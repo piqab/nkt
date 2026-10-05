@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.Me
+import com.netknownsthat.app.i18n.t
 
 /**
  * The only screen reachable before a session exists — sets the hub's own
@@ -45,15 +46,16 @@ fun LoginScreen(
             style = MaterialTheme.typography.headlineMedium,
         )
         Text(
-            text = "Вход в хаб",
+            text = t("Вход в хаб", "Sign in to the hub"),
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(bottom = 24.dp),
+            modifier = Modifier.padding(bottom = 8.dp),
         )
+        com.netknownsthat.app.i18n.LanguagePicker(modifier = Modifier.padding(bottom = 16.dp))
 
         OutlinedTextField(
             value = state.hubUrl,
             onValueChange = viewModel::onHubUrlChange,
-            label = { Text("Адрес хаба") },
+            label = { Text(t("Адрес хаба", "Hub address")) },
             placeholder = { Text("http://127.0.0.1:8077") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             singleLine = true,
@@ -64,7 +66,7 @@ fun LoginScreen(
         OutlinedTextField(
             value = state.username,
             onValueChange = viewModel::onUsernameChange,
-            label = { Text("Логин") },
+            label = { Text(t("Логин", "Login")) },
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
@@ -73,7 +75,7 @@ fun LoginScreen(
         OutlinedTextField(
             value = state.password,
             onValueChange = viewModel::onPasswordChange,
-            label = { Text("Пароль") },
+            label = { Text(t("Пароль", "Password")) },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -100,7 +102,7 @@ fun LoginScreen(
             if (state.loading) {
                 CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
             }
-            Text("Войти")
+            Text(t("Войти", "Sign in"))
         }
     }
 }

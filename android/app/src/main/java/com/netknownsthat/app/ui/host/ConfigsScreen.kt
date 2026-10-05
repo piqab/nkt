@@ -39,6 +39,7 @@ import com.netknownsthat.app.net.model.ConfigVersion
 import com.netknownsthat.app.net.model.ConfigWriteResult
 import com.netknownsthat.app.ui.theme.statusColor
 import com.netknownsthat.app.status.HealthStatus
+import com.netknownsthat.app.i18n.t
 
 /**
  * Config files: browse, read, edit, and walk back through the host's own
@@ -72,7 +73,7 @@ fun ConfigsScreen(viewModel: ConfigsViewModel) {
             modifier = Modifier.fillMaxWidth().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = { viewModel.closeFile() }) { Text("← К списку") }
+            TextButton(onClick = { viewModel.closeFile() }) { Text(t("← К списку", "← Back to list")) }
         }
         when {
             viewModel.openFileLoading ->
@@ -93,7 +94,7 @@ fun ConfigsScreen(viewModel: ConfigsViewModel) {
 private fun FileList(viewModel: ConfigsViewModel) {
     SectionContent(
         state = viewModel.state,
-        emptyText = "Файлы конфигурации не найдены",
+        emptyText = t("Файлы конфигурации не найдены", "No configuration files found"),
         isEmpty = { it.files.isEmpty() },
     ) { response ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
@@ -111,10 +112,10 @@ private fun FileList(viewModel: ConfigsViewModel) {
                         Text(
                             text = listOfNotNull(
                                 file.service.takeIf { it.isNotBlank() },
-                                "${file.size} Б",
+                                t("${file.size} Б", "${file.size} B"),
                                 file.modTime.takeIf { it.isNotBlank() },
-                                if (!file.readable) "нет доступа" else null,
-                                if (file.readable && !file.editable) "только чтение" else null,
+                                if (!file.readable) t("нет доступа", "no access") else null,
+                                if (file.readable && !file.editable) t("только чтение", "read-only") else null,
                             ).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall,
                             color = if (file.readable) MaterialTheme.colorScheme.onSurfaceVariant
@@ -149,11 +150,11 @@ private fun FileEditor(
     if (confirmSave) {
         AlertDialog(
             onDismissRequest = { confirmSave = false },
-            title = { Text("Сохранить файл") },
+            title = { Text(t("Сохранить файл", "Save file")) },
             text = {
                 Text(
-                    "$path будет перезаписан." +
-                        if (applyAfter) "\n\nСервис будет перечитан после записи." else ""
+                    t("$path будет перезаписан.", "$path will be overwritten.") +
+                        if (applyAfter) t("\n\nСервис будет перечитан после записи.", "\n\nThe service will be reloaded after writing.") else ""
                 )
             },
             confirmButton = {
@@ -161,9 +162,9 @@ private fun FileEditor(
                     confirmSave = false
                     editing = false
                     viewModel.save(path, text, sha256, note, applyAfter)
-                }) { Text("Сохранить") }
+                }) { Text(t("Сохранить", "Save")) }
             },
-            dismissButton = { TextButton(onClick = { confirmSave = false }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { confirmSave = false }) { Text(t("Отмена", "Cancel")) } },
         )
     }
 
@@ -193,19 +194,19 @@ private fun FileEditor(
                     onClick = { editing = !editing; if (!editing) text = original },
                     enabled = !viewModel.saving,
                     modifier = Modifier.padding(end = 8.dp),
-                ) { Text(if (editing) "Отменить правку" else "Править") }
+                ) { Text(if (editing) t("Отменить правку", "Discard edit") else t("Править", "Edit")) }
             }
             if (editing) {
                 Button(
                     onClick = { confirmSave = true },
                     enabled = !viewModel.saving && text != original,
                     modifier = Modifier.padding(end = 8.dp),
-                ) { Text("Сохранить") }
+                ) { Text(t("Сохранить", "Save")) }
             }
             OutlinedButton(
                 onClick = { showHistory = !showHistory },
                 modifier = Modifier.padding(end = 8.dp),
-            ) { Text(if (showHistory) "Скрыть историю" else "История (${viewModel.versions.size})") }
+            ) { Text(if (showHistory) t("Скрыть историю", "Hide history") else t("История (${viewModel.versions.size})", "History (${viewModel.versions.size})")) }
         }
 
         if (editing) {
@@ -217,14 +218,14 @@ private fun FileEditor(
                 Text(
                     // Writing a file and restarting a service are decisions of
                     // different sizes; the second one is opt-in.
-                    text = "Перечитать сервис после записи",
+                    text = t("Перечитать сервис после записи", "Reload the service after writing"),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
-                label = { Text("Комментарий к правке") },
+                label = { Text(t("Комментарий к правке", "Edit comment")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
@@ -275,28 +276,28 @@ private fun VersionHistory(viewModel: ConfigsViewModel, path: String) {
     confirmRollback?.let { version ->
         AlertDialog(
             onDismissRequest = { confirmRollback = null },
-            title = { Text("Откатить к версии #${version.id}") },
+            title = { Text(t("Откатить к версии #${version.id}", "Roll back to version #${version.id}")) },
             text = {
                 Text(
-                    "Текущее содержимое $path будет заменено версией от ${version.ts}. " +
-                        "Оно само сохранится в истории как новая версия, так что откат обратим."
+                    t("Текущее содержимое $path будет заменено версией от ${version.ts}. ", "The current content of $path will be replaced by the version from ${version.ts}. ") +
+                        t("Оно само сохранится в истории как новая версия, так что откат обратим.", "It is itself saved in history as a new version, so the rollback can be undone.")
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.rollback(version.id, path, apply = false)
                     confirmRollback = null
-                }) { Text("Откатить") }
+                }) { Text(t("Откатить", "Roll back")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRollback = null }) { Text("Отмена") }
+                TextButton(onClick = { confirmRollback = null }) { Text(t("Отмена", "Cancel")) }
             },
         )
     }
 
     if (viewModel.versions.isEmpty()) {
         Text(
-            text = "История пуста",
+            text = t("История пуста", "History is empty"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(24.dp),
         )
@@ -315,7 +316,7 @@ private fun VersionHistory(viewModel: ConfigsViewModel, path: String) {
                         text = listOfNotNull(
                             version.ts.takeIf { it.isNotBlank() },
                             version.author.takeIf { it.isNotBlank() },
-                            "${version.size} Б",
+                            t("${version.size} Б", "${version.size} B"),
                         ).joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -331,11 +332,11 @@ private fun VersionHistory(viewModel: ConfigsViewModel, path: String) {
                         OutlinedButton(
                             onClick = { viewModel.loadDiff(version.id) },
                             modifier = Modifier.padding(end = 8.dp),
-                        ) { Text("Отличия") }
+                        ) { Text(t("Отличия", "Diff")) }
                         OutlinedButton(
                             onClick = { confirmRollback = version },
                             enabled = !viewModel.saving,
-                        ) { Text("Откатить") }
+                        ) { Text(t("Откатить", "Roll back")) }
                     }
                 }
             }
@@ -344,11 +345,11 @@ private fun VersionHistory(viewModel: ConfigsViewModel, path: String) {
 }
 
 private fun actionLabel(action: String): String = when (action) {
-    "edit" -> "правка"
-    "rollback" -> "откат"
+    "edit" -> t("правка", "edit")
+    "rollback" -> t("откат", "rollback")
     // The state the host recorded before anyone edited the file — it has no
     // author, and calling it an edit would be a lie.
-    "observed" -> "исходное состояние"
+    "observed" -> t("исходное состояние", "original state")
     else -> action
 }
 
@@ -361,7 +362,7 @@ private fun actionLabel(action: String): String = when (action) {
 private fun DiffDialog(diff: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Отличия от текущего файла") },
+        title = { Text(t("Отличия от текущего файла", "Diff against the current file")) },
         text = {
             Column(
                 modifier = Modifier
@@ -386,7 +387,7 @@ private fun DiffDialog(diff: String, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Закрыть", "Close")) } },
     )
 }
 
@@ -402,9 +403,9 @@ private fun WriteResultDialog(result: ConfigWriteResult, onDismiss: () -> Unit) 
         title = {
             Text(
                 when {
-                    result.rolledBack -> "Изменения отменены"
-                    result.validated -> "Сохранено и проверено"
-                    else -> "Сохранено"
+                    result.rolledBack -> t("Изменения отменены", "Changes discarded")
+                    result.validated -> t("Сохранено и проверено", "Saved and validated")
+                    else -> t("Сохранено", "Saved")
                 }
             )
         },
@@ -413,15 +414,15 @@ private fun WriteResultDialog(result: ConfigWriteResult, onDismiss: () -> Unit) 
                 if (result.message.isNotBlank()) Text(result.message)
                 if (result.rolledBack) {
                     Text(
-                        text = "Проверка конфигурации не прошла, поэтому файл возвращён к " +
-                            "прежнему содержимому. Сервис не затронут.",
+                        text = t("Проверка конфигурации не прошла, поэтому файл возвращён к ", "Configuration validation failed, so the file was restored to ") +
+                            t("прежнему содержимому. Сервис не затронут.", "its previous content. The service was not touched."),
                         color = statusColor(HealthStatus.WARN),
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
                 if (result.versionId > 0) {
                     Text(
-                        text = "Версия #${result.versionId}",
+                        text = t("Версия #${result.versionId}", "Version #${result.versionId}"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
@@ -429,7 +430,7 @@ private fun WriteResultDialog(result: ConfigWriteResult, onDismiss: () -> Unit) 
                 }
                 result.validation?.let { validation ->
                     Text(
-                        text = "Проверка: ${validation.argv.joinToString(" ")}",
+                        text = t("Проверка: ${validation.argv.joinToString(" ")}", "Check: ${validation.argv.joinToString(" ")}"),
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -447,7 +448,7 @@ private fun WriteResultDialog(result: ConfigWriteResult, onDismiss: () -> Unit) 
                     }
                     if (validation.simulated) {
                         Text(
-                            text = "(демонстрационный режим — команда не выполнялась)",
+                            text = t("(демонстрационный режим — команда не выполнялась)", "(demo mode — the command was not run)"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -455,13 +456,13 @@ private fun WriteResultDialog(result: ConfigWriteResult, onDismiss: () -> Unit) 
                 }
                 if (result.applied) {
                     Text(
-                        text = "Сервис перечитан.",
+                        text = t("Сервис перечитан.", "Service reloaded."),
                         color = statusColor(HealthStatus.OK),
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Закрыть", "Close")) } },
     )
 }

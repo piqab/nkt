@@ -31,6 +31,7 @@ import com.netknownsthat.app.net.model.User
 import com.netknownsthat.app.status.userHealth
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
 @Composable
 fun UsersScreen(viewModel: UsersViewModel) {
@@ -50,22 +51,22 @@ fun UsersScreen(viewModel: UsersViewModel) {
     pendingDelete?.let { user ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Удалить пользователя") },
-            text = { Text("${user.username} будет удалён безвозвратно.") },
+            title = { Text(t("Удалить пользователя", "Delete user")) },
+            text = { Text(t("${user.username} будет удалён безвозвратно.", "${user.username} will be deleted permanently.")) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.delete(user.username)
                     pendingDelete = null
-                }) { Text("Удалить") }
+                }) { Text(t("Удалить", "Delete")) }
             },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(t("Отмена", "Cancel")) } },
         )
     }
 
     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth()) {
         SectionContent(
             state = viewModel.state,
-            emptyText = "Пользователей нет",
+            emptyText = t("Пользователей нет", "No users"),
             isEmpty = { it.users.isEmpty() },
         ) { response ->
             LazyColumn(contentPadding = PaddingValues(16.dp)) {
@@ -82,7 +83,7 @@ fun UsersScreen(viewModel: UsersViewModel) {
         FloatingActionButton(
             onClick = { showCreate = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) { Icon(Icons.Default.Add, contentDescription = "Добавить пользователя") }
+        ) { Icon(Icons.Default.Add, contentDescription = t("Добавить пользователя", "Add user")) }
     }
 }
 
@@ -115,14 +116,14 @@ private fun UserCard(
                 // Grey, not red: an account switched off on purpose is not a
                 // fault.
                 Text(
-                    text = "Отключён",
+                    text = t("Отключён", "Disabled"),
                     style = MaterialTheme.typography.bodySmall,
                     color = statusColor(userHealth(true)),
                 )
             }
             val details = listOfNotNull(
-                user.createdAt.takeIf { it.isNotBlank() }?.let { "создан $it" },
-                user.lastLoginAt.takeIf { it.isNotBlank() }?.let { "вход $it" },
+                user.createdAt.takeIf { it.isNotBlank() }?.let { t("создан $it", "created $it") },
+                user.lastLoginAt.takeIf { it.isNotBlank() }?.let { t("вход $it", "sign-in $it") },
             ).joinToString(" · ")
             if (details.isNotEmpty()) {
                 Text(
@@ -137,8 +138,8 @@ private fun UserCard(
                     onClick = onToggleDisabled,
                     enabled = enabled,
                     modifier = Modifier.padding(end = 8.dp),
-                ) { Text(if (user.disabled) "Включить" else "Отключить") }
-                OutlinedButton(onClick = onDelete, enabled = enabled) { Text("Удалить") }
+                ) { Text(if (user.disabled) t("Включить", "Enable") else t("Отключить", "Disable")) }
+                OutlinedButton(onClick = onDelete, enabled = enabled) { Text(t("Удалить", "Delete")) }
             }
         }
     }
@@ -155,25 +156,25 @@ private fun CreateUserDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Новый пользователь") },
+        title = { Text(t("Новый пользователь", "New user")) },
         text = {
             Column {
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("Логин") },
+                    label = { Text(t("Логин", "Login")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Пароль") },
+                    label = { Text(t("Пароль", "Password")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 Row(modifier = Modifier.padding(top = 12.dp)) {
-                    listOf("viewer" to "Наблюдатель", "admin" to "Администратор")
+                    listOf("viewer" to t("Наблюдатель", "Viewer"), "admin" to t("Администратор", "Administrator"))
                         .forEach { (value, label) ->
                             FilterChip(
                                 selected = role == value,
@@ -189,8 +190,8 @@ private fun CreateUserDialog(
             TextButton(
                 onClick = { onCreate(username, password, role) },
                 enabled = username.isNotBlank() && password.isNotBlank(),
-            ) { Text("Создать") }
+            ) { Text(t("Создать", "Create")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Отмена", "Cancel")) } },
     )
 }

@@ -31,14 +31,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.ui.host.SectionViewModel
 import kotlinx.coroutines.launch
+import com.netknownsthat.app.i18n.t
 
 /** Hub-level sections — the ones worth having in a pocket. */
-enum class HubSection(val title: String) {
-    EVENTS("Оповещения"),
-    JOBS("Задания хаба"),
-    MONITORING("Мониторинг"),
+enum class HubSection(private val ru: String, private val en: String = ru) {
+    EVENTS("Оповещения", "Alerts"),
+    JOBS("Задания хаба", "Hub jobs"),
+    MONITORING("Мониторинг", "Monitoring"),
     FAIL2BAN("Fail2ban"),
-    DEPLOYMENTS("Выкладка"),
+    DEPLOYMENTS("Выкладка", "Deployments"),
+    ;
+
+    val title: String get() = t(ru, en)
 }
 
 class HubViewModels(
@@ -92,7 +96,7 @@ fun HubScreen(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Text("Хаб", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+                Text(t("Хаб", "Hub"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
                 LazyColumn {
                     items(HubSection.entries) { entry ->
                         NavigationDrawerItem(
@@ -116,15 +120,15 @@ fun HubScreen(
                     title = { Text(section.title) },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Разделы хаба")
+                            Icon(Icons.Default.Menu, contentDescription = t("Разделы хаба", "Hub sections"))
                         }
                     },
                     actions = {
                         IconButton(onClick = { active.load() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Обновить")
+                            Icon(Icons.Default.Refresh, contentDescription = t("Обновить", "Refresh"))
                         }
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "К списку хостов")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("К списку хостов", "Back to hosts"))
                         }
                     },
                 )

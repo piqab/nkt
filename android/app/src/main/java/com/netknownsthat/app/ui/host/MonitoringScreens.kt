@@ -32,6 +32,7 @@ import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
 import com.netknownsthat.app.net.model.VulnFinding
 import java.util.Locale
+import com.netknownsthat.app.i18n.t
 
 /** trivy's own scale, worst first. */
 private val VULN_SEVERITIES = listOf("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
@@ -43,12 +44,12 @@ fun VulnerabilitiesScreen(viewModel: VulnerabilitiesViewModel) {
     // ViewModel) — the loop ends by itself when `scanning` goes false.
     LaunchedEffect(scanning) { if (scanning) viewModel.pollWhileScanning() }
 
-    SectionContent(state = viewModel.state, emptyText = "Нет данных") { response ->
+    SectionContent(state = viewModel.state, emptyText = t("Нет данных", "No data")) { response ->
         Column {
             Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     if (response.scanning) {
-                        Text("Сканирование…", style = MaterialTheme.typography.titleSmall)
+                        Text(t("Сканирование…", "Scanning…"), style = MaterialTheme.typography.titleSmall)
                         if (response.progress.isNotBlank()) {
                             Text(
                                 text = response.progress,
@@ -63,22 +64,22 @@ fun VulnerabilitiesScreen(viewModel: VulnerabilitiesViewModel) {
                     } else {
                         val scan = response.scan
                         if (scan == null) {
-                            Text("Хост ещё не сканировался")
+                            Text(t("Хост ещё не сканировался", "The host has not been scanned yet"))
                         } else {
                             Text(
-                                text = "Найдено уязвимостей: ${scan.findings.size}",
+                                text = t("Найдено уязвимостей: ${scan.findings.size}", "Vulnerabilities found: ${scan.findings.size}"),
                                 style = MaterialTheme.typography.titleSmall,
                             )
                             if (scan.compared) {
                                 Text(
-                                    text = "Новых: ${scan.newCount} · исправлено: ${scan.fixedCount}",
+                                    text = t("Новых: ${scan.newCount} · исправлено: ${scan.fixedCount}", "New: ${scan.newCount} · fixed: ${scan.fixedCount}"),
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.padding(top = 4.dp),
                                 )
                             }
                             if (scan.scannedAt.isNotBlank()) {
                                 Text(
-                                    text = "Проверено: ${scan.scannedAt}",
+                                    text = t("Проверено: ${scan.scannedAt}", "Checked: ${scan.scannedAt}"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -103,7 +104,7 @@ fun VulnerabilitiesScreen(viewModel: VulnerabilitiesViewModel) {
                             onClick = { viewModel.startScan() },
                             enabled = !viewModel.actionInProgress,
                             modifier = Modifier.padding(top = 12.dp),
-                        ) { Text("Сканировать") }
+                        ) { Text(t("Сканировать", "Scan")) }
                     }
                 }
             }
@@ -139,7 +140,7 @@ private fun VulnCard(finding: VulnFinding) {
             }
             if (finding.new) {
                 Text(
-                    text = "Новая",
+                    text = t("Новая", "New"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -152,15 +153,15 @@ private fun VulnCard(finding: VulnFinding) {
             // "No fix yet" is a different situation from "upgrade now", and
             // the Go side keeps them distinct on purpose.
             Text(
-                text = if (finding.fixedVersion.isBlank()) "Исправления пока нет"
-                else "Исправлено в ${finding.fixedVersion}",
+                text = if (finding.fixedVersion.isBlank()) t("Исправления пока нет", "No fix yet")
+                else t("Исправлено в ${finding.fixedVersion}", "Fixed in ${finding.fixedVersion}"),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (finding.fixedVersion.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
                 else MaterialTheme.colorScheme.primary,
             )
             if (finding.target.isNotBlank()) {
                 Text(
-                    text = "В образе: ${finding.target}",
+                    text = t("В образе: ${finding.target}", "In image: ${finding.target}"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -179,7 +180,7 @@ private fun VulnCard(finding: VulnFinding) {
 @Composable
 fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
     var sourceFilter by remember { mutableStateOf<String?>(null) }
-    SectionContent(state = viewModel.state, emptyText = "Целей нет") { data ->
+    SectionContent(state = viewModel.state, emptyText = t("Целей нет", "No targets")) { data ->
         // Targets come from several places — web servers, compose, and
         // Kubernetes (ingresses, NodePort/LoadBalancer services, nodes);
         // a chip per source keeps the k8s ones findable on a phone.
@@ -192,7 +193,7 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
                         FilterChip(
                             selected = sourceFilter == null,
                             onClick = { sourceFilter = null },
-                            label = { Text("Все ${data.targets.targets.size}") },
+                            label = { Text(t("Все ${data.targets.targets.size}", "All ${data.targets.targets.size}")) },
                             modifier = Modifier.padding(end = 8.dp),
                         )
                         sources.forEach { src ->
@@ -211,7 +212,7 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
             if (data.targets.simulated) {
                 item {
                     Text(
-                        text = "Демонстрационные данные",
+                        text = t("Демонстрационные данные", "Demo data"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.padding(bottom = 8.dp),
@@ -223,7 +224,7 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
             if (data.outages.outages.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Недоступность за сутки",
+                        text = t("Недоступность за сутки", "Outages in the last day"),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
@@ -233,7 +234,7 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(outage.label, style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = "${outage.start} — ${outage.end.ifBlank { "продолжается" }}",
+                                text = t("${outage.start} — ${outage.end.ifBlank { "продолжается" }}", "${outage.start} — ${outage.end.ifBlank { "ongoing" }}"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -271,10 +272,10 @@ private fun TargetCard(target: Target) {
                     // last_ok is nullable on the Go side: null means the
                     // target has never been checked, which is not "down".
                     text = when {
-                        !target.enabled -> "проверки выключены"
-                        target.lastOk == true -> "доступен"
-                        target.lastOk == false -> "недоступен"
-                        else -> "не проверялся"
+                        !target.enabled -> t("проверки выключены", "checks disabled")
+                        target.lastOk == true -> t("доступен", "up")
+                        target.lastOk == false -> t("недоступен", "down")
+                        else -> t("не проверялся", "not checked")
                     },
                     style = MaterialTheme.typography.labelMedium,
                     color = statusColor(health),
@@ -292,7 +293,7 @@ private fun TargetCard(target: Target) {
             )
             if (target.checks24h > 0) {
                 Text(
-                    text = "Аптайм 24 ч: %.1f%% · задержка %.0f мс".format(
+                    text = t("Аптайм 24 ч: %.1f%% · задержка %.0f мс", "Uptime 24 h: %.1f%% · latency %.0f ms").format(
                         Locale.getDefault(), target.uptime24h, target.avgLatency24h,
                     ),
                     style = MaterialTheme.typography.bodySmall,

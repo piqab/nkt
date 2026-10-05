@@ -30,12 +30,13 @@ import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.ui.host.SectionContent
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
-private val DEPLOY_STATUS = mapOf(
-    "queued" to "в очереди",
-    "running" to "идёт",
-    "succeeded" to "выложено",
-    "failed" to "ошибка",
+private val DEPLOY_STATUS get() = mapOf(
+    "queued" to t("в очереди", "queued"),
+    "running" to t("идёт", "running"),
+    "succeeded" to t("выложено", "deployed"),
+    "failed" to t("ошибка", "failed"),
 )
 
 private fun deployHealth(status: String?): HealthStatus = when (status) {
@@ -67,15 +68,15 @@ fun DeploymentsScreen(viewModel: DeploymentsViewModel, jobLog: JobLogViewModel) 
     confirm?.let { p ->
         AlertDialog(
             onDismissRequest = { confirm = null },
-            title = { Text("Выложить ${p.name}?") },
-            text = { Text("Выкладка пойдёт заданием хаба; журнал откроется сразу.") },
+            title = { Text(t("Выложить ${p.name}?", "Deploy ${p.name}?")) },
+            text = { Text(t("Выкладка пойдёт заданием хаба; журнал откроется сразу.", "The deployment runs as a hub job; its log opens right away.")) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deploy(p.id, openJob)
                     confirm = null
-                }) { Text("Выложить") }
+                }) { Text(t("Выложить", "Deploy")) }
             },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text(t("Отмена", "Cancel")) } },
         )
     }
     viewModel.history?.let { (id, data) ->
@@ -93,13 +94,13 @@ fun DeploymentsScreen(viewModel: DeploymentsViewModel, jobLog: JobLogViewModel) 
 
     SectionContent(
         state = viewModel.state,
-        emptyText = "Конвейеров нет — создаются в веб-интерфейсе",
+        emptyText = t("Конвейеров нет — создаются в веб-интерфейсе", "No pipelines — they are created in the web UI"),
         isEmpty = { it.pipelines.isEmpty() },
     ) { r ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             item {
                 Text(
-                    "Выкладка — экспериментальная функция",
+                    t("Выкладка — экспериментальная функция", "Deployments are an experimental feature"),
                     style = MaterialTheme.typography.bodySmall,
                     color = statusColor(HealthStatus.WARN),
                     modifier = Modifier.padding(bottom = 8.dp),
@@ -136,13 +137,13 @@ private fun PipelineCard(
                 StatusDot(deployHealth(p.last?.status), busy = p.last?.status == "running")
                 Text(p.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 Text(
-                    text = listOfNotNull(p.action.ifBlank { null }, if (p.enabled) null else "выключен").joinToString(" · "),
+                    text = listOfNotNull(p.action.ifBlank { null }, if (p.enabled) null else t("выключен", "disabled")).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
             val last = p.last
             if (last == null) {
-                Text("Ещё не выкладывался", style = MaterialTheme.typography.bodySmall)
+                Text(t("Ещё не выкладывался", "Not deployed yet"), style = MaterialTheme.typography.bodySmall)
             } else {
                 Text(
                     "${DEPLOY_STATUS[last.status] ?: last.status} · ${last.summary()}",
@@ -155,27 +156,27 @@ private fun PipelineCard(
             }
             p.leftovers.forEach { l ->
                 Text(
-                    "Старый стек ${l.project} на ${l.host}" + (if (l.reason.isNotBlank()) " — ${l.reason}" else ""),
+                    t("Старый стек ${l.project} на ${l.host}", "Old stack ${l.project} on ${l.host}") + (if (l.reason.isNotBlank()) " — ${l.reason}" else ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = statusColor(HealthStatus.WARN),
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Row {
-                    TextButton(onClick = { onLeftover(l.hostId, l.project, false) }, enabled = actionsEnabled) { Text("Убрать") }
-                    TextButton(onClick = { onLeftover(l.hostId, l.project, true) }, enabled = actionsEnabled) { Text("Забыть") }
+                    TextButton(onClick = { onLeftover(l.hostId, l.project, false) }, enabled = actionsEnabled) { Text(t("Убрать", "Remove")) }
+                    TextButton(onClick = { onLeftover(l.hostId, l.project, true) }, enabled = actionsEnabled) { Text(t("Забыть", "Forget")) }
                 }
             }
             Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp)) {
                 OutlinedButton(onClick = onDeploy, enabled = p.enabled, modifier = Modifier.padding(end = 8.dp)) {
-                    Text("Выложить")
+                    Text(t("Выложить", "Deploy"))
                 }
                 if (p.action == "compose") {
-                    OutlinedButton(onClick = onDryRun, modifier = Modifier.padding(end = 8.dp)) { Text("Сухой прогон") }
+                    OutlinedButton(onClick = onDryRun, modifier = Modifier.padding(end = 8.dp)) { Text(t("Сухой прогон", "Dry run")) }
                 }
                 if (last != null && last.jobId > 0) {
-                    OutlinedButton(onClick = onLog, modifier = Modifier.padding(end = 8.dp)) { Text("Журнал") }
+                    OutlinedButton(onClick = onLog, modifier = Modifier.padding(end = 8.dp)) { Text(t("Журнал", "Log")) }
                 }
-                OutlinedButton(onClick = onHistory) { Text("История") }
+                OutlinedButton(onClick = onHistory) { Text(t("История", "History")) }
             }
         }
     }
@@ -193,23 +194,23 @@ private fun HistoryDialog(
     rollback?.let { d ->
         AlertDialog(
             onDismissRequest = { rollback = null },
-            text = { Text("Выложить заново ${d.summary()}?") },
+            text = { Text(t("Выложить заново ${d.summary()}?", "Deploy ${d.summary()} again?")) },
             confirmButton = {
                 TextButton(onClick = {
                     onRollback(d)
                     rollback = null
-                }) { Text("Откатить") }
+                }) { Text(t("Откатить", "Roll back")) }
             },
-            dismissButton = { TextButton(onClick = { rollback = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { rollback = null }) { Text(t("Отмена", "Cancel")) } },
         )
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("История ${pipeline?.name ?: ""}") },
+        title = { Text(t("История ${pipeline?.name ?: ""}", "History of ${pipeline?.name ?: ""}")) },
         text = {
             when {
                 deployments == null -> CircularProgressIndicator()
-                deployments.isEmpty() -> Text("Выкладок ещё не было")
+                deployments.isEmpty() -> Text(t("Выкладок ещё не было", "No deployments yet"))
                 else -> LazyColumn {
                     items(deployments, key = { it.id }) { d ->
                         Column(modifier = Modifier.padding(bottom = 8.dp)) {
@@ -222,9 +223,9 @@ private fun HistoryDialog(
                                 Text(d.error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                             }
                             Row {
-                                if (d.jobId > 0) TextButton(onClick = { onLog(d.jobId) }) { Text("Журнал") }
+                                if (d.jobId > 0) TextButton(onClick = { onLog(d.jobId) }) { Text(t("Журнал", "Log")) }
                                 if (d.status == "succeeded" && d.commit.isNotBlank()) {
-                                    TextButton(onClick = { rollback = d }) { Text("Откатить сюда") }
+                                    TextButton(onClick = { rollback = d }) { Text(t("Откатить сюда", "Roll back to this")) }
                                 }
                             }
                         }
@@ -232,6 +233,6 @@ private fun HistoryDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Закрыть", "Close")) } },
     )
 }

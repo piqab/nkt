@@ -34,12 +34,13 @@ import com.netknownsthat.app.status.firewallManagerHealth
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
 import com.netknownsthat.app.net.model.Listener
+import com.netknownsthat.app.i18n.t
 
 @Composable
 fun MiscScreen(viewModel: MiscViewModel) {
     SectionContent(
         state = viewModel.state,
-        emptyText = "Все слушающие сокеты описаны в конфигурации",
+        emptyText = t("Все слушающие сокеты описаны в конфигурации", "All listening sockets are declared in the configuration"),
         isEmpty = { it.listeners.isEmpty() },
     ) { response ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
@@ -89,7 +90,7 @@ fun CertificatesScreen(viewModel: CertificatesViewModel) {
 
     Column {
         TabRow(selectedTabIndex = tab) {
-            listOf("Список", "Выпуск").forEachIndexed { index, title ->
+            listOf(t("Список", "List"), t("Выпуск", "Issue")).forEachIndexed { index, title ->
                 Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title) })
             }
         }
@@ -105,7 +106,7 @@ fun CertificatesScreen(viewModel: CertificatesViewModel) {
 private fun CertificatesList(viewModel: CertificatesViewModel) {
     SectionContent(
         state = viewModel.state,
-        emptyText = "Сертификаты не найдены",
+        emptyText = t("Сертификаты не найдены", "No certificates found"),
         isEmpty = { it.certificates.isEmpty() },
     ) { response ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
@@ -113,22 +114,22 @@ private fun CertificatesList(viewModel: CertificatesViewModel) {
                 item {
                     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            LabeledValue("Всего", "${summary.total}")
+                            LabeledValue(t("Всего", "Total"), "${summary.total}")
                             if (summary.expired > 0) {
                                 Text(
-                                    text = "Просрочено: ${summary.expired}",
+                                    text = t("Просрочено: ${summary.expired}", "Expired: ${summary.expired}"),
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
                             if (summary.expiring > 0) {
                                 Text(
-                                    text = "Истекают: ${summary.expiring}",
+                                    text = t("Истекают: ${summary.expiring}", "Expiring: ${summary.expiring}"),
                                     color = MaterialTheme.colorScheme.tertiary,
                                 )
                             }
                             if (summary.unmanaged > 0) {
                                 Text(
-                                    text = "Без автопродления: ${summary.unmanaged}",
+                                    text = t("Без автопродления: ${summary.unmanaged}", "Without auto-renewal: ${summary.unmanaged}"),
                                     color = MaterialTheme.colorScheme.tertiary,
                                 )
                             }
@@ -158,8 +159,8 @@ private fun CertificateCard(cert: Certificate) {
                 )
             }
             Text(
-                text = if (cert.daysLeft < 0) "Просрочен ${-cert.daysLeft} дн. назад"
-                else "Осталось ${cert.daysLeft} дн. (до ${cert.notAfter})",
+                text = if (cert.daysLeft < 0) t("Просрочен ${-cert.daysLeft} дн. назад", "Expired ${-cert.daysLeft} d ago")
+                else t("Осталось ${cert.daysLeft} дн. (до ${cert.notAfter})", "${cert.daysLeft} d left (until ${cert.notAfter})"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = statusColor(health),
                 modifier = Modifier.padding(top = 4.dp),
@@ -168,7 +169,7 @@ private fun CertificateCard(cert: Certificate) {
                 text = listOfNotNull(
                     cert.service.takeIf { it.isNotBlank() },
                     cert.keyAlgorithm.takeIf { it.isNotBlank() }?.let { "$it ${cert.keyBits}" },
-                    if (cert.selfSigned) "самоподписанный" else null,
+                    if (cert.selfSigned) t("самоподписанный", "self-signed") else null,
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -178,8 +179,8 @@ private fun CertificateCard(cert: Certificate) {
                 Text(
                     // The distinction that matters: a certificate nothing
                     // renews is the one that eventually takes a site down.
-                    text = if (renewal.automatic) "Продлевается автоматически (${renewal.tool})"
-                    else "Автопродления нет",
+                    text = if (renewal.automatic) t("Продлевается автоматически (${renewal.tool})", "Renewed automatically (${renewal.tool})")
+                    else t("Автопродления нет", "No auto-renewal"),
                     style = MaterialTheme.typography.bodySmall,
                     color = statusColor(
                         if (renewal.automatic) com.netknownsthat.app.status.HealthStatus.OK

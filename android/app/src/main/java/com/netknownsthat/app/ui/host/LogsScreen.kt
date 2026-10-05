@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.netknownsthat.app.net.model.LogSource
 import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
 /**
  * Watching one log as it is written. Same endpoint as the web page — the
@@ -87,15 +88,15 @@ fun LogsScreen(viewModel: LogsViewModel) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = viewModel.currentLabel ?: "Источник не выбран",
+                        text = viewModel.currentLabel ?: t("Источник не выбран", "No source selected"),
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = when {
-                            viewModel.isArchived -> "архив"
-                            stream?.connected == true -> "поток идёт"
-                            else -> "остановлен"
+                            viewModel.isArchived -> t("архив", "archive")
+                            stream?.connected == true -> t("поток идёт", "streaming")
+                            else -> t("остановлен", "stopped")
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = statusColor(
@@ -124,16 +125,16 @@ fun LogsScreen(viewModel: LogsViewModel) {
                     OutlinedButton(
                         onClick = { showPicker = true },
                         modifier = Modifier.padding(end = 8.dp),
-                    ) { Text("Выбрать") }
+                    ) { Text(t("Выбрать", "Choose")) }
                     OutlinedButton(
                         onClick = { if (stream?.connected == true) viewModel.stop() else viewModel.restart() },
                         enabled = viewModel.currentLabel != null,
                     ) {
                         Text(
                             when {
-                                viewModel.isArchived -> "Перечитать"
-                                stream?.connected == true -> "Остановить"
-                                else -> "Смотреть"
+                                viewModel.isArchived -> t("Перечитать", "Reload")
+                                stream?.connected == true -> t("Остановить", "Stop")
+                                else -> t("Смотреть", "View")
                             }
                         )
                     }
@@ -144,7 +145,7 @@ fun LogsScreen(viewModel: LogsViewModel) {
                         FilterChip(
                             selected = viewModel.lineCount == n,
                             onClick = { viewModel.setLines(n) },
-                            label = { Text("последние $n") },
+                            label = { Text(t("последние $n", "last $n")) },
                             modifier = Modifier.padding(end = 6.dp),
                         )
                     }
@@ -153,25 +154,25 @@ fun LogsScreen(viewModel: LogsViewModel) {
                 OutlinedTextField(
                     value = filter,
                     onValueChange = { filter = it },
-                    label = { Text("Фильтр: только строки с…") },
+                    label = { Text(t("Фильтр: только строки с…", "Filter: only lines with…")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 OutlinedTextField(
                     value = highlight,
                     onValueChange = { highlight = it },
-                    label = { Text("Подсветить…") },
+                    label = { Text(t("Подсветить…", "Highlight…")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = caseSensitive, onCheckedChange = { caseSensitive = it })
-                    Text("регистр", style = MaterialTheme.typography.bodySmall)
+                    Text(t("регистр", "case"), style = MaterialTheme.typography.bodySmall)
                     Checkbox(checked = follow, onCheckedChange = { follow = it })
-                    Text("к концу", style = MaterialTheme.typography.bodySmall)
+                    Text(t("к концу", "to the end"), style = MaterialTheme.typography.bodySmall)
                 }
                 Text(
-                    text = "показано ${shown.size} из ${all.size}",
+                    text = t("показано ${shown.size} из ${all.size}", "showing ${shown.size} of ${all.size}"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -247,20 +248,20 @@ private fun SourcePickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Источник") },
+        title = { Text(t("Источник", "Source")) },
         text = {
             Column {
                 OutlinedTextField(
                     value = search,
                     onValueChange = { search = it },
-                    label = { Text("Поиск") },
+                    label = { Text(t("Поиск", "Search")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = custom,
                     onValueChange = { custom = it },
-                    label = { Text("Свой путь внутри $root") },
+                    label = { Text(t("Свой путь внутри $root", "Own path inside $root")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
@@ -270,9 +271,9 @@ private fun SourcePickerDialog(
                         .padding(top = 8.dp),
                 ) {
                     listOf(
-                        "unit" to "Журналы служб (${counts.first})",
-                        "file" to "Файлы (${counts.second})",
-                        "archived" to "Архивы (${counts.third})",
+                        "unit" to t("Журналы служб (${counts.first})", "Service journals (${counts.first})"),
+                        "file" to t("Файлы (${counts.second})", "Files (${counts.second})"),
+                        "archived" to t("Архивы (${counts.third})", "Archives (${counts.third})"),
                     ).forEach { (value, label) ->
                         FilterChip(
                             selected = kind == value,
@@ -286,11 +287,11 @@ private fun SourcePickerDialog(
                     OutlinedButton(
                         onClick = { onPick(LogSource(kind = "file", name = custom.trim())) },
                         modifier = Modifier.padding(top = 8.dp),
-                    ) { Text("Смотреть этот файл") }
+                    ) { Text(t("Смотреть этот файл", "View this file")) }
                 }
                 if (visible.isEmpty()) {
                     Text(
-                        text = "Здесь пусто — на хосте нет таких логов",
+                        text = t("Здесь пусто — на хосте нет таких логов", "Nothing here — the host has no such logs"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
@@ -304,9 +305,9 @@ private fun SourcePickerDialog(
                             label = {
                                 Text(
                                     text = when {
-                                        source.kind == "unit" -> "журнал: ${source.name}"
-                                        source.compressed -> "${source.name} (сжат)"
-                                        source.archived -> "${source.name} (архив)"
+                                        source.kind == "unit" -> t("журнал: ${source.name}", "log: ${source.name}")
+                                        source.compressed -> t("${source.name} (сжат)", "${source.name} (compressed)")
+                                        source.archived -> t("${source.name} (архив)", "${source.name} (archive)")
                                         else -> source.name
                                     },
                                 )
@@ -317,6 +318,6 @@ private fun SourcePickerDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Закрыть", "Close")) } },
     )
 }

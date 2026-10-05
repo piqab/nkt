@@ -14,34 +14,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.Overview
+import com.netknownsthat.app.i18n.t
 
 /** Severity order the rest of the project uses, worst first. */
 private val SEVERITIES = listOf("critical", "high", "medium", "low", "info")
 
-private val SEVERITY_LABELS = mapOf(
-    "critical" to "Критичные",
-    "high" to "Высокие",
-    "medium" to "Средние",
-    "low" to "Низкие",
-    "info" to "Информационные",
+private val SEVERITY_LABELS get() = mapOf(
+    "critical" to t("Критичные", "Critical"),
+    "high" to t("Высокие", "High"),
+    "medium" to t("Средние", "Medium"),
+    "low" to t("Низкие", "Low"),
+    "info" to t("Информационные", "Info"),
 )
 
-private val COUNT_LABELS = listOf(
-    "endpoints" to "Точки входа",
-    "endpoints_public" to "Из них публичных",
-    "upstreams" to "Апстримы",
-    "containers" to "Контейнеры",
-    "containers_running" to "Из них запущено",
-    "networks" to "Сети",
-    "firewall_rules" to "Правила firewall",
-    "listeners" to "Слушающие сокеты",
-    "config_files" to "Файлы конфигурации",
-    "certificates" to "Сертификаты",
+private val COUNT_LABELS get() = listOf(
+    "endpoints" to t("Точки входа", "Entry points"),
+    "endpoints_public" to t("Из них публичных", "Of them public"),
+    "upstreams" to t("Апстримы", "Upstreams"),
+    "containers" to t("Контейнеры", "Containers"),
+    "containers_running" to t("Из них запущено", "Of them running"),
+    "networks" to t("Сети", "Networks"),
+    "firewall_rules" to t("Правила firewall", "Firewall rules"),
+    "listeners" to t("Слушающие сокеты", "Listening sockets"),
+    "config_files" to t("Файлы конфигурации", "Configuration files"),
+    "certificates" to t("Сертификаты", "Certificates"),
 )
 
 @Composable
 fun OverviewScreen(viewModel: OverviewViewModel) {
-    SectionContent(state = viewModel.state, emptyText = "Нет данных обзора") { overview ->
+    SectionContent(state = viewModel.state, emptyText = t("Нет данных обзора", "No overview data")) { overview ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             item { HostCard(overview) }
             item { FindingsCard(overview) }
@@ -77,15 +78,15 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun HostCard(overview: Overview) {
-    SectionCard("Хост") {
-        LabeledValue("Имя", overview.host.hostname.ifBlank { "—" })
-        LabeledValue("ОС", overview.host.os.ifBlank { "—" })
-        LabeledValue("Ядро", overview.host.kernel.ifBlank { "—" })
-        LabeledValue("Версия nkt", overview.version.ifBlank { "—" })
-        LabeledValue("Проверено", overview.scanned.ifBlank { "—" })
+    SectionCard(t("Хост", "Host")) {
+        LabeledValue(t("Имя", "Name"), overview.host.hostname.ifBlank { "—" })
+        LabeledValue(t("ОС", "OS"), overview.host.os.ifBlank { "—" })
+        LabeledValue(t("Ядро", "Kernel"), overview.host.kernel.ifBlank { "—" })
+        LabeledValue(t("Версия nkt", "nkt version"), overview.version.ifBlank { "—" })
+        LabeledValue(t("Проверено", "Checked"), overview.scanned.ifBlank { "—" })
         if (overview.simulated) {
             Text(
-                text = "Демонстрационные данные (режим фикстур)",
+                text = t("Демонстрационные данные (режим фикстур)", "Demo data (fixtures mode)"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.padding(top = 8.dp),
@@ -96,11 +97,11 @@ private fun HostCard(overview: Overview) {
 
 @Composable
 private fun FindingsCard(overview: Overview) {
-    SectionCard("Проблемы") {
+    SectionCard(t("Проблемы", "Problems")) {
         val present = SEVERITIES.filter { (overview.findings[it] ?: 0) > 0 }
         if (present.isEmpty()) {
             Text(
-                text = "Ничего не найдено",
+                text = t("Ничего не найдено", "Nothing found"),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -137,26 +138,26 @@ private fun CertificatesCard(
     soonestDays: Int,
     soonestName: String,
 ) {
-    SectionCard("Сертификаты") {
-        LabeledValue("Всего", "$total")
+    SectionCard(t("Сертификаты", "Certificates")) {
+        LabeledValue(t("Всего", "Total"), "$total")
         if (expired > 0) {
             Text(
-                text = "Просрочено: $expired",
+                text = t("Просрочено: $expired", "Expired: $expired"),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
         if (expiring > 0) {
             Text(
-                text = "Истекают в ближайшие 30 дней: $expiring",
+                text = t("Истекают в ближайшие 30 дней: $expiring", "Expiring in the next 30 days: $expiring"),
                 color = MaterialTheme.colorScheme.tertiary,
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
         if (soonestDays >= 0) {
             LabeledValue(
-                "Ближайший к истечению",
-                "$soonestName — через $soonestDays дн.",
+                t("Ближайший к истечению", "Closest to expiry"),
+                t("$soonestName — через $soonestDays дн.", "$soonestName — in $soonestDays d"),
             )
         }
     }
@@ -164,16 +165,16 @@ private fun CertificatesCard(
 
 @Composable
 private fun AvailabilityCard(targets: Int, up: Int, down: Int, avgUptime: Double) {
-    SectionCard("Доступность") {
-        LabeledValue("Целей", "$targets")
-        LabeledValue("Доступно / недоступно", "$up / $down")
-        LabeledValue("Средний аптайм за 24 ч", "%.1f%%".format(avgUptime))
+    SectionCard(t("Доступность", "Availability")) {
+        LabeledValue(t("Целей", "Targets"), "$targets")
+        LabeledValue(t("Доступно / недоступно", "Up / down"), "$up / $down")
+        LabeledValue(t("Средний аптайм за 24 ч", "Average uptime over 24 h"), "%.1f%%".format(avgUptime))
     }
 }
 
 @Composable
 private fun CountsCard(overview: Overview) {
-    SectionCard("Инвентарь") {
+    SectionCard(t("Инвентарь", "Inventory")) {
         COUNT_LABELS.forEach { (key, label) ->
             overview.counts[key]?.let { LabeledValue(label, "$it") }
         }

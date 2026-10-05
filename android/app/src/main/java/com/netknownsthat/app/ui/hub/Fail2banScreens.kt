@@ -33,8 +33,9 @@ import com.netknownsthat.app.net.model.Fail2banJail
 import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.ui.host.SectionContent
 import com.netknownsthat.app.ui.theme.StatusDot
+import com.netknownsthat.app.i18n.t
 
-private val BAN_TIMES = listOf(3_600L to "1 час", 86_400L to "сутки", 604_800L to "неделя", 2_592_000L to "30 дней")
+private val BAN_TIMES get() = listOf(3_600L to t("1 час", "1 hour"), 86_400L to t("сутки", "1 day"), 604_800L to t("неделя", "1 week"), 2_592_000L to t("30 дней", "30 days"))
 
 /** Light client-side check only — the server parses and refuses for real
  * (loopback, the hub itself, the caller's own address). */
@@ -54,7 +55,7 @@ private fun BanDialog(title: String, note: String, onDismiss: () -> Unit, onBan:
                 OutlinedTextField(
                     value = ip,
                     onValueChange = { ip = it },
-                    label = { Text("IP-адрес") },
+                    label = { Text(t("IP-адрес", "IP address")) },
                     singleLine = true,
                     isError = ip.isNotBlank() && !valid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -73,9 +74,9 @@ private fun BanDialog(title: String, note: String, onDismiss: () -> Unit, onBan:
             }
         },
         confirmButton = {
-            TextButton(enabled = valid, onClick = { onBan(ip.trim(), time) }) { Text("Забанить") }
+            TextButton(enabled = valid, onClick = { onBan(ip.trim(), time) }) { Text(t("Забанить", "Ban")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Отмена", "Cancel")) } },
     )
 }
 
@@ -84,8 +85,8 @@ private fun ConfirmDialog(text: String, onDismiss: () -> Unit, onConfirm: () -> 
     AlertDialog(
         onDismissRequest = onDismiss,
         text = { Text(text) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Да") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(t("Да", "Yes")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Отмена", "Cancel")) } },
     )
 }
 
@@ -96,8 +97,8 @@ fun Fail2banScreen(viewModel: Fail2banViewModel) {
     var unban by remember { mutableStateOf<Pair<String, String>?>(null) }
     if (banOpen) {
         BanDialog(
-            title = "Забанить адрес",
-            note = "В ручной джейл nkt на этом хосте",
+            title = t("Забанить адрес", "Ban an address"),
+            note = t("В ручной джейл nkt на этом хосте", "Into nkt's manual jail on this host"),
             onDismiss = { banOpen = false },
             onBan = { ip, t ->
                 viewModel.ban(ip, t)
@@ -106,7 +107,7 @@ fun Fail2banScreen(viewModel: Fail2banViewModel) {
         )
     }
     unban?.let { (ip, jail) ->
-        ConfirmDialog("Разбанить $ip в джейле $jail?", onDismiss = { unban = null }) {
+        ConfirmDialog(t("Разбанить $ip в джейле $jail?", "Unban $ip in jail $jail?"), onDismiss = { unban = null }) {
             viewModel.unban(ip, jail)
             unban = null
         }
@@ -125,9 +126,9 @@ fun Fail2banScreen(viewModel: Fail2banViewModel) {
                     )
                     Text(
                         text = when {
-                            !st.installed -> "fail2ban не установлен — поставить можно в веб-интерфейсе"
-                            st.running -> "fail2ban ${st.version} работает"
-                            else -> "fail2ban установлен, но не запущен"
+                            !st.installed -> t("fail2ban не установлен — поставить можно в веб-интерфейсе", "fail2ban is not installed — it can be installed from the web UI")
+                            st.running -> t("fail2ban ${st.version} работает", "fail2ban ${st.version} is running")
+                            else -> t("fail2ban установлен, но не запущен", "fail2ban is installed but not running")
                         },
                         modifier = Modifier.weight(1f),
                     )
@@ -137,7 +138,7 @@ fun Fail2banScreen(viewModel: Fail2banViewModel) {
                         onClick = { banOpen = true },
                         enabled = st.running && r.manualReady && !viewModel.actionInProgress,
                         modifier = Modifier.padding(bottom = 8.dp),
-                    ) { Text("Забанить IP") }
+                    ) { Text(t("Забанить IP", "Ban IP")) }
                 }
             }
             items(st.jails, key = { it.name }) { jail ->
@@ -153,8 +154,8 @@ private fun JailCard(jail: Fail2banJail, actionsEnabled: Boolean, onUnban: (Stri
         Column(modifier = Modifier.padding(12.dp)) {
             Text(jail.name, style = MaterialTheme.typography.titleSmall)
             Text(
-                text = "забанено ${jail.banned} (всего ${jail.totalBanned}) · неудачных ${jail.failed} (${jail.totalFailed}) · " +
-                    "maxretry ${jail.maxRetry} · бан ${jail.banTime} с",
+                text = t("забанено ${jail.banned} (всего ${jail.totalBanned}) · неудачных ${jail.failed} (${jail.totalFailed}) · ", "banned ${jail.banned} (total ${jail.totalBanned}) · failed ${jail.failed} (${jail.totalFailed}) · ") +
+                    t("maxretry ${jail.maxRetry} · бан ${jail.banTime} с", "maxretry ${jail.maxRetry} · ban ${jail.banTime} s"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -164,13 +165,13 @@ private fun JailCard(jail: Fail2banJail, actionsEnabled: Boolean, onUnban: (Stri
                         Text(ban.ip, fontFamily = FontFamily.Monospace)
                         if (ban.until.isNotBlank()) {
                             Text(
-                                "до ${formatTs(ban.until)}",
+                                t("до ${formatTs(ban.until)}", "until ${formatTs(ban.until)}"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
-                    TextButton(onClick = { onUnban(ban.ip) }, enabled = actionsEnabled) { Text("Разбанить") }
+                    TextButton(onClick = { onUnban(ban.ip) }, enabled = actionsEnabled) { Text(t("Разбанить", "Unban")) }
                 }
             }
         }
@@ -189,8 +190,8 @@ fun FleetFail2banScreen(viewModel: FleetFail2banViewModel, jobLog: JobLogViewMod
     }
     if (banOpen) {
         BanDialog(
-            title = "Забанить на всех хостах",
-            note = "На каждом хосте, где есть fail2ban; идёт заданием хаба",
+            title = t("Забанить на всех хостах", "Ban on all hosts"),
+            note = t("На каждом хосте, где есть fail2ban; идёт заданием хаба", "On every host with fail2ban; runs as a hub job"),
             onDismiss = { banOpen = false },
             onBan = { ip, t ->
                 viewModel.fleet("ban", listOf(ip), t, emptyList(), openJob)
@@ -199,7 +200,7 @@ fun FleetFail2banScreen(viewModel: FleetFail2banViewModel, jobLog: JobLogViewMod
         )
     }
     unban?.let { ip ->
-        ConfirmDialog("Разбанить $ip на всех хостах?", onDismiss = { unban = null }) {
+        ConfirmDialog(t("Разбанить $ip на всех хостах?", "Unban $ip on all hosts?"), onDismiss = { unban = null }) {
             viewModel.fleet("unban", listOf(ip), 0, emptyList(), openJob)
             unban = null
         }
@@ -208,13 +209,13 @@ fun FleetFail2banScreen(viewModel: FleetFail2banViewModel, jobLog: JobLogViewMod
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             item {
                 Button(onClick = { banOpen = true }, modifier = Modifier.padding(bottom = 8.dp)) {
-                    Text("Забанить на всех")
+                    Text(t("Забанить на всех", "Ban everywhere"))
                 }
                 Text(
                     text = r.hosts.joinToString(" · ") { h ->
                         when {
-                            !h.installed -> "${h.name}: нет"
-                            !h.running -> "${h.name}: остановлен"
+                            !h.installed -> t("${h.name}: нет", "${h.name}: none")
+                            !h.running -> t("${h.name}: остановлен", "${h.name}: stopped")
                             else -> "${h.name}: ${h.banned}"
                         }
                     },
@@ -222,7 +223,7 @@ fun FleetFail2banScreen(viewModel: FleetFail2banViewModel, jobLog: JobLogViewMod
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
-                if (r.ips.isEmpty()) Text("Забаненных адресов нет")
+                if (r.ips.isEmpty()) Text(t("Забаненных адресов нет", "No banned addresses"))
             }
             items(r.ips, key = { it.ip }) { item ->
                 Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -235,7 +236,7 @@ fun FleetFail2banScreen(viewModel: FleetFail2banViewModel, jobLog: JobLogViewMod
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        TextButton(onClick = { unban = item.ip }) { Text("Разбанить везде") }
+                        TextButton(onClick = { unban = item.ip }) { Text(t("Разбанить везде", "Unban everywhere")) }
                     }
                 }
             }

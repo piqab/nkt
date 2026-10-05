@@ -36,19 +36,20 @@ import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.status.firewallManagerHealth
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
-private val UFW_ACTIONS = listOf(
-    "allow" to "Разрешить",
-    "deny" to "Запретить",
-    "reject" to "Отклонить",
-    "limit" to "Ограничить",
+private val UFW_ACTIONS get() = listOf(
+    "allow" to t("Разрешить", "Allow"),
+    "deny" to t("Запретить", "Deny"),
+    "reject" to t("Отклонить", "Reject"),
+    "limit" to t("Ограничить", "Limit"),
 )
 
 @Composable
 fun FirewallScreen(viewModel: FirewallViewModel) {
     var tab by remember { mutableIntStateOf(0) }
 
-    SectionContent(state = viewModel.state, emptyText = "Данных о firewall нет") { data ->
+    SectionContent(state = viewModel.state, emptyText = t("Данных о firewall нет", "No firewall data")) { data ->
         val hasUfw = data.state.managers.any { it.name.contains("ufw", ignoreCase = true) }
         val hasFirewalld = data.state.managers.any {
             it.name.contains("firewalld", ignoreCase = true)
@@ -56,7 +57,7 @@ fun FirewallScreen(viewModel: FirewallViewModel) {
 
         Column {
             TabRow(selectedTabIndex = tab) {
-                listOf("Правила", "Добавить", "Состояние", "Порты").forEachIndexed { index, title ->
+                listOf(t("Правила", "Rules"), t("Добавить", "Add"), t("Состояние", "State"), t("Порты", "Ports")).forEachIndexed { index, title ->
                     Tab(
                         selected = tab == index,
                         onClick = { tab = index },
@@ -83,14 +84,14 @@ private fun RulesTab(viewModel: FirewallViewModel, data: FirewallData) {
     confirmDelete?.let { (number, text) ->
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
-            title = { Text("Удалить правило #$number") },
+            title = { Text(t("Удалить правило #$number", "Delete rule #$number")) },
             text = {
                 Column {
                     Text(text, fontFamily = FontFamily.Monospace)
                     if (text.contains("22") || text.contains("ssh", ignoreCase = true)) {
                         Text(
-                            text = "Похоже, это правило про SSH. Если удалить его и потерять " +
-                                "доступ, вернуть его будет нечем.",
+                            text = t("Похоже, это правило про SSH. Если удалить его и потерять ", "This looks like an SSH rule. If you delete it and lose ") +
+                                t("доступ, вернуть его будет нечем.", "access, there will be nothing to restore it with."),
                             color = statusColor(HealthStatus.BAD),
                             modifier = Modifier.padding(top = 12.dp),
                         )
@@ -101,15 +102,15 @@ private fun RulesTab(viewModel: FirewallViewModel, data: FirewallData) {
                 TextButton(onClick = {
                     viewModel.deleteUfwRule(number, text)
                     confirmDelete = null
-                }) { Text("Удалить") }
+                }) { Text(t("Удалить", "Delete")) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(t("Отмена", "Cancel")) } },
         )
     }
 
     LazyColumn(contentPadding = PaddingValues(16.dp)) {
         if (data.numbered.rules.isNotEmpty()) {
-            item { SectionTitle("Правила ufw (нумерованные)") }
+            item { SectionTitle(t("Правила ufw (нумерованные)", "ufw rules (numbered)")) }
             items(data.numbered.rules, key = { it.number }) { rule ->
                 Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -124,7 +125,7 @@ private fun RulesTab(viewModel: FirewallViewModel, data: FirewallData) {
                             onClick = { confirmDelete = rule.number to rule.text },
                             enabled = !viewModel.actionInProgress,
                             modifier = Modifier.padding(top = 12.dp),
-                        ) { Text("Удалить") }
+                        ) { Text(t("Удалить", "Delete")) }
                     }
                 }
             }
@@ -132,11 +133,11 @@ private fun RulesTab(viewModel: FirewallViewModel, data: FirewallData) {
 
         if (data.numbered.added.isNotEmpty()) {
             item {
-                SectionTitle("Правила ufw, добавленные в конфигурацию")
+                SectionTitle(t("Правила ufw, добавленные в конфигурацию", "ufw rules added to the configuration"))
                 Text(
                     // ufw prints no numbered list at all while it is inactive,
                     // so these are the only rules visible in that state.
-                    text = "Нумерации нет, пока ufw выключен — удаление идёт по описанию правила.",
+                    text = t("Нумерации нет, пока ufw выключен — удаление идёт по описанию правила.", "No numbering while ufw is off — deletion goes by the rule's description."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp),
@@ -163,13 +164,13 @@ private fun RulesTab(viewModel: FirewallViewModel, data: FirewallData) {
                             },
                             enabled = !viewModel.actionInProgress,
                             modifier = Modifier.padding(top = 12.dp),
-                        ) { Text("Удалить") }
+                        ) { Text(t("Удалить", "Delete")) }
                     }
                 }
             }
         }
 
-        item { SectionTitle("Действующие правила") }
+        item { SectionTitle(t("Действующие правила", "Active rules")) }
         items(data.state.rules, key = { it.id }) { rule ->
             Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -200,7 +201,7 @@ private fun AddRuleTab(viewModel: FirewallViewModel, hasUfw: Boolean, hasFirewal
         if (!hasUfw && !hasFirewalld) {
             item {
                 Text(
-                    text = "На хосте не найден ни ufw, ни firewalld — добавлять правило нечем.",
+                    text = t("На хосте не найден ни ufw, ни firewalld — добавлять правило нечем.", "Neither ufw nor firewalld was found on the host — nothing to add a rule with."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -229,19 +230,19 @@ private fun UfwForm(viewModel: FirewallViewModel) {
     confirming?.let { pending ->
         AlertDialog(
             onDismissRequest = { confirming = null },
-            title = { Text(if (risky) "Это может отрезать доступ" else "Добавить правило") },
+            title = { Text(if (risky) t("Это может отрезать доступ", "This may cut off access") else t("Добавить правило", "Add rule")) },
             text = {
                 Column {
                     Text(
                         text = "${pending.action} ${pending.port}/${pending.protocol}" +
-                            if (pending.from.isNotBlank()) " от ${pending.from}" else "",
+                            if (pending.from.isNotBlank()) t(" от ${pending.from}", " from ${pending.from}") else "",
                         fontFamily = FontFamily.Monospace,
                     )
                     if (risky) {
                         Text(
-                            text = "Порт ${pending.port} — то, через что вы сейчас управляете " +
-                                "хостом. Закрыв его, вы потеряете доступ, и починить это с " +
-                                "телефона будет нельзя: понадобится консоль у провайдера.",
+                            text = t("Порт ${pending.port} — то, через что вы сейчас управляете ", "Port ${pending.port} is what you are managing the ") +
+                                t("хостом. Закрыв его, вы потеряете доступ, и починить это с ", "host through right now. Closing it loses access, and fixing that from ") +
+                                t("телефона будет нельзя: понадобится консоль у провайдера.", "a phone will be impossible: you will need the provider's console."),
                             color = statusColor(HealthStatus.BAD),
                             modifier = Modifier.padding(top = 12.dp),
                         )
@@ -252,9 +253,9 @@ private fun UfwForm(viewModel: FirewallViewModel) {
                 TextButton(onClick = {
                     viewModel.addUfwRule(pending)
                     confirming = null
-                }) { Text(if (risky) "Всё равно добавить" else "Добавить") }
+                }) { Text(if (risky) t("Всё равно добавить", "Add anyway") else t("Добавить", "Add")) }
             },
-            dismissButton = { TextButton(onClick = { confirming = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { confirming = null }) { Text(t("Отмена", "Cancel")) } },
         )
     }
 
@@ -280,7 +281,7 @@ private fun UfwForm(viewModel: FirewallViewModel) {
             OutlinedTextField(
                 value = port,
                 onValueChange = { new -> port = new.filter { it.isDigit() }.take(5) },
-                label = { Text("Порт") },
+                label = { Text(t("Порт", "Port")) },
                 singleLine = true,
                 isError = port.isNotEmpty() && (port.toIntOrNull() ?: 0) !in 1..65535,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -300,21 +301,21 @@ private fun UfwForm(viewModel: FirewallViewModel) {
             OutlinedTextField(
                 value = from,
                 onValueChange = { from = it },
-                label = { Text("Откуда (IP или CIDR, пусто — отовсюду)") },
+                label = { Text(t("Откуда (IP или CIDR, пусто — отовсюду)", "From (IP or CIDR, empty — anywhere)")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
             OutlinedTextField(
                 value = comment,
                 onValueChange = { comment = it },
-                label = { Text("Комментарий") },
+                label = { Text(t("Комментарий", "Comment")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
 
             if (risky) {
                 Text(
-                    text = "Внимание: порт ${spec.port} используется для доступа к хосту.",
+                    text = t("Внимание: порт ${spec.port} используется для доступа к хосту.", "Warning: port ${spec.port} is used to access the host."),
                     color = statusColor(HealthStatus.BAD),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 8.dp),
@@ -326,11 +327,11 @@ private fun UfwForm(viewModel: FirewallViewModel) {
                     onClick = { confirming = spec },
                     enabled = !viewModel.actionInProgress && spec.port in 1..65535,
                     modifier = Modifier.padding(end = 8.dp),
-                ) { Text("Добавить") }
+                ) { Text(t("Добавить", "Add")) }
                 OutlinedButton(
                     onClick = { viewModel.reloadUfw() },
                     enabled = !viewModel.actionInProgress,
-                ) { Text("Перечитать") }
+                ) { Text(t("Перечитать", "Reload")) }
             }
         }
     }
@@ -364,21 +365,21 @@ private fun FirewalldForm(viewModel: FirewallViewModel) {
             OutlinedTextField(
                 value = zone,
                 onValueChange = { zone = it },
-                label = { Text("Зона") },
+                label = { Text(t("Зона", "Zone")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
             OutlinedTextField(
                 value = service,
                 onValueChange = { service = it },
-                label = { Text("Служба (например ssh) — либо порт ниже") },
+                label = { Text(t("Служба (например ssh) — либо порт ниже", "Service (e.g. ssh) — or a port below")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
             OutlinedTextField(
                 value = port,
                 onValueChange = { new -> port = new.filter { it.isDigit() }.take(5) },
-                label = { Text("Порт") },
+                label = { Text(t("Порт", "Port")) },
                 singleLine = true,
                 enabled = !byService,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -397,9 +398,9 @@ private fun FirewalldForm(viewModel: FirewallViewModel) {
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = permanent, onCheckedChange = { permanent = it })
-                Text("Постоянно", style = MaterialTheme.typography.bodySmall)
+                Text(t("Постоянно", "Permanent"), style = MaterialTheme.typography.bodySmall)
                 Checkbox(checked = runtime, onCheckedChange = { runtime = it })
-                Text("Сейчас", style = MaterialTheme.typography.bodySmall)
+                Text(t("Сейчас", "Now"), style = MaterialTheme.typography.bodySmall)
             }
 
             Row(modifier = Modifier.padding(top = 12.dp)) {
@@ -407,16 +408,16 @@ private fun FirewalldForm(viewModel: FirewallViewModel) {
                     onClick = { viewModel.addFirewalldRule(spec) },
                     enabled = !viewModel.actionInProgress && valid,
                     modifier = Modifier.padding(end = 8.dp),
-                ) { Text("Разрешить") }
+                ) { Text(t("Разрешить", "Allow")) }
                 OutlinedButton(
                     onClick = { viewModel.deleteFirewalldRule(spec) },
                     enabled = !viewModel.actionInProgress && valid,
                     modifier = Modifier.padding(end = 8.dp),
-                ) { Text("Убрать") }
+                ) { Text(t("Убрать", "Remove")) }
                 OutlinedButton(
                     onClick = { viewModel.reloadFirewalld() },
                     enabled = !viewModel.actionInProgress,
-                ) { Text("Перечитать") }
+                ) { Text(t("Перечитать", "Reload")) }
             }
         }
     }
@@ -440,16 +441,16 @@ private fun StateTab(
                     }
                     Text(
                         text = when {
-                            !manager.installed -> "не установлен"
-                            manager.active -> "включён"
-                            else -> "установлен, выключен"
+                            !manager.installed -> t("не установлен", "not installed")
+                            manager.active -> t("включён", "enabled")
+                            else -> t("установлен, выключен", "installed, disabled")
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = statusColor(health),
                     )
                     if (manager.policy.isNotBlank()) {
                         Text(
-                            text = "Политика: ${manager.policy}",
+                            text = t("Политика: ${manager.policy}", "Policy: ${manager.policy}"),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -482,13 +483,13 @@ private fun StateTab(
                             onClick = { viewModel.reloadUfw() },
                             enabled = !viewModel.actionInProgress,
                             modifier = Modifier.padding(end = 8.dp),
-                        ) { Text("Перечитать ufw") }
+                        ) { Text(t("Перечитать ufw", "Reload ufw")) }
                     }
                     if (hasFirewalld) {
                         OutlinedButton(
                             onClick = { viewModel.reloadFirewalld() },
                             enabled = !viewModel.actionInProgress,
-                        ) { Text("Перечитать firewalld") }
+                        ) { Text(t("Перечитать firewalld", "Reload firewalld")) }
                     }
                 }
             }

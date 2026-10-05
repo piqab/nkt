@@ -60,6 +60,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import com.netknownsthat.app.i18n.t
 
 /** What every read-only section needs and nothing more. */
 data class SectionState<T>(
@@ -120,7 +121,7 @@ abstract class SectionViewModel<T>(protected val hubClient: HubClient) : ViewMod
             actionInProgress = true
             actionMessage = when (val result = call()) {
                 is HubClient.ApiResult.Success -> okMessage
-                is HubClient.ApiResult.Failure -> "Не удалось: ${result.message}"
+                is HubClient.ApiResult.Failure -> t("Не удалось: ${result.message}", "Failed: ${result.message}")
             }
             actionInProgress = false
             load()
@@ -155,7 +156,7 @@ abstract class SectionViewModel<T>(protected val hubClient: HubClient) : ViewMod
 
             when (val result = call()) {
                 is HubClient.ApiResult.Failure -> {
-                    actionMessage = "Не удалось: ${result.message}"
+                    actionMessage = t("Не удалось: ${result.message}", "Failed: ${result.message}")
                     actionInProgress = false
                     pendingKey = null
                     load()
@@ -184,7 +185,7 @@ abstract class SectionViewModel<T>(protected val hubClient: HubClient) : ViewMod
             }
 
             actionMessage = if (reached) okMessage
-            else "$okMessage — но состояние не изменилось за ${timeoutMs / 1000} с"
+            else t("$okMessage — но состояние не изменилось за ${timeoutMs / 1000} с", "$okMessage — but the state did not change within ${timeoutMs / 1000} s")
             pendingKey = null
             actionInProgress = false
         }
@@ -219,12 +220,12 @@ class ServicesViewModel(hubClient: HubClient) : SectionViewModel<ServicesRespons
         val expectRunning = when (action) {
             "start", "restart", "reload" -> true
             "stop" -> false
-            else -> return act("$name: $action выполнено", call)
+            else -> return act(t("$name: $action выполнено", "$name: $action done"), call)
         }
 
         actAwaiting(
             key = name,
-            okMessage = if (expectRunning) "$name запущен" else "$name остановлен",
+            okMessage = if (expectRunning) t("$name запущен", "$name started") else t("$name остановлен", "$name stopped"),
             settled = { response ->
                 val unit = response.services.find { it.name == name }
                     ?: return@actAwaiting true
@@ -319,7 +320,7 @@ class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRunt
 
     /** Removes the selected images; force also drops ones a container holds. */
     fun removeImages(refs: List<String>, force: Boolean) =
-        act("Удаление образов выполнено") {
+        act(t("Удаление образов выполнено", "Images deleted")) {
             hubClient.post<ImageActionResponse>(
                 "/images/remove",
                 buildJsonObject {
@@ -329,7 +330,7 @@ class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRunt
             )
         }
 
-    fun saveImages(refs: List<String>) = act("Образы сохранены на хосте") {
+    fun saveImages(refs: List<String>) = act(t("Образы сохранены на хосте", "Images saved on the host")) {
         hubClient.post<ImageActionResponse>(
             "/images/save",
             buildJsonObject {
@@ -338,7 +339,7 @@ class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRunt
         )
     }
 
-    fun pruneImages() = act("Осиротевшие образы убраны") {
+    fun pruneImages() = act(t("Осиротевшие образы убраны", "Dangling images removed")) {
         hubClient.post<ImageActionResponse>("/images/prune", "{}")
     }
 
@@ -358,7 +359,7 @@ class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRunt
         val expectRunning = action != "stop"
         actAwaiting(
             key = name,
-            okMessage = if (expectRunning) "$name запущен" else "$name остановлен",
+            okMessage = if (expectRunning) t("$name запущен", "$name started") else t("$name остановлен", "$name stopped"),
             settled = { data -> (isRunning(data) ?: !expectRunning) == expectRunning },
             call = { hubClient.post<JsonObject>(path) },
         )
@@ -378,7 +379,7 @@ class UsersViewModel(hubClient: HubClient) : SectionViewModel<UsersResponse>(hub
     override suspend fun fetch() = hubClient.get<UsersResponse>("/users")
 
     fun create(username: String, password: String, role: String) =
-        act("Пользователь $username создан") {
+        act(t("Пользователь $username создан", "User $username created")) {
             hubClient.post<JsonObject>(
                 "/users",
                 """{"username":${username.jsonString()},"password":${password.jsonString()},"role":${role.jsonString()}}""",
@@ -386,11 +387,11 @@ class UsersViewModel(hubClient: HubClient) : SectionViewModel<UsersResponse>(hub
         }
 
     fun setDisabled(username: String, disabled: Boolean) =
-        act(if (disabled) "$username отключён" else "$username включён") {
+        act(if (disabled) t("$username отключён", "$username disabled") else t("$username включён", "$username enabled")) {
             hubClient.patch<JsonObject>("/users/$username", """{"disabled":$disabled}""")
         }
 
-    fun delete(username: String) = act("$username удалён") {
+    fun delete(username: String) = act(t("$username удалён", "$username deleted")) {
         hubClient.delete<JsonObject>("/users/$username")
     }
 }
@@ -407,7 +408,7 @@ class MiscViewModel(hubClient: HubClient) : SectionViewModel<MiscResponse>(hubCl
 class VulnerabilitiesViewModel(hubClient: HubClient) : SectionViewModel<VulnResponse>(hubClient) {
     override suspend fun fetch() = hubClient.get<VulnResponse>("/vulnerabilities")
 
-    fun startScan() = act("Сканирование запущено") {
+    fun startScan() = act(t("Сканирование запущено", "Scan started")) {
         hubClient.post<JsonObject>("/vulnerabilities/scan")
     }
 
@@ -437,7 +438,7 @@ class AvailabilityViewModel(hubClient: HubClient) : SectionViewModel<Availabilit
         )
     }
 
-    fun check(targetId: Long) = act("Проверка выполнена") {
+    fun check(targetId: Long) = act(t("Проверка выполнена", "Check done")) {
         hubClient.post<JsonObject>("/monitor/targets/$targetId/check")
     }
 }
@@ -448,22 +449,22 @@ data class AvailabilityData(
 )
 
 /** Workload sources in the web UI's order; the host itself last. */
-val USAGE_SOURCES = listOf(
+val USAGE_SOURCES get() = listOf(
     "docker" to "Docker",
     "podman" to "Podman",
     "lxd" to "LXD",
     "libvirt" to "Libvirt",
     "k8s" to "Kubernetes",
-    "k8s_node" to "Узлы k8s",
-    "host" to "Хост",
+    "k8s_node" to t("Узлы k8s", "k8s nodes"),
+    "host" to t("Хост", "Host"),
 )
 
 /** CPU first — it is what is looked at first (as in the web UI). */
-val USAGE_METRICS = listOf(
+val USAGE_METRICS get() = listOf(
     "cpu_pct" to "CPU",
-    "mem_bytes" to "Память",
-    "net_rx_bytes" to "Сеть ↓",
-    "net_tx_bytes" to "Сеть ↑",
+    "mem_bytes" to t("Память", "Memory"),
+    "net_rx_bytes" to t("Сеть ↓", "Network ↓"),
+    "net_tx_bytes" to t("Сеть ↑", "Network ↑"),
 )
 
 /** Most series one chart shows; the web UI's MAX_SERIES. */
@@ -612,9 +613,9 @@ class ConfigsViewModel(hubClient: HubClient) : SectionViewModel<ConfigsResponse>
                 is HubClient.ApiResult.Success ->
                     // An empty diff is the honest answer for the version that
                     // is already on disk, and saying so beats a blank screen.
-                    diff = result.value.diff.ifEmpty { "Эта версия совпадает с текущим файлом." }
+                    diff = result.value.diff.ifEmpty { t("Эта версия совпадает с текущим файлом.", "This version matches the current file.") }
 
-                is HubClient.ApiResult.Failure -> diff = "Не удалось получить diff: ${result.message}"
+                is HubClient.ApiResult.Failure -> diff = t("Не удалось получить diff: ${result.message}", "Could not get the diff: ${result.message}")
             }
         }
     }
@@ -657,8 +658,8 @@ class ConfigsViewModel(hubClient: HubClient) : SectionViewModel<ConfigsResponse>
                     // remedy is different from any other failure: reload and
                     // redo the edit rather than retry the same write.
                     openFileError = if (result.httpCode == 409)
-                        "Файл изменился на хосте после того, как был открыт. " +
-                            "Откройте его заново и повторите правку."
+                        t("Файл изменился на хосте после того, как был открыт. ", "The file changed on the host after it was opened. ") +
+                            t("Откройте его заново и повторите правку.", "Open it again and repeat the edit.")
                     else result.message
                 }
             }
@@ -689,7 +690,7 @@ class ConfigsViewModel(hubClient: HubClient) : SectionViewModel<ConfigsResponse>
 
 class FirewallViewModel(hubClient: HubClient) : SectionViewModel<FirewallData>(hubClient) {
 
-    fun addUfwRule(spec: RuleSpec) = act("Правило добавлено") {
+    fun addUfwRule(spec: RuleSpec) = act(t("Правило добавлено", "Rule added")) {
         hubClient.post<CommandStatus>("/firewall/rules", Json.encodeToString(RuleSpec.serializer(), spec))
     }
 
@@ -699,7 +700,7 @@ class FirewallViewModel(hubClient: HubClient) : SectionViewModel<FirewallData>(h
      * ufw renumbers after every change, so acting on a stale number is how
      * the wrong rule — possibly the one keeping SSH open — gets deleted.
      */
-    fun deleteUfwRule(number: Int, expectedText: String) = act("Правило удалено") {
+    fun deleteUfwRule(number: Int, expectedText: String) = act(t("Правило удалено", "Rule deleted")) {
         hubClient.delete<CommandStatus>(
             "/firewall/rules/$number",
             buildJsonObject { put("expected", expectedText) }.toString(),
@@ -708,32 +709,32 @@ class FirewallViewModel(hubClient: HubClient) : SectionViewModel<FirewallData>(h
 
     /** For rules ufw knows about but does not number — `ufw status numbered`
      * lists nothing at all while ufw is inactive. */
-    fun deleteUfwRuleBySpec(spec: RuleSpec) = act("Правило удалено") {
+    fun deleteUfwRuleBySpec(spec: RuleSpec) = act(t("Правило удалено", "Rule deleted")) {
         hubClient.delete<CommandStatus>(
             "/firewall/rules",
             Json.encodeToString(RuleSpec.serializer(), spec),
         )
     }
 
-    fun deleteFirewalldRule(spec: FirewalldPortSpec) = act("Правило удалено") {
+    fun deleteFirewalldRule(spec: FirewalldPortSpec) = act(t("Правило удалено", "Rule deleted")) {
         hubClient.delete<CommandStatus>(
             "/firewall/firewalld/rules",
             Json.encodeToString(FirewalldPortSpec.serializer(), spec),
         )
     }
 
-    fun reloadUfw() = act("ufw перечитан") {
+    fun reloadUfw() = act(t("ufw перечитан", "ufw reloaded")) {
         hubClient.post<CommandStatus>("/firewall/reload")
     }
 
-    fun addFirewalldRule(spec: FirewalldPortSpec) = act("Правило добавлено") {
+    fun addFirewalldRule(spec: FirewalldPortSpec) = act(t("Правило добавлено", "Rule added")) {
         hubClient.post<CommandStatus>(
             "/firewall/firewalld/rules",
             Json.encodeToString(FirewalldPortSpec.serializer(), spec),
         )
     }
 
-    fun reloadFirewalld() = act("firewalld перечитан") {
+    fun reloadFirewalld() = act(t("firewalld перечитан", "firewalld reloaded")) {
         hubClient.post<CommandStatus>("/firewall/firewalld/reload")
     }
 
@@ -822,7 +823,7 @@ class CertificatesViewModel(hubClient: HubClient) :
                     load()
                 }
 
-                is HubClient.ApiResult.Failure -> actionMessage = "Не удалось: ${result.message}"
+                is HubClient.ApiResult.Failure -> actionMessage = t("Не удалось: ${result.message}", "Failed: ${result.message}")
             }
         }
     }
@@ -841,8 +842,8 @@ class CertificatesViewModel(hubClient: HubClient) :
                 put("target_path", targetPath)
             }.toString()
             actionMessage = when (val result = hubClient.post<JsonObject>("/certificates/combine", body)) {
-                is HubClient.ApiResult.Success -> "PEM собран"
-                is HubClient.ApiResult.Failure -> "Не удалось: ${result.message}"
+                is HubClient.ApiResult.Success -> t("PEM собран", "PEM built")
+                is HubClient.ApiResult.Failure -> t("Не удалось: ${result.message}", "Failed: ${result.message}")
             }
             load()
         }

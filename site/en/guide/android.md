@@ -27,6 +27,13 @@ The app version is the nkt version: app `1.11.150` is written for hub
 `1.11.150`. Both are shown in the app's About screen; with a newer hub the
 app works, but may lack the hub's newest sections.
 
+## Language
+
+The interface is in Russian and English. By default it follows the phone
+language (Russian; any other — English). Switch it on the sign-in screen or
+in About, instantly, without a restart. Server messages — errors, job logs,
+alert and problem texts — come in the same language.
+
 ## Sign-in
 
 The hub address is the one used in the browser (`http://192.168.1.10:8077`

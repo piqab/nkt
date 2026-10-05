@@ -14,13 +14,14 @@ import androidx.compose.ui.Modifier
 import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.ui.hub.RebootViewModel
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
-private val KIND_LABEL = mapOf(
+private val KIND_LABEL get() = mapOf(
     "docker" to "Docker",
     "podman" to "Podman",
     "lxd" to "LXD",
-    "vm" to "ВМ",
-    "service" to "служба",
+    "vm" to t("ВМ", "VMs"),
+    "service" to t("служба", "service"),
 )
 
 /**
@@ -33,24 +34,24 @@ fun RebootDialog(hostName: String, viewModel: RebootViewModel, onDismiss: () -> 
     val p = viewModel.preview
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Перезагрузить $hostName?") },
+        title = { Text(t("Перезагрузить $hostName?", "Reboot $hostName?")) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 when {
                     p == null && viewModel.loading -> CircularProgressIndicator()
-                    p == null -> Text("Не удалось получить сведения о хосте")
+                    p == null -> Text(t("Не удалось получить сведения о хосте", "Could not get the host's details"))
                     else -> {
                         if (p.rebootRequired) {
-                            Text("Перезагрузка требуется после обновлений", color = statusColor(HealthStatus.WARN))
+                            Text(t("Перезагрузка требуется после обновлений", "A reboot is required after updates"), color = statusColor(HealthStatus.WARN))
                         }
                         val running = p.running.filterValues { it > 0 }
                             .entries.joinToString(", ") { "${KIND_LABEL[it.key] ?: it.key}: ${it.value}" }
-                        if (running.isNotEmpty()) Text("Работает сейчас — $running")
+                        if (running.isNotEmpty()) Text(t("Работает сейчас — $running", "Running now — $running"))
                         if (p.noAutostart.isEmpty()) {
-                            Text("Всё работающее поднимется само.", color = statusColor(HealthStatus.OK))
+                            Text(t("Всё работающее поднимется само.", "Everything running will come back by itself."), color = statusColor(HealthStatus.OK))
                         } else {
                             Text(
-                                "Не поднимутся сами (${p.noAutostart.size}):",
+                                t("Не поднимутся сами (${p.noAutostart.size}):", "Will not come back by themselves (${p.noAutostart.size}):"),
                                 color = statusColor(HealthStatus.WARN),
                                 style = MaterialTheme.typography.titleSmall,
                             )
@@ -62,7 +63,7 @@ fun RebootDialog(hostName: String, viewModel: RebootViewModel, onDismiss: () -> 
                             }
                         }
                         if (p.simulated) {
-                            Text("Стенд с фикстурами — перезагрузка не выполняется", style = MaterialTheme.typography.bodySmall)
+                            Text(t("Стенд с фикстурами — перезагрузка не выполняется", "Fixtures stand — the reboot is not performed"), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -72,8 +73,8 @@ fun RebootDialog(hostName: String, viewModel: RebootViewModel, onDismiss: () -> 
             TextButton(
                 enabled = p != null && !viewModel.loading,
                 onClick = { viewModel.reboot(onDone = onDismiss) },
-            ) { Text("Перезагрузить", color = MaterialTheme.colorScheme.error) }
+            ) { Text(t("Перезагрузить", "Reboot"), color = MaterialTheme.colorScheme.error) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Отмена", "Cancel")) } },
     )
 }

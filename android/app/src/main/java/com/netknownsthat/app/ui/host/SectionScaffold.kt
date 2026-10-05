@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.netknownsthat.app.i18n.t
 
 /**
  * Renders the three states every read-only section shares, so each screen
@@ -25,7 +26,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun <T> SectionContent(
     state: SectionState<T>,
-    emptyText: String = "Пусто",
+    emptyText: String = t("Пусто", "Empty"),
     isEmpty: (T) -> Boolean = { false },
     content: @Composable (T) -> Unit,
 ) {
@@ -68,7 +69,7 @@ private fun StaleWarning(message: String) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Text(
-            text = "Не удалось обновить: $message",
+            text = t("Не удалось обновить: $message", "Could not refresh: $message"),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(12.dp),

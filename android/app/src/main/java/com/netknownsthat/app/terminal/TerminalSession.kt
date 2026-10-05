@@ -14,6 +14,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
+import com.netknownsthat.app.i18n.t
 
 /**
  * One PTY over a WebSocket, wired to a [TerminalEmulator].
@@ -101,10 +102,10 @@ class TerminalSession(
                     state = State.FAILED
                     error = when {
                         response?.code == 403 ->
-                            "Терминал отключён на этом хосте (NKT_TERMINAL_ENABLED)"
+                            t("Терминал отключён на этом хосте (NKT_TERMINAL_ENABLED)", "The terminal is disabled on this host (NKT_TERMINAL_ENABLED)")
 
-                        response != null -> "Не удалось подключиться: ${response.code}"
-                        else -> t.message ?: "Соединение разорвано"
+                        response != null -> t("Не удалось подключиться: ${response.code}", "Could not connect: ${response.code}")
+                        else -> t.message ?: t("Соединение разорвано", "Connection lost")
                     }
                     revision++
                 }

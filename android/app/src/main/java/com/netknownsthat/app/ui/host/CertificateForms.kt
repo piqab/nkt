@@ -28,6 +28,7 @@ import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.status.certificateHealth
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
 /**
  * The three things this app can do about certificates: issue a real one with
@@ -64,24 +65,24 @@ private fun IssueForm(viewModel: CertificatesViewModel) {
     var domains by remember { mutableStateOf("") }
     val list = domains.split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }
 
-    FormCard("Выпустить сертификат Let's Encrypt") {
+    FormCard(t("Выпустить сертификат Let's Encrypt", "Issue a Let's Encrypt certificate")) {
         Text(
-            text = "certbot должен суметь подтвердить владение доменом с этого хоста — " +
-                "то есть имя уже должно указывать сюда, а 80-й порт быть доступен снаружи.",
+            text = t("certbot должен суметь подтвердить владение доменом с этого хоста — ", "certbot must be able to prove domain ownership from this host — ") +
+                t("то есть имя уже должно указывать сюда, а 80-й порт быть доступен снаружи.", "so the name must already point here, and port 80 must be reachable from outside."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
             value = domains,
             onValueChange = { domains = it },
-            label = { Text("Домены через запятую") },
+            label = { Text(t("Домены через запятую", "Domains, comma-separated")) },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         OutlinedButton(
             onClick = { viewModel.issue(list) },
             enabled = list.isNotEmpty() && !viewModel.jobRunning,
             modifier = Modifier.padding(top = 12.dp),
-        ) { Text("Выпустить") }
+        ) { Text(t("Выпустить", "Issue")) }
     }
 }
 
@@ -89,7 +90,7 @@ private fun IssueForm(viewModel: CertificatesViewModel) {
 private fun RenewForm(viewModel: CertificatesViewModel) {
     if (viewModel.lineages.isEmpty()) return
 
-    FormCard("Продлить существующий") {
+    FormCard(t("Продлить существующий", "Renew existing")) {
         viewModel.lineages.forEach { lineage ->
             val health = certificateHealth(
                 daysLeft = lineage.daysLeft,
@@ -108,8 +109,8 @@ private fun RenewForm(viewModel: CertificatesViewModel) {
                         )
                     }
                     Text(
-                        text = if (lineage.known) "осталось ${lineage.daysLeft} дн."
-                        else "срок неизвестен — fullchain.pem не прочитан",
+                        text = if (lineage.known) t("осталось ${lineage.daysLeft} дн.", "${lineage.daysLeft} d left")
+                        else t("срок неизвестен — fullchain.pem не прочитан", "expiry unknown — fullchain.pem not read"),
                         style = MaterialTheme.typography.bodySmall,
                         color = statusColor(health),
                     )
@@ -117,7 +118,7 @@ private fun RenewForm(viewModel: CertificatesViewModel) {
                 OutlinedButton(
                     onClick = { viewModel.renew(lineage.name) },
                     enabled = !viewModel.jobRunning,
-                ) { Text("Продлить") }
+                ) { Text(t("Продлить", "Renew")) }
             }
         }
     }
@@ -131,18 +132,18 @@ private fun SelfSignedForm(viewModel: CertificatesViewModel) {
     var days by remember { mutableStateOf("397") }
     val list = names.split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }
 
-    FormCard("Самоподписанный сертификат") {
+    FormCard(t("Самоподписанный сертификат", "Self-signed certificate")) {
         Text(
-            text = "Браузеры такому не доверяют — это для внутренних адресов и проверок. " +
-                "Конфигурацию сервиса он не меняет: выдаёт готовый фрагмент, который можно " +
-                "вставить через редактор конфигурации.",
+            text = t("Браузеры такому не доверяют — это для внутренних адресов и проверок. ", "Browsers do not trust these — they are for internal addresses and tests. ") +
+                t("Конфигурацию сервиса он не меняет: выдаёт готовый фрагмент, который можно ", "It does not change the service configuration: it gives a ready snippet that can be ") +
+                t("вставить через редактор конфигурации.", "inserted with the configuration editor."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
             value = names,
             onValueChange = { names = it },
-            label = { Text("Имена через запятую") },
+            label = { Text(t("Имена через запятую", "Names, comma-separated")) },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         Row(modifier = Modifier.padding(top = 8.dp)) {
@@ -160,7 +161,7 @@ private fun SelfSignedForm(viewModel: CertificatesViewModel) {
                 FilterChip(
                     selected = bits == value,
                     onClick = { bits = value },
-                    label = { Text("$value бит") },
+                    label = { Text(t("$value бит", "$value bits")) },
                     modifier = Modifier.padding(end = 6.dp),
                 )
             }
@@ -168,7 +169,7 @@ private fun SelfSignedForm(viewModel: CertificatesViewModel) {
         OutlinedTextField(
             value = days,
             onValueChange = { new -> days = new.filter { it.isDigit() }.take(3) },
-            label = { Text("Срок в днях (1…825)") },
+            label = { Text(t("Срок в днях (1…825)", "Validity in days (1…825)")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
@@ -176,7 +177,7 @@ private fun SelfSignedForm(viewModel: CertificatesViewModel) {
             onClick = { viewModel.generateSelfSigned(list, service, bits, days.toIntOrNull() ?: 397) },
             enabled = list.isNotEmpty() && (days.toIntOrNull() ?: 0) in 1..825,
             modifier = Modifier.padding(top = 12.dp),
-        ) { Text("Создать") }
+        ) { Text(t("Создать", "Create")) }
     }
 }
 
@@ -186,10 +187,10 @@ private fun CombineForm(viewModel: CertificatesViewModel) {
     var lineage by remember { mutableStateOf("") }
     var target by remember { mutableStateOf("") }
 
-    FormCard("Собрать PEM для haproxy") {
+    FormCard(t("Собрать PEM для haproxy", "Build a PEM for haproxy")) {
         Text(
-            text = "haproxy ждёт сертификат и ключ одним файлом. certbot здесь не вызывается — " +
-                "только переупаковывается уже выпущенное.",
+            text = t("haproxy ждёт сертификат и ключ одним файлом. certbot здесь не вызывается — ", "haproxy expects the certificate and key in one file. certbot is not called here — ") +
+                t("только переупаковывается уже выпущенное.", "only an already issued certificate is repackaged."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -209,7 +210,7 @@ private fun CombineForm(viewModel: CertificatesViewModel) {
         }
         if (viewModel.haproxyPaths.isNotEmpty()) {
             Text(
-                text = "Перезаписать существующий файл (иначе будет создан новый):",
+                text = t("Перезаписать существующий файл (иначе будет создан новый):", "Overwrite an existing file (otherwise a new one is created):"),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -226,7 +227,7 @@ private fun CombineForm(viewModel: CertificatesViewModel) {
             onClick = { viewModel.combine(lineage, target) },
             enabled = lineage.isNotEmpty() && !viewModel.actionInProgress,
             modifier = Modifier.padding(top = 12.dp),
-        ) { Text("Собрать") }
+        ) { Text(t("Собрать", "Build")) }
     }
 }
 
@@ -244,7 +245,7 @@ private fun FormCard(title: String, content: @Composable () -> Unit) {
 private fun JobLogDialog(viewModel: CertificatesViewModel) {
     AlertDialog(
         onDismissRequest = { if (!viewModel.jobRunning) viewModel.dismissJob() },
-        title = { Text(if (viewModel.jobRunning) "Выполняется…" else "Готово") },
+        title = { Text(if (viewModel.jobRunning) t("Выполняется…", "Running…") else t("Готово", "Done")) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 if (viewModel.jobRunning) {
@@ -273,7 +274,7 @@ private fun JobLogDialog(viewModel: CertificatesViewModel) {
                 // showing it; certbot takes minutes and the log is the only
                 // sign of progress.
                 enabled = !viewModel.jobRunning,
-            ) { Text("Закрыть") }
+            ) { Text(t("Закрыть", "Close")) }
         },
     )
 }
@@ -286,17 +287,17 @@ private fun SelfSignedResultDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(if (results.size > 1) "Создано сертификатов: ${results.size}" else "Сертификат создан")
+            Text(if (results.size > 1) t("Создано сертификатов: ${results.size}", "Certificates created: ${results.size}") else t("Сертификат создан", "Certificate created"))
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 results.forEach { result ->
                 Text(result.names.joinToString(", "))
                 listOfNotNull(
-                    result.certPath.takeIf { it.isNotBlank() }?.let { "Сертификат: $it" },
-                    result.keyPath.takeIf { it.isNotBlank() }?.let { "Ключ: $it" },
+                    result.certPath.takeIf { it.isNotBlank() }?.let { t("Сертификат: $it", "Certificate: $it") },
+                    result.keyPath.takeIf { it.isNotBlank() }?.let { t("Ключ: $it", "Key: $it") },
                     result.combinedPath.takeIf { it.isNotBlank() }?.let { "PEM: $it" },
-                    result.notAfter.takeIf { it.isNotBlank() }?.let { "Действует до: $it" },
+                    result.notAfter.takeIf { it.isNotBlank() }?.let { t("Действует до: $it", "Valid until: $it") },
                 ).forEach {
                     Text(
                         text = it,
@@ -307,8 +308,8 @@ private fun SelfSignedResultDialog(
                 }
                 if (result.snippet.isNotBlank()) {
                     Text(
-                        text = "Фрагмент конфигурации — вставьте его через раздел " +
-                            "«Конфигурация», приложение не правит конфиги само:",
+                        text = t("Фрагмент конфигурации — вставьте его через раздел ", "Configuration snippet — insert it via the ") +
+                            t("«Конфигурация», приложение не правит конфиги само:", "“Configuration” section, the app does not edit configs itself:"),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 12.dp),
                     )
@@ -324,6 +325,6 @@ private fun SelfSignedResultDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Закрыть", "Close")) } },
     )
 }

@@ -23,6 +23,7 @@ import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.ui.host.SectionContent
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
 private fun pctHealth(pct: Double): HealthStatus = when {
     pct >= 90 -> HealthStatus.BAD
@@ -42,21 +43,21 @@ fun MonitoringScreen(viewModel: MonitoringViewModel, onOpenHost: (hostId: Long, 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                     Text(
-                        text = if (r.collecting) "Идёт сбор…" else "Собрано ${formatTs(r.lastRun)}",
+                        text = if (r.collecting) t("Идёт сбор…", "Collecting…") else t("Собрано ${formatTs(r.lastRun)}", "Collected ${formatTs(r.lastRun)}"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedButton(onClick = viewModel::collect, enabled = !r.collecting && !viewModel.actionInProgress) {
-                        Text("Собрать сейчас")
+                        Text(t("Собрать сейчас", "Collect now"))
                     }
                 }
             }
             if (r.insights.isNotEmpty()) {
-                item { Header("Обратить внимание") }
+                item { Header(t("Обратить внимание", "Needs attention")) }
                 items(r.insights) { InsightCard(it, onOpenHost) }
             }
-            item { Header("Хосты") }
+            item { Header(t("Хосты", "Hosts")) }
             items(r.hosts, key = { it.id }) { HostLoadCard(it, onOpen = { onOpenHost(it.id, "/usage") }) }
             if (r.clusters.isNotEmpty()) {
                 item { Header("Kubernetes") }
@@ -94,7 +95,7 @@ private fun InsightCard(i: MonInsight, onOpenHost: (Long, String) -> Unit) {
             StatusDot(health)
             Text(i.text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             if (i.hostId != 0L && i.path.isNotBlank()) {
-                TextButton(onClick = { onOpenHost(i.hostId, i.path) }) { Text("К хосту") }
+                TextButton(onClick = { onOpenHost(i.hostId, i.path) }) { Text(t("К хосту", "To host")) }
             }
         }
     }
@@ -117,22 +118,22 @@ private fun HostLoadCard(h: MonHost, onOpen: () -> Unit) {
                 )
             }
             if (!h.hasData) {
-                Text("Данных пока нет", style = MaterialTheme.typography.bodySmall)
+                Text(t("Данных пока нет", "No data yet"), style = MaterialTheme.typography.bodySmall)
                 return@Column
             }
-            Meter("CPU", h.cpuNow, "сейчас %.0f%% · среднее %.0f%% · макс %.0f%%".format(h.cpuNow, h.cpuAvg, h.cpuMax))
+            Meter("CPU", h.cpuNow, t("сейчас %.0f%% · среднее %.0f%% · макс %.0f%%", "now %.0f%% · average %.0f%% · max %.0f%%").format(h.cpuNow, h.cpuAvg, h.cpuMax))
             val memPct = if (h.memTotal > 0) h.memUsed / h.memTotal * 100 else 0.0
-            Meter("Память", memPct, "${humanBytes(h.memUsed)} из ${humanBytes(h.memTotal)}")
+            Meter(t("Память", "Memory"), memPct, t("${humanBytes(h.memUsed)} из ${humanBytes(h.memTotal)}", "${humanBytes(h.memUsed)} of ${humanBytes(h.memTotal)}"))
             h.disks.forEach { d ->
                 Meter(
                     d.mount,
                     d.pct,
-                    "${humanBytes(d.used)} из ${humanBytes(d.size)}" +
-                        (d.etaDays?.let { " · заполнится через %.0f дн.".format(it) } ?: ""),
+                    t("${humanBytes(d.used)} из ${humanBytes(d.size)}", "${humanBytes(d.used)} of ${humanBytes(d.size)}") +
+                        (d.etaDays?.let { t(" · заполнится через %.0f дн.", " · full in %.0f d").format(it) } ?: ""),
                 )
             }
             Text(
-                "load %.1f · нагрузок %d".format(h.loadAvg, h.workloads),
+                t("load %.1f · нагрузок %d", "load %.1f · workloads %d").format(h.loadAvg, h.workloads),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -27,14 +27,15 @@ import com.netknownsthat.app.net.model.ServiceUnit
 import com.netknownsthat.app.status.serviceHealth
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
-private val ACTION_LABELS = mapOf(
-    "start" to "Запустить",
-    "stop" to "Остановить",
-    "restart" to "Перезапустить",
-    "reload" to "Перечитать",
-    "enable" to "Включить автозапуск",
-    "disable" to "Выключить автозапуск",
+private val ACTION_LABELS get() = mapOf(
+    "start" to t("Запустить", "Start"),
+    "stop" to t("Остановить", "Stop"),
+    "restart" to t("Перезапустить", "Restart"),
+    "reload" to t("Перечитать", "Reload"),
+    "enable" to t("Включить автозапуск", "Enable autostart"),
+    "disable" to t("Выключить автозапуск", "Disable autostart"),
 )
 
 /** Actions worth a confirmation step: each one interrupts a running service,
@@ -49,20 +50,20 @@ fun ServicesScreen(viewModel: ServicesViewModel) {
         AlertDialog(
             onDismissRequest = { pending = null },
             title = { Text(ACTION_LABELS[action] ?: action) },
-            text = { Text("${service.name} — выполнить «${ACTION_LABELS[action] ?: action}»?") },
+            text = { Text(t("${service.name} — выполнить «${ACTION_LABELS[action] ?: action}»?", "${service.name} — run “${ACTION_LABELS[action] ?: action}”?")) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.action(service.name, action)
                     pending = null
-                }) { Text("Да") }
+                }) { Text(t("Да", "Yes")) }
             },
-            dismissButton = { TextButton(onClick = { pending = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text(t("Отмена", "Cancel")) } },
         )
     }
 
     SectionContent(
         state = viewModel.state,
-        emptyText = "Сервисы не найдены",
+        emptyText = t("Сервисы не найдены", "No services found"),
         isEmpty = { it.services.isEmpty() },
     ) { response ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
@@ -120,7 +121,7 @@ private fun ServiceCard(
             val details = listOfNotNull(
                 service.subState.takeIf { it.isNotBlank() },
                 service.enabled.takeIf { it.isNotBlank() },
-                service.since.takeIf { it.isNotBlank() }?.let { "с $it" },
+                service.since.takeIf { it.isNotBlank() }?.let { t("с $it", "since $it") },
                 service.mainPid.takeIf { it > 0 }?.let { "PID $it" },
             ).joinToString(" · ")
             if (details.isNotEmpty()) {

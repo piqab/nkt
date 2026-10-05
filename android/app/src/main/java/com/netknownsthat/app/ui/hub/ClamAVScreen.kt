@@ -23,12 +23,13 @@ import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.ui.host.SectionContent
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
-private val CLAM_OP = mapOf(
-    "install" to "установка",
-    "update" to "обновление баз",
-    "scan" to "проверка хоста",
-    "scan-images" to "проверка образов",
+private val CLAM_OP get() = mapOf(
+    "install" to t("установка", "install"),
+    "update" to t("обновление баз", "signature update"),
+    "scan" to t("проверка хоста", "host scan"),
+    "scan-images" to t("проверка образов", "image scan"),
 )
 
 /**
@@ -54,15 +55,15 @@ fun ClamAVScreen(viewModel: ClamAVViewModel, jobLog: JobLogViewModel) {
                     )
                     Text(
                         when {
-                            !st.installed -> "ClamAV не установлен"
-                            !st.dbPresent -> "ClamAV ${st.version} — баз сигнатур нет"
-                            else -> "ClamAV ${st.version} · базы ${st.dbVersion} от ${st.dbDate}"
+                            !st.installed -> t("ClamAV не установлен", "ClamAV is not installed")
+                            !st.dbPresent -> t("ClamAV ${st.version} — баз сигнатур нет", "ClamAV ${st.version} — no signature databases")
+                            else -> t("ClamAV ${st.version} · базы ${st.dbVersion} от ${st.dbDate}", "ClamAV ${st.version} · databases ${st.dbVersion} of ${st.dbDate}")
                         },
                     )
                 }
                 if (st.installed) {
                     Text(
-                        if (st.freshclamActive) "freshclam обновляет базы сам" else "freshclam не запущен — базы обновляются вручную",
+                        if (st.freshclamActive) t("freshclam обновляет базы сам", "freshclam updates the databases itself") else t("freshclam не запущен — базы обновляются вручную", "freshclam is not running — databases are updated by hand"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -70,39 +71,39 @@ fun ClamAVScreen(viewModel: ClamAVViewModel, jobLog: JobLogViewModel) {
                 if (r.running) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                         StatusDot(HealthStatus.WARN, busy = true)
-                        Text("Идёт ${CLAM_OP[r.op] ?: r.op}", modifier = Modifier.weight(1f))
-                        OutlinedButton(onClick = { openJob(r.jobId) }) { Text("Журнал") }
+                        Text(t("Идёт ${CLAM_OP[r.op] ?: r.op}", "Running: ${CLAM_OP[r.op] ?: r.op}"), modifier = Modifier.weight(1f))
+                        OutlinedButton(onClick = { openJob(r.jobId) }) { Text(t("Журнал", "Log")) }
                     }
                 }
                 val enabled = !r.running
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
                     if (!st.installed) {
-                        OutlinedButton(onClick = { viewModel.install(openJob) }, enabled = enabled && r.apt) { Text("Установить") }
+                        OutlinedButton(onClick = { viewModel.install(openJob) }, enabled = enabled && r.apt) { Text(t("Установить", "Install")) }
                     } else {
                         OutlinedButton(onClick = { viewModel.updateDb(openJob) }, enabled = enabled, modifier = Modifier.padding(end = 8.dp)) {
-                            Text("Обновить базы")
+                            Text(t("Обновить базы", "Update databases"))
                         }
                         OutlinedButton(onClick = { viewModel.scanHost(openJob) }, enabled = enabled && st.dbPresent, modifier = Modifier.padding(end = 8.dp)) {
-                            Text("Проверить хост")
+                            Text(t("Проверить хост", "Scan host"))
                         }
                         if (r.images.isNotEmpty()) {
                             OutlinedButton(onClick = { viewModel.scanImages(openJob) }, enabled = enabled && st.dbPresent) {
-                                Text("Проверить образы (${r.images.size})")
+                                Text(t("Проверить образы (${r.images.size})", "Scan images (${r.images.size})"))
                             }
                         }
                     }
                 }
                 if (!st.installed && !r.apt) {
-                    Text("Установка отсюда — только на хостах с apt", style = MaterialTheme.typography.bodySmall)
+                    Text(t("Установка отсюда — только на хостах с apt", "Installing from here works only on hosts with apt"), style = MaterialTheme.typography.bodySmall)
                 }
                 Text(
-                    "Каталоги проверки: ${r.paths.joinToString()}",
+                    t("Каталоги проверки: ${r.paths.joinToString()}", "Scanned directories: ${r.paths.joinToString()}"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            r.hostScan?.let { item { ScanCard("Последняя проверка хоста", it) } }
-            r.imageScan?.let { item { ScanCard("Последняя проверка образов", it) } }
+            r.hostScan?.let { item { ScanCard(t("Последняя проверка хоста", "Last host scan"), it) } }
+            r.imageScan?.let { item { ScanCard(t("Последняя проверка образов", "Last image scan"), it) } }
         }
     }
 }
@@ -113,7 +114,7 @@ private fun ScanCard(title: String, scan: ClamScan) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(
-                "${formatTs(scan.finishedAt)} · файлов ${scan.scanned} · найдено ${scan.hits.size}",
+                t("${formatTs(scan.finishedAt)} · файлов ${scan.scanned} · найдено ${scan.hits.size}", "${formatTs(scan.finishedAt)} · files ${scan.scanned} · found ${scan.hits.size}"),
                 style = MaterialTheme.typography.bodySmall,
                 color = statusColor(if (scan.hits.isEmpty()) HealthStatus.OK else HealthStatus.BAD),
             )

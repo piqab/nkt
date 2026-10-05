@@ -38,6 +38,7 @@ import androidx.compose.foundation.Canvas
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
+import com.netknownsthat.app.i18n.t
 
 /**
  * The resource map, drawn natively rather than ported from the web SVG.
@@ -56,7 +57,7 @@ import kotlin.math.sin
 fun TopologyScreen(viewModel: TopologyViewModel) {
     SectionContent(
         state = viewModel.state,
-        emptyText = "Карта пуста",
+        emptyText = t("Карта пуста", "The map is empty"),
         isEmpty = { it.nodes.isEmpty() },
     ) { topology ->
         var scale by remember { mutableFloatStateOf(1f) }
@@ -156,20 +157,20 @@ fun TopologyScreen(viewModel: TopologyViewModel) {
                         )
                         if (node.findings > 0) {
                             Text(
-                                text = "Проблем: ${node.findings}",
+                                text = t("Проблем: ${node.findings}", "Problems: ${node.findings}"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
                         }
                         folded.members[node.id]?.let { members ->
                             Text(
-                                text = "Свёрнуто портов: ${members.size}",
+                                text = t("Свёрнуто портов: ${members.size}", "Folded ports: ${members.size}"),
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(top = 4.dp),
                             )
                             members.forEach { m ->
                                 Text(
-                                    text = "• ${m.label}" + if (m.findings > 0) " — проблем ${m.findings}" else "",
+                                    text = "• ${m.label}" + if (m.findings > 0) t(" — проблем ${m.findings}", " — problems ${m.findings}") else "",
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
@@ -187,8 +188,8 @@ fun TopologyScreen(viewModel: TopologyViewModel) {
             }
 
             Text(
-                text = "Узлов: ${shown.nodes.size} · связей: ${shown.edges.size}. " +
-                    "Щипок — масштаб, перетаскивание — сдвиг, касание — узел.",
+                text = t("Узлов: ${shown.nodes.size} · связей: ${shown.edges.size}. ", "Nodes: ${shown.nodes.size} · links: ${shown.edges.size}. ") +
+                    t("Щипок — масштаб, перетаскивание — сдвиг, касание — узел.", "Pinch — zoom, drag — pan, tap — node."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.TopStart).padding(12.dp),

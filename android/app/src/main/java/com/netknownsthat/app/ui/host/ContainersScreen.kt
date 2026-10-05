@@ -35,8 +35,9 @@ import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.status.instanceHealth
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
-private val LIFECYCLE = listOf("start" to "Пуск", "stop" to "Стоп", "restart" to "Рестарт")
+private val LIFECYCLE get() = listOf("start" to t("Пуск", "Start"), "stop" to t("Стоп", "Stop"), "restart" to t("Рестарт", "Restart"))
 
 @Composable
 fun ContainersScreen(viewModel: ContainersViewModel) {
@@ -44,19 +45,19 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
     var inspectName by remember { mutableStateOf<String?>(null) }
     inspectName?.let { ContainerInspectDialog(it, viewModel, onDismiss = { inspectName = null }) }
 
-    SectionContent(state = viewModel.state, emptyText = "Контейнеры не найдены") { data ->
+    SectionContent(state = viewModel.state, emptyText = t("Контейнеры не найдены", "No containers found")) { data ->
         // Only tabs with something in them: a host running plain Docker
         // should not be offered three empty tabs for runtimes it lacks.
         val tabs = buildList {
             if (data.docker.containers.isNotEmpty()) add("Docker" to 0)
             if (data.podman.containers.isNotEmpty()) add("Podman" to 1)
             if (data.lxd.instances.isNotEmpty()) add("LXD" to 2)
-            if (data.vms.vms.isNotEmpty()) add("ВМ" to 3)
-            if (data.images.images.isNotEmpty()) add("Образы" to 4)
+            if (data.vms.vms.isNotEmpty()) add(t("ВМ", "VMs") to 3)
+            if (data.images.images.isNotEmpty()) add(t("Образы", "Images") to 4)
         }
         if (!data.dockerInstalled) {
             Text(
-                text = "Docker на хосте не установлен — установить можно в веб-интерфейсе (раздел «Контейнеры и ВМ»)",
+                text = t("Docker на хосте не установлен — установить можно в веб-интерфейсе (раздел «Контейнеры и ВМ»)", "Docker is not installed on the host — it can be installed from the web UI (“Containers and VMs” section)"),
                 style = MaterialTheme.typography.bodySmall,
                 color = statusColor(HealthStatus.WARN),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -64,7 +65,7 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
         }
         if (tabs.isEmpty()) {
             Text(
-                text = "Ни один контейнерный движок не найден",
+                text = t("Ни один контейнерный движок не найден", "No container engine found"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(24.dp),
             )
@@ -120,7 +121,7 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
                     items(data.vms.vms, key = { it.name }) {
                         SimpleRuntimeCard(
                             it.name,
-                            "${it.vcpus} vCPU · ${it.memoryKb / 1024} МБ",
+                            t("${it.vcpus} vCPU · ${it.memoryKb / 1024} МБ", "${it.vcpus} vCPU · ${it.memoryKb / 1024} MB"),
                             it.state,
                             instanceHealth(it.state), enabled,
                             viewModel.pendingKey == it.name,
@@ -178,14 +179,14 @@ private fun DockerCard(
             }
             if (!container.declared && container.project.isBlank()) {
                 Text(
-                    text = "Запущен вручную, не описан в compose",
+                    text = t("Запущен вручную, не описан в compose", "Started by hand, not described in compose"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
             ActionRow(enabled, onAction)
-            TextButton(onClick = onInspect) { Text("Инспект") }
+            TextButton(onClick = onInspect) { Text(t("Инспект", "Inspect")) }
         }
     }
 }
@@ -259,13 +260,13 @@ private fun ImagesTab(viewModel: ContainersViewModel, data: ContainerRuntimes) {
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
-            title = { Text("Удалить выбранные образы?") },
+            title = { Text(t("Удалить выбранные образы?", "Delete the selected images?")) },
             text = {
                 Text(
                     if (inUseSelected > 0 && !force)
-                        "Из выбранных $inUseSelected используются запущенными контейнерами — " +
-                            "Docker откажется их удалять. Включите «принудительно», если это осознанно."
-                    else "Будет удалено образов: ${selected.size}."
+                        t("Из выбранных $inUseSelected используются запущенными контейнерами — ", "$inUseSelected of the selected are used by running containers — ") +
+                            t("Docker откажется их удалять. Включите «принудительно», если это осознанно.", "Docker will refuse to delete them. Turn on “force” if this is intended.")
+                    else t("Будет удалено образов: ${selected.size}.", "Images to delete: ${selected.size}.")
                 )
             },
             confirmButton = {
@@ -273,9 +274,9 @@ private fun ImagesTab(viewModel: ContainersViewModel, data: ContainerRuntimes) {
                     viewModel.removeImages(selected.map(::refOf), force)
                     picked = emptySet()
                     confirmRemove = false
-                }) { Text("Удалить") }
+                }) { Text(t("Удалить", "Delete")) }
             },
-            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(t("Отмена", "Cancel")) } },
         )
     }
 
@@ -289,28 +290,28 @@ private fun ImagesTab(viewModel: ContainersViewModel, data: ContainerRuntimes) {
             FilterChip(
                 selected = force,
                 onClick = { force = !force },
-                label = { Text("принудительно") },
+                label = { Text(t("принудительно", "force")) },
                 modifier = Modifier.padding(end = 8.dp),
             )
             OutlinedButton(
                 onClick = { viewModel.saveImages(selected.map(::refOf)) },
                 enabled = selected.isNotEmpty() && !viewModel.actionInProgress,
                 modifier = Modifier.padding(end = 8.dp),
-            ) { Text("Сохранить (${selected.size})") }
+            ) { Text(t("Сохранить (${selected.size})", "Save (${selected.size})")) }
             OutlinedButton(
                 onClick = { confirmRemove = true },
                 enabled = selected.isNotEmpty() && !viewModel.actionInProgress,
                 modifier = Modifier.padding(end = 8.dp),
-            ) { Text("Удалить (${selected.size})") }
+            ) { Text(t("Удалить (${selected.size})", "Delete (${selected.size})")) }
             OutlinedButton(
                 onClick = { viewModel.pruneImages() },
                 enabled = !viewModel.actionInProgress,
-            ) { Text("Убрать осиротевшие") }
+            ) { Text(t("Убрать осиротевшие", "Remove dangling")) }
         }
 
         if (data.images.backupDir.isNotBlank()) {
             Text(
-                text = "Архивы сохраняются в ${data.images.backupDir}",
+                text = t("Архивы сохраняются в ${data.images.backupDir}", "Archives are saved to ${data.images.backupDir}"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -332,24 +333,24 @@ private fun ImagesTab(viewModel: ContainersViewModel, data: ContainerRuntimes) {
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = image.tags.firstOrNull() ?: "без тега",
+                                text = image.tags.firstOrNull() ?: t("без тега", "untagged"),
                                 style = MaterialTheme.typography.titleSmall,
                             )
                             Text(
-                                text = "${image.size / 1024 / 1024} МБ · " +
+                                text = t("${image.size / 1024 / 1024} МБ · ", "${image.size / 1024 / 1024} MB · ") +
                                     image.id.removePrefix("sha256:").take(12),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             when {
                                 image.inUse -> Text(
-                                    text = "используется: ${image.usedBy.joinToString(", ")}",
+                                    text = t("используется: ${image.usedBy.joinToString(", ")}", "used by: ${image.usedBy.joinToString(", ")}"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = statusColor(HealthStatus.OK),
                                 )
 
                                 image.dangling -> Text(
-                                    text = "осиротевший",
+                                    text = t("осиротевший", "dangling"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = statusColor(HealthStatus.WARN),
                                 )

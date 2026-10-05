@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.netknownsthat.app.i18n.t
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,10 +42,10 @@ fun AboutScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("О системе") },
+                title = { Text(t("О системе", "About")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("Назад", "Back"))
                     }
                 },
             )
@@ -65,24 +66,30 @@ fun AboutScreen(
                 else -> Column(modifier = Modifier.padding(16.dp)) {
                     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Версия хаба", style = MaterialTheme.typography.titleMedium)
+                            Text(t("Язык", "Language"), style = MaterialTheme.typography.titleMedium)
+                            com.netknownsthat.app.i18n.LanguagePicker(modifier = Modifier.padding(top = 8.dp))
+                        }
+                    }
+                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(t("Версия хаба", "Hub version"), style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "Текущая: ${state.version?.current ?: "—"}",
+                                t("Текущая: ${state.version?.current ?: "—"}", "Current: ${state.version?.current ?: "—"}"),
                                 modifier = Modifier.padding(top = 8.dp),
                             )
                             state.version?.latest?.let {
-                                Text("Последняя доступная: $it")
+                                Text(t("Последняя доступная: $it", "Latest available: $it"))
                             }
                             // The app is released together with nkt, so a
                             // mismatch says which side is behind.
                             Text(
-                                "Приложение: ${com.netknownsthat.app.BuildConfig.VERSION_NAME}",
+                                t("Приложение: ${com.netknownsthat.app.BuildConfig.VERSION_NAME}", "App: ${com.netknownsthat.app.BuildConfig.VERSION_NAME}"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             if (state.version?.updateAvailable == true) {
                                 Text(
-                                    text = "Доступно обновление",
+                                    text = t("Доступно обновление", "Update available"),
                                     color = MaterialTheme.colorScheme.tertiary,
                                 )
                                 // Что именно несёт новая версия — читается до
@@ -92,7 +99,7 @@ fun AboutScreen(
                                 // описывали бы уже работающую версию.
                                 state.version.notes?.takeIf { it.isNotBlank() }?.let { notes ->
                                     Text(
-                                        text = "Что нового в ${state.version.latest ?: ""}".trim(),
+                                        text = t("Что нового в ${state.version.latest ?: ""}", "What's new in ${state.version.latest ?: ""}").trim(),
                                         style = MaterialTheme.typography.titleSmall,
                                         modifier = Modifier.padding(top = 12.dp),
                                     )
@@ -109,7 +116,7 @@ fun AboutScreen(
                             }
                             state.version?.checkError?.let {
                                 Text(
-                                    text = "Проверка не удалась: $it",
+                                    text = t("Проверка не удалась: $it", "Check failed: $it"),
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
@@ -120,12 +127,12 @@ fun AboutScreen(
                         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(
-                                    "Сертификат хаба",
+                                    t("Сертификат хаба", "Hub certificate"),
                                     style = MaterialTheme.typography.titleMedium,
                                 )
                                 Text(
-                                    text = "Самоподписанный, закреплён при первом подключении. " +
-                                        "Сверьте отпечаток с тем, что показывает сам хаб:",
+                                    text = t("Самоподписанный, закреплён при первом подключении. ", "Self-signed, pinned on first connection. ") +
+                                        t("Сверьте отпечаток с тем, что показывает сам хаб:", "Compare the fingerprint with what the hub itself shows:"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(top = 8.dp),
@@ -140,7 +147,7 @@ fun AboutScreen(
                                 // only blocks the new certificate; this lets
                                 // the next connection trust on first use again.
                                 androidx.compose.material3.TextButton(onClick = viewModel::forgetCert) {
-                                    Text("Забыть сертификат (после переустановки хаба)")
+                                    Text(t("Забыть сертификат (после переустановки хаба)", "Forget certificate (after reinstalling the hub)"))
                                 }
                             }
                         }
@@ -148,16 +155,16 @@ fun AboutScreen(
 
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("База уязвимостей", style = MaterialTheme.typography.titleMedium)
+                            Text(t("База уязвимостей", "Vulnerability database"), style = MaterialTheme.typography.titleMedium)
                             val status = when {
-                                state.vulnDb?.refreshing == true -> "Обновляется…"
-                                state.vulnDb?.available == true -> "Готова"
-                                else -> "Ещё не загружена"
+                                state.vulnDb?.refreshing == true -> t("Обновляется…", "Updating…")
+                                state.vulnDb?.available == true -> t("Готова", "Ready")
+                                else -> t("Ещё не загружена", "Not downloaded yet")
                             }
                             Text(status, modifier = Modifier.padding(top = 8.dp))
                             state.vulnDb?.error?.let {
                                 Text(
-                                    text = "Ошибка: $it",
+                                    text = t("Ошибка: $it", "Error: $it"),
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }

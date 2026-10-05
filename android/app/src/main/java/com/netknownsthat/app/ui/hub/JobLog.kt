@@ -29,6 +29,7 @@ import com.netknownsthat.app.ui.theme.statusColor
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.netknownsthat.app.i18n.t
 
 private val TS_FORMAT = DateTimeFormatter.ofPattern("dd.MM HH:mm:ss")
 
@@ -37,13 +38,13 @@ fun formatTs(raw: String): String =
     runCatching { OffsetDateTime.parse(raw).atZoneSameInstant(ZoneId.systemDefault()).format(TS_FORMAT) }
         .getOrDefault(raw)
 
-val JOB_STATUS = mapOf(
-    "queued" to "в очереди",
-    "running" to "выполняется",
-    "succeeded" to "выполнено",
-    "failed" to "ошибка",
-    "canceled" to "отменено",
-    "interrupted" to "прервано",
+val JOB_STATUS get() = mapOf(
+    "queued" to t("в очереди", "queued"),
+    "running" to t("выполняется", "running"),
+    "succeeded" to t("выполнено", "succeeded"),
+    "failed" to t("ошибка", "failed"),
+    "canceled" to t("отменено", "cancelled"),
+    "interrupted" to t("прервано", "interrupted"),
 )
 
 fun jobHealth(status: String): HealthStatus = when (status) {
@@ -54,7 +55,7 @@ fun jobHealth(status: String): HealthStatus = when (status) {
 }
 
 fun humanBytes(bytes: Double): String {
-    val units = listOf("Б", "КБ", "МБ", "ГБ", "ТБ")
+    val units = listOf(t("Б", "B"), t("КБ", "KB"), t("МБ", "MB"), t("ГБ", "GB"), t("ТБ", "TB"))
     var v = bytes
     var i = 0
     while (v >= 1024 && i < units.lastIndex) {
@@ -83,7 +84,7 @@ fun JobLogDialog(viewModel: JobLogViewModel) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 Text(
-                    text = job?.title?.ifBlank { null } ?: "Задание",
+                    text = job?.title?.ifBlank { null } ?: t("Задание", "Job"),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 if (job != null) {
@@ -92,7 +93,7 @@ fun JobLogDialog(viewModel: JobLogViewModel) {
                         Text(
                             text = buildString {
                                 append(JOB_STATUS[job.status] ?: job.status)
-                                if (job.steps > 0) append(" · шаг ${job.step}/${job.steps}")
+                                if (job.steps > 0) append(t(" · шаг ${job.step}/${job.steps}", " · step ${job.step}/${job.steps}"))
                                 if (job.stepName.isNotBlank()) append(" · ${job.stepName}")
                             },
                             style = MaterialTheme.typography.bodySmall,
@@ -115,7 +116,7 @@ fun JobLogDialog(viewModel: JobLogViewModel) {
                     }
                 }
                 viewModel.error?.let {
-                    Text("Нет связи: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(t("Нет связи: $it", "No connection: $it"), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
                 LazyColumn(
                     state = listState,
@@ -136,10 +137,10 @@ fun JobLogDialog(viewModel: JobLogViewModel) {
                 ) {
                     if (job != null && !job.finished) {
                         OutlinedButton(onClick = viewModel::cancel, enabled = !viewModel.canceling) {
-                            Text("Отменить задание")
+                            Text(t("Отменить задание", "Cancel job"))
                         }
                     }
-                    TextButton(onClick = viewModel::close) { Text("Закрыть") }
+                    TextButton(onClick = viewModel::close) { Text(t("Закрыть", "Close")) }
                 }
             }
         }

@@ -47,6 +47,7 @@ import com.netknownsthat.app.terminal.TerminalEmulator
 import com.netknownsthat.app.terminal.computeTerminalGrid
 import com.netknownsthat.app.terminal.TerminalKeys
 import com.netknownsthat.app.terminal.TerminalSession
+import com.netknownsthat.app.i18n.t
 
 private val TERMINAL_BACKGROUND = Color(0xFF12141A)
 private val TERMINAL_FOREGROUND = Color(0xFFD8DEE9)
@@ -91,7 +92,7 @@ fun TerminalScreen(viewModel: TerminalViewModel, btop: Boolean = false) {
         Box(modifier = Modifier.weight(1f)) {
             if (session == null) {
                 Text(
-                    text = "Подключение…",
+                    text = t("Подключение…", "Connecting…"),
                     color = TERMINAL_FOREGROUND,
                     modifier = Modifier.align(Alignment.Center),
                 )
@@ -118,7 +119,7 @@ fun TerminalScreen(viewModel: TerminalViewModel, btop: Boolean = false) {
                         // log endpoints, which can be resumed), so the only
                         // honest offer here is a fresh session.
                         Button(onClick = { viewModel.start(btop) }) {
-                            Text("Новая сессия")
+                            Text(t("Новая сессия", "New session"))
                         }
                     }
                 }
@@ -294,7 +295,7 @@ private fun KeyBar(
         FilterChip(
             selected = false,
             onClick = onShowKeyboard,
-            label = { Text("⌨ Клавиатура") },
+            label = { Text(t("⌨ Клавиатура", "⌨ Keyboard")) },
             modifier = Modifier.padding(end = 6.dp),
         )
         // Ctrl is a modifier, not a key: it arms the next letter typed,

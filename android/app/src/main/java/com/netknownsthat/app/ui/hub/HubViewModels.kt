@@ -29,6 +29,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import com.netknownsthat.app.i18n.t
 
 /**
  * Where a job lives. Host jobs go through the host scope like every other
@@ -124,11 +125,11 @@ abstract class JobsViewModel(hubClient: HubClient, val place: JobPlace) :
         return hubClient.get("${place.prefix}/jobs?limit=100$status")
     }
 
-    fun cancel(id: Long) = act("Задание отменяется") {
+    fun cancel(id: Long) = act(t("Задание отменяется", "Cancelling the job")) {
         hubClient.post<Unit>("${place.prefix}/jobs/$id/cancel")
     }
 
-    fun retry(id: Long) = act("Задание запущено снова") {
+    fun retry(id: Long) = act(t("Задание запущено снова", "Job restarted")) {
         hubClient.post<Unit>("${place.prefix}/jobs/$id/retry")
     }
 }
@@ -154,7 +155,7 @@ class EventsViewModel(hubClient: HubClient) : SectionViewModel<HubEventsResponse
 class Fail2banViewModel(hubClient: HubClient) : SectionViewModel<Fail2banResponse>(hubClient) {
     override suspend fun fetch() = hubClient.get<Fail2banResponse>("/fail2ban")
 
-    fun ban(ip: String, banTimeSeconds: Long) = act("$ip забанен") {
+    fun ban(ip: String, banTimeSeconds: Long) = act(t("$ip забанен", "$ip banned")) {
         hubClient.post<Unit>(
             "/fail2ban/ban",
             buildJsonObject {
@@ -164,7 +165,7 @@ class Fail2banViewModel(hubClient: HubClient) : SectionViewModel<Fail2banRespons
         )
     }
 
-    fun unban(ip: String, jail: String) = act("$ip разбанен") {
+    fun unban(ip: String, jail: String) = act(t("$ip разбанен", "$ip unbanned")) {
         hubClient.post<Unit>(
             "/fail2ban/unban",
             buildJsonObject {
@@ -198,7 +199,7 @@ class FleetFail2banViewModel(hubClient: HubClient) : SectionViewModel<FleetBanne
         viewModelScope.launch {
             when (val r = call()) {
                 is HubClient.ApiResult.Success -> onJob(r.value.jobId)
-                is HubClient.ApiResult.Failure -> actionMessage = "Не удалось: ${r.message}"
+                is HubClient.ApiResult.Failure -> actionMessage = t("Не удалось: ${r.message}", "Failed: ${r.message}")
             }
         }
     }
@@ -208,7 +209,7 @@ class FleetFail2banViewModel(hubClient: HubClient) : SectionViewModel<FleetBanne
 class MonitoringViewModel(hubClient: HubClient) : SectionViewModel<MonitoringOverview>(hubClient) {
     override suspend fun fetch() = hubClient.get<MonitoringOverview>("/hub/monitoring/overview")
 
-    fun collect() = act("Сбор запущен") { hubClient.post<Unit>("/hub/monitoring/collect") }
+    fun collect() = act(t("Сбор запущен", "Collection started")) { hubClient.post<Unit>("/hub/monitoring/collect") }
 }
 
 /** Deployments (pipelines): deploy, dry run, history, leftovers. */
@@ -225,7 +226,7 @@ class DeploymentsViewModel(hubClient: HubClient) : SectionViewModel<PipelinesRes
             when (val r = hubClient.get<DeploymentsResponse>("/hub/pipelines/$id/deployments")) {
                 is HubClient.ApiResult.Success -> if (history?.first == id) history = id to r.value
                 is HubClient.ApiResult.Failure -> {
-                    actionMessage = "Не удалось: ${r.message}"
+                    actionMessage = t("Не удалось: ${r.message}", "Failed: ${r.message}")
                     history = null
                 }
             }
@@ -254,7 +255,7 @@ class DeploymentsViewModel(hubClient: HubClient) : SectionViewModel<PipelinesRes
     /** Removes the old stack left on a previous host, or only forgets it
      * ([forget]) when the host is gone for good. */
     fun leftover(id: Long, hostId: Long, project: String, forget: Boolean) =
-        act(if (forget) "Забыто" else "Старый стек убирается") {
+        act(if (forget) t("Забыто", "Forgotten") else t("Старый стек убирается", "Removing the old stack")) {
             hubClient.post<Unit>(
                 "/hub/pipelines/$id/leftovers/remove",
                 buildJsonObject {
@@ -272,7 +273,7 @@ class DeploymentsViewModel(hubClient: HubClient) : SectionViewModel<PipelinesRes
                     onJob(r.value.jobId)
                     load()
                 }
-                is HubClient.ApiResult.Failure -> actionMessage = "Не удалось: ${r.message}"
+                is HubClient.ApiResult.Failure -> actionMessage = t("Не удалось: ${r.message}", "Failed: ${r.message}")
             }
         }
     }
@@ -292,7 +293,7 @@ class RebootViewModel(private val hubClient: HubClient) : ViewModel() {
             preview = null
             when (val r = hubClient.get<RebootPreview>("/system/reboot/preview")) {
                 is HubClient.ApiResult.Success -> preview = r.value
-                is HubClient.ApiResult.Failure -> message = "Не удалось: ${r.message}"
+                is HubClient.ApiResult.Failure -> message = t("Не удалось: ${r.message}", "Failed: ${r.message}")
             }
             loading = false
         }
@@ -303,8 +304,8 @@ class RebootViewModel(private val hubClient: HubClient) : ViewModel() {
             loading = true
             message = when (val r = hubClient.post<Unit>("/system/reboot", buildJsonObject { put("confirm", true) }.toString())) {
                 is HubClient.ApiResult.Success ->
-                    if (preview?.simulated == true) "Перезагрузка (стенд — не выполняется)" else "Хост перезагружается"
-                is HubClient.ApiResult.Failure -> "Не удалось: ${r.message}"
+                    if (preview?.simulated == true) t("Перезагрузка (стенд — не выполняется)", "Reboot (fixtures stand — not performed)") else t("Хост перезагружается", "The host is rebooting")
+                is HubClient.ApiResult.Failure -> t("Не удалось: ${r.message}", "Failed: ${r.message}")
             }
             loading = false
             onDone()
@@ -326,7 +327,7 @@ class ClamAVViewModel(hubClient: HubClient) : SectionViewModel<com.netknownsthat
         viewModelScope.launch {
             when (val r = hubClient.post<JobIdResponse>(path, body)) {
                 is HubClient.ApiResult.Success -> onJob(r.value.jobId)
-                is HubClient.ApiResult.Failure -> actionMessage = "Не удалось: ${r.message}"
+                is HubClient.ApiResult.Failure -> actionMessage = t("Не удалось: ${r.message}", "Failed: ${r.message}")
             }
             load()
         }

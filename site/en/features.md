@@ -278,6 +278,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Hub sections: alerts with a jump to the host, hub jobs, monitoring, fleet fail2ban, deployments (deploy, dry run, history and rollback, old stacks).
 - Phone notifications for hub alerts (polled every 15 minutes; kinds as in the hub's alert settings); tapping one opens the host at the right section.
 - Jobs come with a live log and cancel.
+- Russian and English interface: follows the phone language or the choice on the sign-in screen and in About; server messages come in the same language.
 - A signed APK in every release (`nkt-android-<version>.apk`); the app version matches the nkt version.
 
 ## Terminal UI (`nkt tui`)
