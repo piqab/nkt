@@ -51,7 +51,7 @@ hub` в Docker. Ошибки заданий — в разделе «Задани
 | Хост завис на «установка» | «Отменить» рядом с кнопкой. После перезапуска хаба чинится само |
 | Колонка «Канал» всегда серая «не подключён» | Хаб не дозванивается на `8078` (`NKT_HUB_TUNNEL_PORT`): откройте порт с адреса хаба, проверьте, что nkt на хосте запущен и порт не занят |
 | Загрузка файлов: часть не сохранилась | Соединение с хостом умерло в пуле (NAT, перезапуск sshd). Хаб меняет мёртвое соединение и повторяет файл до трёх раз; остальное — «повторить неудачные». Галочка «без скрытых» не шлёт `.git`, `.env` и игнорируемое |
-| Забыт пароль администратора хаба | Docker: `docker compose exec hub nkt passwd -random`. systemd: `sudo systemctl stop netknownsthat-hub && sudo env NKT_MODE=hub NKT_DATA_DIR=/var/lib/netknownsthat-hub nkt passwd -random && sudo systemctl start netknownsthat-hub` |
+| Забыт пароль администратора хаба | Docker: `docker compose exec hub nkt passwd -random`. systemd: `sudo systemctl stop netknownsthat-hub && sudo env NKT_MODE=hub NKT_DATA_DIR=/var/lib/netknownsthat-hub nkt passwd -random && sudo systemctl start netknownsthat-hub`. Пароль печатается только в терминал — с перенаправленным выводом (или `docker compose exec -T`) команда откажется |
 | Хаб в Docker не стартует: том принадлежит root | Хаб в контейнере — uid 1000: `docker run --rm -v <том>:/data alpine chown -R 1000:1000 /data` |
 | «Обновить» в «О системе» нет | Хаб не запущен systemd-юнитом (Docker, Kubernetes или ручной запуск) — обновляйте образ или поставьте хаб службой |
 

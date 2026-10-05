@@ -53,6 +53,12 @@ func (r *accountsRuntime) setPassword(ctx context.Context, username, role string
 	if username == "" {
 		username = r.cfg.BootstrapAdminUser
 	}
+	// Сгенерированный пароль показывается только человеку у терминала:
+	// при выводе в файл, CI или журнал он осел бы там открытым текстом.
+	// Проверка — до смены пароля, чтобы отказ ничего не менял.
+	if generate && !term.IsTerminal(int(os.Stdout.Fd())) {
+		return msgs.Errorf("cli.passwd.randomNeedsTerminal")
+	}
 
 	_, err := r.db.UserByName(ctx, username)
 	switch {
@@ -109,7 +115,8 @@ func (r *accountsRuntime) setPassword(ctx context.Context, username, role string
 	}
 
 	if generate {
-		fmt.Print(cli("cli.passwd.generated", username, password))
+		// Прямо в терминал (проверен выше), не через логирующий вывод.
+		_, _ = os.Stdout.WriteString(cli("cli.passwd.generated", username, password))
 	}
 
 	r.db.Audit(ctx, cliActor(), action, username, "ok",
