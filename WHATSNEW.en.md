@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.146 — 2026-10-05
+
+- **Site:** the home page has 21 tiles instead of 11 — each with a
+  “Learn more” link to its docs page: the resource map, containers,
+  virtual machines, Kubernetes, availability and load, system, alerts,
+  hub monitoring, clusters, deployments and more.
+
 ## v1.11.145 — 2026-10-05
 
 - **Docs:** “Hub monitoring” has its own page in the site menu; the hub
