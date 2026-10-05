@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.154 — 2026-10-05
+
+- Security check (gosec): the command-line message catalogs are marked as
+  texts, not credentials — like the other catalogs.
+
 ## v1.11.153 — 2026-10-05
 
 - **English without Russian leftovers.** The English interface no longer

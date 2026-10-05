@@ -9,6 +9,7 @@ func init() {
 	}
 }
 
+// #nosec G101 -- тексты сообщений командной строки (ключи вроде cli.passwd.prompt), а не учётные данные.
 var enCLICatalog = map[string]string{
 	"cli.flag.verbose":           "verbose log",
 	"cli.flag.scan":              "one-off check and exit",
