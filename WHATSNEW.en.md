@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.156 — 2026-10-05
+
+- **A beta release of the Android app apart from nkt:** a manual
+  “android-beta-release” run in Actions builds a signed APK and publishes it
+  as a pre-release `android-v<version>-beta`; the app shows its version as
+  `<version>-beta`. Hubs do not offer such a release as an update.
+- With an nkt beta tag (`vX.Y.Z-beta`) the app in the release is marked
+  `-beta` too.
+
 ## v1.11.155 — 2026-10-05
 
 - **`nkt passwd -random` prints the password only to a terminal.** With

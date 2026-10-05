@@ -223,7 +223,10 @@ jobs:
           export NKT_ANDROID_KEYSTORE="$RUNNER_TEMP/nkt-release.jks"
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$NKT_ANDROID_KEYSTORE"
           chmod +x ./gradlew
-          ./gradlew --no-daemon test assembleRelease
+          # Бета-тег — и приложение «X.Y.Z-beta» в «О системе».
+          suffix=""
+          if [ "${{ needs.check-version.outputs.beta }}" = true ]; then suffix="-beta"; fi
+          ./gradlew --no-daemon test assembleRelease -PnktVersionSuffix="$suffix"
           rm -f "$NKT_ANDROID_KEYSTORE"
           mkdir -p ../dist
           cp app/build/outputs/apk/release/app-release.apk \
