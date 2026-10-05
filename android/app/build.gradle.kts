@@ -89,10 +89,10 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.navigation:navigation-compose:2.8.1")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-ktx:1.19.1")
 
     // Persisted app state — the hub's own base URL, and the session cookie
     // jar (see net/CookieStore.kt) so a relaunch doesn't force a fresh login
@@ -101,7 +101,7 @@ dependencies {
 
     // Phone notifications about hub alerts: a periodic poll of
     // /api/hub/events that survives the app being closed (ui/hub/EventsWorker.kt).
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
 
     // OkHttp: REST + WebSocket (terminal/install-log streams, phase 6) share
     // one client and its CookieJar — see net/HubClient.kt.
@@ -112,10 +112,10 @@ dependencies {
     // and JsonObject is a clean escape hatch for the handful of endpoints
     // that return a hand-written map shape (e.g. /overview) instead of a
     // fixed struct.
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 }
