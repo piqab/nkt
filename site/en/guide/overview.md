@@ -138,6 +138,8 @@ quarantine. Each hit has buttons: a file opens in the "Disks" file
 browser on its row (when it is under a browser root), a file in `/etc` in
 "Configs", a container in "Containers".
 
+![ClamAV](/screens/en/clamav.png)
+
 Installing ClamAV, updating its database (freshclam) and scanning run as
 host **jobs**, one at a time: starting one opens the standard job log
 window, and while it runs the card shows what is running with **Log** and

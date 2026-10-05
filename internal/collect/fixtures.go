@@ -383,7 +383,7 @@ func (f *Fixtures) DockerAPI(_ context.Context, method, apiPath string, _ []byte
 	if strings.HasSuffix(slug, "_json") && strings.HasPrefix(slug, "containers_") {
 		candidates = append(candidates, "inspect.json")
 	}
-	if strings.HasSuffix(slug, "_json") && strings.HasPrefix(slug, "images_") {
+	if strings.HasSuffix(slug, "_json") && strings.HasPrefix(slug, "images_") && slug != "images_json" {
 		candidates = append(candidates, "image_inspect.json")
 	}
 	for _, c := range candidates {

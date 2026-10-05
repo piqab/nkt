@@ -74,6 +74,9 @@ devices.
   “sync now”; installing the service if there is none.
 - NetworkManager: connections, devices, Wi-Fi networks, connecting with a
   password.
+
+![Host reboot](/screens/en/reboot.png)
+
 - **Host reboot**: the card is always here (highlighted when a reboot is
   required, for example after a kernel update); the same button is in the
   "Reboot required" bar on "Overview" and in "Packages". Before rebooting,
