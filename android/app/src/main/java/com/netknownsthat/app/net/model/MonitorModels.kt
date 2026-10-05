@@ -54,7 +54,7 @@ data class Outage(
 data class UsageResponse(
     val metric: String = "",
     val source: String = "",
-    val total: Int = 0,
+    val total: Double? = null,
     val simulated: Boolean = false,
     val points: List<UsagePoint> = emptyList(),
 )
@@ -137,4 +137,24 @@ data class VulnFinding(
     /** Empty for the host's own packages; a container image reference when
      * the finding came from inside one. */
     val target: String = "",
+)
+
+/** GET /api/monitor/usage/sources — sources with data in the last day. */
+@Serializable
+data class UsageSourcesResponse(val sources: List<String> = emptyList())
+
+/** GET /api/monitor/usage/k8s — nodes, and the node of every pod
+ * ("namespace/pod" → node); empty off a control plane. */
+@Serializable
+data class K8sUsageCluster(
+    val nodes: List<K8sUsageNode> = emptyList(),
+    val pods: Map<String, String> = emptyMap(),
+)
+
+@Serializable
+data class K8sUsageNode(
+    val name: String = "",
+    val ready: Boolean = false,
+    val ip: String = "",
+    @SerialName("control_plane") val controlPlane: Boolean = false,
 )

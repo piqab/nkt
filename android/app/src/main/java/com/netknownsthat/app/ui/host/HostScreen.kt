@@ -34,6 +34,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.netknownsthat.app.ui.hub.ClamAVScreen
+import com.netknownsthat.app.ui.hub.ClamAVViewModel
 import com.netknownsthat.app.ui.hub.Fail2banScreen
 import com.netknownsthat.app.ui.hub.Fail2banViewModel
 import com.netknownsthat.app.ui.hub.HostJobsViewModel
@@ -58,6 +60,7 @@ enum class HostSection(val title: String) {
     SERVICES("Сервисы"),
     CONTAINERS("Контейнеры"),
     VULNERABILITIES("Уязвимости"),
+    MALWARE("Вредоносное (ClamAV)"),
     AVAILABILITY("Доступность"),
     USAGE("Нагрузка"),
     CONFIGS("Конфигурация"),
@@ -84,7 +87,8 @@ enum class HostSection(val title: String) {
                 "findings" -> FINDINGS
                 "services" -> SERVICES
                 "containers", "docker", "podman", "lxd", "vms" -> CONTAINERS
-                "vulnerabilities", "packages" -> VULNERABILITIES
+                "vulnerabilities", "packages" -> if ("tab=malware" in path) MALWARE else VULNERABILITIES
+                "malware", "clamav" -> MALWARE
                 "availability" -> AVAILABILITY
                 "usage" -> USAGE
                 "configs" -> CONFIGS
@@ -128,6 +132,7 @@ class HostViewModels(
     val fail2ban: Fail2banViewModel,
     val jobLog: JobLogViewModel,
     val reboot: RebootViewModel,
+    val clamav: ClamAVViewModel,
 ) {
     /** Null for the live sections: a terminal has nothing to load or
      * refresh, so the generic fetch/refresh plumbing does not apply. */
@@ -138,6 +143,7 @@ class HostViewModels(
         HostSection.SERVICES -> services
         HostSection.CONTAINERS -> containers
         HostSection.VULNERABILITIES -> vulnerabilities
+        HostSection.MALWARE -> clamav
         HostSection.AVAILABILITY -> availability
         HostSection.USAGE -> usage
         HostSection.CONFIGS -> configs
@@ -263,13 +269,17 @@ fun HostScreen(
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 when (section) {
                     HostSection.OVERVIEW -> OverviewScreen(viewModels.overview)
-                    HostSection.FINDINGS -> FindingsScreen(viewModels.findings)
+                    HostSection.FINDINGS -> FindingsScreen(viewModels.findings) { jump ->
+                        jump.configPath?.let(viewModels.configs::open)
+                        section = jump.section
+                    }
                     HostSection.TERMINAL -> TerminalScreen(viewModels.terminal, btop = false)
                     HostSection.BTOP -> TerminalScreen(viewModels.terminal, btop = true)
                     HostSection.LOGS -> LogsScreen(viewModels.logs)
                     HostSection.SERVICES -> ServicesScreen(viewModels.services)
                     HostSection.CONTAINERS -> ContainersScreen(viewModels.containers)
                     HostSection.VULNERABILITIES -> VulnerabilitiesScreen(viewModels.vulnerabilities)
+                    HostSection.MALWARE -> ClamAVScreen(viewModels.clamav, viewModels.jobLog)
                     HostSection.AVAILABILITY -> AvailabilityScreen(viewModels.availability)
                     HostSection.USAGE -> UsageScreen(viewModels.usage)
                     HostSection.CONFIGS -> ConfigsScreen(viewModels.configs)

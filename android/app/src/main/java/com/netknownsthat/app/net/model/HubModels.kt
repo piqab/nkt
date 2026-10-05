@@ -286,3 +286,113 @@ data class LeftoverStack(
     val reason: String = "",
     val at: String = "",
 )
+
+/** GET /api/containers/{name}/inspect[?reveal=1] — values of [env] are
+ * masked unless an admin asked to reveal them (audited on the host). */
+@Serializable
+data class ContainerInspect(
+    val name: String = "",
+    val id: String = "",
+    val image: String = "",
+    @SerialName("image_id") val imageId: String = "",
+    @SerialName("image_outdated") val imageOutdated: Boolean = false,
+    val state: String = "",
+    val health: String = "",
+    @SerialName("exit_code") val exitCode: Int = 0,
+    val created: String = "",
+    @SerialName("started_at") val startedAt: String = "",
+    @SerialName("restart_count") val restartCount: Int = 0,
+    @SerialName("restart_policy") val restartPolicy: String = "",
+    @SerialName("memory_limit") val memoryLimit: Long = 0,
+    @SerialName("nano_cpus") val nanoCpus: Long = 0,
+    val entrypoint: List<String>? = null,
+    val cmd: List<String>? = null,
+    val user: String = "",
+    @SerialName("working_dir") val workingDir: String = "",
+    @SerialName("compose_project") val composeProject: String = "",
+    @SerialName("compose_service") val composeService: String = "",
+    val env: List<InspectEnv> = emptyList(),
+    val revealed: Boolean = false,
+    val ports: List<InspectPort> = emptyList(),
+    val mounts: List<InspectMount> = emptyList(),
+    val networks: List<InspectNet> = emptyList(),
+    val labels: Map<String, String> = emptyMap(),
+)
+
+@Serializable
+data class InspectEnv(
+    val name: String = "",
+    val value: String = "",
+    val masked: Boolean = false,
+    /** container | override | image */
+    val origin: String = "",
+)
+
+@Serializable
+data class InspectPort(
+    val container: String = "",
+    @SerialName("host_ip") val hostIp: String = "",
+    @SerialName("host_port") val hostPort: String = "",
+)
+
+@Serializable
+data class InspectMount(
+    val type: String = "",
+    val source: String = "",
+    val name: String = "",
+    val destination: String = "",
+    val rw: Boolean = false,
+)
+
+@Serializable
+data class InspectNet(
+    val name: String = "",
+    val ip: String = "",
+    val gateway: String = "",
+    val aliases: List<String> = emptyList(),
+)
+
+/** GET /api/services/{name}/installed — a live check, not the snapshot. */
+@Serializable
+data class InstalledResponse(val installed: Boolean = false)
+
+/** GET /api/clamav — everything the ClamAV card needs in one call. */
+@Serializable
+data class ClamResponse(
+    val status: ClamStatus = ClamStatus(),
+    val running: Boolean = false,
+    val op: String = "",
+    @SerialName("job_id") val jobId: Long = 0,
+    @SerialName("host_scan") val hostScan: ClamScan? = null,
+    @SerialName("image_scan") val imageScan: ClamScan? = null,
+    val paths: List<String> = emptyList(),
+    val images: List<String> = emptyList(),
+    val apt: Boolean = false,
+)
+
+@Serializable
+data class ClamStatus(
+    val installed: Boolean = false,
+    val version: String = "",
+    @SerialName("db_version") val dbVersion: String = "",
+    @SerialName("db_date") val dbDate: String = "",
+    @SerialName("db_present") val dbPresent: Boolean = false,
+    @SerialName("freshclam_active") val freshclamActive: Boolean = false,
+)
+
+@Serializable
+data class ClamScan(
+    val kind: String = "",
+    val targets: List<String> = emptyList(),
+    @SerialName("finished_at") val finishedAt: String = "",
+    val scanned: Int = 0,
+    val hits: List<ClamHit> = emptyList(),
+    val error: String = "",
+)
+
+@Serializable
+data class ClamHit(
+    val path: String = "",
+    val signature: String = "",
+    val target: String = "",
+)

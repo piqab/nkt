@@ -22,6 +22,7 @@ import com.netknownsthat.app.ui.host.UsageViewModel
 import com.netknownsthat.app.ui.host.UsersViewModel
 import com.netknownsthat.app.ui.host.VulnerabilitiesViewModel
 import com.netknownsthat.app.ui.hosts.HostListViewModel
+import com.netknownsthat.app.ui.hub.ClamAVViewModel
 import com.netknownsthat.app.ui.hub.DeploymentsViewModel
 import com.netknownsthat.app.ui.hub.EventsViewModel
 import com.netknownsthat.app.ui.hub.Fail2banViewModel
@@ -71,6 +72,7 @@ class AppViewModelFactory(private val hubClient: HubClient) : ViewModelProvider.
         MonitoringViewModel::class.java -> MonitoringViewModel(hubClient) as T
         DeploymentsViewModel::class.java -> DeploymentsViewModel(hubClient) as T
         RebootViewModel::class.java -> RebootViewModel(hubClient) as T
+        ClamAVViewModel::class.java -> ClamAVViewModel(hubClient) as T
         else -> throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
     }
 }

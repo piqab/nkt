@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.149 — 2026-10-05
+
+- **Android app — on par with the web UI:**
+  - findings have jump buttons: to the certificate, container, service,
+    Firewall, Fail2ban, the map; “Open file” opens the config right away;
+  - a Docker container has “Inspect”: variables with their origin
+    (container, over the image, from the image), values only for an admin
+    via “Show values” (audited), image, command, ports, volumes, networks;
+    when Docker is not installed, the screen says so;
+  - Usage is reworked: source (Docker, Podman, LXD, Libvirt, Kubernetes
+    pods and nodes, the host itself), CPU first, node and namespace
+    filters, up to 8 picked subjects on the chart;
+  - Availability has a filter by target source, Kubernetes targets apart;
+  - on the map, listeners of one service beyond 4 fold into one node with
+    a list of ports;
+  - a new “Malware (ClamAV)” section: install, signature update, host and
+    image scans — as jobs with a live log;
+  - the host list shows the group, Kubernetes role and sudo state
+    (passwordless in red);
+  - server messages always come in Russian, matching the app's UI.
+
 ## v1.11.148 — 2026-10-05
 
 - **Android app — hub sections:** the host list's menu button opens

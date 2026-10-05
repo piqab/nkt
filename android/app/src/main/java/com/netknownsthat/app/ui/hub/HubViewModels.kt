@@ -311,3 +311,24 @@ class RebootViewModel(private val hubClient: HubClient) : ViewModel() {
         }
     }
 }
+
+/** Host ClamAV: install, signature update and scans all run as host jobs;
+ * [onJob] opens the live log. */
+class ClamAVViewModel(hubClient: HubClient) : SectionViewModel<com.netknownsthat.app.net.model.ClamResponse>(hubClient) {
+    override suspend fun fetch() = hubClient.get<com.netknownsthat.app.net.model.ClamResponse>("/clamav")
+
+    fun install(onJob: (Long) -> Unit) = start("/clamav/install", "{}", onJob)
+    fun updateDb(onJob: (Long) -> Unit) = start("/clamav/update-db", "{}", onJob)
+    fun scanHost(onJob: (Long) -> Unit) = start("/clamav/scan", """{"paths":[]}""", onJob)
+    fun scanImages(onJob: (Long) -> Unit) = start("/clamav/scan-images", """{"images":[]}""", onJob)
+
+    private fun start(path: String, body: String, onJob: (Long) -> Unit) {
+        viewModelScope.launch {
+            when (val r = hubClient.post<JobIdResponse>(path, body)) {
+                is HubClient.ApiResult.Success -> onJob(r.value.jobId)
+                is HubClient.ApiResult.Failure -> actionMessage = "Не удалось: ${r.message}"
+            }
+            load()
+        }
+    }
+}

@@ -61,6 +61,10 @@ data class HubHost(
     @SerialName("last_polled_at") val lastPolledAt: String? = null,
     val channel: String? = null, // "ssh" | "tunnel"
     @SerialName("tunnel_connected") val tunnelConnected: Boolean = false,
+    val group: String = "",
+    /** control-plane | worker — set for hosts of a cluster the hub built. */
+    @SerialName("k8s_role") val k8sRole: String = "",
+    @SerialName("install_active") val installActive: Boolean = false,
 ) {
     companion object {
         /** Mirrors web/src/api.ts's LOCAL_HOST_ID — the hub's own machine. */

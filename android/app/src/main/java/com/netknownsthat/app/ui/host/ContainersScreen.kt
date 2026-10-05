@@ -41,6 +41,8 @@ private val LIFECYCLE = listOf("start" to "Пуск", "stop" to "Стоп", "res
 @Composable
 fun ContainersScreen(viewModel: ContainersViewModel) {
     var tab by remember { mutableIntStateOf(0) }
+    var inspectName by remember { mutableStateOf<String?>(null) }
+    inspectName?.let { ContainerInspectDialog(it, viewModel, onDismiss = { inspectName = null }) }
 
     SectionContent(state = viewModel.state, emptyText = "Контейнеры не найдены") { data ->
         // Only tabs with something in them: a host running plain Docker
@@ -51,6 +53,14 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
             if (data.lxd.instances.isNotEmpty()) add("LXD" to 2)
             if (data.vms.vms.isNotEmpty()) add("ВМ" to 3)
             if (data.images.images.isNotEmpty()) add("Образы" to 4)
+        }
+        if (!data.dockerInstalled) {
+            Text(
+                text = "Docker на хосте не установлен — установить можно в веб-интерфейсе (раздел «Контейнеры и ВМ»)",
+                style = MaterialTheme.typography.bodySmall,
+                color = statusColor(HealthStatus.WARN),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
         }
         if (tabs.isEmpty()) {
             Text(
@@ -76,7 +86,7 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
             when (current.second) {
                 0 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     items(data.docker.containers, key = { it.id }) {
-                        DockerCard(it, enabled, viewModel.pendingKey == it.name) { action ->
+                        DockerCard(it, enabled, viewModel.pendingKey == it.name, onInspect = { inspectName = it.name }) { action ->
                             viewModel.dockerAction(it.name, action)
                         }
                     }
@@ -127,6 +137,7 @@ private fun DockerCard(
     container: Container,
     enabled: Boolean,
     busy: Boolean,
+    onInspect: () -> Unit,
     onAction: (String) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -174,6 +185,7 @@ private fun DockerCard(
                 )
             }
             ActionRow(enabled, onAction)
+            TextButton(onClick = onInspect) { Text("Инспект") }
         }
     }
 }

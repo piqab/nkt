@@ -327,6 +327,9 @@ data class TopologyNode(
     val label: String = "",
     val status: String = "",
     val findings: Int = 0,
+    /** Service a listener belongs to — what folding groups by. */
+    val group: String = "",
+    val meta: Map<String, String> = emptyMap(),
 )
 
 @Serializable
