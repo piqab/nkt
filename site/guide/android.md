@@ -116,14 +116,22 @@ APK — в `android/app/build/outputs/apk/debug/app-debug.apk`. Отладочн
 заводится один раз:
 
 ```sh
-keytool -genkeypair -keystore nkt-release.jks -alias nkt \
+keytool -genkeypair -keystore ~/nkt-release.jks -alias nkt \
   -keyalg RSA -keysize 4096 -validity 36500
-base64 -w0 nkt-release.jks   # → секрет ANDROID_KEYSTORE_BASE64
+base64 -w0 ~/nkt-release.jks > ~/nkt-release.b64   # → секрет ANDROID_KEYSTORE_BASE64
 ```
 
-Секреты: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
-`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Без них релиз выходит без
-APK. Ключ храните отдельно и надёжно: потерянный ключ — это невозможность
+`keytool` — из JDK (после `android/scripts/setup-toolchain.sh` он в
+`~/.local/jdk-17/bin`). Содержимое `.b64` копируйте не из окна терминала, а
+в буфер обмена напрямую — `clip.exe < ~/nkt-release.b64` в WSL,
+`xclip -sel clip < ~/nkt-release.b64` или `pbcopy < …` — иначе в секрет
+попадают переносы строк.
+
+Секреты: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, и
+`ANDROID_KEY_PASSWORD` — только если пароль ключа отличается. Псевдоним
+ключа — переменная репозитория `ANDROID_KEY_ALIAS` (Variables, а не
+Secrets), по умолчанию `nkt`. Без секретов релиз выходит без APK; ключ,
+который не открывается паролем, сборка сообщает сразу. Ключ храните отдельно и надёжно: потерянный ключ — это невозможность
 обновить уже установленные приложения.
 
 ### Бета-релиз только приложения

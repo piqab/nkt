@@ -96,7 +96,8 @@
 `versionName` — файл `VERSION` репозитория, `versionCode` выводится из
 него (`1.11.150` → `1011150`). Подписанный APK собирает релизный workflow
 (задание `android-apk`) из секретов `ANDROID_KEYSTORE_BASE64`,
-`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`;
+`ANDROID_KEYSTORE_PASSWORD` (`ANDROID_KEY_PASSWORD` — если пароль ключа
+другой; псевдоним — переменная `ANDROID_KEY_ALIAS`, по умолчанию `nkt`);
 локально — переменные `NKT_ANDROID_KEYSTORE*` (см. сайт: «Android-приложение»).
 Отдельный бета-релиз приложения — workflow `android-beta-release`
 (запуск вручную), версия в приложении — `X.Y.Z-beta`
