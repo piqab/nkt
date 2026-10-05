@@ -26,6 +26,9 @@ file list too.
 
 - **Containers**: status, image, ports, networks; start, stop, restart,
   remove, logs; create a container; scan compose stacks.
+
+![Container inspect](/screens/en/container-inspect.png)
+
 - **Inspect** (an icon in the container row), with tabs:
   - **Variables** — the container environment with its source:
     “container” (compose, `.env`, `docker run -e`), “over image” (its own
@@ -50,6 +53,9 @@ file list too.
 - No Docker on the host — a bar with an install button right in the tab
   (the official docker.com repository or distribution packages with
   compose), as a background job with the standard log window.
+
+![Image archives](/screens/en/image-archives.png)
+
 - **Image archives**: a card below the images (Podman and LXD have the
   same): image files on the host in the nkt save directory. **"Save an
   image to an archive"** runs `docker save` for the selected image as a

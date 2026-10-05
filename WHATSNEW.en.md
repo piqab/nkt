@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.144 — 2026-10-05
+
+- **Docs: screenshots refreshed.** All sections are reshot (ru and en),
+  with new shots of container Inspect, image archives, ClamAV and the host
+  reboot window; the screenshot script also covers the deployment windows
+  (description, examples, deletion by plan).
+
 ## v1.11.143 — 2026-10-04
 
 - **Docker container “Inspect”** — an icon in the container row: all

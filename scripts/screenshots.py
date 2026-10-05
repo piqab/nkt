@@ -46,7 +46,6 @@ SCREENS = [
     ('k8s-helm', 'host', '/containers', "tabStart('Kubernetes'); await sleep(2500); tab('Helm'); await sleep(1500); document.querySelector('.ant-tabs-tab-active')?.scrollIntoView({block: 'start'})"),
     ('k8s-forward', 'host', '/containers', "tabStart('Kubernetes'); await sleep(2500); tab(pick({ru: 'Сеть', en: 'Network'})); await sleep(1500); document.querySelector('button[aria-label=\"' + pick({ru: 'Действия', en: 'Actions'}) + '\"]')?.click(); await sleep(700); clickText('.ant-dropdown:not(.ant-dropdown-hidden) [role=menuitem]', new RegExp('^' + pick({ru: 'Открыть в браузере', en: 'Open in the browser'})))"),
     ('profiles', 'host', '/profiles', ''),
-    ('configs', 'host', '/configs', ''),
     ('configs-editor', 'host', '/configs', "clickText('button', /^\\/etc\\/nginx\\/nginx\\.conf/)"),
     ('interfaces', 'host', '/interfaces', ''),
     ('firewall', 'host', '/firewall', ''),
@@ -62,7 +61,6 @@ SCREENS = [
     ('job', 'host', '/jobs', "document.querySelector('button[aria-label=\"' + pick({ru: 'журнал', en: 'log'}) + '\"]')?.click()"),
     ('hub-hosts', 'hub', '/', ''),
     ('hub-alerts', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'})"),
-    ('hub-profiles', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); clickText('button', /^web-base/)"),
     ('hub-scripts', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/)"),
     ('hub-script-scheme', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/); await sleep(800); tab({ru: 'Схема', en: 'Scheme'})"),
     ('hub-fail2ban', 'hub', '/', "menu('fail2ban')"),
@@ -82,6 +80,14 @@ SCREENS = [
     ('hub-webhooks', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'}); await sleep(1500); tab({ru: 'Настройка', en: 'Settings'}); await sleep(1200); scrollToText(pick({ru: 'Исходящие вебхуки', en: 'Outgoing webhooks'}))"),
     ('hub-bots', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'}); await sleep(1500); tab({ru: 'Настройка', en: 'Settings'}); await sleep(1200); scrollToText(pick({ru: 'Бот Telegram', en: 'Telegram bot'}))"),
     ('deploy-edge', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Вебхук', en: 'Webhook'}) + '$')); await sleep(1200); clickText('.ant-modal .ant-tabs-tab-btn, .ant-modal .ant-segmented-item-label, .ant-modal button', new RegExp('^' + pick({ru: 'Через edge', en: 'Via edge'})))"),
+    # Новые окна и карточки (v1.11.13x–14x).
+    ('container-inspect', 'host', '/containers', "await sleep(1500); [...document.querySelectorAll('tr')].find((r) => /acme-app/.test(r.textContent))?.querySelector('button[aria-label=\"' + pick({ru: 'Инспект', en: 'Inspect'}) + '\"]')?.click(); await sleep(1200)"),
+    ('image-archives', 'host', '/containers', "await sleep(1500); [...document.querySelectorAll('.ant-card-head-title')].find((e) => /архивы образов|image archives/i.test(e.textContent))?.scrollIntoView({block: 'start'}); await sleep(500)"),
+    ('clamav', 'host', '/vulnerabilities', "tab({ru: 'Вредоносное', en: 'Malware'}); await sleep(1500); [...document.querySelectorAll('.ant-card-head-title')].find((e) => /^ClamAV/.test(e.textContent.trim()))?.scrollIntoView({block: 'start'}); await sleep(500)"),
+    ('reboot', 'host', '/system', "await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Перезагрузить хост', en: 'Reboot host'}) + '$')); await sleep(1500)"),
+    ('deploy-compose', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); [...([...document.querySelectorAll('tr')].find((r) => /httpbin/.test(r.textContent))?.querySelectorAll('button') ?? [])].find((b) => new RegExp('^' + pick({ru: 'Описание', en: 'Description'}) + '$').test(b.textContent.trim()))?.click(); await sleep(1500)"),
+    ('deploy-examples', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Новый конвейер', en: 'New pipeline'}) + '$')); await sleep(1500); clickText('.ant-modal button', new RegExp('^' + pick({ru: 'Примеры', en: 'Examples'}))); await sleep(800)"),
+    ('deploy-remove', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); [...([...document.querySelectorAll('tr')].find((r) => /httpbin/.test(r.textContent))?.querySelectorAll('button') ?? [])].find((b) => new RegExp('^' + pick({ru: 'Удалить', en: 'Delete'}) + '$').test(b.textContent.trim()))?.click(); await sleep(2000)"),
 ]
 
 # Помощники, доступные действию: клик по пункту меню/вкладке/тексту.
