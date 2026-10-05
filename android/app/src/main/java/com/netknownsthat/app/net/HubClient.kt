@@ -58,6 +58,12 @@ class HubClient(
         .cookieJar(cookieJar)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // Server-side texts (errors, job logs, alert details) come in the
+        // language this header names — the app's own UI is Russian, so ask
+        // for Russian explicitly instead of relying on the server default.
+        .addInterceptor { chain ->
+            chain.proceed(chain.request().newBuilder().header("X-NKT-Lang", "ru").build())
+        }
         .apply {
             // A hub with NKT_TLS_ENABLED generates its own self-signed
             // certificate, so plain chain validation cannot work — see

@@ -52,6 +52,7 @@ import com.netknownsthat.app.ui.host.VulnerabilitiesViewModel
 import com.netknownsthat.app.ui.hosts.HostListScreen
 import com.netknownsthat.app.ui.hosts.HostListViewModel
 import com.netknownsthat.app.ui.host.HostSection
+import com.netknownsthat.app.ui.hub.ClamAVViewModel
 import com.netknownsthat.app.ui.hub.DeploymentsViewModel
 import com.netknownsthat.app.ui.hub.EventsViewModel
 import com.netknownsthat.app.ui.hub.EventsWorker
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity() {
     private val monitoringViewModel: MonitoringViewModel by viewModels { factory }
     private val deploymentsViewModel: DeploymentsViewModel by viewModels { factory }
     private val rebootViewModel: RebootViewModel by viewModels { factory }
+    private val clamAVViewModel: ClamAVViewModel by viewModels { factory }
 
     private val hubViewModels by lazy {
         HubViewModels(
@@ -161,6 +163,7 @@ class MainActivity : ComponentActivity() {
             fail2ban = fail2banViewModel,
             jobLog = jobLogViewModel,
             reboot = rebootViewModel,
+            clamav = clamAVViewModel,
         )
     }
 

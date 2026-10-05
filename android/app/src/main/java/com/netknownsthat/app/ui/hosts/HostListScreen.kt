@@ -113,6 +113,14 @@ fun HostListScreen(
     }
 }
 
+/** Web's hosts.sudo* wording, shortened for a phone. */
+private val SUDO_LABEL = mapOf(
+    "root" to "sudo: root",
+    "nopasswd" to "sudo без пароля — опасно",
+    "password_required" to "sudo с паролем",
+    "narrow" to "узкий sudo",
+)
+
 @Composable
 private fun HostRow(host: HubHost, onClick: () -> Unit) {
     Card(
@@ -134,6 +142,22 @@ private fun HostRow(host: HubHost, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val tags = listOfNotNull(
+                host.group.ifBlank { null },
+                host.k8sRole.ifBlank { null }?.let { "k8s $it" },
+                SUDO_LABEL[host.sudoStatus.orEmpty()],
+                if (host.installActive) "идёт установка" else null,
+            )
+            if (tags.isNotEmpty()) {
+                Text(
+                    text = tags.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    // sudo without a password is the one worth a colour:
+                    // whoever logs in as that user is root at once.
+                    color = if (host.sudoStatus == "nopasswd") MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             val findingsTotal = host.findings?.values?.sum() ?: 0
             if (findingsTotal > 0) {
                 Text(

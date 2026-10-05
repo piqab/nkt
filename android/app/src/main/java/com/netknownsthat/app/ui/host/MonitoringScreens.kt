@@ -9,7 +9,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -171,8 +178,36 @@ private fun VulnCard(finding: VulnFinding) {
 
 @Composable
 fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
+    var sourceFilter by remember { mutableStateOf<String?>(null) }
     SectionContent(state = viewModel.state, emptyText = "Целей нет") { data ->
+        // Targets come from several places — web servers, compose, and
+        // Kubernetes (ingresses, NodePort/LoadBalancer services, nodes);
+        // a chip per source keeps the k8s ones findable on a phone.
+        val sources = data.targets.targets.map { it.source }.filter { it.isNotBlank() }.distinct().sorted()
+        val visible = data.targets.targets.filter { sourceFilter == null || it.source == sourceFilter }
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
+            if (sources.size > 1) {
+                item {
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
+                        FilterChip(
+                            selected = sourceFilter == null,
+                            onClick = { sourceFilter = null },
+                            label = { Text("Все ${data.targets.targets.size}") },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        sources.forEach { src ->
+                            FilterChip(
+                                selected = sourceFilter == src,
+                                onClick = { sourceFilter = if (sourceFilter == src) null else src },
+                                label = {
+                                    Text("${if (src == "kubernetes") "Kubernetes" else src} ${data.targets.targets.count { it.source == src }}")
+                                },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
+                    }
+                }
+            }
             if (data.targets.simulated) {
                 item {
                     Text(
@@ -183,7 +218,7 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
                     )
                 }
             }
-            items(data.targets.targets, key = { it.id }) { TargetCard(it) }
+            items(visible, key = { it.id }) { TargetCard(it) }
 
             if (data.outages.outages.isNotEmpty()) {
                 item {
@@ -275,88 +310,3 @@ private fun TargetCard(target: Target) {
     }
 }
 
-@Composable
-fun UsageScreen(viewModel: UsageViewModel) {
-    SectionContent(state = viewModel.state, emptyText = "Нет данных о нагрузке") { data ->
-        LazyColumn(contentPadding = PaddingValues(16.dp)) {
-            if (data.top.top.isNotEmpty()) {
-                item {
-                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Больше всего: ${data.top.metric}",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            val max = data.top.top.maxOf { it.total }.coerceAtLeast(1.0)
-                            data.top.top.forEach { entry ->
-                                Column(modifier = Modifier.padding(top = 12.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth()) {
-                                        Text(
-                                            text = entry.subject,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        Text(
-                                            text = "%.1f".format(Locale.getDefault(), entry.total),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                    }
-                                    // A bar rather than a chart library: one
-                                    // proportion per row is all this data is,
-                                    // and it stays readable on a phone.
-                                    LinearProgressIndicator(
-                                        progress = { (entry.total / max).toFloat() },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .padding(top = 4.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (data.jobs.jobs.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Фоновые задания",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
-                items(data.jobs.jobs, key = { it.name }) { job ->
-                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(job.name, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                text = "Интервал ${job.interval} · запусков ${job.runs}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (job.lastRun.isNotBlank()) {
-                                Text(
-                                    text = "Последний: ${job.lastRun} (${job.durationMs} мс, " +
-                                        "${job.lastCount} шт.)",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (data.usage.points.isEmpty() && data.top.top.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
-                        Text(
-                            text = "Метрики не собираются",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}

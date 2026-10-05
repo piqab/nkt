@@ -47,6 +47,8 @@ import com.netknownsthat.app.net.model.TargetsResponse
 import com.netknownsthat.app.net.model.TopologyResponse
 import com.netknownsthat.app.net.model.UsageResponse
 import com.netknownsthat.app.net.model.UsageTopResponse
+import com.netknownsthat.app.net.model.UsageSourcesResponse
+import com.netknownsthat.app.net.model.K8sUsageCluster
 import com.netknownsthat.app.net.model.UsersResponse
 import com.netknownsthat.app.net.model.VMsResponse
 import com.netknownsthat.app.net.model.VulnResponse
@@ -244,8 +246,16 @@ class ServicesViewModel(hubClient: HubClient) : SectionViewModel<ServicesRespons
  */
 class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRuntimes>(hubClient) {
     override suspend fun fetch(): HubClient.ApiResult<ContainerRuntimes> {
-        val docker = hubClient.get<ContainersResponse>("/containers")
-        if (docker is HubClient.ApiResult.Failure) return docker
+        val dockerResult = hubClient.get<ContainersResponse>("/containers")
+        // Live check, like the web UI's install banner: the snapshot may be
+        // minutes old, and a just-installed engine must not show as missing.
+        val dockerInstalled = (hubClient.get<com.netknownsthat.app.net.model.InstalledResponse>("/services/docker/installed")
+            as? HubClient.ApiResult.Success)?.value?.installed ?: true
+        val docker = when {
+            dockerResult is HubClient.ApiResult.Success -> dockerResult
+            !dockerInstalled -> HubClient.ApiResult.Success(ContainersResponse())
+            else -> return dockerResult as HubClient.ApiResult.Failure
+        }
         // Podman/LXD/libvirt are frequently absent on a host that runs
         // Docker (and vice versa); a failure for those is "nothing here",
         // not an error worth blanking the whole screen over.
@@ -262,8 +272,27 @@ class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRunt
                 lxd = (lxd as? HubClient.ApiResult.Success)?.value ?: LXDResponse(),
                 vms = (vms as? HubClient.ApiResult.Success)?.value ?: VMsResponse(),
                 images = (images as? HubClient.ApiResult.Success)?.value ?: ImagesResponse(),
+                dockerInstalled = dockerInstalled,
             )
         )
+    }
+
+    /** Inspect of the container open in ContainerInspectDialog. */
+    var inspect by androidx.compose.runtime.mutableStateOf<com.netknownsthat.app.net.model.ContainerInspect?>(null)
+        private set
+    var inspectError by androidx.compose.runtime.mutableStateOf<String?>(null)
+        private set
+
+    fun loadInspect(name: String, reveal: Boolean) {
+        viewModelScope.launch {
+            inspectError = null
+            if (inspect?.name != name) inspect = null
+            val path = "/containers/${name.urlEncoded()}/inspect" + if (reveal) "?reveal=1" else ""
+            when (val r = hubClient.get<com.netknownsthat.app.net.model.ContainerInspect>(path)) {
+                is HubClient.ApiResult.Success -> inspect = r.value
+                is HubClient.ApiResult.Failure -> inspectError = r.message
+            }
+        }
     }
 
     fun dockerAction(name: String, action: String) = runtimeAction(name, action, "/containers/$name/$action") { data ->
@@ -342,6 +371,7 @@ data class ContainerRuntimes(
     val lxd: LXDResponse,
     val vms: VMsResponse,
     val images: ImagesResponse = ImagesResponse(),
+    val dockerInstalled: Boolean = true,
 )
 
 class UsersViewModel(hubClient: HubClient) : SectionViewModel<UsersResponse>(hubClient) {
@@ -417,16 +447,98 @@ data class AvailabilityData(
     val outages: OutagesResponse,
 )
 
+/** Workload sources in the web UI's order; the host itself last. */
+val USAGE_SOURCES = listOf(
+    "docker" to "Docker",
+    "podman" to "Podman",
+    "lxd" to "LXD",
+    "libvirt" to "Libvirt",
+    "k8s" to "Kubernetes",
+    "k8s_node" to "Узлы k8s",
+    "host" to "Хост",
+)
+
+/** CPU first — it is what is looked at first (as in the web UI). */
+val USAGE_METRICS = listOf(
+    "cpu_pct" to "CPU",
+    "mem_bytes" to "Память",
+    "net_rx_bytes" to "Сеть ↓",
+    "net_tx_bytes" to "Сеть ↑",
+)
+
+/** Most series one chart shows; the web UI's MAX_SERIES. */
+const val USAGE_MAX_SERIES = 8
+
 class UsageViewModel(hubClient: HubClient) : SectionViewModel<UsageData>(hubClient) {
+    var source by mutableStateOf<String?>(null)
+        private set
+    var metric by mutableStateOf("cpu_pct")
+        private set
+    /** k8s only: pods of this node / this namespace; null — all. */
+    var node by mutableStateOf<String?>(null)
+    var namespace by mutableStateOf<String?>(null)
+    /** Subjects drawn on the chart; empty — the top ones. */
+    var picked by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    fun choose(source: String? = this.source, metric: String = this.metric) {
+        if (source != this.source) {
+            node = null
+            namespace = null
+            picked = emptySet()
+        }
+        if (metric != this.metric) picked = emptySet()
+        this.source = source
+        // The host has no network series.
+        this.metric = if (source == "host" && metric.startsWith("net_")) "cpu_pct" else metric
+        load()
+    }
+
+    fun toggle(subject: String) {
+        picked = when {
+            subject in picked -> picked - subject
+            picked.size >= USAGE_MAX_SERIES -> picked
+            else -> picked + subject
+        }
+        load()
+    }
+
     override suspend fun fetch(): HubClient.ApiResult<UsageData> {
-        val usage = hubClient.get<UsageResponse>("/monitor/usage")
-        if (usage is HubClient.ApiResult.Failure) return usage
-        val top = hubClient.get<UsageTopResponse>("/monitor/usage/top")
+        val sources = (hubClient.get<UsageSourcesResponse>("/monitor/usage/sources") as? HubClient.ApiResult.Success)
+            ?.value?.sources.orEmpty()
+        val available = USAGE_SOURCES.map { it.first }.filter { it in sources }
+        // First working engine, the host when there is none — not Docker,
+        // which the host may not have at all.
+        val src = source?.takeIf { it in available } ?: available.firstOrNull() ?: "docker"
+        source = src
+        val top = hubClient.get<UsageTopResponse>("/monitor/usage/top?source=$src&metric=$metric&limit=500")
+        if (top is HubClient.ApiResult.Failure) return top
+        val cluster = if (src == "k8s" || src == "k8s_node") {
+            (hubClient.get<K8sUsageCluster>("/monitor/usage/k8s") as? HubClient.ApiResult.Success)?.value
+        } else null
+        val entries = (top as HubClient.ApiResult.Success).value.top.filter { e ->
+            src != "k8s" || (
+                (node == null || cluster?.pods?.get(e.subject) == node) &&
+                    (namespace == null || e.subject.substringBefore('/') == namespace)
+                )
+        }
+        val chartSubjects = picked.ifEmpty { entries.take(5).map { it.subject }.toSet() }
+        val agg = if (metric.startsWith("net_")) "sum" else "avg"
+        val series = if (chartSubjects.isEmpty()) UsageResponse() else
+            (
+                hubClient.get<UsageResponse>(
+                    "/monitor/usage?source=$src&metric=$metric&agg=$agg&subjects=" +
+                        chartSubjects.joinToString(",").urlEncoded(),
+                ) as? HubClient.ApiResult.Success
+                )?.value ?: UsageResponse()
         val jobs = hubClient.get<JobsResponse>("/monitor/jobs")
         return HubClient.ApiResult.Success(
             UsageData(
-                usage = (usage as HubClient.ApiResult.Success).value,
-                top = (top as? HubClient.ApiResult.Success)?.value ?: UsageTopResponse(),
+                sources = available,
+                top = entries,
+                cluster = cluster,
+                series = series,
+                chartSubjects = chartSubjects.toList(),
                 jobs = (jobs as? HubClient.ApiResult.Success)?.value ?: JobsResponse(),
             )
         )
@@ -434,8 +546,11 @@ class UsageViewModel(hubClient: HubClient) : SectionViewModel<UsageData>(hubClie
 }
 
 data class UsageData(
-    val usage: UsageResponse,
-    val top: UsageTopResponse,
+    val sources: List<String>,
+    val top: List<com.netknownsthat.app.net.model.UsageTopEntry>,
+    val cluster: K8sUsageCluster?,
+    val series: UsageResponse,
+    val chartSubjects: List<String>,
     val jobs: JobsResponse,
 )
 
@@ -454,7 +569,7 @@ class ConfigsViewModel(hubClient: HubClient) : SectionViewModel<ConfigsResponse>
             openFileLoading = true
             openFileError = null
             openFile = null
-            when (val result = hubClient.get<ConfigFileResponse>("/configs/file?path=$path")) {
+            when (val result = hubClient.get<ConfigFileResponse>("/configs/file?path=${path.urlEncoded()}")) {
                 is HubClient.ApiResult.Success -> openFile = result.value
                 is HubClient.ApiResult.Failure -> openFileError = result.message
             }
@@ -485,7 +600,7 @@ class ConfigsViewModel(hubClient: HubClient) : SectionViewModel<ConfigsResponse>
 
     fun loadVersions(path: String) {
         viewModelScope.launch {
-            val result = hubClient.get<ConfigVersionsResponse>("/configs/versions?path=$path")
+            val result = hubClient.get<ConfigVersionsResponse>("/configs/versions?path=${path.urlEncoded()}")
             if (result is HubClient.ApiResult.Success) versions = result.value.versions
         }
     }
@@ -780,3 +895,6 @@ class TopologyViewModel(hubClient: HubClient) : SectionViewModel<TopologyRespons
 
 /** Minimal JSON string escaping for the small bodies built by hand above. */
 private fun String.jsonString(): String = Json.encodeToString(String.serializer(), this)
+
+/** For a query-string value: a path may hold spaces, '+', '&' or '#'. */
+internal fun String.urlEncoded(): String = java.net.URLEncoder.encode(this, "UTF-8")

@@ -63,7 +63,12 @@ fun TopologyScreen(viewModel: TopologyViewModel) {
         var offset by remember { mutableStateOf(Offset.Zero) }
         var selected by remember { mutableStateOf<TopologyNode?>(null) }
 
-        val positions = remember(topology) { layout(topology) }
+        // Listeners of one service beyond the threshold fold into a single
+        // node, as on the web map (its default threshold is 4) — a busy host
+        // otherwise turns the listeners ring into an unreadable smear.
+        val folded = remember(topology) { fold(topology, GROUP_OVER) }
+        val shown = folded.topology
+        val positions = remember(shown) { layout(shown) }
         val measurer = rememberTextMeasurer()
         val surface = MaterialTheme.colorScheme.surfaceVariant
         val onSurface = MaterialTheme.colorScheme.onSurface
@@ -93,12 +98,12 @@ fun TopologyScreen(viewModel: TopologyViewModel) {
                                     point.x - it.value.x,
                                     point.y - it.value.y,
                                 ) < NODE_RADIUS }
-                                ?.let { entry -> topology.nodes.find { it.id == entry.key } }
+                                ?.let { entry -> shown.nodes.find { it.id == entry.key } }
                         }
                     },
             ) {
                 withTransform(offset, scale) {
-                    topology.edges.forEach { edge ->
+                    shown.edges.forEach { edge ->
                         val from = positions[edge.from] ?: return@forEach
                         val to = positions[edge.to] ?: return@forEach
                         drawLine(
@@ -108,7 +113,7 @@ fun TopologyScreen(viewModel: TopologyViewModel) {
                             strokeWidth = 1.5f,
                         )
                     }
-                    topology.nodes.forEach { node ->
+                    shown.nodes.forEach { node ->
                         val position = positions[node.id] ?: return@forEach
                         drawCircle(
                             color = when {
@@ -156,7 +161,20 @@ fun TopologyScreen(viewModel: TopologyViewModel) {
                                 color = MaterialTheme.colorScheme.error,
                             )
                         }
-                        val related = topology.findings.filter { it.nodeId == node.id }
+                        folded.members[node.id]?.let { members ->
+                            Text(
+                                text = "Свёрнуто портов: ${members.size}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                            members.forEach { m ->
+                                Text(
+                                    text = "• ${m.label}" + if (m.findings > 0) " — проблем ${m.findings}" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                        val related = shown.findings.filter { it.nodeId == node.id }
                         related.forEach {
                             Text(
                                 text = "• ${it.title}",
@@ -169,7 +187,7 @@ fun TopologyScreen(viewModel: TopologyViewModel) {
             }
 
             Text(
-                text = "Узлов: ${topology.nodes.size} · связей: ${topology.edges.size}. " +
+                text = "Узлов: ${shown.nodes.size} · связей: ${shown.edges.size}. " +
                     "Щипок — масштаб, перетаскивание — сдвиг, касание — узел.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -180,6 +198,50 @@ fun TopologyScreen(viewModel: TopologyViewModel) {
 }
 
 private const val NODE_RADIUS = 14f
+private const val GROUP_OVER = 4
+
+private class Folded(val topology: TopologyResponse, val members: Map<String, List<TopologyNode>>)
+
+private val STATUS_RANK = mapOf("error" to 3, "warn" to 2, "unknown" to 1, "ok" to 0)
+
+/** web/src/pages/Topology.tsx's folding: endpoint/undeclared nodes of one
+ * service (or one process) beyond [over] become one group node; edges to
+ * them are redirected to the group. */
+private fun fold(t: TopologyResponse, over: Int): Folded {
+    fun keyOf(n: TopologyNode): String =
+        if (n.kind == "endpoint") n.group.ifBlank { n.meta["service"] ?: n.label }
+        else "${n.label}|${n.meta["unit"] ?: n.meta["container_id"] ?: ""}"
+    val buckets = t.nodes.filter { it.kind == "endpoint" || it.kind == "undeclared" }
+        .groupBy { "${it.kind}|${keyOf(it)}" }
+        .filterValues { it.size > over }
+    if (buckets.isEmpty()) return Folded(t, emptyMap())
+    val memberOf = mutableMapOf<String, String>()
+    val groups = mutableMapOf<String, TopologyNode>()
+    val members = mutableMapOf<String, List<TopologyNode>>()
+    buckets.forEach { (key, list) ->
+        val id = "group:$key"
+        val worst = list.maxBy { STATUS_RANK[it.status] ?: 0 }
+        groups[id] = TopologyNode(
+            id = id,
+            kind = list.first().kind,
+            label = "${keyOf(list.first()).substringBefore('|')} (${list.size})",
+            status = worst.status,
+            findings = list.sumOf { it.findings },
+        )
+        members[id] = list
+        list.forEach { memberOf[it.id] = id }
+    }
+    val placed = mutableSetOf<String>()
+    val nodes = t.nodes.mapNotNull { n ->
+        val g = memberOf[n.id] ?: return@mapNotNull n
+        if (placed.add(g)) groups.getValue(g) else null
+    }
+    val edges = t.edges
+        .map { e -> e.copy(from = memberOf[e.from] ?: e.from, to = memberOf[e.to] ?: e.to) }
+        .distinctBy { Triple(it.from, it.to, it.kind) }
+    val findings = t.findings.map { f -> f.copy(nodeId = memberOf[f.nodeId] ?: f.nodeId) }
+    return Folded(t.copy(nodes = nodes, edges = edges, findings = findings), members)
+}
 
 private fun DrawScope.withTransform(offset: Offset, scale: Float, body: DrawScope.() -> Unit) {
     translate(offset.x + center.x, offset.y + center.y) {
