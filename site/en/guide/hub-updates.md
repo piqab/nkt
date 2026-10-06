@@ -34,7 +34,9 @@ not interrupt it):
    `systemd-run` in a separate unit, because the hub's own
    `ProtectSystem=strict` doesn't let it write there;
 3. the hub is unavailable for a few seconds; the open page waits until it
-   answers with the new version and reloads itself.
+   answers with the new version and reloads itself. If the new version is
+   not there within 3 minutes, the page says so and points to where the
+   install log is.
 
 The job log shows four steps as lines: the checksum file, downloading the
 binary (with percentages; one already downloaded by an earlier attempt is

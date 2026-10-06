@@ -39,6 +39,9 @@ import { cancelUpdateAllAfterHub, requestUpdateAllAfterHub } from '../updateAllA
  * back as a server error surfaced through the same notice banner every
  * other action here already uses.
  */
+/** Сколько ждать, пока хаб ответит новой версией после обновления. */
+const RESTART_WAIT_MS = 3 * 60_000
+
 export default function About({ admin = false }: { admin?: boolean }) {
   const { t } = useTranslation()
   const [privacy, setPrivacy] = usePrivacy()
@@ -49,6 +52,10 @@ export default function About({ admin = false }: { admin?: boolean }) {
   const [restarting, setRestarting] = useState(false)
   const [selfJob, setSelfJob] = useState<Job | null>(null)
   const fromVersion = useRef('')
+  const selfJobId = useRef(0)
+  // Хаб не ответил новой версией за RESTART_WAIT_MS — сказать прямо, а не
+  // ждать вечно.
+  const [restartStuck, setRestartStuck] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
 
   // 5s while a refresh is actually running (rare — background-refreshed
@@ -146,6 +153,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
     fromVersion.current = version.data?.current ?? ''
     const res = await api<{ job_id?: number }>(path, { method: 'POST' })
     if (typeof res.job_id === 'number') {
+      selfJobId.current = res.job_id
       setSelfJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
       return
     }
@@ -206,9 +214,46 @@ export default function About({ admin = false }: { admin?: boolean }) {
   // again is deliberate: it makes App.tsx re-fetch /auth/me from scratch,
   // which is what actually picks up the new hub_version everywhere else
   // in the UI that shows it (e.g. Hosts.tsx's own outdated-host badges).
+  // Итог задания обновления — сам по себе, а не только из окна журнала:
+  // окно могли закрыть, а раньше (без области /hosts/local) оно и вовсе
+  // не видело задание на хабе — страница так и не начинала ждать
+  // перезапуска. Хаб перестал отвечать — значит, уже перезапускается.
+  useEffect(() => {
+    if (!(updating || rollingBack) || restarting || selfJobId.current === 0) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+    const poll = async () => {
+      try {
+        const job = await api<Job>(`/hosts/local/jobs/${selfJobId.current}`, { timeoutMs: 10_000 })
+        if (cancelled) return
+        if (job.status === 'succeeded') {
+          setRestarting(true)
+          return
+        }
+        if (job.status === 'failed' || job.status === 'canceled' || job.status === 'interrupted') {
+          onSelfUpdateDone(job)
+          return
+        }
+      } catch {
+        if (!cancelled) {
+          setRestarting(true)
+          return
+        }
+      }
+      if (!cancelled) timer = setTimeout(poll, 2000)
+    }
+    timer = setTimeout(poll, 2000)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- опрос живёт, пока идёт обновление
+  }, [updating, rollingBack, restarting, selfJob])
+
   useEffect(() => {
     if (!restarting) return
     let cancelled = false
+    const stuck = setTimeout(() => !cancelled && setRestartStuck(true), RESTART_WAIT_MS)
     let timer: ReturnType<typeof setTimeout>
     const poll = async () => {
       try {
@@ -231,6 +276,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
     return () => {
       cancelled = true
       clearTimeout(timer)
+      clearTimeout(stuck)
     }
   }, [restarting])
 
@@ -248,7 +294,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
       </div>
 
       <ErrorNote error={version.error} />
-      {selfJob && <JobLogModal job={selfJob} onClose={() => setSelfJob(null)} onDone={onSelfUpdateDone} />}
+      {selfJob && <JobLogModal job={selfJob} scope="/hosts/local" onClose={() => setSelfJob(null)} onDone={onSelfUpdateDone} />}
       {notice && (
         <Banner kind={notice.kind} onClose={() => setNotice(null)}>
           {notice.text}
@@ -259,7 +305,16 @@ export default function About({ admin = false }: { admin?: boolean }) {
         {version.loading && !info ? (
           <Loading what={t('about.loadingVersion')} />
         ) : restarting ? (
-          <div>{t('about.restarting')}</div>
+          restartStuck ? (
+            <Banner kind="warn">
+              {t('about.restartStuck')}{' '}
+              <Button size="small" onClick={() => window.location.reload()}>
+                {t('staleUI.reload')}
+              </Button>
+            </Banner>
+          ) : (
+            <div>{t('about.restarting')}</div>
+          )
         ) : (
           <>
             <div className="row" style={{ gap: '2rem', flexWrap: 'wrap' }}>
