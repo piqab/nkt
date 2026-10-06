@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useJobLauncher } from './useJobLauncher'
 import { Button, Input, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -60,6 +61,9 @@ export function HubManifestsCard() {
   const list = useApi<{ manifests: Manifest[] }>('/hub/k8s/manifests')
   const [edit, setEdit] = useState<{ manifest?: Manifest; content?: string } | null>(null)
   const [history, setHistory] = useState<Manifest | null>(null)
+  // Применение — заданием хаба (по шагу на кластер); по его концу список
+  // перечитывается — итог по кластерам в журнале и в истории редакций.
+  const applyJob = useJobLauncher(() => void list.reload())
   const [results, setResults] = useState<{ name: string; results: Result[] } | null>(null)
   const [error, setError] = useState<Msg | null>(null)
 
@@ -134,15 +138,13 @@ export function HubManifestsCard() {
           <DataTable<Manifest> dataSource={list.data?.manifests ?? []} rowKey={(m) => String(m.id)} size="small" columns={columns} />
         </div>
       )}
+      {applyJob.modal}
       {edit && (
         <ApplyModal
           manifest={edit.manifest}
           initial={edit.content}
           onClose={() => setEdit(null)}
-          onApplied={(name, res) => {
-            setResults({ name, results: res })
-            void list.reload()
-          }}
+          onStartApply={(body) => applyJob.start('/hub/k8s/manifests/apply', body)}
         />
       )}
       {history && (
@@ -176,7 +178,19 @@ function ResultsBanner({ name, results, onClose }: { name: string; results: Resu
   )
 }
 
-function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Manifest; initial?: string; onClose: () => void; onApplied: (name: string, res: Result[]) => void }) {
+function ApplyModal({
+  manifest,
+  initial,
+  onClose,
+  onStartApply,
+}: {
+  manifest?: Manifest
+  initial?: string
+  onClose: () => void
+  /** Запуск задания применения — у родителя: окно правки закроется, а
+   * журнал задания должен остаться. */
+  onStartApply: (body: { name: string; note: string; content: string; clusters: number[] }) => Promise<void>
+}) {
   const { t } = useTranslation()
   const [name, setName] = useState(manifest?.name ?? '')
   const [note, setNote] = useState('')
@@ -188,7 +202,9 @@ function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Mani
 
   async function clusterDiff(): Promise<string> {
     if (selected.length === 0) throw new Error(t('manifests.pickClusters'))
-    const res = await api<{ results: Result[] }>('/hub/k8s/manifests/diff', { method: 'POST', body: { content: draft, clusters: selected } })
+    // Только просмотр, но по всем кластерам по очереди — ждать дольше
+    // обычных 30 секунд.
+    const res = await api<{ results: Result[] }>('/hub/k8s/manifests/diff', { method: 'POST', body: { content: draft, clusters: selected }, timeoutMs: 120_000 })
     // Один дифф на кластер, с заголовком: так его читает DiffView.
     return res.results.map((r) => `### ${r.cluster}\n${r.error ? `! ${r.error}\n` : r.diff || `${t('editModal.noChanges')}\n`}`).join('\n')
   }
@@ -201,8 +217,9 @@ function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Mani
     }
     setBusy(true)
     try {
-      const res = await api<{ results: Result[] }>('/hub/k8s/manifests/apply', { method: 'POST', body: { name, note, content: draft, clusters: selected } })
-      onApplied(name, res.results)
+      // Заданием хаба: по шагу на кластер, вывод kubectl — в журнале; итог
+      // сохраняется редакцией, как и раньше.
+      await onStartApply({ name, note, content: draft, clusters: selected })
       return true
     } catch (err) {
       setError(errText(err))

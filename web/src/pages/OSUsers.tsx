@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useJobLauncher } from '../components/useJobLauncher'
 import { Button, Checkbox, Input, Select, Space, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -64,6 +65,12 @@ export default function OSUsers({ me }: { me: Me }) {
 
   const canUse = me.is_admin && me.allow_mutations
 
+  const deletedName = useRef('')
+  const deleteJob = useJobLauncher((job) => {
+    if (!job || job.status === 'succeeded') setDone(tx('osUsers.deleted', { name: deletedName.current }))
+    void users.reload()
+  })
+
   async function remove(u: OSUser) {
     const res = await confirmWithOption(t('osUsers.deleteConfirm', { name: u.name }), t('osUsers.deleteHome', { home: u.home }), {
       title: t('osUsers.deleteTitle'),
@@ -75,7 +82,14 @@ export default function OSUsers({ me }: { me: Me }) {
     setError(null)
     setDone(null)
     try {
-      await api(`/os-users/${encodeURIComponent(u.name)}${res.checked ? '?home=1' : ''}`, { method: 'DELETE' })
+      // С домашним каталогом — заданием: большой каталог удаляется
+      // дольше, чем браузер ждёт ответа.
+      if (res.checked) {
+        deletedName.current = u.name
+        await deleteJob.start(`/os-users/${encodeURIComponent(u.name)}?home=1`, undefined, 'DELETE')
+        return
+      }
+      await api(`/os-users/${encodeURIComponent(u.name)}`, { method: 'DELETE' })
       setDone(tx('osUsers.deleted', { name: u.name }))
       await users.reload()
     } catch (err) {
@@ -188,6 +202,7 @@ export default function OSUsers({ me }: { me: Me }) {
 
       <ErrorNote error={users.error} />
       {error && <Banner kind="error">{error}</Banner>}
+      {deleteJob.modal}
       {done && <Banner kind="info">{msg(done)}</Banner>}
 
       <Card title={t('osUsers.listTitle')} subtitle={t('osUsers.count', { count: users.data?.users.length ?? 0 })}>

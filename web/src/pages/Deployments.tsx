@@ -786,8 +786,11 @@ function ComposeFromLink({
         setScanning(true)
         setScanNote(null)
         try {
+          // Сервер ждёт git и реестры до двух минут — браузер не должен
+          // бросать раньше.
           const res = await api<{ scan?: ComposeScan; error?: string; reason?: string; has_access?: boolean }>('/hub/pipelines/scan', {
             method: 'POST',
+            timeoutMs: 130_000,
             body: { repo: p.repo, ref: p.ref, file: p.file, pipeline_id: pipelineId ?? 0 },
           })
           if (res.scan) {

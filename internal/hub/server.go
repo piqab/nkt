@@ -453,6 +453,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/sudo/rule-off", s.handleDisableSudoRule)
 					r.Post("/hub/purge-all", s.handlePurgeAll)
 					r.Post("/hub/install-all", s.handleInstallAll)
+					r.Post("/hub/hosts/service-all", s.handleServiceAll)
 					r.Post("/hub/monitoring/collect", s.handleMonitoringCollect)
 					r.Put("/hub/monitoring/settings", s.handleMonitoringSettings)
 					r.Get("/hub/hosts/{id}/sudo", s.handleSudoInfo)

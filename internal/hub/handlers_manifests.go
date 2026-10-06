@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/k8s"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
@@ -109,6 +110,8 @@ func (s *Server) handleManifestDiff(w http.ResponseWriter, r *http.Request) {
 
 // handleManifestApply — POST /hub/k8s/manifests/apply {name, note,
 // content, clusters}: kubectl apply в каждом кластере, редакция с итогом.
+// С ?job=1 — заданием хаба: кластеров много, и запрос браузера обрывался
+// раньше, чем доходил до последнего.
 func (s *Server) handleManifestApply(w http.ResponseWriter, r *http.Request) {
 	var req manifestRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -120,22 +123,62 @@ func (s *Server) handleManifestApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.Username(r.Context())
+	if r.URL.Query().Get("job") == "1" && s.jobs != nil {
+		id, err := s.jobs.Start(r.Context(), jobs.Spec{
+			Kind: KindManifestApply, TitleKey: "hub.manifestApplyJob", TitleArgs: []any{strings.TrimSpace(req.Name), len(req.Clusters)},
+			Queue: "hub-manifests", Author: user, Steps: len(req.Clusters), Params: req,
+		})
+		if err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
+		return
+	}
+	results, id, vid, err := s.applyManifest(r.Context(), msgs.LangFromRequest(r), user, req, nil)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results, "manifest_id": id, "version_id": vid})
+}
+
+// applyManifest применяет манифест в кластерах по очереди и сохраняет
+// редакцию с итогом. step (может быть nil) — ход по кластерам для журнала
+// задания.
+func (s *Server) applyManifest(ctx context.Context, lang msgs.Lang, user string, req manifestRequest, jc *jobs.Context) ([]ManifestResult, int64, int64, error) {
 	note := req.Note
 	if note == "" {
-		note = msgs.Tc(r.Context(), "hub.manifestApplied")
+		note = msgs.T(lang, "hub.manifestApplied")
 	}
-	results := s.forEachCluster(r.Context(), msgs.LangFromRequest(r), req.Clusters, func(cl store.Cluster, hostID int64) ManifestResult {
+	n := 0
+	results := s.forEachCluster(ctx, lang, req.Clusters, func(cl store.Cluster, hostID int64) ManifestResult {
+		n++
+		if jc != nil {
+			jc.StepKey(n, len(req.Clusters), "hub.manifestApplyStep", cl.Name)
+		}
 		var res struct {
 			Output string `json:"output"`
 		}
-		body := map[string]string{"content": req.Content, "note": msgs.Tc(r.Context(), "hub.manifestNote", req.Name, user)}
-		if _, err := s.hub.HostAPI(r.Context(), hostID, "POST", "/api/k8s/apply", body, &res); err != nil {
-			return ManifestResult{Error: msgs.Localize(msgs.LangFromRequest(r), err)}
+		body := map[string]string{"content": req.Content, "note": msgs.T(lang, "hub.manifestNote", req.Name, user)}
+		if _, err := s.hub.HostAPI(ctx, hostID, "POST", "/api/k8s/apply", body, &res); err != nil {
+			if jc != nil {
+				jc.Log("hub.manifestApplyFailed", cl.Name, msgs.Localize(lang, err))
+			}
+			return ManifestResult{Error: msgs.Localize(lang, err)}
+		}
+		if jc != nil {
+			jc.Log("hub.manifestApplyOK", cl.Name)
+			for _, l := range strings.Split(strings.TrimSpace(res.Output), "\n") {
+				if l != "" {
+					jc.Logf("  %s", l)
+				}
+			}
 		}
 		return ManifestResult{Output: res.Output}
 	})
 	raw, _ := json.Marshal(results)
-	id, vid, err := s.db.SaveManifestVersion(r.Context(), store.Manifest{Name: strings.TrimSpace(req.Name), Content: req.Content, Note: note, Author: user}, string(raw))
+	id, vid, err := s.db.SaveManifestVersion(context.WithoutCancel(ctx), store.Manifest{Name: strings.TrimSpace(req.Name), Content: req.Content, Note: note, Author: user}, string(raw))
 	names, failed := make([]string, 0, len(results)), 0
 	for _, res := range results {
 		names = append(names, res.Cluster)
@@ -147,12 +190,30 @@ func (s *Server) handleManifestApply(w http.ResponseWriter, r *http.Request) {
 	if failed > 0 {
 		outcome = "error"
 	}
-	s.db.Audit(r.Context(), user, "hub.k8s.apply", req.Name+" → "+strings.Join(names, ", "), outcome, map[string]any{"failed": failed, "version_id": vid})
-	if err != nil {
-		writeErr(w, r, http.StatusInternalServerError, err)
-		return
+	s.db.Audit(context.WithoutCancel(ctx), user, "hub.k8s.apply", req.Name+" → "+strings.Join(names, ", "), outcome, map[string]any{"failed": failed, "version_id": vid})
+	if err == nil && failed > 0 && jc != nil {
+		err = msgs.Errorf("hub.manifestApplySomeFailed", failed, len(results))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"results": results, "manifest_id": id, "version_id": vid})
+	return results, id, vid, err
+}
+
+// KindManifestApply — задание хаба «применить манифест в кластерах».
+const KindManifestApply = "hub.manifestapply"
+
+// ManifestApplyRunner — исполнитель.
+type ManifestApplyRunner struct{ s *Server }
+
+// NewManifestApplyRunner — исполнитель применения манифеста.
+func NewManifestApplyRunner(s *Server) *ManifestApplyRunner { return &ManifestApplyRunner{s: s} }
+
+// Run применяет манифест по кластерам с журналом.
+func (r *ManifestApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
+	var req manifestRequest
+	if err := jc.Params(&req); err != nil {
+		return msgs.Errorf("hub.parsingJob", err)
+	}
+	_, _, _, err := r.s.applyManifest(ctx, jc.Lang(), jc.Job.Author, req, jc)
+	return err
 }
 
 func manifestIDParam(r *http.Request, name string) (int64, error) {

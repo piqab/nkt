@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useJobLauncher } from './useJobLauncher'
 import { Button, Checkbox, Input, Pagination, Select, Tag } from 'antd'
 import { CheckOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -59,11 +60,25 @@ export function LocaleCard({ canUse }: { canUse: boolean }) {
   const visible = rows.slice((page - 1) * GRID_PAGE, page * GRID_PAGE)
   const installedCount = (locales.data?.locales ?? []).filter((l) => l.installed).length
 
+  const doneText = useRef('')
+  const localesJob = useJobLauncher((job) => {
+    if (!job || job.status === 'succeeded') setNotice(doneText.current)
+    void locales.reload()
+  })
+
   async function apply(body: Record<string, unknown>, key: string, done: string) {
     setBusy(key)
     setError(null)
     setNotice(null)
     try {
+      // Генерация локалей — заданием (locale-gen пересобирает все
+      // включённые, это минуты); выбор языка по умолчанию — сразу.
+      if (Array.isArray(body.generate) && body.generate.length > 0) {
+        doneText.current = done
+        await localesJob.start('/system/locales', body)
+        setPicked([])
+        return
+      }
       await api('/system/locales', { method: 'POST', body, timeoutMs: 300_000 })
       setNotice(done)
       setPicked([])
@@ -82,6 +97,7 @@ export function LocaleCard({ canUse }: { canUse: boolean }) {
     >
       {locales.error && <Banner kind="error">{locales.error}</Banner>}
       {locales.data?.note && <Banner kind="warn">{locales.data.note}</Banner>}
+      {localesJob.modal}
       {error && <Banner kind="error">{error}</Banner>}
       {notice && (
         <Banner kind="info" onClose={() => setNotice(null)}>

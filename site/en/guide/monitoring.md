@@ -89,7 +89,13 @@ filter, page size and order are remembered in this browser. The hub's
 Jobs also cover installing and removing apt, snap and flatpak packages,
 the system upgrade, installing engines (LXD, Podman), btop, tmux, ufw and
 firewalld, creating LXD instances and Podman containers, downloading LXD
-images and changing guest passwords. The button opens the job log window
+images and changing guest passwords, stopping LXD instances and their
+snapshots, saving Docker images, uploading files from the computer,
+extracting an archive in the file browser, generating locales, deleting a
+user with the home directory and removing Kubernetes from a node. On the
+hub — updating the hub itself, "Update all", starting and stopping nkt on
+all hosts, applying a manifest to clusters, deleting a host with cleanup.
+The button opens the job log window
 right away with percentages (apt's come from its status); a closed window
 reopens from "Jobs". Through the hub it is the same: these are the host's
 own jobs.

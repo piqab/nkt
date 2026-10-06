@@ -168,6 +168,7 @@ func New(d Deps) *Server {
 		s.jobs.Register(KindClamAV, &clamRunner{s})
 		s.jobs.Register(KindArchiveFetch, &archiveFetchRunner{s})
 		s.jobs.Register(KindUpload, &uploadRunner{s})
+		s.jobs.Register(KindHostOp, &hostOpRunner{s})
 	}
 	return s
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { guardUnload } from '../components/uploadJob'
 import { Sensitive } from '../privacy'
 import { Button, Checkbox, Input, InputNumber, Progress, Select, Tooltip } from 'antd'
 import { DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
@@ -135,7 +136,10 @@ function ClusterImagesCard({ canEdit }: { canEdit: boolean }) {
   function upload(file: File) {
     setError(null)
     setUploading(0)
+    // Образ — гигабайты: пока он идёт, закрытие вкладки переспросит.
+    const release = guardUnload()
     const xhr = new XMLHttpRequest()
+    xhr.onloadend = release
     xhr.open('POST', `/api/hub/cluster-images/upload?name=${encodeURIComponent(file.name)}`)
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setUploading(Math.round((e.loaded / e.total) * 100))

@@ -40,6 +40,19 @@ function track(delta: number) {
   if (sending === 0) window.removeEventListener('beforeunload', warnOnUnload)
 }
 
+/** Защита передачи из браузера, которая идёт своим путём (не sendFile):
+ * пока не вызван возвращённый release, закрытие вкладки переспросит. */
+export function guardUnload(): () => void {
+  track(1)
+  let released = false
+  return () => {
+    if (!released) {
+      released = true
+      track(-1)
+    }
+  }
+}
+
 /** Отправка файла XMLHttpRequest — только он сообщает, сколько ушло. */
 export function sendFile(method: 'PUT' | 'POST', path: string, file: File, onProgress: (percent: number) => void): Promise<void> {
   track(1)

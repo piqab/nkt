@@ -865,13 +865,14 @@ export default function Hosts({
     }
     setNotice(null)
     setBulkBusy(running ? 'start' : 'stop')
+    // Одно задание хаба на все хосты (по восемь разом): ход и итог по
+    // каждому — в его журнале, уход со страницы ничего не теряет.
     try {
-      const results = await Promise.all(targets.map((h) => setServiceRunning(h, running)))
-      const failed = results.filter((e): e is string => e !== null).length
-      if (failed > 0) {
-        setNotice({ kind: 'error', text: tx('hosts.bulkFailed', { failed, total: targets.length }) })
-      }
+      const res = await api<{ job_id: number }>('/hub/hosts/service-all', { method: 'POST', body: { host_ids: targets.map((h) => h.id), running } })
+      await openHubJob(res.job_id)
       reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
       setBulkBusy(null)
     }
@@ -2841,7 +2842,8 @@ interface ReachResult {
 function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active: boolean; onImported: () => void }) {
   const { t } = useTranslation()
   // Поиск идёт по SSH к хосту — запускается, только когда вкладка открыта.
-  const found = useApi<{ vms: DiscoveredVM[] }>(active ? `/hub/hosts/${host.id}/vm-discover` : null)
+  // Обход машин хоста по одной — дольше обычных 30 секунд.
+  const found = useApi<{ vms: DiscoveredVM[] }>(active ? `/hub/hosts/${host.id}/vm-discover` : null, 0, 120_000)
   const [picked, setPicked] = useState<string[]>([])
   const [sshUser, setSSHUser] = useState('root')
   const [sshPort, setSSHPort] = useState(22)
@@ -2870,7 +2872,7 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
     if (!addr) return
     setReach((m) => ({ ...m, [vm.name]: 'busy' }))
     try {
-      const res = await api<ReachResult>(`/hub/hosts/${host.id}/vm-reach`, { method: 'POST', body: { name: vm.name, addr, port: credsOf(vm.name).ssh_port } })
+      const res = await api<ReachResult>(`/hub/hosts/${host.id}/vm-reach`, { method: 'POST', body: { name: vm.name, addr, port: credsOf(vm.name).ssh_port }, timeoutMs: 120_000 })
       setReach((m) => ({ ...m, [vm.name]: res }))
     } catch (err) {
       setReach((m) => ({ ...m, [vm.name]: { error: err instanceof Error ? err.message : String(err) } }))
@@ -2887,6 +2889,7 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
         `/hub/hosts/${host.id}/vm-import`,
         {
           method: 'POST',
+          timeoutMs: 120_000,
           body: {
             names: picked,
             ssh_user: sshUser,

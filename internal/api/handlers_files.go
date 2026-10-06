@@ -122,6 +122,24 @@ func (s *Server) handleFilesDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFilesExtract(w http.ResponseWriter, r *http.Request) {
+	// ?job=1 — заданием: большой архив распаковывается дольше, чем браузер
+	// ждёт ответа.
+	if wantsJob(r) {
+		if s.filesOrFail(w, r) == nil {
+			return
+		}
+		var req filesPathRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		if strings.TrimSpace(req.Path) == "" {
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hostop.noPath"))
+			return
+		}
+		s.startHostOp(w, r, "files.extract", extractArgs{Path: req.Path, Dest: req.Dest}, "hostop.extractJob", []any{gopath.Base(req.Path)}, "files")
+		return
+	}
 	s.filesMutation(w, r, "extract", func(m *files.Manager, req filesPathRequest) (string, error) {
 		dest := req.Dest
 		if dest == "" {

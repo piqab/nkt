@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { guardUnload } from './uploadJob'
+import { useJobLauncher } from './useJobLauncher'
 import type React from 'react'
 import { Button, Checkbox, Input, Progress, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, BranchesOutlined, DownloadOutlined, UploadOutlined, ReloadOutlined, HistoryOutlined, LockOutlined, DatabaseOutlined } from '@ant-design/icons'
@@ -201,6 +203,8 @@ export default function FileBrowser() {
 
   const reload = useCallback(() => listing.reload(), [listing])
 
+  const extractJob = useJobLauncher(() => reload())
+
   async function mutate(key: string, path: string, body: Record<string, unknown>) {
     setBusy(key)
     setError(null)
@@ -227,7 +231,17 @@ export default function FileBrowser() {
   async function extract(e: Entry) {
     const ok = await confirmAction(t('files.confirmExtract', { name: e.name, dir }), { okText: t('files.extract'), danger: false })
     if (!ok) return
-    await mutate(`x:${e.path}`, '/files/extract', { path: e.path, dest: dir })
+    // Заданием: большой архив распаковывается дольше, чем браузер ждёт
+    // ответа; журнал — в окне задания, список обновится по его концу.
+    setBusy(`x:${e.path}`)
+    setError(null)
+    try {
+      await extractJob.start('/files/extract', { path: e.path, dest: dir })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
   }
 
   // Загрузка идёт по одному файлу за запрос: серверу так проще — тело и
@@ -359,7 +373,13 @@ export default function FileBrowser() {
         }
       }
     }
-    await Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, list.length) }, worker))
+    // Пока очередь идёт, закрытие вкладки её оборвёт — браузер переспросит.
+    const release = guardUnload()
+    try {
+      await Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, list.length) }, worker))
+    } finally {
+      release()
+    }
     await api(`/files/upload/${uploadID}/finish`, { method: 'POST' }).catch(() => {})
     summary.finished = true
     summary.current = ''
@@ -456,6 +476,7 @@ export default function FileBrowser() {
       {info.error && <Banner kind="error">{info.error}</Banner>}
       {info.data?.warning && <Banner kind="warn">{info.data.warning}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
+      {extractJob.modal}
 
       <div className="filters" style={{ alignItems: 'center' }}>
         <Select
