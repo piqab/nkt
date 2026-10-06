@@ -59,12 +59,31 @@ file list too.
 - **Image archives**: a card below the images (Podman and LXD have the
   same): image files on the host in the nkt save directory. **"Save an
   image to an archive"** runs `docker save` for the selected image as a
-  background job; **"Download"** gets the file to your computer;
-  **"Upload from computer"** streams a `.tar`, `.tar.gz` and the like to
-  the host with a progress bar (via the hub too); **"Load into Docker"**
-  runs `docker load` as a job; "Delete". Images saved earlier with the
-  images' "Save" button are here too. Download and upload are admin-only,
-  since an image may carry secrets.
+  background job; **"Download"** gets the file to your computer; **"Load
+  into Docker"** runs `docker load` as a job; "Delete". Images saved
+  earlier with the images' "Save" button are here too. Download and upload
+  are admin-only, since an image may carry secrets.
+
+![Add image](/screens/en/image-archive-add.png)
+
+- **"Add image…"** (Docker and Podman) — a `docker save` archive (`.tar`,
+  `.tar.gz`, `.tgz`, `.tar.xz`, `.tar.zst`) in two ways:
+  - **by link** (http/https) — the host downloads it itself as a
+    background job with the standard log window: the browser window can
+    be closed, and after a dropped connection or an nkt restart the
+    download resumes where it stopped. The file name defaults to the
+    link's; an optional sha256 checksum is verified on the finished file,
+    and a mismatching file is not kept. A host without internet access
+    downloads through the hub's cache, like machine images;
+  - **from the computer** — the browser sends the file with a progress
+    bar (via the hub too); the tab must stay open until the transfer
+    ends, and the browser asks before closing it.
+
+  The **"Load into Docker right away"** checkbox (on by default) runs
+  `docker load` as a job after the download or transfer — the server
+  starts it itself as soon as the whole file has arrived, so nothing
+  depends on the window after that. LXD keeps the plain "Upload from
+  computer" button.
 
 ## Podman and LXD
 

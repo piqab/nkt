@@ -74,11 +74,11 @@ func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	jc.StepKey(2, 3, "vmimage.stepDownload")
 	path, err := r.store.Download(ctx, img, func(pr Progress) {
 		if pr.Total > 0 {
-			jc.Log("vmimage.downloaded", humanBytes(jc.Lang(), pr.Done), humanBytes(jc.Lang(), pr.Total),
+			jc.Log("vmimage.downloaded", HumanBytes(jc.Lang(), pr.Done), HumanBytes(jc.Lang(), pr.Total),
 				pr.Done*100/pr.Total)
 			return
 		}
-		jc.Log("vmimage.downloaded2", humanBytes(jc.Lang(), pr.Done))
+		jc.Log("vmimage.downloaded2", HumanBytes(jc.Lang(), pr.Done))
 	})
 	if err != nil {
 		return err
@@ -127,8 +127,8 @@ func resolveDownload(p DownloadParams) (Image, error) {
 	return img, nil
 }
 
-// humanBytes показывает размер так, как его читают, а не в байтах.
-func humanBytes(lang msgs.Lang, n int64) string {
+// HumanBytes показывает размер так, как его читают, а не в байтах.
+func HumanBytes(lang msgs.Lang, n int64) string {
 	const unit = 1024
 	if n < unit {
 		return msgs.T(lang, "vmimage.bytes", n)

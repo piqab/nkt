@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
-import { Button, Input, Progress, Select, Space, Tag } from 'antd'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Checkbox, Input, Progress, Select, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
 import { Banner, Card, Modal, formatRelative } from './ui'
@@ -8,6 +8,8 @@ import { formatBytes } from './charts'
 import { confirmAction } from './confirm'
 import { useJobLauncher } from './useJobLauncher'
 import { msg, tx, type Msg } from '../msg'
+import { JobLogModal } from '../pages/Jobs'
+import type { Job } from '../types'
 
 type Engine = 'docker' | 'podman' | 'lxd'
 
@@ -31,6 +33,12 @@ export interface SaveSource {
  * export — заданием), «Скачать» на компьютер, «Загрузить» с компьютера,
  * «Загрузить в Docker/Podman» (load) или «Импортировать» в LXD — тоже
  * заданием, «Удалить».
+ *
+ * Docker и Podman ещё и по ссылке: качает сам хост заданием (переживает
+ * закрытое окно), и по галочке — сразу load. С компьютера файл передаёт
+ * браузер — эту часть закрытие вкладки прерывает (о чём браузер
+ * предупредит), а load по галочке сервер запускает сам, как только файл
+ * получен.
  */
 export function ImageArchivesCard({ engine, canControl, sources }: { engine: Engine; canControl: boolean; sources: SaveSource[] }) {
   const { t } = useTranslation()
@@ -41,24 +49,39 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
   const [saving, setSaving] = useState(false)
   const [importing, setImporting] = useState<Archive | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [loadJob, setLoadJob] = useState<Job | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const canLoad = engine !== 'lxd'
+
+  // Закрыть или перезагрузить вкладку во время передачи — значит оборвать
+  // её: браузер переспросит.
+  useEffect(() => {
+    if (progress === null) return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [progress])
   const engineName = engine === 'docker' ? 'Docker' : engine === 'podman' ? 'Podman' : 'LXD'
 
-  async function start(path: string) {
+  async function start(path: string, body?: unknown) {
     setError(null)
     try {
-      await launcher.start(path)
+      await launcher.start(path, body)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
   }
 
-  function upload(file: File) {
+  function upload(file: File, load = false) {
     setError(null)
     // Своя приставка — чтобы архив попал в список этого движка.
     const name = file.name.startsWith(`${engine}__`) ? file.name : `${engine}__${file.name}`
     const xhr = new XMLHttpRequest()
-    xhr.open('PUT', apiURL(`/images/archives/upload?name=${encodeURIComponent(name)}`))
+    xhr.open('PUT', apiURL(`/images/archives/upload?name=${encodeURIComponent(name)}${load ? '&load=1' : ''}`))
     setProgress(0)
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
@@ -67,6 +90,16 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
       setProgress(null)
       if (xhr.status === 200) {
         list.reload()
+        // load по галочке сервер уже запустил заданием — показать его журнал.
+        try {
+          const res = JSON.parse(xhr.responseText) as { job_id?: number; load_error?: string }
+          if (res.load_error) setError(res.load_error)
+          if (typeof res.job_id === 'number') {
+            void api<Job>(`/jobs/${res.job_id}`).then(setLoadJob, (err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+          }
+        } catch {
+          /* старый хост: ответ без задания */
+        }
         return
       }
       try {
@@ -102,9 +135,15 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
             <Button size="small" onClick={() => setSaving(true)} disabled={sources.length === 0}>
               {engine === 'lxd' ? t('archives.export') : t('archives.save')}
             </Button>
-            <Button size="small" onClick={() => fileRef.current?.click()} loading={progress !== null}>
-              {t('archives.upload')}
-            </Button>
+            {canLoad ? (
+              <Button size="small" onClick={() => setAdding(true)} loading={progress !== null}>
+                {t('archives.add')}
+              </Button>
+            ) : (
+              <Button size="small" onClick={() => fileRef.current?.click()} loading={progress !== null}>
+                {t('archives.upload')}
+              </Button>
+            )}
             <input
               ref={fileRef}
               type="file"
@@ -119,7 +158,12 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
         )
       }
     >
-      {progress !== null && <Progress percent={progress} size="small" />}
+      {progress !== null && (
+        <>
+          <Progress percent={progress} size="small" />
+          <span className="small muted">{t('archives.uploadKeepOpen')}</span>
+        </>
+      )}
       {error && <Banner kind="error">{msg(error)}</Banner>}
       {archives.length === 0 ? (
         <span className="small muted">{t('archives.none')}</span>
@@ -163,6 +207,21 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
         </div>
       )}
       {launcher.modal}
+      {loadJob && <JobLogModal job={loadJob} onClose={() => setLoadJob(null)} onDone={() => list.reload()} />}
+      {adding && (
+        <AddArchiveModal
+          engineName={engineName}
+          onClose={() => setAdding(false)}
+          onFile={(file, load) => {
+            setAdding(false)
+            upload(file, load)
+          }}
+          onURL={(body) => {
+            setAdding(false)
+            void start('/images/archives/fetch', { engine, ...body })
+          }}
+        />
+      )}
       {saving && (
         <SaveModal
           engine={engine}
@@ -193,6 +252,83 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
         />
       )}
     </Card>
+  )
+}
+
+/**
+ * Образ Docker/Podman в каталог архивов: по ссылке (качает хост заданием)
+ * или файлом с компьютера; галочка «сразу загрузить» включена по
+ * умолчанию — архив почти всегда нужен ради образа в движке.
+ */
+function AddArchiveModal({
+  engineName,
+  onClose,
+  onFile,
+  onURL,
+}: {
+  engineName: string
+  onClose: () => void
+  onFile: (file: File, load: boolean) => void
+  onURL: (body: { url: string; file_name: string; checksum: string; load: boolean }) => void
+}) {
+  const { t } = useTranslation()
+  const [load, setLoad] = useState(true)
+  const [url, setURL] = useState('')
+  const [fileName, setFileName] = useState('')
+  const [checksum, setChecksum] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+  const validURL = /^https?:\/\/[^/\s]+/.test(url.trim())
+  return (
+    <Modal title={t('archives.addTitle', { engine: engineName })} onClose={onClose} width={680}>
+      <div className="col" style={{ gap: '0.8rem' }}>
+      <Checkbox checked={load} onChange={(e) => setLoad(e.target.checked)}>
+        {t('archives.loadNow', { engine: engineName })}
+      </Checkbox>
+
+      <Card title={t('archives.byURL')} subtitle={t('archives.byURLHint')}>
+        <div className="col" style={{ gap: '0.5rem' }}>
+          <label>
+            {t('archives.url')}
+            <Input value={url} onChange={(e) => setURL(e.target.value)} placeholder="https://…/image.tar.gz" />
+          </label>
+          <div className="grid grid-2">
+            <label>
+              {t('archives.fileName')}
+              <Input value={fileName} onChange={(e) => setFileName(e.target.value)} placeholder={t('archives.fileNameAuto')} />
+            </label>
+            <label>
+              {t('archives.checksum')}
+              <Input value={checksum} onChange={(e) => setChecksum(e.target.value)} placeholder="sha256" />
+            </label>
+          </div>
+          <span>
+            <Button
+              type="primary"
+              disabled={!validURL}
+              onClick={() => onURL({ url: url.trim(), file_name: fileName.trim(), checksum: checksum.trim(), load })}
+            >
+              {t('archives.fetch')}
+            </Button>
+          </span>
+        </div>
+      </Card>
+
+      <Card title={t('archives.byFile')} subtitle={t('archives.byFileHint')}>
+        {/* Своя кнопка вместо системной «Choose File» — на языке интерфейса. */}
+        <Button onClick={() => fileRef.current?.click()}>{t('archives.chooseFile')}</Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".tar,.gz,.tgz,.xz,.zst"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) onFile(file, load)
+          }}
+        />
+      </Card>
+      </div>
+    </Modal>
   )
 }
 

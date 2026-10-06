@@ -4339,7 +4339,7 @@
   },
   "archives": {
     "title": "{{engine}} image archives",
-    "hint": "Image files on the host ({{dir}}): download to your computer, upload from it, load into the engine.",
+    "hint": "Image files on the host ({{dir}}): download by link or upload from the computer, download to the computer, load into the engine.",
     "save": "Save an image to an archive",
     "saveHint": "The image is saved to a file on the host (save) as a background job; then it can be downloaded to your computer.",
     "export": "Export an image to an archive",
@@ -4358,6 +4358,20 @@
     "rootfs": "Root file system",
     "rootfsNone": "none (unified archive)",
     "alias": "Alias",
-    "deleteConfirm": "Delete archive {{name}} from the host?"
+    "deleteConfirm": "Delete archive {{name}} from the host?",
+    "add": "Add image…",
+    "addTitle": "{{engine}} image: by link or from the computer",
+    "loadNow": "Load into {{engine}} right away",
+    "byURL": "By link",
+    "byURLHint": "The host downloads it itself as a background job and resumes after a dropped connection: the window can be closed. A docker save archive is needed — .tar, .tar.gz, .tgz, .tar.xz or .tar.zst.",
+    "url": "Link (http or https)",
+    "fileName": "File name",
+    "fileNameAuto": "from the link",
+    "checksum": "sha256 checksum (optional)",
+    "fetch": "Download to the host",
+    "byFile": "From the computer",
+    "byFileHint": "The browser sends the file: do not close or reload the tab until the transfer ends. Loading into the engine afterwards runs as a job and no longer depends on the window.",
+    "uploadKeepOpen": "Transfer in progress — keep the tab open.",
+    "chooseFile": "Choose a file…"
   }
 }
