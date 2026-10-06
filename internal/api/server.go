@@ -161,6 +161,7 @@ func New(d Deps) *Server {
 		s.jobs.Register(KindComposeRemove, &composeRemoveRunner{s})
 		s.jobs.Register(KindSiteApply, &siteRunner{s})
 		s.jobs.Register(KindClamAV, &clamRunner{s})
+		s.jobs.Register(KindArchiveFetch, &archiveFetchRunner{s})
 	}
 	return s
 }
@@ -607,6 +608,7 @@ func (s *Server) Handler() http.Handler {
 				r.Put("/images/archives/upload", s.handleImageArchiveUpload)
 				r.Delete("/images/archives/{name}", s.handleImageArchiveDelete)
 				r.Post("/images/archives/save", s.handleImageArchiveSave)
+				r.Post("/images/archives/fetch", s.handleImageArchiveFetch)
 				r.Post("/images/archives/{name}/load", s.handleImageArchiveLoad)
 				r.Post("/lxd/images/{fp}/export", s.handleLXDImageExport)
 				r.Post("/lxd/images/import", s.handleLXDImageImport)

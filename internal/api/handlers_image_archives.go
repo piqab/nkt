@@ -16,7 +16,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/vmcreate"
 )
@@ -172,7 +174,41 @@ func (s *Server) handleImageArchiveUpload(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.db.Audit(r.Context(), user, "image.archive_upload", filepath.Base(p), "ok", fmt.Sprint(n))
-	writeJSON(w, http.StatusOK, map[string]any{"name": filepath.Base(p), "size": n})
+	out := map[string]any{"name": filepath.Base(p), "size": n}
+	// ?load=1 — сразу загрузить в движок заданием, запущенным здесь же, как
+	// только файл получен целиком: дальше от открытого окна ничего не
+	// зависит.
+	if r.URL.Query().Get("load") == "1" {
+		id, err := s.startArchiveLoadJob(r.Context(), user, archiveKind(filepath.Base(p)), p)
+		if err != nil {
+			out["load_error"] = msgs.Localize(msgs.LangFromRequest(r), err)
+		} else if id > 0 {
+			out["job_id"] = id
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// startArchiveLoadJob — docker (podman) load из архива фоновым заданием.
+// 0 без ошибки — загружать некуда (демо-режим, архив LXD).
+func (s *Server) startArchiveLoadJob(ctx context.Context, user, engine, path string) (int64, error) {
+	if s.cfg.IsFixtures() || s.jobs == nil || (engine != "docker" && engine != "podman") {
+		return 0, nil
+	}
+	name := filepath.Base(path)
+	engineName := map[string]string{"docker": "Docker", "podman": "Podman"}[engine]
+	id, err := s.jobs.Start(ctx, jobs.Spec{
+		Kind: cmdjob.Kind, TitleKey: "archives.loadJobTitle", TitleArgs: []any{name, engineName},
+		Queue: "session:image-load:" + engine, Author: user, Steps: 1,
+		Params: cmdjob.Params{Commands: []cmdjob.Command{{
+			Argv: []string{engine, "load", "-i", path}, StepKey: "archives.stepLoad", StepArgs: []any{engineName},
+		}}, Refresh: true},
+	})
+	if err != nil {
+		return 0, err
+	}
+	s.db.Audit(ctx, user, "image.archive_load", name, "ok", map[string]any{"job_id": id})
+	return id, nil
 }
 
 // archiveCommand — команда движка заданием (?job=1) или живым выводом.

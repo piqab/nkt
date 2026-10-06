@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.159 — 2026-10-06
+
+- **Docker and Podman images by link.** In the "Image archives" card the
+  "Add image…" button opens a window: by link (http/https) the host itself
+  downloads the `docker save` archive as a background job — the window can
+  be closed, and after a dropped connection or an nkt restart the download
+  resumes where it stopped; an optional sha256 checksum is verified. Or
+  as a file from the computer, as before.
+- **"Load into Docker/Podman right away" checkbox** (on by default): `load`
+  runs as a job right after the download or transfer. For a file from the
+  computer the server starts it as soon as the file has arrived — nothing
+  depends on the window after that; while the file is being sent, the
+  browser asks before the tab is closed.
+
 ## v1.11.158 — 2026-10-05
 
 - **The mobile app is rewritten in Kotlin Multiplatform** (`mobile/`):

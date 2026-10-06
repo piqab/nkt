@@ -83,6 +83,7 @@ SCREENS = [
     # Новые окна и карточки (v1.11.13x–14x).
     ('container-inspect', 'host', '/containers', "await sleep(1500); [...document.querySelectorAll('tr')].find((r) => /acme-app/.test(r.textContent))?.querySelector('button[aria-label=\"' + pick({ru: 'Инспект', en: 'Inspect'}) + '\"]')?.click(); await sleep(1200)"),
     ('image-archives', 'host', '/containers', "await sleep(1500); [...document.querySelectorAll('.ant-card-head-title')].find((e) => /архивы образов|image archives/i.test(e.textContent))?.scrollIntoView({block: 'start'}); await sleep(500)"),
+    ('image-archive-add', 'host', '/containers', "await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Загрузить образ', en: 'Add image'}))); await sleep(800)"),
     ('clamav', 'host', '/vulnerabilities', "tab({ru: 'Вредоносное', en: 'Malware'}); await sleep(1500); [...document.querySelectorAll('.ant-card-head-title')].find((e) => /^ClamAV/.test(e.textContent.trim()))?.scrollIntoView({block: 'start'}); await sleep(500)"),
     ('reboot', 'host', '/system', "await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Перезагрузить хост', en: 'Reboot host'}) + '$')); await sleep(1500)"),
     ('deploy-compose', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); [...([...document.querySelectorAll('tr')].find((r) => /httpbin/.test(r.textContent))?.querySelectorAll('button') ?? [])].find((b) => new RegExp('^' + pick({ru: 'Описание', en: 'Description'}) + '$').test(b.textContent.trim()))?.click(); await sleep(1500)"),
