@@ -74,6 +74,12 @@ func (s *Server) handleOSUserUpdate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOSUserDelete(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	withHome := r.URL.Query().Get("home") == "1"
+	// ?job=1 с домашним каталогом — заданием: большой каталог удаляется
+	// дольше, чем браузер ждёт ответа.
+	if wantsJob(r) && withHome {
+		s.startHostOp(w, r, "osuser.delete", osUserDeleteArgs{Name: name, Home: true}, "hostop.osUserDeleteJob", []any{name}, "host")
+		return
+	}
 	err := s.osusers.Delete(r.Context(), name, withHome)
 	target := name
 	if withHome {

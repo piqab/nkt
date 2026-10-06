@@ -917,6 +917,8 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindHostPurge, hub.NewHostPurgeRunner(manager))
 	r.jobs.Register(hub.KindInstallAll, hub.NewInstallAllRunner(manager))
 	r.jobs.Register(hub.KindHubSelfUpdate, hub.NewHubSelfUpdateRunner(manager))
+	r.jobs.Register(hub.KindManifestApply, hub.NewManifestApplyRunner(server))
+	r.jobs.Register(hub.KindServiceAll, hub.NewServiceAllRunner(manager))
 	// Сценарии — тоже задание хаба; исполнителю нужен сервер, потому что
 	// он запускает и другие задания хаба (создание машин).
 	r.jobs.Register(hub.KindScriptRun, server.ScriptRunner())

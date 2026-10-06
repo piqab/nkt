@@ -42,7 +42,9 @@ interface SudoInfo {
  * hub-sudo, правило sudoers; «сузить» полный sudo и «снять правило». */
 export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId: number; hostName: string; onClose: () => void; onChanged: () => void }) {
   const { t } = useTranslation()
-  const info = useApi<SudoInfo>(`/hub/hosts/${hostId}/sudo`)
+  // Проверка sudo, сужение и снятие правила — несколько обходов по SSH
+  // подряд: на медленном хосте это дольше обычных 30 секунд.
+  const info = useApi<SudoInfo>(`/hub/hosts/${hostId}/sudo`, 0, 120_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const d = info.data
@@ -66,7 +68,7 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
     setBusy(`rule:${s.file}:${s.line}`)
     setNote(null)
     try {
-      await api(`/hub/hosts/${hostId}/sudo/rule-off`, { method: 'POST', body: { file: s.file, line: s.line, text: s.text } })
+      await api(`/hub/hosts/${hostId}/sudo/rule-off`, { method: 'POST', body: { file: s.file, line: s.line, text: s.text }, timeoutMs: 120_000 })
       setNote({ kind: 'info', text: tx('sudo.ruleOffDone', { file: s.file }) })
       onChanged()
       await info.reload()
@@ -84,13 +86,13 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
     setNote(null)
     try {
       if (kind === 'narrow') {
-        const res = await api<{ mode: string }>(`/hub/hosts/${hostId}/sudo/narrow`, { method: 'POST' })
+        const res = await api<{ mode: string }>(`/hub/hosts/${hostId}/sudo/narrow`, { method: 'POST', timeoutMs: 120_000 })
         setNote({
           kind: 'info',
           text: res.mode === 'narrow' ? t('sudo.narrowed') : res.mode === 'already' ? t('sudo.alreadyNarrow') : t('sudo.narrowedOtherRule'),
         })
       } else {
-        await api(`/hub/hosts/${hostId}/sudo/remove`, { method: 'POST' })
+        await api(`/hub/hosts/${hostId}/sudo/remove`, { method: 'POST', timeoutMs: 120_000 })
         setNote({ kind: 'info', text: tx('sudo.removed') })
       }
       onChanged()

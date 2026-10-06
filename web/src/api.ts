@@ -205,7 +205,9 @@ export interface Loadable<T> {
  * Loads a GET endpoint and re-runs whenever `path` changes. In-flight requests
  * are aborted on change so a slow response cannot overwrite a newer one.
  */
-export function useApi<T>(path: string | null, pollMs = 0): Loadable<T> {
+/** timeoutMs — своё ожидание ответа для заведомо долгих чтений (обход
+ * хостов по SSH и т. п.), по умолчанию — DEFAULT_TIMEOUT_MS. */
+export function useApi<T>(path: string | null, pollMs = 0, timeoutMs?: number): Loadable<T> {
   // Сервер отдаёт свои тексты (справка, находки, планы) на языке
   // запроса — смена языка в меню должна перечитать их, а не оставить
   // страницу на старом языке до следующего перехода.
@@ -233,7 +235,7 @@ export function useApi<T>(path: string | null, pollMs = 0): Loadable<T> {
 
     setLoading(true)
     try {
-      const result = await api<T>(path, { signal: controller.signal })
+      const result = await api<T>(path, { signal: controller.signal, timeoutMs })
       if (controller.signal.aborted) return
       setData(result)
       setError(null)

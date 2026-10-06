@@ -12,14 +12,14 @@ import { JobLogModal } from '../pages/Jobs'
  * значит, всё уже сделано, onDone вызывается тут же.
  */
 export function useJobLauncher(onDone?: (job: Job | null) => void): {
-  start: (path: string, body?: unknown) => Promise<void>
+  start: (path: string, body?: unknown, method?: 'POST' | 'DELETE') => Promise<void>
   modal: ReactNode
 } {
   const [job, setJob] = useState<Job | null>(null)
 
-  async function start(path: string, body?: unknown) {
+  async function start(path: string, body?: unknown, method: 'POST' | 'DELETE' = 'POST') {
     const url = path + (path.includes('?') ? '&' : '?') + 'job=1'
-    const res = await api<{ job_id?: number }>(url, { method: 'POST', body })
+    const res = await api<{ job_id?: number }>(url, { method, body })
     if (res && typeof res.job_id === 'number') {
       setJob(await api<Job>(`/jobs/${res.job_id}`))
       return

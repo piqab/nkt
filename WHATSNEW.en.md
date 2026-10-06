@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.163 — 2026-10-06
+
+- **More long operations run as jobs** (with a log and in the background
+  operations indicator): extracting an archive in the file browser,
+  generating locales, deleting a user together with the home directory; on
+  the hub — applying a manifest to several clusters (one step per cluster,
+  the `kubectl` output in the log) and "Start all" / "Stop all" for nkt on
+  hosts.
+- Read-only operations that go over hosts and clusters one by one
+  (comparing a manifest across clusters, scanning a pipeline repository,
+  finding and checking machines to import, the host's sudo details and
+  changes) wait up to two minutes instead of being cut off by the browser
+  after 30 seconds.
+- Closing the tab while a cluster image or a file browser batch is
+  uploading now asks first.
+
 ## v1.11.162 — 2026-10-06
 
 - **The hub update no longer hangs at 50%.** Downloading the release from

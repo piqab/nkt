@@ -190,6 +190,12 @@ func (s *Server) handleLocalesUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	// ?job=1 — заданием: locale-gen пересобирает все включённые локали,
+	// это минуты на слабой машине.
+	if wantsJob(r) && len(req.Generate) > 0 {
+		s.startHostOp(w, r, "locales", localesArgs{Generate: req.Generate, Default: req.Default}, "hostop.localesJob", []any{strings.Join(req.Generate, ", ")}, "host")
+		return
+	}
 	user := auth.Username(r.Context())
 	if len(req.Generate) > 0 {
 		err := s.sysconfig.GenerateLocales(r.Context(), req.Generate)
