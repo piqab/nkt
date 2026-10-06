@@ -153,7 +153,7 @@ func (s *Server) handleImageArchiveUpload(w http.ResponseWriter, r *http.Request
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(vmImageUploadTimeout))
+	extendUpload(w)
 	if err := os.MkdirAll(s.archiveDir(), 0o700); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -122,5 +123,62 @@ func TestUploadAsJob(t *testing.T) {
 		if rec.Code != 400 {
 			t.Errorf("%v: %d", bad, rec.Code)
 		}
+	}
+}
+
+// Передача дольше WriteTimeout сервера (на деле — 2 минуты) получает ответ:
+// раньше файл доходил целиком, а ответ уже не уходил, и браузер видел
+// обрыв.
+func TestUploadOutlivesWriteTimeout(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	jm := jobs.New(db, slog.New(slog.DiscardHandler))
+	t.Cleanup(jm.Close)
+	dir := t.TempDir()
+	s := &Server{db: db, jobs: jm, cfg: &config.Config{}, images: control.NewImageManager(nil, nil, dir)}
+	jm.Register(KindUpload, &uploadRunner{s})
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/begin" {
+			s.handleUploadBegin(w, r)
+			return
+		}
+		s.handleImageArchiveUpload(w, r)
+	}))
+	srv.Config.WriteTimeout = 300 * time.Millisecond
+	srv.Start()
+	defer srv.Close()
+
+	res, err := http.Post(srv.URL+"/begin", "application/json", strings.NewReader(`{"target":"archive","name":"docker__slow.tar","size":3000}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		JobID int64  `json:"job_id"`
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	res.Body.Close()
+
+	// Тело идёт медленно — дольше срока записи сервера.
+	pr, pw := io.Pipe()
+	go func() {
+		for i := 0; i < 3; i++ {
+			_, _ = pw.Write(bytes.Repeat([]byte("x"), 1000))
+			time.Sleep(250 * time.Millisecond)
+		}
+		_ = pw.Close()
+	}()
+	req, _ := http.NewRequest("PUT", srv.URL+"/upload?upload="+out.Token, pr)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("ответа нет (обрыв по сроку записи): %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("код %d", resp.StatusCode)
 	}
 }

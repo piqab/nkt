@@ -62,6 +62,18 @@ const maxUploadBytes = 10 << 30
 // медленной сети это часы.
 const vmImageUploadTimeout = 6 * time.Hour
 
+// extendUpload продлевает на время загрузки образа оба срока соединения:
+// чтение тела — понятно, а запись — потому что WriteTimeout http.Server
+// (2 минуты) отсчитывается от начала запроса, и ответ после загрузки
+// дольше двух минут уже не уходил: файл доходил целиком, а браузер видел
+// обрыв.
+func extendUpload(w http.ResponseWriter) {
+	rc := http.NewResponseController(w)
+	deadline := time.Now().Add(vmImageUploadTimeout)
+	_ = rc.SetReadDeadline(deadline)
+	_ = rc.SetWriteDeadline(deadline)
+}
+
 func (s *Server) handleVMImageUpload(w http.ResponseWriter, r *http.Request) {
 	if s.vmimages == nil {
 		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.imageManagementUnavailable"))
@@ -80,7 +92,7 @@ func (s *Server) handleVMImageUpload(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	// Образ — гигабайты: 30-секундный ReadTimeout http.Server (cmd/nkt)
 	// оборвал бы чтение тела на первом же большом файле.
-	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(vmImageUploadTimeout))
+	extendUpload(w)
 	// Сначала во временный файл каталога данных (туда писать можно
 	// изнутри юнита), потом переносом в каталог дисков libvirt — там
 	// его и ждут qemu и оператор.

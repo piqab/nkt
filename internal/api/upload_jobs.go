@@ -275,7 +275,7 @@ func (s *Server) receiveUpload(w http.ResponseWriter, r *http.Request, token str
 		writeError(w, http.StatusNotFound, msgs.Tc(r.Context(), "upload.noSession"))
 		return
 	}
-	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(vmImageUploadTimeout))
+	extendUpload(w)
 	body := countingReader{r: http.MaxBytesReader(w, r.Body, maxUploadBytes), u: u}
 	var path string
 	var err error
@@ -395,6 +395,7 @@ func (u *uploadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return msgs.Errorf("upload.interrupted", pct(n), err)
 	}
+	jc.StepKey(100, 100, "upload.stepTransferPct", p.Name, 100)
 	jc.Log("upload.received", vmimage.HumanBytes(jc.Lang(), n))
 
 	switch p.Target {

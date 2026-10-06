@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActiveJobsIndicator } from './components/ActiveJobsIndicator'
+import { StaleUIBanner } from './components/StaleUIBanner'
 import ruRU from 'antd/locale/ru_RU'
 import enUS from 'antd/locale/en_US'
 import { Badge, Button, ConfigProvider, Layout, Menu, Tabs, Tag, Tooltip, type MenuProps, type ThemeConfig } from 'antd'
@@ -574,6 +575,7 @@ function Shell({
     return (
       <Layout className="shell">
       <ActiveJobsIndicator isHub={isHub} />
+      <StaleUIBanner />
         <Layout.Sider
           className="sidebar"
           width={208}
@@ -634,6 +636,7 @@ function Shell({
   const shell = (
     <Layout className="shell">
       <ActiveJobsIndicator isHub={isHub} />
+      <StaleUIBanner />
       <Layout.Sider
         className="sidebar"
         width={208}
