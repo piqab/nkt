@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.162 — 2026-10-06
+
+- **The hub update no longer hangs at 50%.** Downloading the release from
+  GitHub had no time limit: a stalled connection held the job forever.
+  Now, if not a byte arrives for 60 seconds, the download is retried once,
+  and then the job ends with "the download stopped at N%"; the whole
+  update is limited to 30 minutes. Downloading the release when installing
+  nkt on hosts gets the same limit.
+- **The hub update log shows steps:** the checksum file, downloading the
+  binary with percentages (one already downloaded by an earlier attempt is
+  taken from the cache if its checksum matches), the systemd unit, install
+  and restart.
+- The app's beta release is called "Android <version> (beta)"; running the
+  workflow again renames an already published release too.
+
 ## v1.11.161 — 2026-10-06
 
 - **Background operations indicator** — an "N operations" button in the

@@ -118,12 +118,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ steps.v.outputs.tag }}"
+          title="Android ${{ steps.v.outputs.version }} (beta)"
           if gh release view "$tag" >/dev/null 2>&1; then
             # Та же версия собрана ещё раз — заменить файлы и описание.
+            # Заголовок — тоже: так переименовываются и уже выпущенные релизы.
             gh release upload "$tag" dist/* --clobber
-            gh release edit "$tag" --prerelease --notes-file notes.md
+            gh release edit "$tag" --prerelease --title "$title" --notes-file notes.md
           else
             gh release create "$tag" dist/* --target "$GITHUB_SHA" --prerelease \
-              --title "Android-приложение ${{ steps.v.outputs.version }} (beta)" \
-              --notes-file notes.md
+              --title "$title" --notes-file notes.md
           fi
