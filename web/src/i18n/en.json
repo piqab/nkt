@@ -110,7 +110,8 @@
     "beta": "use beta versions",
     "betaHint": "Pre-releases (vX.Y.Z-beta) count as updates; hosts always follow the hub version. Unchecked, a hub on a beta updates to the stable build of the same version once it is out.",
     "updateAllHosts": "After the hub update, update nkt on all hosts",
-    "updateAllHostsHint": "The hub restarts, the page reloads and opens the “Update all” window listing the hosts that will be updated."
+    "updateAllHostsHint": "The hub restarts, the page reloads and opens the “Update all” window listing the hosts that will be updated.",
+    "restartStuck": "The hub has not answered with the new version within 3 minutes. Reload the page: if the version in About is still the old one, the install did not go through — check the service log on the hub machine (journalctl -u netknownsthat-hub and the transient run-… units)."
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",

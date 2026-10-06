@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.165 — 2026-10-06
+
+- **After a hub update the page reloads by itself again.** The update log
+  window in About asked for the job from the hub itself rather than from
+  the hub's machine, where jobs live — and saw neither the lines nor the
+  end of the job, so the page never started waiting for the restart (the
+  hub did update). Now the window looks where the job is, and waiting for
+  the restart relies on the job itself, even with the window closed. If
+  the hub has not answered with the new version within 3 minutes, the page
+  says so and tells where to look for the install log.
+
 ## v1.11.164 — 2026-10-06
 
 - **Uploading from the computer for longer than two minutes no longer
