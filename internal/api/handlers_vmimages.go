@@ -67,6 +67,11 @@ func (s *Server) handleVMImageUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.imageManagementUnavailable"))
 		return
 	}
+	// С токеном — передача, заведённая заданием (POST /uploads/begin).
+	if t := uploadTokenOf(r); t != "" {
+		s.receiveUpload(w, r, t)
+		return
+	}
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
 	if name == "" {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.fileNameSpecified"))

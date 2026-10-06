@@ -84,6 +84,10 @@ SCREENS = [
     ('container-inspect', 'host', '/containers', "await sleep(1500); [...document.querySelectorAll('tr')].find((r) => /acme-app/.test(r.textContent))?.querySelector('button[aria-label=\"' + pick({ru: 'Инспект', en: 'Inspect'}) + '\"]')?.click(); await sleep(1200)"),
     ('image-archives', 'host', '/containers', "await sleep(1500); [...document.querySelectorAll('.ant-card-head-title')].find((e) => /архивы образов|image archives/i.test(e.textContent))?.scrollIntoView({block: 'start'}); await sleep(500)"),
     ('image-archive-add', 'host', '/containers', "await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Загрузить образ', en: 'Add image'}))); await sleep(800)"),
+    # Индикатор фоновых операций: задание передачи файла, которому
+    # браузер так и не прислал файл, — висит «идущим» ровно столько, сколько
+    # нужно для снимка (через 10 минут оно закончится ошибкой).
+    ('active-jobs', 'hub', '/', "await fetch('/api/hosts/local/uploads/begin', {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({target: 'archive', name: 'docker__demo-app.tar', size: 734003200})}); await sleep(6000); document.querySelector('.active-jobs-button')?.click(); await sleep(800)"),
     ('clamav', 'host', '/vulnerabilities', "tab({ru: 'Вредоносное', en: 'Malware'}); await sleep(1500); [...document.querySelectorAll('.ant-card-head-title')].find((e) => /^ClamAV/.test(e.textContent.trim()))?.scrollIntoView({block: 'start'}); await sleep(500)"),
     ('reboot', 'host', '/system', "await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Перезагрузить хост', en: 'Reboot host'}) + '$')); await sleep(1500)"),
     ('deploy-compose', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); [...([...document.querySelectorAll('tr')].find((r) => /httpbin/.test(r.textContent))?.querySelectorAll('button') ?? [])].find((b) => new RegExp('^' + pick({ru: 'Описание', en: 'Description'}) + '$').test(b.textContent.trim()))?.click(); await sleep(1500)"),

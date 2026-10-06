@@ -261,6 +261,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/auth/password", s.handleChangePassword)
 
 				r.Get("/hub/version", s.handleHubVersion)
+				r.Get("/hub/jobs/active", s.handleActiveJobs)
 				r.Get("/hub/vulndb", s.handleHubVulnDBStatus)
 				r.Get("/hub/clamdb", s.handleHubClamDBStatus)
 				r.Get("/hub/aptcache", s.handleHubAptCacheStatus)

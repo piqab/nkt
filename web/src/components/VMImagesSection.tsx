@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { beginUploadJob, sendFile } from './uploadJob'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
@@ -763,8 +764,36 @@ function AddImageModal({
 
   // Загрузка идёт XMLHttpRequest, а не fetch: только он показывает, сколько
   // отправлено, а на семистах мегабайтах полоса — не украшение.
-  function upload(file: File) {
+  // Загрузка — заданием хоста с первого байта: его журнал открывается
+  // сразу (onStarted), хост пишет туда проценты и потом сам переносит
+  // образ в каталог дисков libvirt.
+  async function upload(file: File) {
     setError(null)
+    let begun: Awaited<ReturnType<typeof beginUploadJob>>
+    try {
+      begun = await beginUploadJob({ target: 'vmimage', name: file.name, size: file.size })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      return
+    }
+    if (!begun) {
+      legacyUpload(file)
+      return
+    }
+    onStarted(begun.job)
+    setUploading(0)
+    try {
+      await sendFile('POST', `/vm/images/upload?upload=${begun.token}`, file, setUploading)
+      onUploaded()
+    } catch (err) {
+      setError(err instanceof Error && err.message !== 'network' ? err.message : tx('vmimages.uploadFailed'))
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  /** Старый хост без /uploads/begin: образ одним запросом. */
+  function legacyUpload(file: File) {
     setUploading(0)
     const xhr = new XMLHttpRequest()
     // apiURL, а не строка «/api/…»: через хаб путь хоста получает префикс
@@ -835,7 +864,7 @@ function AddImageModal({
             accept=".qcow2,.img,.raw"
             onChange={(e) => {
               const file = e.target.files?.[0]
-              if (file) upload(file)
+              if (file) void upload(file)
             }}
           />
         )}

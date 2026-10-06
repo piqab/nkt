@@ -8,6 +8,25 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.161 — 2026-10-06
+
+- **Background operations indicator** — an "N operations" button in the
+  bottom right corner of any section while something is running: on a host
+  — its jobs, on the hub — the jobs of the hub and of every online host,
+  with the host name, step and percentage; a click opens the log. A long
+  operation no longer "disappears" when you leave the section or go to the
+  hub.
+- **Uploading from the computer is a job from the first byte** (Docker,
+  Podman and LXD image archives and your own machine image): the job is
+  created before the transfer starts, its log opens at once, and the host
+  writes the percentage of the bytes that have arrived — the progress is
+  visible in the host's "Jobs" and in the indicator. After the transfer the
+  same job runs `docker load` (with the checkbox) or moves the machine image
+  to the libvirt directory. Moving between sections and to the hub does not
+  interrupt the transfer; a broken-off transfer (closed tab, lost
+  connection) is a job error with the percentage where it stopped, and no
+  partial file is kept.
+
 ## v1.11.160 — 2026-10-06
 
 - **Long operations that still waited for a request reply now run as

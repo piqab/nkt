@@ -94,6 +94,16 @@ right away with percentages (apt's come from its status); a closed window
 reopens from "Jobs". Through the hub it is the same: these are the host's
 own jobs.
 
+![Background operations indicator](/screens/en/active-jobs.png)
+
+**The background operations indicator** — an "N operations" button in the
+bottom right corner of any section while something is running: on a host
+— its jobs, on the hub — the hub's own jobs and those of every online host
+(with the host name). The list shows the step and a percentage bar; a
+click opens the job log. This way a long operation's progress stays
+visible after leaving the section where it started, and from another
+host.
+
 ## Audit log
 
 ![Audit log](/screens/en/audit.png)
