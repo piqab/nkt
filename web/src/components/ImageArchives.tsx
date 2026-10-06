@@ -9,6 +9,7 @@ import { confirmAction } from './confirm'
 import { useJobLauncher } from './useJobLauncher'
 import { msg, tx, type Msg } from '../msg'
 import { JobLogModal } from '../pages/Jobs'
+import { beginUploadJob, sendFile } from './uploadJob'
 import type { Job } from '../types'
 
 type Engine = 'docker' | 'podman' | 'lxd'
@@ -76,10 +77,37 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
     }
   }
 
-  function upload(file: File, load = false) {
+  // Загрузка — заданием хоста с первого байта: журнал открывается сразу,
+  // хост пишет в задание проценты, после передачи там же идёт load.
+  async function upload(file: File, load = false) {
     setError(null)
     // Своя приставка — чтобы архив попал в список этого движка.
     const name = file.name.startsWith(`${engine}__`) ? file.name : `${engine}__${file.name}`
+    let begun: Awaited<ReturnType<typeof beginUploadJob>>
+    try {
+      begun = await beginUploadJob({ target: 'archive', name, size: file.size, load })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      return
+    }
+    if (!begun) {
+      legacyUpload(file, name, load)
+      return
+    }
+    setLoadJob(begun.job)
+    setProgress(0)
+    try {
+      await sendFile('PUT', `/images/archives/upload?upload=${begun.token}`, file, setProgress)
+      list.reload()
+    } catch (err) {
+      setError(err instanceof Error && err.message !== 'network' ? err.message : tx('archives.uploadFailed'))
+    } finally {
+      setProgress(null)
+    }
+  }
+
+  /** Старый хост без /uploads/begin: передача одним запросом, load — после. */
+  function legacyUpload(file: File, name: string, load: boolean) {
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', apiURL(`/images/archives/upload?name=${encodeURIComponent(name)}${load ? '&load=1' : ''}`))
     setProgress(0)
@@ -150,7 +178,7 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
               multiple={engine === 'lxd'}
               style={{ display: 'none' }}
               onChange={(e) => {
-                for (const f of Array.from(e.target.files ?? [])) upload(f)
+                for (const f of Array.from(e.target.files ?? [])) void upload(f)
                 e.target.value = ''
               }}
             />
@@ -214,7 +242,7 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
           onClose={() => setAdding(false)}
           onFile={(file, load) => {
             setAdding(false)
-            upload(file, load)
+            void upload(file, load)
           }}
           onURL={(body) => {
             setAdding(false)

@@ -1155,3 +1155,17 @@ span.vm-toggle {
 .mon-bar-track { position: relative; height: 6px; border-radius: 3px; background: var(--border); overflow: visible; }
 .mon-bar-fill { height: 100%; border-radius: 3px; }
 .mon-bar-peak { position: absolute; top: -2px; width: 2px; height: 10px; border-radius: 1px; opacity: 0.7; }
+
+/* Индикатор фоновых операций (ActiveJobsIndicator) — в правом нижнем углу
+   поверх всего: вверху справа живут имя пользователя и кнопки разделов. */
+.active-jobs-button {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 900;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.active-jobs-list { display: flex; flex-direction: column; gap: 0.3rem; width: min(26rem, 80vw); max-height: 60vh; overflow: auto; }
+.active-jobs-item { display: flex; flex-direction: column; align-items: stretch; gap: 0.1rem; text-align: left; padding: 0.4rem 0.5rem; border-radius: 6px; width: 100%; }
+.active-jobs-item:hover { background: var(--wash); }
+.active-jobs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -31,6 +31,11 @@ import (
 
 // Server holds everything the handlers need.
 type Server struct {
+	// transfers — идущие передачи файлов с компьютера (upload_jobs.go):
+	// по токену и по номеру задания.
+	transfersMu  sync.Mutex
+	transfers    map[string]*uploadSession
+	transferJobs map[int64]string
 	// pf — пробросы портов Kubernetes в браузер (k8s_portforward.go).
 	pf         pfManager
 	cfg        *config.Config
@@ -162,6 +167,7 @@ func New(d Deps) *Server {
 		s.jobs.Register(KindSiteApply, &siteRunner{s})
 		s.jobs.Register(KindClamAV, &clamRunner{s})
 		s.jobs.Register(KindArchiveFetch, &archiveFetchRunner{s})
+		s.jobs.Register(KindUpload, &uploadRunner{s})
 	}
 	return s
 }
@@ -606,6 +612,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/images/archives/{name}/download", s.handleImageArchiveDownload)
 				r.Get("/vm/images/file/download", s.handleVMImageFileDownload)
 				r.Put("/images/archives/upload", s.handleImageArchiveUpload)
+				r.Post("/uploads/begin", s.handleUploadBegin)
 				r.Delete("/images/archives/{name}", s.handleImageArchiveDelete)
 				r.Post("/images/archives/save", s.handleImageArchiveSave)
 				r.Post("/images/archives/fetch", s.handleImageArchiveFetch)

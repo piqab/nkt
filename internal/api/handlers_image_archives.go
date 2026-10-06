@@ -140,6 +140,11 @@ func (s *Server) handleImageArchiveDelete(w http.ResponseWriter, r *http.Request
 // handleImageArchiveUpload — PUT /images/archives/upload?name=: файл с
 // компьютера в каталог архивов (потоком; недописанный удаляется).
 func (s *Server) handleImageArchiveUpload(w http.ResponseWriter, r *http.Request) {
+	// С токеном — передача, заведённая заданием (POST /uploads/begin).
+	if t := uploadTokenOf(r); t != "" {
+		s.receiveUpload(w, r, t)
+		return
+	}
 	p, err := s.archivePath(strings.TrimSpace(r.URL.Query().Get("name")))
 	if err == nil && !archiveExtRe.MatchString(p) {
 		err = msgs.Errorf("api.archiveBadName", filepath.Base(p))

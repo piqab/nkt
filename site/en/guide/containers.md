@@ -76,15 +76,22 @@ file list too.
     link's; an optional sha256 checksum is verified on the finished file,
     and a mismatching file is not kept. A host without internet access
     downloads through the hub's cache, like machine images;
-  - **from the computer** — the browser sends the file with a progress
-    bar (via the hub too); the tab must stay open until the transfer
-    ends, and the browser asks before closing it.
+  - **from the computer** — also a host job, created before the first
+    byte: the log window opens at once, the host writes the percentage of
+    the bytes that have arrived into the job, and the progress is visible
+    in the host's "Jobs" and in the background operations indicator from
+    any section, on the hub too. The browser sends the file, so moving
+    between sections and to the hub does not interrupt the transfer, while
+    closing the tab does (the browser asks first); a broken-off transfer
+    is a job error with the percentage where it stopped, and no partial
+    file is kept.
 
-  The **"Load into Docker right away"** checkbox (on by default) runs
-  `docker load` as a job after the download or transfer — the server
-  starts it itself as soon as the whole file has arrived, so nothing
-  depends on the window after that. LXD keeps the plain "Upload from
-  computer" button.
+  The **"Load into Docker right away"** checkbox (on by default) — after
+  the download or transfer `docker load` is the next step of the same
+  job. LXD keeps the "Upload from computer" button, also as a job, without
+  loading into an engine; the same goes for your own machine image in the
+  libvirt section (after the transfer the job moves it to the disk
+  directory itself).
 
 ## Podman and LXD
 

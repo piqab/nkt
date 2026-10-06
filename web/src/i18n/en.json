@@ -4373,5 +4373,12 @@
     "byFileHint": "The browser sends the file: do not close or reload the tab until the transfer ends. Loading into the engine afterwards runs as a job and no longer depends on the window.",
     "uploadKeepOpen": "Transfer in progress — keep the tab open.",
     "chooseFile": "Choose a file…"
+  },
+  "activeJobs": {
+    "title": "Background operations",
+    "count_one": "{{count}} operation",
+    "count_other": "{{count}} operations",
+    "queued": "queued",
+    "running": "running"
   }
 }
