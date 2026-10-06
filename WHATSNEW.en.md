@@ -8,6 +8,28 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.160 — 2026-10-06
+
+- **Long operations that still waited for a request reply now run as
+  jobs** with the log window; closing it interrupts nothing:
+  - removing Kubernetes from a node — the request used to break off after
+    30 seconds, leaving `kubeadm reset` / `k3s-uninstall` half done;
+  - stopping and restarting an LXD instance, taking a snapshot and
+    restoring it — a machine shuts down longer than the command limit;
+  - "Save" for Docker images — `docker save` one step per image, the
+    archives show up in the "Image archives" card;
+  - updating and removing snap/flatpak packages;
+  - updating and rolling back the hub itself — the browser no longer
+    breaks off the release download; the page waits until the hub answers
+    with the new version;
+  - "Update all" on hosts — one hub job instead of a loop in the browser:
+    leaving the page no longer leaves some hosts without the update;
+  - deleting a host with cleanup on it.
+- **AI:** a model answer that takes longer than two minutes is no longer
+  cut off — requests to the model live as long as the settings allow (up
+  to 30 minutes).
+- An LXD instance name is checked against LXD's rules in its actions too.
+
 ## v1.11.159 — 2026-10-06
 
 - **Docker and Podman images by link.** In the "Image archives" card the

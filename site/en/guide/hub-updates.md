@@ -23,7 +23,8 @@ Below — the **release notes** in the UI language (from `WHATSNEW.md` and
 
 ## Update the hub
 
-"Update to vX.Y.Z":
+"Update to vX.Y.Z" — a hub job with the log window (closing the window does
+not interrupt it):
 
 1. downloads the binary for this machine's architecture and the
    `deploy/netknownsthat-hub.service` of the same tag, verifies
@@ -32,8 +33,8 @@ Below — the **release notes** in the UI language (from `WHATSNEW.md` and
    `/etc/systemd/system/`, then `daemon-reload` and `restart` — via
    `systemd-run` in a separate unit, because the hub's own
    `ProtectSystem=strict` doesn't let it write there;
-3. the hub is unavailable for a few seconds; the open page polls
-   `/api/health` and reloads itself.
+3. the hub is unavailable for a few seconds; the open page waits until it
+   answers with the new version and reloads itself.
 
 The confirmation has a **"After the hub update, update nkt on all hosts"**
 checkbox, on by default. Then, after the reload, "Hosts" opens right away

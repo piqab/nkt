@@ -227,6 +227,24 @@ func (s *Server) Handler() http.Handler {
 			})
 		})
 
+		// Запросы к модели ИИ — мимо двухминутного потолка: модель вправе
+		// думать столько, сколько разрешено в настройках (до aiTimeoutMaxS),
+		// а потолок отменял контекст запроса и обрывал ответ на второй
+		// минуте. Разбор находки — обычному пользователю тоже: это
+		// объяснение, а не изменение; проверка ключа и список моделей —
+		// администратору.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(aiTimeoutMaxS*time.Second + time.Minute))
+			r.Use(s.auth.RequireAuth)
+			r.Post("/hub/ai/explain", s.handleAIExplain)
+			r.Post("/hub/ai/review", s.handleAIReview)
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.RequireAdmin)
+				r.Post("/hub/ai/test", s.handleAITest)
+				r.Post("/hub/ai/models", s.handleAIModels)
+			})
+		})
+
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(2 * time.Minute))
 
@@ -250,11 +268,6 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/ai/reviews", s.handleAIReviews)
 				r.Get("/hub/ai/answers", s.handleAIAnswers)
 				r.Get("/hub/ai/prompts", s.handleAIPrompts)
-				// Разбор находки — обычному пользователю тоже: это
-				// объяснение, а не изменение. Настройка и ключ — только
-				// администратору (ниже).
-				r.Post("/hub/ai/explain", s.handleAIExplain)
-				r.Post("/hub/ai/review", s.handleAIReview)
 				r.Get("/hub/clusters", s.handleClusterList)
 				r.Get("/hub/cluster-images", s.handleClusterImages)
 				r.Get("/hub/k8s-versions", s.handleK8sVersions)
@@ -318,8 +331,6 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/aptcache/clear", s.handleHubAptCacheClear)
 					r.Post("/hub/ai/settings", s.handleAISettings)
 					r.Post("/hub/ai/cache/clear", s.handleAICacheClear)
-					r.Post("/hub/ai/test", s.handleAITest)
-					r.Post("/hub/ai/models", s.handleAIModels)
 					r.Post("/hub/ai/answers/delete", s.handleAIAnswerDelete)
 					r.Post("/hub/ai/prompts", s.handleAIPromptSet)
 					r.Post("/hub/ai/prompts/diff", s.handleAIPromptDiff)

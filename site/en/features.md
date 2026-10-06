@@ -20,7 +20,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - "Allow writing" button opens a directory to the unit (a `ReadWritePaths` drop-in) and restarts the service when a config lives outside the allowed paths.
 - Sandbox diagnostics: why the terminal or the sandbox escape does not work, with commands to fix it.
 - Background jobs with a log, steps, cancellation and resumption after a service restart; the "Jobs" section.
-- Long operations — installing packages and engines, the system upgrade, creating LXD instances and Podman containers, downloading images, backups, changing guest passwords — run as jobs: the log window opens right away with percentages, closing it stops nothing; on the host and through the hub.
+- Long operations — installing packages and engines, the system upgrade, creating LXD instances and Podman containers, stopping and restarting LXD instances, their snapshots and restores, saving Docker images, downloading images, backups, changing guest passwords, removing Kubernetes from a node, snap/flatpak; on the hub — updating and rolling back the hub itself, "Update all", deleting a host with cleanup — run as jobs: the log window opens right away with percentages, closing it stops nothing; on the host and through the hub.
 - UI windows resize with a corner and maximize to the full screen; the size of log, job, editor, terminal and machine screen windows is remembered.
 - Scheduler for background checks and metric collection (`NKT_SCHEDULER_ENABLED`).
 - Host self-update through the hub or with a manually uploaded binary.

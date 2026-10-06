@@ -185,6 +185,9 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
       )}
       {running && (
         <CommandModal
+          // Обновление и удаление snap/flatpak — минуты: заданием, чтобы
+          // ход и итог остались в «Заданиях», а не в закрытом окне.
+          asJob
           title={running.title}
           wsPath={running.wsPath}
           outcome={running.outcome ?? null}

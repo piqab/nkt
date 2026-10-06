@@ -387,16 +387,23 @@ func (m *Manager) Pods(ctx context.Context, namespace string) ([]byte, error) {
 	return []byte(out.Stdout), nil
 }
 
-// Uninstall убирает узел: официальные скрипты k3s или kubeadm reset.
-func (m *Manager) Uninstall(ctx context.Context) error {
-	st := m.Status(ctx)
-	var script string
-	switch st.Flavor {
+// UninstallScript — сценарий удаления узла: официальные скрипты k3s или
+// kubeadm reset; пустая строка — удалять нечего. Отдельно от Uninstall:
+// интерфейс выполняет его фоновым заданием (минуты), хаб — напрямую.
+func (m *Manager) UninstallScript(ctx context.Context) string {
+	switch m.Status(ctx).Flavor {
 	case FlavorK3s:
-		script = "if [ -x /usr/local/bin/k3s-uninstall.sh ]; then /usr/local/bin/k3s-uninstall.sh; elif [ -x /usr/local/bin/k3s-agent-uninstall.sh ]; then /usr/local/bin/k3s-agent-uninstall.sh; fi"
+		return "if [ -x /usr/local/bin/k3s-uninstall.sh ]; then /usr/local/bin/k3s-uninstall.sh; elif [ -x /usr/local/bin/k3s-agent-uninstall.sh ]; then /usr/local/bin/k3s-agent-uninstall.sh; fi"
 	case FlavorKubeadm:
-		script = "kubeadm reset -f; apt-get remove -y --purge kubeadm kubelet kubectl; rm -rf /etc/kubernetes /var/lib/etcd /etc/cni/net.d"
-	default:
+		return "kubeadm reset -f; apt-get remove -y --purge kubeadm kubelet kubectl; rm -rf /etc/kubernetes /var/lib/etcd /etc/cni/net.d"
+	}
+	return ""
+}
+
+// Uninstall убирает узел (см. UninstallScript).
+func (m *Manager) Uninstall(ctx context.Context) error {
+	script := m.UninstallScript(ctx)
+	if script == "" {
 		return nil
 	}
 	out, err := m.run(ctx, "sh", "-c", script)

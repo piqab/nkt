@@ -39,7 +39,9 @@ interface HostsRepository {
     suspend fun latestInstallJob(hostId: Long): Outcome<Long>
 
     /** [purge] — also remove nkt from the host itself. */
-    suspend fun delete(hostId: Long, purge: Boolean): Outcome<Unit>
+    /** The hub job of the cleanup on the host when [purge] (null without
+     * it, or on an older hub that cleans up within the request). */
+    suspend fun delete(hostId: Long, purge: Boolean): Outcome<Long?>
     suspend fun setGroup(hostId: Long, group: String): Outcome<Unit>
     suspend fun groups(): Outcome<List<String>>
     suspend fun createGroup(name: String): Outcome<Unit>

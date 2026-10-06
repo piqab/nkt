@@ -113,6 +113,19 @@ func (s *Server) handleK8sUninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.Username(r.Context())
+	// ?job=1 — заданием: удаление идёт минутами, а запрос браузера
+	// обрывается раньше и прерывал бы его на полпути.
+	if wantsJob(r) {
+		script := s.k8sManager().UninstallScript(r.Context())
+		if script == "" {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+		s.startCmdJob(w, r, "k8s.uninstallJobTitle", nil, "host",
+			cmdjob.Params{Commands: []cmdjob.Command{{Script: script, StepKey: "k8s.uninstallJobTitle"}}, Refresh: true},
+			"k8s.uninstall", "")
+		return
+	}
 	err := s.k8sManager().Uninstall(r.Context())
 	s.db.Audit(r.Context(), user, "k8s.uninstall", "", auditResult(err), errText(err))
 	if err != nil {

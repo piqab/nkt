@@ -94,7 +94,7 @@ fun HostListScreen(
     deleting?.let { h ->
         DeleteHostDialog(h, onDismiss = { deleting = null }) { purge ->
             deleting = null
-            viewModel.delete(h, purge)
+            viewModel.delete(h, purge, openJob)
         }
     }
     regrouping?.let { h ->

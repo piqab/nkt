@@ -71,6 +71,19 @@ class RepositoryTest {
         assertEquals("failed", requests[1].url.parameters["status"])
     }
 
+    /** Delete with cleanup: the hub answers with the job doing it; without
+     * cleanup (or on an older hub) there is no job. */
+    @Test
+    fun deleteWithPurgeReturnsTheJob() = runBlocking {
+        val api = api { request ->
+            if (request.body.contentLength != null && request.body.contentLength!! > 0) respond("""{"status":"ok","job_id":42}""", headers = jsonHeaders)
+            else respond("""{"status":"ok"}""", headers = jsonHeaders)
+        }
+        assertEquals(42L, (HostsRepositoryImpl(api).delete(5, purge = true) as Outcome.Success).value)
+        assertEquals(null, (HostsRepositoryImpl(api).delete(5, purge = false) as Outcome.Success).value)
+        assertEquals("/api/hub/hosts/5", requests[0].url.encodedPath)
+    }
+
     @Test
     fun errorsAreTyped() = runBlocking {
         val api = api { request ->

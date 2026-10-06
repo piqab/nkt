@@ -39,17 +39,34 @@ const (
 // its own running binary, so every precondition is checked up front rather
 // than discovered halfway through a script no one is watching run.
 func (m *Manager) ApplyUpdate(ctx context.Context) error {
+	version, err := m.SelfUpdateTarget(false)
+	if err != nil {
+		return err
+	}
+	return m.applyVersion(ctx, version, nil)
+}
+
+// SelfUpdateTarget — версия, на которую встанет хаб: последняя (обновление)
+// или предыдущая (откат), с проверкой всех условий заранее — до задания и
+// до скачивания.
+func (m *Manager) SelfUpdateTarget(rollback bool) (string, error) {
 	status := m.VersionStatus()
 	if !status.Updatable {
-		return msgs.Errorf("hub.selfUpdateUnavailableHubRunning")
+		return "", msgs.Errorf("hub.selfUpdateUnavailableHubRunning")
 	}
 	if status.Latest == "" {
-		return msgs.Errorf("hub.versionHasBeenCheckedYet")
+		return "", msgs.Errorf("hub.versionHasBeenCheckedYet")
+	}
+	if rollback {
+		if status.Previous == "" {
+			return "", msgs.Errorf("hub.noPreviousRelease", status.Current)
+		}
+		return status.Previous, nil
 	}
 	if !status.UpdateAvailable {
-		return msgs.Errorf("hub.latestVersionAlreadyInstalled", status.Current)
+		return "", msgs.Errorf("hub.latestVersionAlreadyInstalled", status.Current)
 	}
-	return m.applyVersion(ctx, status.Latest)
+	return status.Latest, nil
 }
 
 // Rollback installs the release right below the running one — the same
@@ -58,25 +75,25 @@ func (m *Manager) ApplyUpdate(ctx context.Context) error {
 // up: the hub always installs its own version, and the UI treats any
 // version mismatch as "bring the host to the hub's version".
 func (m *Manager) Rollback(ctx context.Context) error {
-	status := m.VersionStatus()
-	if !status.Updatable {
-		return msgs.Errorf("hub.selfUpdateUnavailableHubRunning")
+	version, err := m.SelfUpdateTarget(true)
+	if err != nil {
+		return err
 	}
-	if status.Latest == "" {
-		return msgs.Errorf("hub.versionHasBeenCheckedYet")
-	}
-	if status.Previous == "" {
-		return msgs.Errorf("hub.noPreviousRelease", status.Current)
-	}
-	return m.applyVersion(ctx, status.Previous)
+	return m.applyVersion(ctx, version, nil)
 }
 
 // applyVersion downloads and verifies release `version`, then replaces
 // this hub's own binary and systemd unit and restarts itself.
-func (m *Manager) applyVersion(ctx context.Context, version string) error {
-	report := func(key string, args ...any) {
+// report — строки хода (ключ msgs и аргументы) для журнала задания; nil —
+// только в журнал службы.
+func (m *Manager) applyVersion(ctx context.Context, version string, report func(key string, args ...any)) error {
+	logReport := func(key string, args ...any) {
 		m.log.Info("hub self-update", "step", key, "args", args)
+		if report != nil {
+			report(key, args...)
+		}
 	}
+	report = logReport
 
 	name := fmt.Sprintf("nkt-%s-%s-%s", runtime.GOOS, runtime.GOARCH, version)
 	binPath := filepath.Join(m.cfg.HubBinCacheDir(), name)
@@ -119,7 +136,7 @@ install -D -m 0755 %s %s
 install -D -m 0644 %s %s
 systemctl daemon-reload
 rm -rf %s
-sleep 1
+sleep 3
 systemctl restart netknownsthat-hub
 `,
 		binPath, hubSelfUpdateBinPath,

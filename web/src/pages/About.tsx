@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Checkbox, InputNumber, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -9,7 +9,8 @@ import { ApiTokensCard } from '../components/ApiTokensCard'
 import { NavLayoutCard } from '../components/NavLayoutModal'
 import { DangerZoneCard } from '../components/PurgeAllModal'
 import { InstallAllCard } from '../components/InstallAllModal'
-import type { HubVersionInfo, HubVulnDBInfo } from '../types'
+import type { HubVersionInfo, HubVulnDBInfo, Job } from '../types'
+import { JobLogModal } from './Jobs'
 
 interface AptCacheInfo {
   available: boolean
@@ -46,6 +47,8 @@ export default function About({ admin = false }: { admin?: boolean }) {
   const [updating, setUpdating] = useState(false)
   const [rollingBack, setRollingBack] = useState(false)
   const [restarting, setRestarting] = useState(false)
+  const [selfJob, setSelfJob] = useState<Job | null>(null)
+  const fromVersion = useRef('')
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
 
   // 5s while a refresh is actually running (rare — background-refreshed
@@ -139,6 +142,29 @@ export default function About({ admin = false }: { admin?: boolean }) {
     }
   }
 
+  async function openSelfUpdateJob(path: string) {
+    fromVersion.current = version.data?.current ?? ''
+    const res = await api<{ job_id?: number }>(path, { method: 'POST' })
+    if (typeof res.job_id === 'number') {
+      setSelfJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
+      return
+    }
+    // Старый хаб без задания: перезапуск уже пошёл.
+    setRestarting(true)
+  }
+
+  // Задание закончилось: успех — хаб вот-вот перезапустится, ждём его
+  // новой версии; неудача — журнал уже сказал почему, кнопки снова живые.
+  function onSelfUpdateDone(job: Job) {
+    if (job.status === 'succeeded') {
+      setRestarting(true)
+      return
+    }
+    setUpdating(false)
+    setRollingBack(false)
+    cancelUpdateAllAfterHub()
+  }
+
   async function applyUpdate() {
     const ok = await confirmWithOption(t('about.confirmUpdate', { version: version.data?.latest }), t('about.updateAllHosts'), {
       optionHint: t('about.updateAllHostsHint'),
@@ -151,12 +177,9 @@ export default function About({ admin = false }: { admin?: boolean }) {
     setUpdating(true)
     setNotice(null)
     try {
-      await api('/hub/update', { method: 'POST' })
-      // The hub restarts itself mid-flight from here on — nothing in this
-      // request/response cycle can watch that same process finish, so
-      // "restarting" hands off to the polling effect below instead of
-      // reporting a normal success/failure from this call.
-      setRestarting(true)
+      // Скачивание и проверка релиза — задание хаба с журналом; когда оно
+      // успешно закончится, хаб сам перезапустится (см. onSelfUpdateDone).
+      await openSelfUpdateJob('/hub/update')
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
       setUpdating(false)
@@ -169,8 +192,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
     setRollingBack(true)
     setNotice(null)
     try {
-      await api('/hub/rollback', { method: 'POST' })
-      setRestarting(true)
+      await openSelfUpdateJob('/hub/rollback')
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
       setRollingBack(false)
@@ -190,10 +212,15 @@ export default function About({ admin = false }: { admin?: boolean }) {
     let timer: ReturnType<typeof setTimeout>
     const poll = async () => {
       try {
-        const res = await fetch('/api/health', { cache: 'no-store' })
+        // Не просто «отвечает»: задание закончилось за секунды до
+        // перезапуска, и старый процесс ещё жив — ждём другую версию.
+        const res = await fetch('/api/hub/version', { cache: 'no-store', credentials: 'same-origin' })
         if (!cancelled && res.ok) {
-          window.location.reload()
-          return
+          const v = (await res.json()) as { current?: string }
+          if (!fromVersion.current || (v.current && v.current !== fromVersion.current)) {
+            window.location.reload()
+            return
+          }
         }
       } catch {
         // Still down — expected for most of the restart window, keep polling.
@@ -221,6 +248,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
       </div>
 
       <ErrorNote error={version.error} />
+      {selfJob && <JobLogModal job={selfJob} onClose={() => setSelfJob(null)} onDone={onSelfUpdateDone} />}
       {notice && (
         <Banner kind={notice.kind} onClose={() => setNotice(null)}>
           {notice.text}

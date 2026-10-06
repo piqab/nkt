@@ -87,6 +87,12 @@ export default function LXD({ me }: { me: Me }) {
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
+      // Остановка и перезапуск ждут, пока гость выключится (у машины —
+      // дольше минуты): заданием с журналом, а не ожиданием запроса.
+      if (action === 'stop' || action === 'restart') {
+        await launcher.start(`/lxd/instances/${name}/${action}`)
+        return
+      }
       await api(`/lxd/instances/${name}/${action}`, { method: 'POST' })
       setNotice({ kind: 'info', text: tx('lxd.actionDone', { name, action }) })
       // The backend only kicks off a fire-and-forget background rescan
