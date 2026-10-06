@@ -728,9 +728,9 @@ export default function Hosts({
     }
   }
 
-  /** «Обновить всё»: на каждый отставший хост заводится задание хаба
-   * (очередь — по хосту, так что они идут параллельно), ход — в
-   * «Заданиях» и в статусах строк таблицы. Хосты, у которых установка уже
+  /** «Обновить всё»: одно задание хаба install-all на все отставшие
+   * хосты (по три параллельно), ход — в его журнале, в «Заданиях» и в
+   * статусах строк таблицы. Хосты, у которых установка уже
    * идёт или ждёт, недоступные и упавшие в прошлый раз в цели не входят —
    * упавшие только по галочке «повторить неудачные». */
   /** Опросить хост сейчас (щелчок по красному значку). */
@@ -749,18 +749,17 @@ export default function Hosts({
     if (targets.length === 0) return
     setNotice(null)
     setBulkUpdating(true)
-    let started = 0
+    // Одно задание хаба на все хосты, а не цикл в браузере: уход со
+    // страницы посреди цикла оставлял часть хостов без обновления.
     try {
-      for (const h of targets) {
-        if (await startInstall(h, false, false)) started++
-      }
+      const res = await api<{ job_id: number }>('/hub/install-all', { method: 'POST', body: { host_ids: targets.map((h) => h.id) } })
+      setNotice({ kind: 'info', text: tx('hosts.bulkUpdateStarted', { started: targets.length, total: targets.length }) })
+      await openHubJob(res.job_id)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
       setBulkUpdating(false)
     }
-    setNotice({
-      kind: started === targets.length ? 'info' : 'error',
-      text: tx('hosts.bulkUpdateStarted', { started, total: targets.length }),
-    })
     reload()
   }
 
@@ -954,12 +953,17 @@ export default function Hosts({
   // другую сторону.
   async function remove(host: HubHost, purge: PurgeOptions) {
     try {
-      const res = await api<{ purge?: PurgeResult }>(`/hub/hosts/${host.id}`, {
+      const res = await api<{ purge?: PurgeResult; job_id?: number }>(`/hub/hosts/${host.id}`, {
         method: 'DELETE',
         body: purge,
       })
       setRemovingHost(null)
       reload()
+      // С очисткой — задание хаба: ход и итог в его журнале.
+      if (typeof res.job_id === 'number') {
+        await openHubJob(res.job_id)
+        return
+      }
       const p = res.purge
       if (p?.attempted && !p.ok) {
         // Запись всё равно удалена: хост мог быть уже погашен. Молчать об

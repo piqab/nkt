@@ -412,3 +412,7 @@ data class AddHostResponseDto(
 /** POST /api/hub/hosts/{id}/install and GET …/install/latest: {"job": N}. */
 @Serializable
 data class InstallJobResponseDto(val job: Long = 0)
+
+/** DELETE /hub/hosts/{id}: with a cleanup, the hub job that does it. */
+@Serializable
+data class DeleteHostResponseDto(@SerialName("job_id") val jobId: Long? = null)

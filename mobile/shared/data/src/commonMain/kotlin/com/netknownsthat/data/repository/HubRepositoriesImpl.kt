@@ -1,6 +1,7 @@
 package com.netknownsthat.data.repository
 
 import com.netknownsthat.data.dto.AddHostResponseDto
+import com.netknownsthat.data.dto.DeleteHostResponseDto
 import com.netknownsthat.data.dto.DeploymentsResponseDto
 import com.netknownsthat.data.dto.FleetBannedResponseDto
 import com.netknownsthat.data.dto.HostGroupsResponseDto
@@ -73,8 +74,8 @@ class HostsRepositoryImpl(private val api: ApiClient) : HostsRepository {
     override suspend fun latestInstallJob(hostId: Long): Outcome<Long> =
         api.get<InstallJobResponseDto>("/hub/hosts/$hostId/install/latest").map { it.job }
 
-    override suspend fun delete(hostId: Long, purge: Boolean): Outcome<Unit> =
-        api.delete<Unit>(
+    override suspend fun delete(hostId: Long, purge: Boolean): Outcome<Long?> =
+        api.delete<DeleteHostResponseDto>(
             "/hub/hosts/$hostId",
             if (purge) buildJsonObject {
                 put("service", true)
@@ -82,7 +83,7 @@ class HostsRepositoryImpl(private val api: ApiClient) : HostsRepository {
                 put("access", true)
                 put("restore_password", true)
             } else null,
-        )
+        ).map { it.jobId?.takeIf { id -> id > 0 } }
 
     override suspend fun setGroup(hostId: Long, group: String): Outcome<Unit> =
         api.post("/hub/hosts/$hostId/group", buildJsonObject { put("group", group.trim()) })

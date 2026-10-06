@@ -23,15 +23,25 @@ func NewLXDManager(c collect.Collector, db *store.DB) *LXDManager {
 	return &LXDManager{c: c, db: db}
 }
 
-// InstanceAction starts, stops, restarts or pauses an LXD instance.
-func (m *LXDManager) InstanceAction(ctx context.Context, user, name, action string) error {
+// LXDActionArgs — аргументы lxc для действия с инстансом (проверенные):
+// и для прямого вызова, и для фонового задания (stop и restart ждут, пока
+// гость выключится, — у машины это дольше предела команды).
+func LXDActionArgs(name, action string) ([]string, error) {
 	switch action {
 	case "start", "stop", "restart", "pause":
 	default:
-		return msgs.Errorf("control.invalidActionInstance", action)
+		return nil, msgs.Errorf("control.invalidActionInstance", action)
 	}
-	if name == "" || strings.ContainsAny(name, "/?&# ") {
-		return msgs.Errorf("control.invalidInstanceName", name)
+	if !validLXDInstance(name) {
+		return nil, msgs.Errorf("control.invalidInstanceName", name)
+	}
+	return []string{action, name}, nil
+}
+
+// InstanceAction starts, stops, restarts or pauses an LXD instance.
+func (m *LXDManager) InstanceAction(ctx context.Context, user, name, action string) error {
+	if _, err := LXDActionArgs(name, action); err != nil {
+		return err
 	}
 
 	res, err := m.c.Run(ctx, "lxc", action, name)

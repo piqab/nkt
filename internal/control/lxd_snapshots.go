@@ -24,9 +24,8 @@ type LXDSnapshot struct {
 
 var lxdSnapshotNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$`)
 
-func validLXDInstance(name string) bool {
-	return name != "" && !strings.ContainsAny(name, "/?&# ")
-}
+// validLXDInstance — имя по правилам LXD (lxdInstanceNameRe, как при создании).
+func validLXDInstance(name string) bool { return lxdInstanceNameRe.MatchString(name) }
 
 // ListSnapshots — снимки инстанса, новые сверху. lxc query отдаёт JSON
 // REST API LXD без разбора табличного вывода.
@@ -77,28 +76,37 @@ func parseLXDSnapshots(data []byte) ([]LXDSnapshot, error) {
 	return out, nil
 }
 
-// SnapshotAction — create | restore | delete снимка snap инстанса name.
-// stateful — со снимком памяти (только create, нужен CRIU/VM-агент).
-func (m *LXDManager) SnapshotAction(ctx context.Context, user, name, snap, action string, stateful bool) error {
+// LXDSnapshotArgs — аргументы lxc для create | restore | delete снимка
+// (проверенные): и для прямого вызова, и для фонового задания — снимок с
+// памятью или откат большого инстанса длятся дольше предела команды.
+func LXDSnapshotArgs(name, snap, action string, stateful bool) ([]string, error) {
 	if !validLXDInstance(name) {
-		return msgs.Errorf("control.invalidInstanceName", name)
+		return nil, msgs.Errorf("control.invalidInstanceName", name)
 	}
 	if !lxdSnapshotNameRe.MatchString(snap) {
-		return msgs.Errorf("control.invalidSnapshotName", snap)
+		return nil, msgs.Errorf("control.invalidSnapshotName", snap)
 	}
-	var args []string
 	switch action {
 	case "create":
-		args = []string{"snapshot", name, snap}
+		args := []string{"snapshot", name, snap}
 		if stateful {
 			args = append(args, "--stateful")
 		}
+		return args, nil
 	case "restore":
-		args = []string{"restore", name, snap}
+		return []string{"restore", name, snap}, nil
 	case "delete":
-		args = []string{"delete", name + "/" + snap}
-	default:
-		return msgs.Errorf("control.invalidActionInstance", action)
+		return []string{"delete", name + "/" + snap}, nil
+	}
+	return nil, msgs.Errorf("control.invalidActionInstance", action)
+}
+
+// SnapshotAction — create | restore | delete снимка snap инстанса name.
+// stateful — со снимком памяти (только create, нужен CRIU/VM-агент).
+func (m *LXDManager) SnapshotAction(ctx context.Context, user, name, snap, action string, stateful bool) error {
+	args, err := LXDSnapshotArgs(name, snap, action, stateful)
+	if err != nil {
+		return err
 	}
 	res, err := m.c.Run(ctx, "lxc", args...)
 	outcome := "ok"

@@ -6,6 +6,7 @@ import { Banner, Loading, Modal, formatBytesShort, formatDateTime } from './ui'
 import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from './useDeletions'
+import { useJobLauncher } from './useJobLauncher'
 
 type Snapshot = { name: string; created_at: string; expires_at?: string; stateful: boolean; size: number }
 
@@ -54,15 +55,22 @@ export default function LXDSnapshotsModal({
     }
   }
 
+  // Снимок с памятью и откат большого инстанса — дольше предела запроса:
+  // заданием со стандартным окном журнала.
+  const job = useJobLauncher(() => {
+    void list.reload()
+    onChanged()
+  })
+
   const create = () =>
     run('create', async () => {
-      await api(base, { method: 'POST', body: { name: snapName, stateful } })
+      await job.start(base, { name: snapName, stateful })
       setSnapName(defaultSnapName())
     })
 
   async function restore(s: string) {
     if (!(await confirmAction(t('lxdSnap.restoreConfirm', { name, snap: s }), { okText: t('lxdSnap.restore') }))) return
-    await run(`${s}:restore`, () => api(`${base}/${encodeURIComponent(s)}/restore`, { method: 'POST' }))
+    await run(`${s}:restore`, () => job.start(`${base}/${encodeURIComponent(s)}/restore`))
   }
 
   async function del(s: string) {
@@ -162,6 +170,7 @@ export default function LXDSnapshotsModal({
         </>
       )}
       {dels.modal}
+      {job.modal}
     </Modal>
   )
 }

@@ -1,11 +1,17 @@
 package api
 
 import (
-	"github.com/piqab/nkt/internal/msgs"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/cmdjob"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // handleImages lists Docker images, each marked with whether a container is
@@ -78,6 +84,35 @@ func (s *Server) handleImagesSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.Username(r.Context())
+
+	// ?job=1 — заданием, по шагу на образ: docker save пишет гигабайты, и
+	// синхронно не успевал ни в предел команды, ни в ожидание браузера.
+	// Архивы ложатся в тот же каталог и под теми же именами, что и
+	// «Сохранить образ в архив», — их видно в карточке архивов.
+	if wantsJob(r) {
+		for _, ref := range req.Refs {
+			if err := control.ValidImageRef(ref); err != nil {
+				writeErr(w, r, http.StatusBadRequest, err)
+				return
+			}
+		}
+		if err := os.MkdirAll(s.archiveDir(), 0o700); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		stamp := time.Now().UTC().Format("20060102-150405")
+		cmds := make([]cmdjob.Command, 0, len(req.Refs))
+		for _, ref := range req.Refs {
+			name := fmt.Sprintf("docker__%s__%s.tar", safePart(ref), stamp)
+			cmds = append(cmds, cmdjob.Command{
+				Argv:    []string{"docker", "save", "-o", filepath.Join(s.archiveDir(), name), ref},
+				StepKey: "images.stepSave", StepArgs: []any{ref},
+			})
+		}
+		s.startCmdJob(w, r, "images.saveJobTitle", []any{len(req.Refs)}, "session:image-save:docker",
+			cmdjob.Params{Commands: cmds}, "image.save", strings.Join(req.Refs, ", "))
+		return
+	}
 
 	results := make([]imageOutcome, 0, len(req.Refs))
 	for _, ref := range req.Refs {

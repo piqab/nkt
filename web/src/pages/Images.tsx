@@ -7,6 +7,7 @@ import { Banner, Card, ErrorNote, Loading, formatDateTime } from '../components/
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
 import { useDeletions, type DeleteItem } from '../components/useDeletions'
+import { useJobLauncher } from '../components/useJobLauncher'
 import { msg, tx, type Msg } from '../msg'
 
 export interface DockerImage {
@@ -69,6 +70,20 @@ export default function Images({ me }: { me: Me }) {
    * Docker accepts either. */
   function refOf(image: DockerImage): string {
     return image.tags?.[0] ?? image.id
+  }
+
+  // docker save — гигабайты: заданием, по шагу на образ. Архивы видны в
+  // карточке «Архивы образов».
+  const saveJob = useJobLauncher(() => void images.reload())
+  async function saveSelected() {
+    setError(null)
+    setOutcomes(null)
+    try {
+      await saveJob.start('/images/save', { refs: selectedImages.map(refOf) })
+      setSelected([])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   async function run(path: string, body: Record<string, unknown>) {
@@ -176,7 +191,7 @@ export default function Images({ me }: { me: Me }) {
               <Button
                 disabled={selected.length === 0 || busy}
                 loading={busy}
-                onClick={() => run('/images/save', { refs: selectedImages.map(refOf) })}
+                onClick={() => void saveSelected()}
               >
                 {t('images.save', { count: selected.length })}
               </Button>
@@ -228,6 +243,7 @@ export default function Images({ me }: { me: Me }) {
             }
           />
           {dels.modal}
+          {saveJob.modal}
         </div>
       </Card>
     </>

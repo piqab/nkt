@@ -199,21 +199,13 @@ func versionInfoJSON(v VersionInfo) map[string]any {
 // so an operator always sees the target version (via the "О системе" page)
 // before triggering this.
 func (s *Server) handleHubUpdate(w http.ResponseWriter, r *http.Request) {
-	if err := s.hub.ApplyUpdate(r.Context()); err != nil {
-		writeErr(w, r, http.StatusBadRequest, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	s.startSelfUpdate(w, r, false)
 }
 
 // handleHubRollback installs the release right below the running one —
 // admin-only, same shape as handleHubUpdate.
 func (s *Server) handleHubRollback(w http.ResponseWriter, r *http.Request) {
-	if err := s.hub.Rollback(r.Context()); err != nil {
-		writeErr(w, r, http.StatusBadRequest, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	s.startSelfUpdate(w, r, true)
 }
 
 // handleHubVulnDBStatus reports the hub's own centralized trivy DB state —
@@ -1361,6 +1353,26 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var purge PurgeResult
+	if opts.Any() && s.jobs != nil {
+		host, err := s.db.HostByID(r.Context(), id)
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		user := auth.Username(r.Context())
+		jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
+			Kind: KindHostPurge, TitleKey: "hub.hostPurgeJob", TitleArgs: []any{host.Name},
+			Queue: "host-install:" + strconv.FormatInt(id, 10), Author: user, Steps: 2,
+			Params: HostPurgeParams{HostID: id, Name: host.Name, Purge: opts},
+		})
+		if err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		s.db.Audit(r.Context(), user, "host.delete", host.Name, "ok", map[string]any{"job_id": jobID, "purge": opts})
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "job_id": jobID})
+		return
+	}
 	if opts.Any() {
 		// Сначала хост, потом запись: после удаления записи ни адреса, ни
 		// ключа для подключения уже не будет.

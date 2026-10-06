@@ -119,8 +119,17 @@ class HostListViewModel(
         }
     }
 
-    /** [purge] — also remove nkt from the host itself. */
-    fun delete(host: HubHost, purge: Boolean) = call(t("${host.name} удалён", "${host.name} deleted")) { hostsRepo.delete(host.id, purge) }
+    /** [purge] — also remove nkt from the host itself: a hub job, whose log
+     * opens (the host leaves the list when the job removes it). */
+    fun delete(host: HubHost, purge: Boolean, onJob: (Long) -> Unit) {
+        viewModelScope.launch {
+            when (val r = hostsRepo.delete(host.id, purge)) {
+                is Outcome.Success -> r.value?.let(onJob) ?: run { message = t("${host.name} удалён", "${host.name} deleted") }
+                is Outcome.Failure -> message = failedText(r.error)
+            }
+            refresh()
+        }
+    }
     fun setGroup(host: HubHost, group: String) = call(t("Группа изменена", "Group changed")) { hostsRepo.setGroup(host.id, group) }
     fun createGroup(name: String) = call(t("Группа создана", "Group created")) { hostsRepo.createGroup(name) }
     fun renameGroup(name: String, to: String) = call(t("Группа переименована", "Group renamed")) { hostsRepo.renameGroup(name, to) }

@@ -150,7 +150,8 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   comparison uses the hub version from the same response, so an old tab
   doesn't reinstall hosts in a loop after the hub is updated.
 - **Seen** — when the host last answered.
-- **"Update all"** — a job for each outdated host, at most three at a
+- **"Update all"** — one hub job for all outdated hosts (its log opens
+  right away, and leaving the page does not interrupt it), at most three at a
   time (otherwise dozens of SSH connections hit sshd's `MaxStartups` or a
   jump host). The confirmation window shows who gets updated and who
   doesn't: hosts where an update is already running or queued are left

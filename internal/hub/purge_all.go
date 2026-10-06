@@ -146,3 +146,47 @@ func (r *PurgeAllRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	return nil
 }
+
+// KindHostPurge — удаление одного хоста с очисткой (форма удаления хоста):
+// цепочка SSH-шагов, а с машиной — ещё и её выключение и удаление дисков.
+// Заданием, а не внутри запроса: ход виден в журнале, а закрытое окно или
+// оборванный запрос не бросают очистку на полпути.
+const KindHostPurge = "hub.hostpurge"
+
+// HostPurgeParams — вход задания.
+type HostPurgeParams struct {
+	HostID int64        `json:"host_id"`
+	Name   string       `json:"name"`
+	Purge  PurgeOptions `json:"purge"`
+}
+
+// HostPurgeRunner выполняет KindHostPurge.
+type HostPurgeRunner struct{ m *Manager }
+
+// NewHostPurgeRunner — исполнитель.
+func NewHostPurgeRunner(m *Manager) *HostPurgeRunner { return &HostPurgeRunner{m: m} }
+
+// Run чистит хост и убирает его запись — запись в любом случае, как и при
+// удалении без задания: погашенный сервер не должен висеть в списке
+// вечно. Что не удалось убрать с хоста — ошибка задания.
+func (r *HostPurgeRunner) Run(ctx context.Context, jc *jobs.Context) error {
+	var p HostPurgeParams
+	if err := jc.Params(&p); err != nil {
+		return msgs.Errorf("hub.parsingJob", err)
+	}
+	jc.StepKey(1, 2, "hub.hostPurgeStepClean", p.Name)
+	res := r.m.PurgeHost(ctx, p.HostID, p.Purge)
+	for _, st := range res.Steps {
+		jc.Logf("%s", st)
+	}
+	jc.StepKey(2, 2, "hub.hostPurgeStepRemove", p.Name)
+	r.m.CloseHost(p.HostID)
+	if err := r.m.db.DeleteHost(context.WithoutCancel(ctx), p.HostID); err != nil {
+		return err
+	}
+	jc.Log("hub.purgeAllRemoved", p.Name)
+	if !res.OK || res.Error != "" {
+		return msgs.Errorf("hub.hostPurgeIncomplete", p.Name, res.Error)
+	}
+	return nil
+}

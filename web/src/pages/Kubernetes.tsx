@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Tag } from 'antd'
 import { CodeOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { api, apiURL, hostScope, readSelectedHost, useApi } from '../api'
+import { apiURL, hostScope, readSelectedHost, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { K8sObjects } from '../components/K8sObjects'
@@ -44,6 +44,12 @@ export default function Kubernetes({ me }: { me: Me }) {
   const [notice, setNotice] = useState<Msg | null>(null)
   const [upgrading, setUpgrading] = useState(false)
   const upgradeJob = useJobLauncher(() => void status.reload())
+  // Удаление узла — минуты (k3s-uninstall, kubeadm reset и apt): заданием,
+  // иначе запрос браузера обрывался раньше и прерывал удаление на полпути.
+  const uninstallJob = useJobLauncher((job) => {
+    if (!job || job.status === 'succeeded') setNotice(tx('k8s.uninstalled'))
+    void status.reload()
+  })
 
   if (status.loading && !status.data) return <Loading what="Kubernetes" />
   if (!st?.installed) return <p className="small muted">{t('k8s.notInstalled')}</p>
@@ -52,9 +58,7 @@ export default function Kubernetes({ me }: { me: Me }) {
     if (!(await confirmAction(t('k8s.confirmUninstall')))) return
     setBusy(true)
     try {
-      await api('/k8s/uninstall', { method: 'POST' })
-      setNotice(tx('k8s.uninstalled'))
-      await status.reload()
+      await uninstallJob.start('/k8s/uninstall')
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err))
     } finally {
@@ -106,6 +110,7 @@ export default function Kubernetes({ me }: { me: Me }) {
       >
         {notice && <Banner kind="info" onClose={() => setNotice(null)}>{msg(notice)}</Banner>}
         {upgradeJob.modal}
+        {uninstallJob.modal}
         {upgrading && (
           <K8sUpgradeModal
             title={t('k8s.upgrade.title')}

@@ -45,7 +45,8 @@ file list too.
     with addresses;
   - **Labels** and the full `docker inspect` **JSON** (variable values are
     masked there too).
-- **Images**: size, date, who uses it; remove, save to a tar on the host,
+- **Images**: size, date, who uses it; remove, save to a tar on the host
+  (as a job; the archives show up in the "Image archives" card),
   prune orphaned layers.
 - **Stacks**: the host's compose files — `up`, `down`, `restart`; compose
   is edited in the [config editor](/en/guide/configs) with a `docker
@@ -112,7 +113,10 @@ port", autostart as one button (`boot.autostart`), **logs** (the journal
 inside the instance or LXD's own log) and the console.
 
 Instance **snapshots** open in their own window from the row: take one
-(optionally with memory), restore (`lxc restore`), delete. A snapshot
+(optionally with memory), restore (`lxc restore`), delete. Taking and
+restoring run as background jobs with the log window, as do stopping and
+restarting an instance: a machine shuts down longer than a request
+should wait. A snapshot
 lives on the same storage pool; moving to another host needs a backup.
 
 ![LXD instance configuration](/screens/en/lxd-config.png)
@@ -288,7 +292,10 @@ More — [Ports and access](/en/guide/ports#_8446-kubernetes-port-forwards).
 "Upgrade" on the Kubernetes card upgrades this node to the chosen minor
 version as a job (k3s by replacing the binary, kubeadm with `kubeadm
 upgrade`); a cluster created by the hub is upgraded as a whole from the
-"Clusters" section — node by node, with drain and uncordon.
+"Clusters" section — node by node, with drain and uncordon. "Remove"
+takes Kubernetes off the node (`k3s-uninstall.sh` or `kubeadm reset` with
+package removal) as a job too: it takes minutes, and a dropped request
+used to leave the removal half done.
 
 ![Kubernetes](/screens/en/kubernetes.png)
 

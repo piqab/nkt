@@ -87,6 +87,18 @@ func (s *Server) handleLXDInstanceAction(w http.ResponseWriter, r *http.Request)
 	name := chi.URLParam(r, "name")
 	action := chi.URLParam(r, "action")
 	user := auth.Username(r.Context())
+	if wantsJob(r) {
+		args, err := control.LXDActionArgs(name, action)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		key := "lxd.job" + strings.ToUpper(action[:1]) + action[1:]
+		s.startCmdJob(w, r, key, []any{name}, "lxd:"+name,
+			cmdjob.Params{Commands: []cmdjob.Command{{Argv: append([]string{hostTool("lxc")}, args...), StepKey: key, StepArgs: []any{name}}}, Refresh: true},
+			"lxd."+action, name)
+		return
+	}
 	if err := s.lxd.InstanceAction(r.Context(), user, name, action); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
@@ -224,6 +236,19 @@ func (s *Server) handleLXDSnapshotDelete(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) lxdSnapshotAction(w http.ResponseWriter, r *http.Request, snap, action string, stateful bool) {
+	if wantsJob(r) {
+		name := chi.URLParam(r, "name")
+		args, err := control.LXDSnapshotArgs(name, snap, action, stateful)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		key := "lxd.jobSnapshot" + strings.ToUpper(action[:1]) + action[1:]
+		s.startCmdJob(w, r, key, []any{snap, name}, "lxd:"+name,
+			cmdjob.Params{Commands: []cmdjob.Command{{Argv: append([]string{hostTool("lxc")}, args...), StepKey: key, StepArgs: []any{snap, name}}}, Refresh: true},
+			"lxd.snapshot."+action, name+"/"+snap)
+		return
+	}
 	if err := s.lxd.SnapshotAction(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "name"), snap, action, stateful); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
