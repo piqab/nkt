@@ -44,6 +44,12 @@ download is retried once, and then the job ends with "the download
 stopped at N%" — instead of hanging; the whole update is limited to 30
 minutes.
 
+Other tabs opened before the update keep running the previous interface
+code until reloaded. Such a tab notices the new build on the server by
+itself (every two minutes and when you return to it) and shows a **"The
+nkt interface has been updated… — reload the page"** bar. The same goes
+after nkt is updated on a host.
+
 The confirmation has a **"After the hub update, update nkt on all hosts"**
 checkbox, on by default. Then, after the reload, "Hosts" opens right away
 with the **"Update all"** window: who will be updated, who is already

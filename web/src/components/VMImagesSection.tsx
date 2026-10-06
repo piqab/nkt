@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { beginUploadJob, sendFile } from './uploadJob'
+import { beginUploadJob, jobOutlivedTransfer, sendFile } from './uploadJob'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
@@ -777,6 +777,7 @@ function AddImageModal({
       return
     }
     if (!begun) {
+      setError(tx('upload.oldHost'))
       legacyUpload(file)
       return
     }
@@ -786,6 +787,10 @@ function AddImageModal({
       await sendFile('POST', `/vm/images/upload?upload=${begun.token}`, file, setUploading)
       onUploaded()
     } catch (err) {
+      if (await jobOutlivedTransfer(begun.job.id)) {
+        onUploaded()
+        return
+      }
       setError(err instanceof Error && err.message !== 'network' ? err.message : tx('vmimages.uploadFailed'))
     } finally {
       setUploading(null)

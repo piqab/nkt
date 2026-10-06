@@ -77,3 +77,18 @@ export function sendFile(method: 'PUT' | 'POST', path: string, file: File, onPro
     xhr.send(file)
   }).finally(() => track(-1))
 }
+
+/**
+ * Оборвалась ли передача на самом деле: соединение могло порваться уже
+ * после того, как файл дошёл (тогда задание идёт дальше или закончилось
+ * успешно). true — задание само знает итог, ошибку показывать не нужно:
+ * она будет в его журнале, если есть.
+ */
+export async function jobOutlivedTransfer(jobId: number): Promise<boolean> {
+  try {
+    const job = await api<Job>(`/jobs/${jobId}`)
+    return job.status !== 'failed' && job.status !== 'canceled' && (job.status === 'succeeded' || job.step >= job.steps)
+  } catch {
+    return false
+  }
+}

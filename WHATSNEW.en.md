@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.164 — 2026-10-06
+
+- **Uploading from the computer for longer than two minutes no longer
+  "breaks off".** The file arrived whole, but the host's reply could not
+  be sent anymore: the server has a common two-minute write limit from the
+  start of the request, and the upload only extended the read limit. Now
+  both are extended — for image archives, your own machine images and
+  uploads as jobs. If the connection still breaks after the transfer, the
+  interface takes the result from the job instead of saying "failed".
+- **"The interface has been updated — reload the page".** A tab opened
+  before the hub or a host was updated runs the old interface code (and,
+  for example, uploaded files without a job); now it notices the new build
+  on the server by itself and shows a bar with a button.
+- If nkt on the host is older than the hub and cannot upload as a job, the
+  upload window says so and suggests updating the host.
+- The upload job's bar ends the transfer at 100%, not 99%.
+
 ## v1.11.163 — 2026-10-06
 
 - **More long operations run as jobs** (with a log and in the background

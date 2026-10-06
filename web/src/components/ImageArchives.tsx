@@ -9,7 +9,7 @@ import { confirmAction } from './confirm'
 import { useJobLauncher } from './useJobLauncher'
 import { msg, tx, type Msg } from '../msg'
 import { JobLogModal } from '../pages/Jobs'
-import { beginUploadJob, sendFile } from './uploadJob'
+import { beginUploadJob, jobOutlivedTransfer, sendFile } from './uploadJob'
 import type { Job } from '../types'
 
 type Engine = 'docker' | 'podman' | 'lxd'
@@ -51,6 +51,7 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
   const [importing, setImporting] = useState<Archive | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [adding, setAdding] = useState(false)
+  const [note, setNote] = useState<Msg | null>(null)
   const [loadJob, setLoadJob] = useState<Job | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const canLoad = engine !== 'lxd'
@@ -91,6 +92,7 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
       return
     }
     if (!begun) {
+      setNote(tx('upload.oldHost'))
       legacyUpload(file, name, load)
       return
     }
@@ -100,6 +102,10 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
       await sendFile('PUT', `/images/archives/upload?upload=${begun.token}`, file, setProgress)
       list.reload()
     } catch (err) {
+      if (await jobOutlivedTransfer(begun.job.id)) {
+        list.reload()
+        return
+      }
       setError(err instanceof Error && err.message !== 'network' ? err.message : tx('archives.uploadFailed'))
     } finally {
       setProgress(null)
@@ -193,6 +199,11 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
         </>
       )}
       {error && <Banner kind="error">{msg(error)}</Banner>}
+      {note && (
+        <Banner kind="warn" onClose={() => setNote(null)}>
+          {msg(note)}
+        </Banner>
+      )}
       {archives.length === 0 ? (
         <span className="small muted">{t('archives.none')}</span>
       ) : (

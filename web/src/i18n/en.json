@@ -4380,5 +4380,12 @@
     "count_other": "{{count}} operations",
     "queued": "queued",
     "running": "running"
+  },
+  "upload": {
+    "oldHost": "nkt on this host is older than the hub and cannot upload as a job: the file goes in one request, with no job until the transfer ends. Update nkt on the host to the hub's version."
+  },
+  "staleUI": {
+    "text": "The nkt interface has been updated, but this tab runs the previous version — reload the page.",
+    "reload": "Reload the page"
   }
 }
