@@ -6,12 +6,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // downloadReleaseBinary fetches a prebuilt nkt binary for goos/goarch from
@@ -46,75 +49,160 @@ func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, versi
 	return m.downloadReleaseAsset(ctx, "nkt", goos, goarch, version, destPath, report, progress)
 }
 
-// downloadReleaseAsset — то же для любой программы релиза (prefix —
-// «nkt» или «nkt-edge»): файл <prefix>-<os>-<arch> со сверкой SHA256SUMS.
-func (m *Manager) downloadReleaseAsset(ctx context.Context, prefix, goos, goarch, version, destPath string, report, progress func(key string, args ...any)) error {
-	assetName := fmt.Sprintf("%s-%s-%s", prefix, goos, goarch)
-	base := fmt.Sprintf("https://github.com/%s/releases/download/v%s", m.cfg.HubReleaseRepo, version)
+// Сроки скачивания с GitHub. У http.DefaultClient своего срока нет, и
+// повисшее соединение (такое бывает у objects.githubusercontent.com, куда
+// GitHub перенаправляет скачивание) ждало бы вечно: пока скачивание шло
+// внутри HTTP-запроса, его обрывал срок запроса, а в задании — ничто.
+var (
+	// releaseIdleTimeout — сколько ждать следующей порции данных.
+	releaseIdleTimeout = 60 * time.Second
+	// releaseSmallFileTimeout — файл сумм и юнит целиком.
+	releaseSmallFileTimeout = 30 * time.Second
+)
 
-	report("hub.downloadingReleaseBinary", goos, goarch, version)
+// releaseDownloadAttempts — попыток скачать бинарник: оборванное или
+// повисшее соединение с GitHub обычно проходит со второго раза.
+const releaseDownloadAttempts = 2
 
-	sums, err := fetchReleaseBytes(ctx, base+"/SHA256SUMS")
+func releaseBase(repo, version string) string {
+	return fmt.Sprintf("https://github.com/%s/releases/download/v%s", repo, version)
+}
+
+// releaseSum — ожидаемая sha256 файла assetName из SHA256SUMS релиза.
+func (m *Manager) releaseSum(ctx context.Context, version, assetName string) (string, error) {
+	sums, err := fetchReleaseBytes(ctx, releaseBase(m.cfg.HubReleaseRepo, version)+"/SHA256SUMS")
 	if err != nil {
-		return msgs.Errorf("hub.releaseVChecksums", version, err)
+		return "", msgs.Errorf("hub.releaseVChecksums", version, err)
 	}
 	want, err := findSHA256(sums, assetName)
 	if err != nil {
-		return msgs.Errorf("hub.releaseV", version, err)
+		return "", msgs.Errorf("hub.releaseV", version, err)
 	}
+	return want, nil
+}
 
+// fetchVerified скачивает файл релиза в destPath через временный файл и
+// сверяет sha256 с want; обрыв или зависание — ещё одна попытка (о ней
+// строка в report).
+func (m *Manager) fetchVerified(ctx context.Context, version, assetName, want, destPath string, report, progress func(key string, args ...any)) error {
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
 		return msgs.Errorf("hub.binaryCacheDirectory", err)
 	}
 	tmp := destPath + ".tmp"
-	gotHex, err := fetchReleaseFile(ctx, base+"/"+assetName, tmp, progress)
+	url := releaseBase(m.cfg.HubReleaseRepo, version) + "/" + assetName
+	var gotHex string
+	var err error
+	for attempt := 1; attempt <= releaseDownloadAttempts; attempt++ {
+		gotHex, err = fetchReleaseFile(ctx, url, tmp, progress)
+		if err == nil || ctx.Err() != nil {
+			break
+		}
+		if attempt < releaseDownloadAttempts {
+			report("hub.downloadRetry", err)
+		}
+	}
 	if err != nil {
 		_ = os.Remove(tmp)
 		return msgs.Errorf("hub.releaseVBinary", version, err)
 	}
 	if !strings.EqualFold(gotHex, want) {
 		_ = os.Remove(tmp)
-		return msgs.Errorf("hub.checksumDownloadedDoesMatchExpected",
-			assetName, want, gotHex)
+		return msgs.Errorf("hub.checksumDownloadedDoesMatchExpected", assetName, want, gotHex)
 	}
 	if err := os.Rename(tmp, destPath); err != nil {
 		_ = os.Remove(tmp)
 		return msgs.Errorf("hub.renaming", tmp, err)
 	}
+	return nil
+}
 
+// downloadReleaseAsset — то же для любой программы релиза (prefix —
+// «nkt» или «nkt-edge»): файл <prefix>-<os>-<arch> со сверкой SHA256SUMS.
+func (m *Manager) downloadReleaseAsset(ctx context.Context, prefix, goos, goarch, version, destPath string, report, progress func(key string, args ...any)) error {
+	assetName := fmt.Sprintf("%s-%s-%s", prefix, goos, goarch)
+	report("hub.downloadingReleaseBinary", goos, goarch, version)
+	want, err := m.releaseSum(ctx, version, assetName)
+	if err != nil {
+		return err
+	}
+	if err := m.fetchVerified(ctx, version, assetName, want, destPath, report, progress); err != nil {
+		return err
+	}
 	report("hub.releaseBinaryVerified", goos, goarch)
 	return nil
 }
 
+// idleReader отодвигает срок ожидания на каждой пришедшей порции и
+// считает прочитанное — для сообщения, на скольких процентах встало.
+type idleReader struct {
+	r     io.Reader
+	timer *time.Timer
+	read  int64
+}
+
+func (i *idleReader) Read(b []byte) (int, error) {
+	n, err := i.r.Read(b)
+	if n > 0 {
+		i.read += int64(n)
+		i.timer.Reset(releaseIdleTimeout)
+	}
+	return n, err
+}
+
 // fetchReleaseFile скачивает url в файл dest (0755), считая sha256 по
-// ходу; progress получает проценты, когда сервер сообщил размер.
+// ходу; progress получает проценты, когда сервер сообщил размер. Если
+// releaseIdleTimeout не приходит ни байта (и до ответа сервера тоже), —
+// ошибка «скачивание остановилось на N%», а не вечное ожидание.
 func fetchReleaseFile(ctx context.Context, url, dest string, progress func(key string, args ...any)) (sha256Hex string, err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var stalled atomic.Bool
+	timer := time.AfterFunc(releaseIdleTimeout, func() {
+		stalled.Store(true)
+		cancel()
+	})
+	defer timer.Stop()
+	idle := &idleReader{timer: timer}
+	var total int64
+	stallErr := func(err error) error {
+		if !stalled.Load() {
+			return err
+		}
+		pct := int64(0)
+		if total > 0 {
+			pct = idle.read * 100 / total
+		}
+		return msgs.Errorf("hub.downloadStalled", pct, int(releaseIdleTimeout.Seconds()))
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", msgs.Errorf("hub.downloading", url, err)
+		return "", stallErr(msgs.Errorf("hub.downloading", url, err))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return "", msgs.Errorf("hub.code2", url, resp.StatusCode)
 	}
+	total = resp.ContentLength
 	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
 		return "", msgs.Errorf("control.writing", dest, err)
 	}
-	var body io.Reader = resp.Body
+	idle.r = resp.Body
+	var body io.Reader = idle
 	var pr *progressReader
 	if progress != nil && resp.ContentLength > 0 {
-		pr = &progressReader{r: resp.Body, total: resp.ContentLength, report: progress, key: "hub.downloadingBinaryProgress"}
+		pr = &progressReader{r: idle, total: resp.ContentLength, report: progress, key: "hub.downloadingBinaryProgress"}
 		body = pr
 	}
 	sum := sha256.New()
 	if _, err := io.Copy(io.MultiWriter(out, sum), body); err != nil {
 		_ = out.Close()
-		return "", msgs.Errorf("hub.downloading", url, err)
+		return "", stallErr(msgs.Errorf("hub.downloading", url, err))
 	}
 	if err := out.Close(); err != nil {
 		return "", msgs.Errorf("control.writing", dest, err)
@@ -123,6 +211,29 @@ func fetchReleaseFile(ctx context.Context, url, dest string, progress func(key s
 		pr.reportNow()
 	}
 	return hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+// fetchReleaseBytes GETs url and returns the full body, failing on a
+// non-200 status with the status code in the message rather than trying to
+// parse whatever error page (GitHub's 404 HTML, say) came back as if it
+// were the expected content.
+// Целиком не дольше releaseSmallFileTimeout.
+func fetchReleaseBytes(ctx context.Context, url string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, releaseSmallFileTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, msgs.Errorf("hub.downloading", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, msgs.Errorf("hub.code2", url, resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
 }
 
 // downloadUnitTemplate fetches deploy/<unitFile> straight from this
@@ -163,24 +274,4 @@ func findSHA256(sums []byte, asset string) (string, error) {
 		}
 	}
 	return "", msgs.Errorf("hub.sha256sumsHasLine", asset)
-}
-
-// fetchReleaseBytes GETs url and returns the full body, failing on a
-// non-200 status with the status code in the message rather than trying to
-// parse whatever error page (GitHub's 404 HTML, say) came back as if it
-// were the expected content.
-func fetchReleaseBytes(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, msgs.Errorf("hub.downloading", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, msgs.Errorf("hub.code2", url, resp.StatusCode)
-	}
-	return io.ReadAll(resp.Body)
 }

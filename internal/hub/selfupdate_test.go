@@ -1,331 +1,168 @@
 package hub
 
 import (
-	"context"
-	"net"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"runtime"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/hashicorp/yamux"
-
-	"github.com/piqab/nkt/internal/config"
-	"github.com/piqab/nkt/internal/secretbox"
-	"github.com/piqab/nkt/internal/store"
 )
 
-// newTestRelaySession wires a real yamux client/server pair over an
-// in-memory net.Pipe — enough to register a live "reverse-tunnel session"
-// for a host without any of TestProxyFallsBackToRelayWhenSSHUnreachable's
-// real WebSocket/SSH machinery, since tunnelReinstallFallback/TunnelConnected
-// only ever check whether *a* session is registered, never dial through it
-// themselves in these tests.
-func newTestRelaySession(t *testing.T) *yamux.Session {
-	t.Helper()
-	clientConn, serverConn := net.Pipe()
-	t.Cleanup(func() { _ = clientConn.Close() })
+// toServer отправляет все запросы (github.com, raw.githubusercontent.com)
+// на подменный сервер, сохраняя путь.
+type toServer struct{ base *url.URL }
 
-	serverDone := make(chan struct{})
-	go func() {
-		defer close(serverDone)
-		srv, err := yamux.Server(serverConn, nil)
-		if err != nil {
+func (t toServer) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.URL.Scheme, r.URL.Host = t.base.Scheme, t.base.Host
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+func fakeGitHub(t *testing.T, h http.Handler) {
+	t.Helper()
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	u, _ := url.Parse(srv.URL)
+	old := http.DefaultClient.Transport
+	http.DefaultClient.Transport = toServer{u}
+	t.Cleanup(func() { http.DefaultClient.Transport = old })
+}
+
+// stepLog собирает ход обновления, как журнал задания.
+type stepLog struct {
+	mu    sync.Mutex
+	keys  []string
+	steps []int
+}
+
+func (l *stepLog) Log(key string, _ ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.keys = append(l.keys, key)
+}
+
+func (l *stepLog) StepKey(n, _ int, _ string, _ ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.steps = append(l.steps, n)
+}
+
+func (l *stepLog) has(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, k := range l.keys {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+// Обновление хаба пишет в журнал все четыре шага; повторное — берёт
+// бинарник из кэша по совпавшей сумме; установка запускается сценарием,
+// который в тесте не выполняется.
+func TestSelfUpdateSteps(t *testing.T) {
+	m, _ := newTestManager(t)
+	m.cfg.DataDir = t.TempDir()
+	m.cfg.HubReleaseRepo = "piqab/nkt"
+	asset := fmt.Sprintf("nkt-%s-%s", runtime.GOOS, runtime.GOARCH)
+	bin := []byte(strings.Repeat("ELF", 50_000))
+	sum := sha256.Sum256(bin)
+	var binHits atomic.Int32
+	fakeGitHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/v9.9.9/SHA256SUMS"):
+			fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), asset)
+		case strings.HasSuffix(r.URL.Path, "/v9.9.9/"+asset):
+			binHits.Add(1)
+			_, _ = w.Write(bin)
+		case strings.HasSuffix(r.URL.Path, "/v9.9.9/deploy/netknownsthat-hub.service"):
+			fmt.Fprint(w, "[Service]\nExecStart=/usr/local/bin/nkt hub\n")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	var script string
+	old := startSelfUpdateScript
+	startSelfUpdateScript = func(s string) error { script = s; return nil }
+	t.Cleanup(func() { startSelfUpdateScript = old })
+
+	log := &stepLog{}
+	if err := m.applyVersion(t.Context(), "9.9.9", log); err != nil {
+		t.Fatalf("обновление: %v", err)
+	}
+	for _, k := range []string{"hub.selfUpdateFromTo", "hub.selfUpdateStepSumsLine", "hub.selfUpdateSumFound",
+		"hub.selfUpdateStepBinaryLine", "hub.releaseBinaryVerified", "hub.selfUpdateStepUnitLine",
+		"hub.selfUpdateStepInstallLine", "hub.selfUpdateRestarting"} {
+		if !log.has(k) {
+			t.Errorf("нет строки %s в журнале: %v", k, log.keys)
+		}
+	}
+	if fmt.Sprint(log.steps) != "[1 2 3 4]" {
+		t.Errorf("шаги: %v", log.steps)
+	}
+	if !strings.Contains(script, "systemctl restart netknownsthat-hub") || !strings.Contains(script, asset+"-9.9.9") {
+		t.Errorf("сценарий установки: %q", script)
+	}
+
+	again := &stepLog{}
+	if err := m.applyVersion(t.Context(), "9.9.9", again); err != nil {
+		t.Fatalf("повтор: %v", err)
+	}
+	if !again.has("hub.selfUpdateFromCache") || binHits.Load() != 1 {
+		t.Errorf("повтор качал заново: %d раз, %v", binHits.Load(), again.keys)
+	}
+}
+
+// Сервер, который отдал половину файла и замолчал: скачивание
+// заканчивается ошибкой «остановилось на 50%» через срок ожидания (после
+// второй попытки), а не ждёт вечно; если вторая попытка проходит —
+// файл скачан.
+func TestReleaseDownloadStall(t *testing.T) {
+	old := releaseIdleTimeout
+	releaseIdleTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { releaseIdleTimeout = old })
+
+	m, _ := newTestManager(t)
+	m.cfg.HubReleaseRepo = "piqab/nkt"
+	body := []byte(strings.Repeat("x", 1000))
+	sum := sha256.Sum256(body)
+	var hits atomic.Int32
+	var healAfter atomic.Int32
+	healAfter.Store(100)
+	fakeGitHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := hits.Add(1)
+		w.Header().Set("Content-Length", "1000")
+		if n > healAfter.Load() {
+			_, _ = w.Write(body)
 			return
 		}
-		<-srv.CloseChan()
-	}()
-	t.Cleanup(func() { <-serverDone })
+		_, _ = w.Write(body[:500])
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
 
-	client, err := yamux.Client(clientConn, nil)
-	if err != nil {
-		t.Fatalf("yamux.Client: %v", err)
+	log := &stepLog{}
+	dest := t.TempDir() + "/nkt"
+	start := time.Now()
+	err := m.fetchVerified(t.Context(), "9.9.9", "nkt-linux-amd64", hex.EncodeToString(sum[:]), dest, log.Log, nil)
+	if err == nil || !strings.Contains(err.Error(), "50%") {
+		t.Fatalf("зависший сервер: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
-	return client
-}
-
-// TestTunnelReinstallFallback locks in every condition that has to hold
-// before install() will even try updating a host over the reverse-tunnel
-// channel instead of failing outright when SSH is down: the feature must
-// be on for that host, its architecture must already be known (a first
-// install never gets here — see the function's own doc comment), and a
-// session must actually be live right now.
-func TestTunnelReinstallFallback(t *testing.T) {
-	m, _ := newTestManager(t)
-
-	t.Run("tunnel not enabled", func(t *testing.T) {
-		host := store.Host{ID: 1, TunnelEnabled: false, Arch: "linux/amd64"}
-		if m.tunnelReinstallFallback(host) {
-			t.Error("tunnelReinstallFallback() = true with TunnelEnabled false")
-		}
-	})
-
-	t.Run("architecture not yet known", func(t *testing.T) {
-		host := store.Host{ID: 2, TunnelEnabled: true, Arch: ""}
-		if m.tunnelReinstallFallback(host) {
-			t.Error("tunnelReinstallFallback() = true with Arch empty")
-		}
-	})
-
-	t.Run("enabled and known arch, but no live session", func(t *testing.T) {
-		host := store.Host{ID: 3, TunnelEnabled: true, Arch: "linux/amd64"}
-		if m.tunnelReinstallFallback(host) {
-			t.Error("tunnelReinstallFallback() = true with no registered relay session")
-		}
-	})
-
-	t.Run("enabled, known arch, live session: falls back", func(t *testing.T) {
-		host := store.Host{ID: 4, TunnelEnabled: true, Arch: "linux/amd64"}
-		session := newTestRelaySession(t)
-		m.registerRelay(host.ID, session)
-		t.Cleanup(func() { m.dropRelayAll(host.ID) })
-
-		if !m.tunnelReinstallFallback(host) {
-			t.Fatal("tunnelReinstallFallback() = false, want true with a live relay session")
-		}
-	})
-}
-
-// withShortTunnelReinstallFallbackWait shrinks the wait/poll intervals
-// awaitTunnelReinstallFallback uses so tests exercise real timer behavior
-// without actually waiting the production 5-second budget.
-func withShortTunnelReinstallFallbackWait(t *testing.T) {
-	t.Helper()
-	origWait, origPoll := tunnelReinstallFallbackWait, tunnelReinstallFallbackPoll
-	tunnelReinstallFallbackWait = 200 * time.Millisecond
-	tunnelReinstallFallbackPoll = 20 * time.Millisecond
-	t.Cleanup(func() {
-		tunnelReinstallFallbackWait = origWait
-		tunnelReinstallFallbackPoll = origPoll
-	})
-}
-
-// TestAwaitTunnelReinstallFallback covers the bounded-wait wrapper install()
-// actually calls: it must not wait at all when tunnelReinstallFallback's own
-// fast-fail conditions (TunnelEnabled, known Arch) already rule out the
-// fallback for good, but it must ride out a session that appears moments
-// after SSH failed — the exact "works on the second click" symptom this
-// exists to fix, reproduced here as "appears within the wait window" rather
-// than as a second manual call.
-func TestAwaitTunnelReinstallFallback(t *testing.T) {
-	t.Run("already live: returns true immediately, no wait needed", func(t *testing.T) {
-		m, _ := newTestManager(t)
-		host := store.Host{ID: 10, TunnelEnabled: true, Arch: "linux/amd64"}
-		session := newTestRelaySession(t)
-		m.registerRelay(host.ID, session)
-		t.Cleanup(func() { m.dropRelayAll(host.ID) })
-
-		start := time.Now()
-		if !m.awaitTunnelReinstallFallback(context.Background(), host) {
-			t.Fatal("awaitTunnelReinstallFallback() = false, want true with an already-live session")
-		}
-		if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-			t.Errorf("took %v to return for an already-live session, want near-instant", elapsed)
-		}
-	})
-
-	t.Run("tunnel not enabled: returns false without waiting", func(t *testing.T) {
-		m, _ := newTestManager(t)
-		host := store.Host{ID: 11, TunnelEnabled: false, Arch: "linux/amd64"}
-
-		start := time.Now()
-		if m.awaitTunnelReinstallFallback(context.Background(), host) {
-			t.Fatal("awaitTunnelReinstallFallback() = true with TunnelEnabled false")
-		}
-		if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-			t.Errorf("took %v to return false for TunnelEnabled=false, want near-instant (no point waiting)", elapsed)
-		}
-	})
-
-	t.Run("session registers partway through the wait: returns true", func(t *testing.T) {
-		withShortTunnelReinstallFallbackWait(t)
-		m, _ := newTestManager(t)
-		host := store.Host{ID: 12, TunnelEnabled: true, Arch: "linux/amd64"}
-		// Created up front, on the main test goroutine (t.Fatalf inside it
-		// would be unsafe from the background goroutine below) — only the
-		// registration itself is delayed.
-		session := newTestRelaySession(t)
-		t.Cleanup(func() { m.dropRelayAll(host.ID) })
-
-		go func() {
-			time.Sleep(60 * time.Millisecond)
-			m.registerRelay(host.ID, session)
-		}()
-
-		if !m.awaitTunnelReinstallFallback(context.Background(), host) {
-			t.Fatal("awaitTunnelReinstallFallback() = false, want true once the session registered mid-wait")
-		}
-	})
-
-	t.Run("session never appears: returns false once the wait elapses", func(t *testing.T) {
-		withShortTunnelReinstallFallbackWait(t)
-		m, _ := newTestManager(t)
-		host := store.Host{ID: 13, TunnelEnabled: true, Arch: "linux/amd64"}
-
-		if m.awaitTunnelReinstallFallback(context.Background(), host) {
-			t.Fatal("awaitTunnelReinstallFallback() = true with no session ever registered")
-		}
-	})
-
-	t.Run("ctx cancelled mid-wait: returns false promptly", func(t *testing.T) {
-		withShortTunnelReinstallFallbackWait(t)
-		m, _ := newTestManager(t)
-		host := store.Host{ID: 14, TunnelEnabled: true, Arch: "linux/amd64"}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			time.Sleep(10 * time.Millisecond)
-			cancel()
-		}()
-
-		start := time.Now()
-		if m.awaitTunnelReinstallFallback(ctx, host) {
-			t.Fatal("awaitTunnelReinstallFallback() = true with a cancelled ctx and no session")
-		}
-		if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
-			t.Errorf("took %v to return after ctx cancellation, want it to stop promptly", elapsed)
-		}
-	})
-}
-
-// TestTunnelConnectedAndRecordChannel exercises the two pieces of state the
-// "Канал" badge in the UI reads (see handlers.go's hostWithOverview):
-// TunnelConnected reflects whether a relay session is registered regardless
-// of use, while recordChannel/Overview track which path was most recently
-// actually dialed.
-func TestTunnelConnectedAndRecordChannel(t *testing.T) {
-	m, _ := newTestManager(t)
-	const hostID = int64(7)
-
-	if m.TunnelConnected(hostID) {
-		t.Error("TunnelConnected() = true before any session was registered")
+	if time.Since(start) > 5*time.Second || hits.Load() != 2 || !log.has("hub.downloadRetry") {
+		t.Errorf("попытки: %d за %v, %v", hits.Load(), time.Since(start), log.keys)
 	}
 
-	session := newTestRelaySession(t)
-	m.registerRelay(hostID, session)
-	if !m.TunnelConnected(hostID) {
-		t.Error("TunnelConnected() = false with a session registered")
+	hits.Store(0)
+	healAfter.Store(1)
+	if err := m.fetchVerified(t.Context(), "9.9.9", "nkt-linux-amd64", hex.EncodeToString(sum[:]), dest, log.Log, nil); err != nil {
+		t.Errorf("вторая попытка должна пройти: %v", err)
 	}
-
-	m.recordChannel(hostID, channelTunnel)
-	ov, ok := m.Overview(hostID)
-	if !ok || ov.Channel != channelTunnel {
-		t.Errorf("Overview() = (%+v, %v), want Channel = %q", ov, ok, channelTunnel)
-	}
-
-	m.dropRelayAll(hostID)
-	if m.TunnelConnected(hostID) {
-		t.Error("TunnelConnected() = true after dropRelayAll")
-	}
-}
-
-// TestDynamicRelayDialSurvivesSessionSwap is the regression test for the
-// exact failure mode installOverTunnel exists to avoid: a dial bound to
-// *today's* session would start erroring the moment that session closes —
-// which self-update's own restart guarantees happens mid-flow. dynamicRelayDial
-// must re-resolve on every call, so it keeps working once the restarted host
-// reconnects with a brand new session, without installOverTunnel needing to
-// notice the swap itself.
-func TestDynamicRelayDialSurvivesSessionSwap(t *testing.T) {
-	m, _ := newTestManager(t)
-	const hostID = int64(9)
-
-	dial := m.dynamicRelayDial(hostID)
-	if _, err := dial("tcp", "127.0.0.1:0"); err == nil {
-		t.Error("dynamicRelayDial()'s dial succeeded with no session registered at all")
-	}
-
-	first := newTestRelaySession(t)
-	m.registerRelay(hostID, first)
-	if _, err := dial("tcp", "127.0.0.1:0"); err != nil {
-		t.Errorf("dial() with a live session: %v", err)
-	}
-
-	// Simulate the host restarting mid-update: its old session drops, a
-	// new one (a fresh yamux handshake, not the same object) replaces it.
-	_ = first.Close()
-	second := newTestRelaySession(t)
-	m.registerRelay(hostID, second)
-
-	if _, err := dial("tcp", "127.0.0.1:0"); err != nil {
-		t.Errorf("dial() after the session was swapped out from under it: %v", err)
-	}
-}
-
-// TestPrepareTunnelEnv covers Manager.prepareTunnelEnv now that it no
-// longer has any hub-address guessing to do — the hub is the side that
-// dials out (see tunneldial.go), using the host's own already-known Addr,
-// so this only has TunnelEnabled to branch on. Disabled means no token is
-// generated or stored at all; enabled means a token is generated, stored
-// secretbox-encrypted (recoverable — the hub has to present it again on
-// every future reconnect, unlike the first iteration's plain hash), and
-// ListenAddr reflects cfg.HubTunnelPort.
-func TestPrepareTunnelEnv(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("disabled: no token generated or stored", func(t *testing.T) {
-		m, db := newTestManager(t)
-		id, err := db.CreateHost(ctx, "h", "203.0.113.9", 22, "root", store.HostAuthKey, []byte("enc"))
-		if err != nil {
-			t.Fatalf("CreateHost: %v", err)
-		}
-		host, err := db.HostByID(ctx, id)
-		if err != nil {
-			t.Fatalf("HostByID: %v", err)
-		}
-
-		tun, err := m.prepareTunnelEnv(ctx, host.ID, host)
-		if err != nil {
-			t.Fatalf("prepareTunnelEnv: %v", err)
-		}
-		if tun.Enabled {
-			t.Errorf("prepareTunnelEnv() = %+v, want Enabled=false with TunnelEnabled off", tun)
-		}
-		got, err := db.HostByID(ctx, id)
-		if err != nil {
-			t.Fatalf("HostByID: %v", err)
-		}
-		if got.TunnelTokenEnc != nil {
-			t.Errorf("TunnelTokenEnc = %x, want nil — nothing should be stored when the feature is off", got.TunnelTokenEnc)
-		}
-	})
-
-	t.Run("enabled: generates, stores encrypted, and derives ListenAddr from HubTunnelPort", func(t *testing.T) {
-		m, db := newTestManager(t)
-		m.cfg = &config.Config{HubTunnelPort: 9999}
-		id, err := db.CreateHost(ctx, "h", "203.0.113.9", 22, "root", store.HostAuthKey, []byte("enc"))
-		if err != nil {
-			t.Fatalf("CreateHost: %v", err)
-		}
-		host, err := db.HostByID(ctx, id)
-		if err != nil {
-			t.Fatalf("HostByID: %v", err)
-		}
-		host.TunnelEnabled = true
-
-		tun, err := m.prepareTunnelEnv(ctx, host.ID, host)
-		if err != nil {
-			t.Fatalf("prepareTunnelEnv: %v", err)
-		}
-		if !tun.Enabled || tun.Token == "" {
-			t.Fatalf("prepareTunnelEnv() = %+v, want Enabled=true with a generated token", tun)
-		}
-		if tun.ListenAddr != "0.0.0.0:9999" {
-			t.Errorf("ListenAddr = %q, want %q (from cfg.HubTunnelPort)", tun.ListenAddr, "0.0.0.0:9999")
-		}
-
-		got, err := db.HostByID(ctx, id)
-		if err != nil {
-			t.Fatalf("HostByID: %v", err)
-		}
-		if len(got.TunnelTokenEnc) == 0 {
-			t.Fatal("TunnelTokenEnc not stored")
-		}
-		decrypted, err := secretbox.Decrypt(m.key, got.TunnelTokenEnc)
-		if err != nil {
-			t.Fatalf("decrypt stored token: %v", err)
-		}
-		if string(decrypted) != tun.Token {
-			t.Errorf("stored token decrypts to %q, want the same token renderEnv got: %q", decrypted, tun.Token)
-		}
-	})
 }

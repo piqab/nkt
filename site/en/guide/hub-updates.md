@@ -36,6 +36,14 @@ not interrupt it):
 3. the hub is unavailable for a few seconds; the open page waits until it
    answers with the new version and reloads itself.
 
+The job log shows four steps as lines: the checksum file, downloading the
+binary (with percentages; one already downloaded by an earlier attempt is
+taken from the cache if its checksum matches), the systemd unit, install
+and restart. If not a byte arrives from GitHub for 60 seconds, the
+download is retried once, and then the job ends with "the download
+stopped at N%" — instead of hanging; the whole update is limited to 30
+minutes.
+
 The confirmation has a **"After the hub update, update nkt on all hosts"**
 checkbox, on by default. Then, after the reload, "Hosts" opens right away
 with the **"Update all"** window: who will be updated, who is already

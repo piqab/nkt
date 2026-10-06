@@ -42,7 +42,7 @@ func (s *Server) startSelfUpdate(w http.ResponseWriter, r *http.Request, rollbac
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: KindHubSelfUpdate, TitleKey: title, TitleArgs: []any{version},
-		Queue: "hub-selfupdate", Author: user, Steps: 2,
+		Queue: "hub-selfupdate", Author: user, Steps: 4,
 		Params: HubSelfUpdateParams{Version: version, Rollback: rollback},
 	})
 	if err != nil {
@@ -73,11 +73,5 @@ func (r *HubSelfUpdateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err := jc.Params(&p); err != nil {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
-	jc.StepKey(1, 2, "hub.selfUpdateStepDownload", p.Version)
-	if err := r.m.applyVersion(ctx, p.Version, func(key string, args ...any) { jc.Log(key, args...) }); err != nil {
-		return err
-	}
-	jc.StepKey(2, 2, "hub.selfUpdateStepRestart")
-	jc.Log("hub.selfUpdateRestarting", p.Version)
-	return nil
+	return r.m.applyVersion(ctx, p.Version, jc)
 }

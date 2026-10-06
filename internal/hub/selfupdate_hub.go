@@ -2,13 +2,18 @@ package hub
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
-	"github.com/piqab/nkt/internal/msgs"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/api"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // hubSelfUpdatePaths mirror handleSelfUpdate's own constants
@@ -82,32 +87,82 @@ func (m *Manager) Rollback(ctx context.Context) error {
 	return m.applyVersion(ctx, version, nil)
 }
 
+// selfUpdateLog — куда писать ход обновления: журнал задания
+// (*jobs.Context) или, если nil, только журнал службы.
+type selfUpdateLog interface {
+	Log(key string, args ...any)
+	StepKey(n, total int, key string, args ...any)
+}
+
+// selfUpdateTimeout — предел всего обновления (скачивание и подготовка).
+const selfUpdateTimeout = 30 * time.Minute
+
+// selfUpdateProgressEvery — как часто строка процентов скачивания
+// попадает в журнал задания.
+const selfUpdateProgressEvery = 5 * time.Second
+
 // applyVersion downloads and verifies release `version`, then replaces
-// this hub's own binary and systemd unit and restarts itself.
-// report — строки хода (ключ msgs и аргументы) для журнала задания; nil —
-// только в журнал службы.
-func (m *Manager) applyVersion(ctx context.Context, version string, report func(key string, args ...any)) error {
-	logReport := func(key string, args ...any) {
+// this hub's own binary and systemd unit and restarts itself. Ход — по
+// шагам (сумма, бинарник, юнит, установка), каждый — строкой в out.
+func (m *Manager) applyVersion(ctx context.Context, version string, out selfUpdateLog) error {
+	ctx, cancel := context.WithTimeout(ctx, selfUpdateTimeout)
+	defer cancel()
+	const steps = 4
+	report := func(key string, args ...any) {
 		m.log.Info("hub self-update", "step", key, "args", args)
-		if report != nil {
-			report(key, args...)
+		if out != nil {
+			out.Log(key, args...)
 		}
 	}
-	report = logReport
+	step := func(n int, key string, args ...any) {
+		if out != nil {
+			out.StepKey(n, steps, key, args...)
+		}
+		report(key+"Line", args...)
+	}
+	var lastProgress time.Time
+	progress := func(key string, args ...any) {
+		// Строка процентов — не чаще раза в selfUpdateProgressEvery и
+		// обязательно последняя (100%).
+		if pct, ok := args[0].(int); ok && pct < 100 && time.Since(lastProgress) < selfUpdateProgressEvery {
+			return
+		}
+		lastProgress = time.Now()
+		report(key, args...)
+	}
 
-	name := fmt.Sprintf("nkt-%s-%s-%s", runtime.GOOS, runtime.GOARCH, version)
-	binPath := filepath.Join(m.cfg.HubBinCacheDir(), name)
-	if _, err := os.Stat(binPath); err != nil {
-		if err := m.downloadReleaseBinary(ctx, runtime.GOOS, runtime.GOARCH, version, binPath, report, nil); err != nil {
+	report("hub.selfUpdateFromTo", m.version, version)
+	asset := fmt.Sprintf("nkt-%s-%s", runtime.GOOS, runtime.GOARCH)
+
+	step(1, "hub.selfUpdateStepSums")
+	want, err := m.releaseSum(ctx, version, asset)
+	if err != nil {
+		return err
+	}
+	report("hub.selfUpdateSumFound", asset)
+
+	step(2, "hub.selfUpdateStepBinary", version)
+	binPath := filepath.Join(m.cfg.HubBinCacheDir(), fmt.Sprintf("%s-%s", asset, version))
+	if got, err := fileSHA256(binPath); err == nil && strings.EqualFold(got, want) {
+		// Скачан прошлой попыткой — и сумма та же: качать заново незачем.
+		report("hub.selfUpdateFromCache")
+	} else {
+		if err := m.fetchVerified(ctx, version, asset, want, binPath, report, progress); err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				return msgs.Errorf("hub.selfUpdateTimedOut", int(selfUpdateTimeout.Minutes()))
+			}
 			return msgs.Errorf("hub.downloadingBinaryV", version, err)
 		}
+		report("hub.releaseBinaryVerified", runtime.GOOS, runtime.GOARCH)
 	}
 
+	step(3, "hub.selfUpdateStepUnit")
 	unitContent, err := m.downloadUnitTemplate(ctx, version, "netknownsthat-hub.service")
 	if err != nil {
 		return msgs.Errorf("hub.downloadingSystemdUnitV", version, err)
 	}
 
+	step(4, "hub.selfUpdateStepInstall")
 	stageDir, err := os.MkdirTemp(m.cfg.DataDir, "hub-selfupdate-")
 	if err != nil {
 		return msgs.Errorf("hub.temporaryDirectory", err)
@@ -143,8 +198,7 @@ systemctl restart netknownsthat-hub
 		stageUnit, hubSelfUpdateServicePath,
 		stageDir)
 
-	cmd := api.UnrestrictedBackgroundCommand("bash", "-c", script)
-	if err := cmd.Start(); err != nil {
+	if err := startSelfUpdateScript(script); err != nil {
 		return msgs.Errorf("hub.startingBackgroundUpdateScript", err)
 	}
 	// Not Wait()'d — see the doc comment above. The stage dir's unit file is
@@ -153,5 +207,26 @@ systemctl restart netknownsthat-hub
 	// it must still exist when systemctl restart's replacement process
 	// starts reading it, well past this function's own return.
 	removeStage = false
+	report("hub.selfUpdateRestarting", version)
 	return nil
+}
+
+// startSelfUpdateScript запускает установку с перезапуском вне песочницы
+// и не ждёт её (см. applyVersion); подменяется в тестах.
+var startSelfUpdateScript = func(script string) error {
+	return api.UnrestrictedBackgroundCommand("bash", "-c", script).Start()
+}
+
+// fileSHA256 — sha256 файла (hex).
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
