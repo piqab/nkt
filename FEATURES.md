@@ -272,7 +272,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 
 - A native hub client on Kotlin Multiplatform and Compose Multiplatform: one code base for Android 8+ and iOS 16+, the same API as the web UI, sign-in with a hub account, the session survives restarts; a self-signed hub certificate is pinned on first sign-in.
 - Clean Architecture (domain, data, ui), dependency injection with Koin.
-- Navigation: hub sections in the bottom bar (at the side on a tablet), breadcrumbs “Hosts › host › section › object”, Back steps back one level; details (container, config file, job, pipeline) are pages of their own.
+- Navigation: hub sections in the bottom bar (at the side on a tablet or a phone on its side), breadcrumbs “Hosts › host › section › object” as the title, Back steps back one level; details (container, config file, job, pipeline) are pages of their own.
 - Host list by group: state, problems, Kubernetes role, sudo, an outdated nkt version.
 - Host management: adding (password, own key or a hub key with the authorized_keys line), installing, updating and reinstalling nkt as a hub job with a log, the install log, moving to a group, deleting (from the hub only or cleaning the host); groups — create, rename, delete.
 - Host sections: overview, problems with jumps to the right section, terminal and btop, logs, services, containers (Docker with “Inspect”, Podman, LXD, VMs, images), vulnerabilities, ClamAV, availability, usage with Kubernetes nodes and a chart, configs with history and rollback, firewall, certificates, interfaces, a touch resource map, users, jobs, fail2ban, audit log; reboot with a preview of what will not come back by itself.
@@ -281,6 +281,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Jobs come with a live log and cancel.
 - A full-screen terminal: in tmux when the host has it, re-attaching to the session after a dropped connection, with a menu of tmux actions (windows, splits, scroll mode, mouse); without tmux — a plain shell and a tmux install with live output.
 - The console of a Docker or Podman container (with a choice of user), an LXD instance and a libvirt machine (serial, Enter on connect) — in the same full-screen terminal.
+- Interface scale 80–115 % (90 % by default): text and spacing together; button rows wrap; rotating the screen does not interrupt the terminal.
 - Russian and English interface: follows the phone language or the choice on the sign-in screen and in About; server messages come in the same language.
 - A signed APK in every release (`nkt-android-<version>.apk`) and separate beta releases of the app; the app version matches the nkt version; the iOS version is built from source (CI checks the simulator build), not published to the App Store.
 

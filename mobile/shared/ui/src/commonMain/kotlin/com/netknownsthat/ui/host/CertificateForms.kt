@@ -2,6 +2,7 @@ package com.netknownsthat.ui.host
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -146,7 +147,7 @@ private fun SelfSignedForm(viewModel: CertificatesViewModel) {
             label = { Text(t("Имена через запятую", "Names, comma-separated")) },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
-        Row(modifier = Modifier.padding(top = 8.dp)) {
+        FlowRow(modifier = Modifier.padding(top = 8.dp)) {
             listOf("nginx", "haproxy").forEach { value ->
                 FilterChip(
                     selected = service == value,
@@ -156,7 +157,7 @@ private fun SelfSignedForm(viewModel: CertificatesViewModel) {
                 )
             }
         }
-        Row(modifier = Modifier.padding(top = 8.dp)) {
+        FlowRow(modifier = Modifier.padding(top = 8.dp)) {
             listOf(2048, 3072, 4096).forEach { value ->
                 FilterChip(
                     selected = bits == value,

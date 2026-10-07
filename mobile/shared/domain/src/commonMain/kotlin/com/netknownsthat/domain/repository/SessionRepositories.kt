@@ -37,11 +37,28 @@ interface SessionRepository {
     fun forgetPinnedCertificate()
 }
 
+/**
+ * Scale of the whole interface — text and spacing together, so more fits on
+ * a small phone. [percent] of the platform's own size.
+ */
+enum class UiScale(val percent: Int) {
+    P80(80), P90(90), P100(100), P115(115);
+
+    companion object {
+        /** A phone screen holds little at 100%: the default is a notch smaller. */
+        val DEFAULT = P90
+        fun of(percent: Int?): UiScale = entries.firstOrNull { it.percent == percent } ?: DEFAULT
+    }
+}
+
 /** Settings kept on the device. */
 interface SettingsRepository {
     /** Chosen interface language; null — follow the device. */
     val language: StateFlow<AppLanguage?>
     suspend fun setLanguage(language: AppLanguage)
+
+    val uiScale: StateFlow<UiScale>
+    suspend fun setUiScale(scale: UiScale)
 
     suspend fun betaNoticeHidden(): Boolean
     suspend fun hideBetaNotice()

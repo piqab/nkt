@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -224,16 +225,19 @@ private fun HostRow(host: HubHost, onClick: () -> Unit, menu: HostMenu?) {
             .fillMaxWidth()
             .padding(bottom = 8.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        // Tight on purpose: a list of hosts is scanned, and a full-size
+        // menu button made every card half empty.
+        Column(modifier = Modifier.padding(start = 14.dp, end = if (menu != null) 4.dp else 14.dp, top = 8.dp, bottom = 10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(host.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Text(host.status, style = MaterialTheme.typography.labelMedium)
                 if (menu != null) {
                     Box {
-                        IconButton(onClick = { open = true }) {
+                        IconButton(onClick = { open = true }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.MoreVert, contentDescription = t("Действия с хостом", "Host actions"))
                         }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {

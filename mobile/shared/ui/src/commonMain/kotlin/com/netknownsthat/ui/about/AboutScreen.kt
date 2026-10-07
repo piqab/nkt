@@ -35,6 +35,8 @@ import com.netknownsthat.ui.i18n.t
 fun AboutScreen(
     viewModel: AboutViewModel,
     onLanguage: (com.netknownsthat.domain.repository.AppLanguage) -> Unit,
+    uiScale: com.netknownsthat.domain.repository.UiScale,
+    onUiScale: (com.netknownsthat.domain.repository.UiScale) -> Unit,
     onSignedOut: () -> Unit,
 ) {
     val state = viewModel.uiState
@@ -62,6 +64,26 @@ fun AboutScreen(
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(t("Язык", "Language"), style = MaterialTheme.typography.titleMedium)
                             com.netknownsthat.ui.i18n.LanguagePicker(onLanguage, modifier = Modifier.padding(top = 8.dp))
+                        }
+                    }
+                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(t("Масштаб интерфейса", "Interface scale"), style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                t("Текст и отступы вместе: меньше — больше умещается на экране", "Text and spacing together: smaller fits more on the screen"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            androidx.compose.foundation.layout.Row(modifier = Modifier.padding(top = 8.dp)) {
+                                com.netknownsthat.domain.repository.UiScale.entries.forEach { s ->
+                                    androidx.compose.material3.FilterChip(
+                                        selected = s == uiScale,
+                                        onClick = { onUiScale(s) },
+                                        label = { Text("${s.percent}%") },
+                                        modifier = Modifier.padding(end = 6.dp),
+                                    )
+                                }
+                            }
                         }
                     }
                     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {

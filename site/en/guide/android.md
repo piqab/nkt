@@ -52,9 +52,16 @@ there.
 
 **Navigation.** At the bottom (at the side on a tablet or in landscape) are
 the hub sections: hosts, alerts, monitoring, jobs, “more” (fail2ban,
-deployments, about). Under the title are breadcrumbs, e.g.
+deployments, about). The top bar's title is breadcrumbs, e.g.
 `Hosts › web-1 › Containers › acme-app`: each one goes back to its level, and
 the system Back button goes back one step.
+
+**A small screen.** About has the interface scale: 80, 90 (the default), 100
+or 115 % — text and spacing shrink together, so more fits on the screen.
+Rows of buttons wrap to the next line instead of running off the edge.
+Rotating the phone does not interrupt the terminal or a console, and with a
+phone on its side the hub sections are a rail at the side so they take no
+height.
 
 **Background operations.** While a job runs somewhere — on the hub or on
 any host, whoever started it — the top bar shows an icon with their count.

@@ -15,6 +15,7 @@ import com.netknownsthat.domain.repository.AppLanguage
 import com.netknownsthat.domain.repository.HubInfoRepository
 import com.netknownsthat.domain.repository.SessionRepository
 import com.netknownsthat.domain.repository.SettingsRepository
+import com.netknownsthat.domain.repository.UiScale
 import com.netknownsthat.ui.common.text
 import com.netknownsthat.ui.i18n.I18n
 import com.netknownsthat.ui.i18n.t
@@ -41,6 +42,8 @@ class AppViewModel(
         private set
     var notifyEnabled by mutableStateOf(false)
         private set
+    var uiScale by mutableStateOf(UiScale.DEFAULT)
+        private set
 
     init {
         viewModelScope.launch {
@@ -48,6 +51,9 @@ class AppViewModel(
         }
         viewModelScope.launch {
             settings.eventNotifications.collect { notifyEnabled = it }
+        }
+        viewModelScope.launch {
+            settings.uiScale.collect { uiScale = it }
         }
         viewModelScope.launch {
             // The hub ended the session: back to sign-in (the hub address
@@ -69,6 +75,11 @@ class AppViewModel(
     fun setLanguage(language: AppLanguage) {
         I18n.lang = language
         viewModelScope.launch { settings.setLanguage(language) }
+    }
+
+    fun chooseUiScale(scale: UiScale) {
+        uiScale = scale
+        viewModelScope.launch { settings.setUiScale(scale) }
     }
 
     fun setNotifications(enabled: Boolean) {

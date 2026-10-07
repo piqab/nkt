@@ -11,6 +11,7 @@ import com.netknownsthat.domain.model.Me
 import com.netknownsthat.domain.repository.AppLanguage
 import com.netknownsthat.domain.repository.SessionRepository
 import com.netknownsthat.domain.repository.SettingsRepository
+import com.netknownsthat.domain.repository.UiScale
 import io.ktor.http.HttpMethod
 import io.ktor.http.Url
 import io.ktor.http.parseUrl
@@ -104,6 +105,8 @@ class SettingsRepositoryImpl(
 ) : SettingsRepository {
     private val _language = MutableStateFlow<AppLanguage?>(null)
     override val language: StateFlow<AppLanguage?> = _language.asStateFlow()
+    private val _scale = MutableStateFlow(UiScale.DEFAULT)
+    override val uiScale: StateFlow<UiScale> = _scale.asStateFlow()
     private val _notify = MutableStateFlow(false)
     override val eventNotifications: StateFlow<Boolean> = _notify.asStateFlow()
 
@@ -113,6 +116,7 @@ class SettingsRepositoryImpl(
     init {
         scope.launch {
             _language.value = AppLanguage.entries.firstOrNull { it.code == local.appLang() }
+            _scale.value = UiScale.of(local.uiScale())
             _notify.value = local.eventsNotify()
             loaded.complete(Unit)
         }
@@ -121,6 +125,11 @@ class SettingsRepositoryImpl(
     override suspend fun setLanguage(language: AppLanguage) {
         _language.value = language
         local.setAppLang(language.code)
+    }
+
+    override suspend fun setUiScale(scale: UiScale) {
+        _scale.value = scale
+        local.setUiScale(scale.percent)
     }
 
     override suspend fun betaNoticeHidden(): Boolean = local.betaNoticeHidden()

@@ -5,6 +5,7 @@ import com.netknownsthat.ui.common.formatTs
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -331,7 +332,7 @@ private fun VersionHistory(viewModel: ConfigsViewModel, path: String) {
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
-                    Row(modifier = Modifier.padding(top = 12.dp)) {
+                    FlowRow(modifier = Modifier.padding(top = 12.dp)) {
                         OutlinedButton(
                             onClick = { viewModel.loadDiff(version.id) },
                             modifier = Modifier.padding(end = 8.dp),

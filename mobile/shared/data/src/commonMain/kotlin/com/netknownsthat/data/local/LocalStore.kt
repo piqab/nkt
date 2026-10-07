@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -30,6 +31,7 @@ class LocalStore(private val store: DataStore<Preferences>) {
         val PINNED_CERTS = stringSetPreferencesKey("pinned_certs")
         val BETA_NOTICE_HIDDEN = booleanPreferencesKey("beta_notice_hidden")
         val APP_LANG = stringPreferencesKey("app_lang")
+        val UI_SCALE = intPreferencesKey("ui_scale")
         val EVENTS_NOTIFY = booleanPreferencesKey("events_notify")
         val EVENTS_LAST_ID = longPreferencesKey("events_last_id")
     }
@@ -53,6 +55,9 @@ class LocalStore(private val store: DataStore<Preferences>) {
 
     suspend fun appLang(): String? = prefs()[Keys.APP_LANG]
     suspend fun setAppLang(code: String) = store.edit { it[Keys.APP_LANG] = code }.let { }
+
+    suspend fun uiScale(): Int? = prefs()[Keys.UI_SCALE]
+    suspend fun setUiScale(percent: Int) = store.edit { it[Keys.UI_SCALE] = percent }.let { }
 
     suspend fun eventsNotify(): Boolean = prefs()[Keys.EVENTS_NOTIFY] ?: false
     suspend fun setEventsNotify(on: Boolean) = store.edit { it[Keys.EVENTS_NOTIFY] = on }.let { }

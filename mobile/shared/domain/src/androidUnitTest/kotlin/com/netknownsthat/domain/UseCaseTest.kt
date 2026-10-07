@@ -30,6 +30,7 @@ import com.netknownsthat.domain.usecase.WatchJobUseCase
 import com.netknownsthat.domain.usecase.CheckNewEventsUseCase
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import com.netknownsthat.domain.repository.UiScale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -184,6 +185,8 @@ class UseCaseTest {
             var last = 0L
             override val language = kotlinx.coroutines.flow.MutableStateFlow<com.netknownsthat.domain.repository.AppLanguage?>(null)
             override suspend fun setLanguage(language: com.netknownsthat.domain.repository.AppLanguage) = Unit
+            override val uiScale = kotlinx.coroutines.flow.MutableStateFlow(com.netknownsthat.domain.repository.UiScale.DEFAULT)
+            override suspend fun setUiScale(scale: com.netknownsthat.domain.repository.UiScale) = Unit
             override suspend fun betaNoticeHidden() = true
             override suspend fun hideBetaNotice() = Unit
             override val eventNotifications = kotlinx.coroutines.flow.MutableStateFlow(true)
@@ -213,5 +216,13 @@ class UseCaseTest {
         assertEquals(6L, settings.last)
         events.list = events.list + HubEvent(id = 7, kind = "unreachable") + HubEvent(id = 8, kind = "recovered")
         assertEquals(listOf(7L), check().map { it.id })
+    }
+
+    @Test
+    fun uiScaleFallsBackToTheDefault() {
+        assertEquals(UiScale.P80, UiScale.of(80))
+        // Nothing saved yet, or a value from a newer app: the default.
+        assertEquals(UiScale.DEFAULT, UiScale.of(null))
+        assertEquals(UiScale.DEFAULT, UiScale.of(73))
     }
 }

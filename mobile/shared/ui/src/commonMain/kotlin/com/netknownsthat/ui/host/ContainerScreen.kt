@@ -13,7 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -78,7 +78,7 @@ fun ContainerScreen(name: String, viewModel: ContainersViewModel) {
         if (d == null) {
             if (viewModel.inspectError == null) CircularProgressIndicator(modifier = Modifier.padding(24.dp))
         } else {
-            TabRow(selectedTabIndex = tab) {
+            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
                 listOf(t("Переменные (${d.env.size})", "Variables (${d.env.size})"), t("Основное", "Main"), t("Сеть и тома", "Network and volumes")).forEachIndexed { i, label ->
                     Tab(selected = tab == i, onClick = { tab = i }, text = { Text(label) })
                 }

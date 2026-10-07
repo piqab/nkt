@@ -1,7 +1,9 @@
 package com.netknownsthat.ui.host
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,7 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -90,7 +92,7 @@ fun ContainersScreen(
         val current = tabs.firstOrNull { it.second == tab } ?: tabs.first()
 
         Column {
-            TabRow(selectedTabIndex = tabs.indexOf(current)) {
+            ScrollableTabRow(selectedTabIndex = tabs.indexOf(current), edgePadding = 0.dp) {
                 tabs.forEach { (title, index) ->
                     Tab(
                         selected = current.second == index,
@@ -209,8 +211,9 @@ private fun DockerCard(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
-            ActionRow(enabled, onAction, onConsole.takeIf { running(container.state) })
-            TextButton(onClick = onInspect) { Text(t("Инспект", "Inspect")) }
+            ActionRow(enabled, onAction, onConsole.takeIf { running(container.state) }) {
+                TextButton(onClick = onInspect) { Text(t("Инспект", "Inspect")) }
+            }
         }
     }
 }
@@ -249,25 +252,30 @@ private fun SimpleRuntimeCard(
 }
 
 @Composable
-private fun ActionRow(enabled: Boolean, onAction: (String) -> Unit, onConsole: (() -> Unit)? = null) {
-    Row(
-        modifier = Modifier
-            .horizontalScroll(rememberScrollState())
-            .padding(top = 12.dp),
+private fun ActionRow(
+    enabled: Boolean,
+    onAction: (String) -> Unit,
+    onConsole: (() -> Unit)? = null,
+    extra: (@Composable () -> Unit)? = null,
+) {
+    // Wraps instead of scrolling sideways: on a narrow phone the last
+    // buttons were cut off with no hint that the row scrolls.
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(top = 8.dp),
     ) {
         LIFECYCLE.forEach { (action, label) ->
-            OutlinedButton(
-                onClick = { onAction(action) },
-                enabled = enabled,
-                modifier = Modifier.padding(end = 8.dp),
-            ) { Text(label) }
+            OutlinedButton(onClick = { onAction(action) }, enabled = enabled, contentPadding = COMPACT_BUTTON) { Text(label) }
         }
         // Only while it runs: there is nothing to exec into otherwise.
         if (onConsole != null) {
-            OutlinedButton(onClick = onConsole, modifier = Modifier.padding(end = 8.dp)) { Text(t("Консоль", "Console")) }
+            OutlinedButton(onClick = onConsole, contentPadding = COMPACT_BUTTON) { Text(t("Консоль", "Console")) }
         }
+        extra?.invoke()
     }
 }
+
+private val COMPACT_BUTTON = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
 
 /** Docker/LXD/libvirt spell "running" differently ("running", "Running"). */
 private fun running(state: String) = state.equals("running", ignoreCase = true)
