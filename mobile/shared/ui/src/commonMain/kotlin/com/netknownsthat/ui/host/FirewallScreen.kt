@@ -3,6 +3,7 @@ package com.netknownsthat.ui.host
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,7 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,7 +59,7 @@ fun FirewallScreen(viewModel: FirewallViewModel) {
         }
 
         Column {
-            TabRow(selectedTabIndex = tab) {
+            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
                 listOf(t("Правила", "Rules"), t("Добавить", "Add"), t("Состояние", "State"), t("Порты", "Ports")).forEachIndexed { index, title ->
                     Tab(
                         selected = tab == index,
@@ -289,7 +290,7 @@ private fun UfwForm(viewModel: FirewallViewModel) {
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
 
-            Row(modifier = Modifier.padding(top = 8.dp)) {
+            FlowRow(modifier = Modifier.padding(top = 8.dp)) {
                 listOf("tcp", "udp").forEach { value ->
                     FilterChip(
                         selected = protocol == value,
@@ -324,7 +325,7 @@ private fun UfwForm(viewModel: FirewallViewModel) {
                 )
             }
 
-            Row(modifier = Modifier.padding(top = 12.dp)) {
+            FlowRow(modifier = Modifier.padding(top = 12.dp)) {
                 OutlinedButton(
                     onClick = { confirming = spec },
                     enabled = !viewModel.actionInProgress && spec.port in 1..65535,
@@ -386,7 +387,7 @@ private fun FirewalldForm(viewModel: FirewallViewModel) {
                 enabled = !byService,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
-            Row(modifier = Modifier.padding(top = 8.dp)) {
+            FlowRow(modifier = Modifier.padding(top = 8.dp)) {
                 listOf("tcp", "udp").forEach { value ->
                     FilterChip(
                         selected = protocol == value,
@@ -405,7 +406,7 @@ private fun FirewalldForm(viewModel: FirewallViewModel) {
                 Text(t("Сейчас", "Now"), style = MaterialTheme.typography.bodySmall)
             }
 
-            Row(modifier = Modifier.padding(top = 12.dp)) {
+            FlowRow(modifier = Modifier.padding(top = 12.dp)) {
                 OutlinedButton(
                     onClick = { viewModel.addFirewalldRule(spec) },
                     enabled = !viewModel.actionInProgress && valid,
@@ -479,7 +480,7 @@ private fun StateTab(
         }
         if (hasUfw || hasFirewalld) {
             item {
-                Row(modifier = Modifier.padding(top = 8.dp)) {
+                FlowRow(modifier = Modifier.padding(top = 8.dp)) {
                     if (hasUfw) {
                         OutlinedButton(
                             onClick = { viewModel.reloadUfw() },

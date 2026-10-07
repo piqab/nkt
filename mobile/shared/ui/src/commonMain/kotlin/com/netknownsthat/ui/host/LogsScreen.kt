@@ -2,6 +2,7 @@ package com.netknownsthat.ui.host
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -121,7 +122,7 @@ fun LogsScreen(viewModel: LogsViewModel) {
                     )
                 }
 
-                Row(modifier = Modifier.padding(top = 8.dp)) {
+                FlowRow(modifier = Modifier.padding(top = 8.dp)) {
                     OutlinedButton(
                         onClick = { showPicker = true },
                         modifier = Modifier.padding(end = 8.dp),
@@ -140,7 +141,7 @@ fun LogsScreen(viewModel: LogsViewModel) {
                     }
                 }
 
-                Row(modifier = Modifier.padding(top = 8.dp)) {
+                FlowRow(modifier = Modifier.padding(top = 8.dp)) {
                     listOf(500, 1000, 5000).forEach { n ->
                         FilterChip(
                             selected = viewModel.lineCount == n,

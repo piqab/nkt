@@ -132,7 +132,9 @@ fun TerminalScreen(viewModel: TerminalViewModel, btop: Boolean) {
             TerminalCanvas(
                 viewModel = viewModel,
                 minColumns = if (btop) BTOP_MIN_COLUMNS else 20,
-                minRows = if (btop) BTOP_MIN_ROWS else 5,
+                // A shell reads fine in two rows; forcing five shrank the
+                // font to specks on a phone on its side with the keyboard up.
+                minRows = if (btop) BTOP_MIN_ROWS else 2,
             )
             if (viewModel.status == TerminalStatus.CLOSED || viewModel.status == TerminalStatus.FAILED) {
                 Column(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)) {

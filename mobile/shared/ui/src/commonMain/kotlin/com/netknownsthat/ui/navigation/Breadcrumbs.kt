@@ -1,6 +1,7 @@
 package com.netknownsthat.ui.navigation
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -75,17 +76,24 @@ fun sectionTitle(s: HostSectionKey): String = when (s) {
  * "Hosts › web-1 › Containers › acme-app" — the back stack, read from the
  * bottom. Every crumb but the last goes back to its level; the row scrolls
  * to its end so the current place is always visible.
+ *
+ * It is the top bar's title: a separate row under the bar repeated the
+ * title and took a sixth of a phone screen. A top-level page has one crumb
+ * — shown as a plain title.
  */
 @Composable
 fun Breadcrumbs(nav: NavHostController, modifier: Modifier = Modifier) {
     val stack by nav.currentBackStack.collectAsState()
     val crumbs = stack.mapNotNull { entry -> crumbOf(entry)?.let { entry to it } }
-    if (crumbs.size < 2) return
+    if (crumbs.size < 2) {
+        Text(crumbs.firstOrNull()?.second.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
+        return
+    }
     val scroll = rememberScrollState()
     LaunchedEffect(crumbs.size) { scroll.scrollTo(scroll.maxValue) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 8.dp),
+        modifier = modifier.fillMaxWidth().horizontalScroll(scroll),
     ) {
         crumbs.forEachIndexed { i, (entry, label) ->
             val last = i == crumbs.lastIndex
@@ -93,13 +101,16 @@ fun Breadcrumbs(nav: NavHostController, modifier: Modifier = Modifier) {
             if (last) {
                 Text(
                     label,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 8.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp),
                 )
             } else {
-                TextButton(onClick = { nav.popBackStack(entry.destination.id, inclusive = false) }) {
+                TextButton(
+                    onClick = { nav.popBackStack(entry.destination.id, inclusive = false) },
+                    contentPadding = PaddingValues(horizontal = 6.dp),
+                ) {
                     Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
                 }
             }

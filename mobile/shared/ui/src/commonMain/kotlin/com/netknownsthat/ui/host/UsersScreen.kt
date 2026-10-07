@@ -3,6 +3,7 @@ package com.netknownsthat.ui.host
 import com.netknownsthat.ui.common.formatTs
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -135,7 +136,7 @@ private fun UserCard(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
-            Row(modifier = Modifier.padding(top = 12.dp)) {
+            FlowRow(modifier = Modifier.padding(top = 12.dp)) {
                 OutlinedButton(
                     onClick = onToggleDisabled,
                     enabled = enabled,
@@ -175,7 +176,7 @@ private fun CreateUserDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
-                Row(modifier = Modifier.padding(top = 12.dp)) {
+                FlowRow(modifier = Modifier.padding(top = 12.dp)) {
                     listOf("viewer" to t("Наблюдатель", "Viewer"), "admin" to t("Администратор", "Administrator"))
                         .forEach { (value, label) ->
                             FilterChip(

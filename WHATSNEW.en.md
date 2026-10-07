@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.178 — 2026-10-07
+
+- **Mobile app on a small screen:** the interface scale in About — 80, 90
+  (the default), 100 or 115 %, text and spacing together; the breadcrumbs
+  became the top bar's title (one row instead of two); rows of buttons wrap
+  instead of running off the edge; tabs scroll; host cards are tighter.
+- Mobile app: rotating the screen no longer drops the terminal or a
+  console; with a phone on its side the hub sections are a rail at the
+  side, and the terminal with the keyboard up no longer shrinks the font to
+  specks.
+
 ## v1.11.177 — 2026-10-07
 
 - **Mobile app: console** of a Docker or Podman container, an LXD instance

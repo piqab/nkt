@@ -3,6 +3,7 @@ package com.netknownsthat.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
@@ -102,6 +103,9 @@ import com.netknownsthat.ui.session.Start
 import com.netknownsthat.ui.theme.NktTheme
 import com.netknownsthat.ui.BetaNotice
 import com.netknownsthat.ui.about.AboutScreen
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.window.core.layout.WindowSizeClass
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
@@ -115,9 +119,19 @@ data class HostJump(val hostId: Long, val path: String)
 /** The whole app: Android's MainActivity and iOS's view controller show this. */
 @Composable
 fun NktApp(jumps: Flow<HostJump> = emptyFlow()) {
+    val app = koinViewModel<AppViewModel>()
+    // The interface scale (About): density and font scale together, so
+    // spacing shrinks with the text and more fits on a phone.
+    val base = LocalDensity.current
+    val scale = app.uiScale.percent / 100f
+    val density = remember(base, scale) { Density(base.density * scale, base.fontScale) }
+    CompositionLocalProvider(LocalDensity provides density) { NktRoot(app, jumps) }
+}
+
+@Composable
+private fun NktRoot(app: AppViewModel, jumps: Flow<HostJump>) {
     NktTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-            val app = koinViewModel<AppViewModel>()
             val chrome = remember { Chrome() }
             if (app.showBetaNotice) BetaNotice(onDismiss = app::dismissBetaNotice)
             CompositionLocalProvider(LocalChrome provides chrome) {
@@ -164,9 +178,13 @@ private fun Shell(app: AppViewModel, chrome: Chrome, start: Any, jumps: Flow<Hos
         if (signedIn) jumps.collect { openHostAt(it.hostId, it.path) }
     }
 
+    val adaptive = currentWindowAdaptiveInfo()
     val layout = when {
         !signedIn || chrome.fullScreen -> NavigationSuiteType.None
-        else -> NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(currentWindowAdaptiveInfo())
+        // A phone on its side: a bottom bar would take a third of the
+        // height, a rail at the side costs only width there is plenty of.
+        !adaptive.windowSizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND) -> NavigationSuiteType.NavigationRail
+        else -> NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(adaptive)
     }
     NavigationSuiteScaffold(
         layoutType = layout,
@@ -202,7 +220,10 @@ private fun Shell(app: AppViewModel, chrome: Chrome, start: Any, jumps: Flow<Hos
                 if (signedIn && !chrome.fullScreen) {
                     Column {
                         TopAppBar(
-                            title = { Text(current?.let { crumbOf(it) }.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            // The crumbs are the title — one bar, not a bar
+                            // and a row repeating it; and a lower bar.
+                            title = { Breadcrumbs(nav) },
+                            expandedHeight = 52.dp,
                             navigationIcon = {
                                 if (nav.previousBackStackEntry != null) {
                                     IconButton(onClick = { nav.popBackStack() }) {
@@ -220,7 +241,6 @@ private fun Shell(app: AppViewModel, chrome: Chrome, start: Any, jumps: Flow<Hos
                                 }
                             },
                         )
-                        Breadcrumbs(nav)
                     }
                 }
             },
@@ -301,6 +321,8 @@ private fun Routes(nav: NavHostController, app: AppViewModel, start: Any, openHo
             AboutScreen(
                 viewModel = koinViewModel(),
                 onLanguage = app::setLanguage,
+                uiScale = app.uiScale,
+                onUiScale = app::chooseUiScale,
                 onSignedOut = { app.signedOut() },
             )
         }

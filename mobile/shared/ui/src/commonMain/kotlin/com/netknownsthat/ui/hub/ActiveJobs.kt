@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Badge
@@ -75,7 +76,7 @@ fun ActiveJobsButton(viewModel: ActiveJobsViewModel, onOpen: (ActiveJob) -> Unit
                 Icon(Icons.Default.Refresh, contentDescription = t("Фоновые операции", "Background operations"))
             }
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.width(320.dp)) {
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.widthIn(max = 320.dp)) {
             Text(
                 t("Фоновые операции", "Background operations"),
                 style = MaterialTheme.typography.titleSmall,
