@@ -1,6 +1,7 @@
 package com.netknownsthat.domain.repository
 
 import com.netknownsthat.domain.model.ActiveJob
+import com.netknownsthat.domain.model.NewTarget
 import com.netknownsthat.domain.common.HostTarget
 import com.netknownsthat.domain.common.JobOwner
 import com.netknownsthat.domain.common.Outcome
@@ -103,6 +104,12 @@ interface HostMonitoringRepository {
     suspend fun targets(host: HostTarget): Outcome<TargetsResponse>
     suspend fun outages(host: HostTarget): Outcome<OutagesResponse>
     suspend fun checkTarget(host: HostTarget, targetId: Long): Outcome<Unit>
+
+    /** A target of your own (source "manual"): an address no host config
+     * mentions. kind: icmp | tcp | http | https. */
+    suspend fun addTarget(host: HostTarget, target: NewTarget): Outcome<Unit>
+    suspend fun setTargetEnabled(host: HostTarget, targetId: Long, enabled: Boolean): Outcome<Unit>
+    suspend fun deleteTarget(host: HostTarget, targetId: Long): Outcome<Unit>
     suspend fun usageSources(host: HostTarget): Outcome<List<String>>
     suspend fun usageTop(host: HostTarget, source: String, metric: String, limit: Int): Outcome<UsageTopResponse>
     suspend fun usageSeries(host: HostTarget, source: String, metric: String, agg: String, subjects: List<String>): Outcome<UsageResponse>

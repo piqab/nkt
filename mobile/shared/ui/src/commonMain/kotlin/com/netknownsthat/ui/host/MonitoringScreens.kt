@@ -2,6 +2,16 @@ package com.netknownsthat.ui.host
 
 import com.netknownsthat.ui.common.formatTs
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -182,6 +192,32 @@ private fun VulnCard(finding: VulnFinding) {
 @Composable
 fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
     var sourceFilter by remember { mutableStateOf<String?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<Target?>(null) }
+    // A target of your own — an address no host config mentions.
+    com.netknownsthat.ui.common.ScreenActions {
+        IconButton(onClick = { adding = true }) {
+            Icon(Icons.Default.Add, contentDescription = t("Добавить цель", "Add target"))
+        }
+    }
+    if (adding) AddTargetDialog(onDismiss = { adding = false }) { target ->
+        adding = false
+        viewModel.add(target)
+    }
+    deleting?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text(t("Удалить цель?", "Delete the target?")) },
+            text = { Text(target.label) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    viewModel.delete(target.id)
+                }) { Text(t("Удалить", "Delete")) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(t("Отмена", "Cancel")) } },
+        )
+    }
     SectionContent(state = viewModel.state, emptyText = t("Целей нет", "No targets")) { data ->
         // Targets come from several places — web servers, compose, and
         // Kubernetes (ingresses, NodePort/LoadBalancer services, nodes);
@@ -221,7 +257,16 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
                     )
                 }
             }
-            items(visible, key = { it.id }) { TargetCard(it) }
+            items(visible, key = { it.id }) { target ->
+                TargetCard(
+                    target,
+                    onCheck = { viewModel.check(target.id) },
+                    onToggle = { viewModel.setEnabled(target.id, !target.enabled) },
+                    // Only targets added by hand: the rest come from the
+                    // host's own configs and would come back on the next scan.
+                    onDelete = if (target.source == "manual") ({ deleting = target }) else null,
+                )
+            }
 
             if (data.outages.outages.isNotEmpty()) {
                 item {
@@ -256,7 +301,8 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
 }
 
 @Composable
-private fun TargetCard(target: Target) {
+private fun TargetCard(target: Target, onCheck: () -> Unit, onToggle: () -> Unit, onDelete: (() -> Unit)?) {
+    var menu by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             val health = targetHealth(target.lastOk, target.enabled)
@@ -270,6 +316,21 @@ private fun TargetCard(target: Target) {
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
+                Box {
+                    IconButton(onClick = { menu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = t("Действия с целью", "Target actions"))
+                    }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text(t("Проверить сейчас", "Check now")) }, onClick = { menu = false; onCheck() })
+                        DropdownMenuItem(
+                            text = { Text(if (target.enabled) t("Выключить проверки", "Disable checks") else t("Включить проверки", "Enable checks")) },
+                            onClick = { menu = false; onToggle() },
+                        )
+                        if (onDelete != null) {
+                            DropdownMenuItem(text = { Text(t("Удалить", "Delete")) }, onClick = { menu = false; onDelete() })
+                        }
+                    }
+                }
                 Text(
                     // last_ok is nullable on the Go side: null means the
                     // target has never been checked, which is not "down".
@@ -311,3 +372,56 @@ private fun TargetCard(target: Target) {
     }
 }
 
+
+/** A target of your own: kind, address, port (and path for HTTP), label. */
+@Composable
+private fun AddTargetDialog(onDismiss: () -> Unit, onAdd: (com.netknownsthat.domain.model.NewTarget) -> Unit) {
+    var kind by remember { mutableStateOf("icmp") }
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf("") }
+    var path by remember { mutableStateOf("/") }
+    var label by remember { mutableStateOf("") }
+    val needPort = kind != "icmp"
+    val portNum = port.toIntOrNull()
+    val ok = host.isNotBlank() && (!needPort || (portNum != null && portNum in 1..65535))
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Своя цель", "Your own target")) },
+        text = {
+            Column {
+                Text(
+                    t("Адрес, которого нет в конфигурациях хоста: проверяется с этого хоста.", "An address no host config mentions: checked from this host."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                    listOf("icmp" to "ping", "tcp" to "TCP", "http" to "HTTP", "https" to "HTTPS").forEach { (id, name) ->
+                        FilterChip(
+                            selected = kind == id,
+                            onClick = {
+                                kind = id
+                                if (port.isBlank()) port = when (id) { "https" -> "443"; "http" -> "80"; else -> "" }
+                            },
+                            label = { Text(name) },
+                            modifier = Modifier.padding(end = 6.dp),
+                        )
+                    }
+                }
+                OutlinedTextField(value = host, onValueChange = { host = it }, label = { Text(t("Адрес", "Address")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (needPort) {
+                    OutlinedTextField(value = port, onValueChange = { port = it.filter(Char::isDigit).take(5) }, label = { Text(t("Порт", "Port")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+                if (kind.startsWith("http")) {
+                    OutlinedTextField(value = path, onValueChange = { path = it }, label = { Text(t("Путь", "Path")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+                OutlinedTextField(value = label, onValueChange = { label = it }, label = { Text(t("Название (по желанию)", "Label (optional)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = ok, onClick = {
+                onAdd(com.netknownsthat.domain.model.NewTarget(label = label, kind = kind, host = host, port = if (needPort) portNum ?: 0 else 0, path = path))
+            }) { Text(t("Добавить", "Add")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Отмена", "Cancel")) } },
+    )
+}

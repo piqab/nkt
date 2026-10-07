@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.175 — 2026-10-07
+
+- **Mobile app, "Availability":** targets of your own — "+" adds a ping,
+  TCP, HTTP or HTTPS target (an address no host config mentions), and each
+  target's menu has "check now", enabling and disabling checks, and
+  deleting for your own ones.
+
 ## v1.11.174 — 2026-10-07
 
 - **Mobile app: the background operations indicator**, as in the web

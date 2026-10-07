@@ -200,6 +200,10 @@ class AvailabilityViewModel(
 ) : SectionViewModel<AvailabilityData>() {
     override suspend fun fetch() = loadAvailability(host)
     fun check(targetId: Long) = act(t("Проверка выполнена", "Check done")) { repo.checkTarget(host, targetId) }
+    fun add(target: com.netknownsthat.domain.model.NewTarget) = act(t("Цель добавлена", "Target added")) { repo.addTarget(host, target) }
+    fun setEnabled(targetId: Long, enabled: Boolean) =
+        act(if (enabled) t("Проверки включены", "Checks enabled") else t("Проверки выключены", "Checks disabled")) { repo.setTargetEnabled(host, targetId, enabled) }
+    fun delete(targetId: Long) = act(t("Цель удалена", "Target deleted")) { repo.deleteTarget(host, targetId) }
 }
 
 class UsageViewModel(private val host: HostTarget, private val loadUsage: LoadUsageUseCase) : SectionViewModel<UsageData>() {
