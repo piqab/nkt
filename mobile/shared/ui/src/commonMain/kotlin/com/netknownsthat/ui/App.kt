@@ -52,6 +52,8 @@ import androidx.navigation.toRoute
 import com.netknownsthat.domain.common.HostTarget
 import com.netknownsthat.domain.common.JobOwner
 import com.netknownsthat.domain.common.getOrNull
+import com.netknownsthat.domain.repository.ConsoleKind
+import com.netknownsthat.domain.repository.ConsoleTarget
 import com.netknownsthat.domain.repository.HostsRepository
 import com.netknownsthat.domain.usecase.HostSectionKey
 import com.netknownsthat.ui.common.ActionMessages
@@ -63,6 +65,7 @@ import com.netknownsthat.ui.host.ConfigFileScreen
 import com.netknownsthat.ui.host.ContainerScreen
 import com.netknownsthat.ui.host.HostSectionScreen
 import com.netknownsthat.ui.host.HostSectionsScreen
+import com.netknownsthat.ui.host.TerminalScreen
 import com.netknownsthat.ui.hosts.HostListScreen
 import com.netknownsthat.ui.hub.DeploymentsScreen
 import com.netknownsthat.ui.hub.EventsScreen
@@ -78,6 +81,7 @@ import com.netknownsthat.ui.login.LoginScreen
 import com.netknownsthat.ui.navigation.AboutRoute
 import com.netknownsthat.ui.navigation.Breadcrumbs
 import com.netknownsthat.ui.navigation.ConfigFileRoute
+import com.netknownsthat.ui.navigation.ConsoleRoute
 import com.netknownsthat.ui.navigation.ContainerRoute
 import com.netknownsthat.ui.navigation.DeploymentsRoute
 import com.netknownsthat.ui.navigation.EventsRoute
@@ -315,6 +319,7 @@ private fun Routes(nav: NavHostController, app: AppViewModel, start: Any, openHo
                 section = HostSectionKey.valueOf(r.section),
                 openSection = { nav.navigate(HostSectionRoute(r.hostId, r.hostName, it.name)) },
                 openContainer = { nav.navigate(ContainerRoute(r.hostId, r.hostName, it)) },
+                openConsole = { c -> nav.navigate(ConsoleRoute(r.hostId, r.hostName, c.kind.name, c.name, c.user)) },
                 openConfigFile = { nav.navigate(ConfigFileRoute(r.hostId, r.hostName, it)) },
                 openJob = { nav.navigate(JobRoute(r.hostId, r.hostName, it)) },
                 openHostAt = openHostAt,
@@ -323,6 +328,11 @@ private fun Routes(nav: NavHostController, app: AppViewModel, start: Any, openHo
         composable<ContainerRoute> { entry ->
             val r = entry.toRoute<ContainerRoute>()
             ContainerScreen(r.container, koinViewModel { parametersOf(HostTarget(r.hostId)) })
+        }
+        composable<ConsoleRoute> { entry ->
+            val r = entry.toRoute<ConsoleRoute>()
+            val console = ConsoleTarget(ConsoleKind.valueOf(r.kind), r.name, r.user)
+            TerminalScreen(koinViewModel { parametersOf(HostTarget(r.hostId), false, console) }, btop = false)
         }
         composable<ConfigFileRoute> { entry ->
             val r = entry.toRoute<ConfigFileRoute>()

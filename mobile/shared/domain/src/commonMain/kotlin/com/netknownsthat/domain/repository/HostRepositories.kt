@@ -210,6 +210,16 @@ interface LogsRepository {
 
 enum class TerminalMode { SHELL, TMUX, BTOP }
 
+/** What a console opens a shell in: the server's /console/ws kinds. */
+enum class ConsoleKind(val wire: String) { DOCKER("docker"), PODMAN("podman"), LXD("lxd"), VM("vm") }
+
+/**
+ * A console: a shell inside a container or an LXD instance, or a VM's
+ * serial console. [user] — the user to exec as (Docker and Podman only;
+ * empty — the image's default).
+ */
+data class ConsoleTarget(val kind: ConsoleKind, val name: String, val user: String = "")
+
 /** tmux on the host: present, and whether its mouse mode is on. */
 data class TmuxStatus(val available: Boolean)
 
@@ -221,6 +231,7 @@ interface TerminalChannel : StreamChannel {
 
 interface TerminalRepository {
     fun open(host: HostTarget, mode: TerminalMode): TerminalChannel
+    fun openConsole(host: HostTarget, target: ConsoleTarget): TerminalChannel
     suspend fun tmuxStatus(host: HostTarget): Outcome<TmuxStatus>
     suspend fun tmuxMouse(host: HostTarget): Outcome<Boolean?>
     suspend fun setTmuxMouse(host: HostTarget, on: Boolean): Outcome<Boolean>

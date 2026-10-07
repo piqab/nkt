@@ -94,7 +94,8 @@ val presentationModule: Module = module {
     viewModel { (h: HostTarget) -> FirewallViewModel(h, get(), get()) }
     viewModel { (h: HostTarget) -> CertificatesViewModel(h, get()) }
     viewModel { (h: HostTarget) -> LogsViewModel(h, get()) }
-    viewModel { (h: HostTarget, btop: Boolean) -> TerminalViewModel(h, btop, get(), get()) }
+    // (host, btop) for a host terminal; (host, false, ConsoleTarget) for a console.
+    viewModel { p -> TerminalViewModel(p.get(), p.get(), p.getOrNull(), get(), get()) }
     viewModel { (h: HostTarget) -> Fail2banViewModel(h, get()) }
     viewModel { (h: HostTarget) -> ClamAVViewModel(h, get()) }
     viewModel { (h: HostTarget) -> RebootViewModel(h, get()) }

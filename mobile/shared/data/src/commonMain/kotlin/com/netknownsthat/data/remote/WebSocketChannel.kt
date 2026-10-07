@@ -45,7 +45,7 @@ class WebSocketChannel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                send(StreamEvent.Closed(api.networkError(e)))
+                send(StreamEvent.Closed(refusal(e)))
                 this@callbackFlow.close()
                 return@launch
             }
@@ -79,6 +79,23 @@ class WebSocketChannel(
             session = null
             if (ws != null) scope.launch { runCatching { ws.close() } }
         }
+    }
+
+    /**
+     * Why the upgrade failed. A refused upgrade only says "expected 101,
+     * got 403"; the server's reason ("the terminal is disabled", "no such
+     * container") is in the body, which the WebSocket client drops. The
+     * same path as a plain GET returns it: the handlers check before they
+     * upgrade, so nothing is started by asking.
+     */
+    private suspend fun refusal(e: Throwable): AppError {
+        val network = api.networkError(e)
+        val probe = api.call(io.ktor.http.HttpMethod.Get, path)
+        val error = (probe as? com.netknownsthat.domain.common.Outcome.Failure)?.error
+        // 426: the checks passed and the GET reached the upgrade itself —
+        // the failure was the connection, not a refusal.
+        val refused = (error is AppError.Server && error.status != 426) || error is AppError.Unauthorized
+        return if (refused) error!! else network
     }
 
     override suspend fun send(bytes: ByteArray) {

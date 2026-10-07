@@ -30,6 +30,9 @@ import kotlinx.serialization.Serializable
 /** A Docker container's page: state, actions, inspect. */
 @Serializable data class ContainerRoute(val hostId: Long, val hostName: String, val container: String)
 
+/** A console: kind is ConsoleKind's name, user — Docker/Podman only. */
+@Serializable data class ConsoleRoute(val hostId: Long, val hostName: String, val kind: String, val name: String, val user: String = "")
+
 /** A configuration file: view, edit, history. */
 @Serializable data class ConfigFileRoute(val hostId: Long, val hostName: String, val path: String)
 

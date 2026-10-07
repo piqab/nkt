@@ -101,6 +101,8 @@ import com.netknownsthat.domain.model.VMsResponse
 import com.netknownsthat.domain.model.VulnResponse
 import com.netknownsthat.domain.repository.CertificatesRepository
 import com.netknownsthat.domain.repository.ConfigsRepository
+import com.netknownsthat.domain.repository.ConsoleKind
+import com.netknownsthat.domain.repository.ConsoleTarget
 import com.netknownsthat.domain.repository.ContainersRepository
 import com.netknownsthat.domain.repository.FirewallRepository
 import com.netknownsthat.domain.repository.HostInfoRepository
@@ -393,6 +395,13 @@ private data class TmuxInstallStatusDto(
     @SerialName("exit_code") val exitCode: Int = 0,
 )
 
+/** /console/ws for [target]; the user only where the server takes one. */
+internal fun consolePath(target: ConsoleTarget): String = buildString {
+    append("/console/ws?kind=").append(target.kind.wire).append("&name=").append(target.name.q())
+    val withUser = target.kind == ConsoleKind.DOCKER || target.kind == ConsoleKind.PODMAN
+    if (withUser && target.user.isNotBlank()) append("&user=").append(target.user.trim().q())
+}
+
 class TerminalRepositoryImpl(private val api: ApiClient) : TerminalRepository {
     override fun open(host: HostTarget, mode: TerminalMode): TerminalChannel =
         WebSocketChannel(
@@ -406,6 +415,9 @@ class TerminalRepositoryImpl(private val api: ApiClient) : TerminalRepository {
                 },
             ),
         )
+
+    override fun openConsole(host: HostTarget, target: ConsoleTarget): TerminalChannel =
+        WebSocketChannel(api, hostPath(host, consolePath(target)))
 
     override suspend fun tmuxStatus(host: HostTarget): Outcome<TmuxStatus> =
         api.get<TmuxStatusDto>(hostPath(host, "/system/tmux-status")).map { TmuxStatus(it.available) }

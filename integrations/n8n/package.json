@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-nkt",
-  "version": "1.11.176",
+  "version": "1.11.177",
   "description": "n8n nodes for the NetKnownsThat (nkt) hub: hosts, findings, deployments and dry runs, fail2ban, alerts, outgoing webhooks",
   "keywords": [
     "n8n-community-node-package",

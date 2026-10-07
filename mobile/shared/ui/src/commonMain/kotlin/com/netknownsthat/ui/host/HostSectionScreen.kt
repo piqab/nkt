@@ -3,6 +3,7 @@ package com.netknownsthat.ui.host
 import androidx.compose.runtime.Composable
 import com.netknownsthat.domain.common.HostTarget
 import com.netknownsthat.domain.common.JobOwner
+import com.netknownsthat.domain.repository.ConsoleTarget
 import com.netknownsthat.domain.usecase.HostSectionKey
 import com.netknownsthat.ui.Section
 import com.netknownsthat.ui.hub.ClamAVScreen
@@ -19,6 +20,7 @@ fun HostSectionScreen(
     section: HostSectionKey,
     openSection: (HostSectionKey) -> Unit,
     openContainer: (String) -> Unit,
+    openConsole: (ConsoleTarget) -> Unit,
     openConfigFile: (String) -> Unit,
     openJob: (Long) -> Unit,
     openHostAt: (Long, String) -> Unit,
@@ -36,7 +38,7 @@ fun HostSectionScreen(
         HostSectionKey.BTOP -> TerminalScreen(koinViewModel { parametersOf(host, true) }, btop = true)
         HostSectionKey.LOGS -> LogsScreen(koinViewModel(parameters = p))
         HostSectionKey.SERVICES -> Section(koinViewModel<ServicesViewModel>(parameters = p)) { ServicesScreen(it) }
-        HostSectionKey.CONTAINERS -> Section(koinViewModel<ContainersViewModel>(parameters = p)) { ContainersScreen(it, openContainer, openJob) }
+        HostSectionKey.CONTAINERS -> Section(koinViewModel<ContainersViewModel>(parameters = p)) { ContainersScreen(it, openContainer, openJob, openConsole) }
         HostSectionKey.VULNERABILITIES -> Section(koinViewModel<VulnerabilitiesViewModel>(parameters = p)) { VulnerabilitiesScreen(it) }
         HostSectionKey.MALWARE -> Section(koinViewModel<com.netknownsthat.ui.hub.ClamAVViewModel>(parameters = p)) { ClamAVScreen(it, openJob) }
         HostSectionKey.AVAILABILITY -> Section(koinViewModel<AvailabilityViewModel>(parameters = p)) { AvailabilityScreen(it) }

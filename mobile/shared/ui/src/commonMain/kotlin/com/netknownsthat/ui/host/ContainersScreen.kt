@@ -16,6 +16,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -38,12 +39,27 @@ import com.netknownsthat.ui.theme.statusColor
 import com.netknownsthat.ui.i18n.t
 import com.netknownsthat.ui.common.SectionContent
 import com.netknownsthat.domain.usecase.ContainerRuntimes
+import com.netknownsthat.domain.repository.ConsoleKind
+import com.netknownsthat.domain.repository.ConsoleTarget
 
 private val LIFECYCLE get() = listOf("start" to t("Пуск", "Start"), "stop" to t("Стоп", "Stop"), "restart" to t("Рестарт", "Restart"))
 
 @Composable
-fun ContainersScreen(viewModel: ContainersViewModel, onOpenContainer: (String) -> Unit, onOpenJob: (Long) -> Unit = {}) {
+fun ContainersScreen(
+    viewModel: ContainersViewModel,
+    onOpenContainer: (String) -> Unit,
+    onOpenJob: (Long) -> Unit = {},
+    onOpenConsole: (ConsoleTarget) -> Unit = {},
+) {
     var tab by remember { mutableIntStateOf(0) }
+    // Docker and Podman ask whom to exec as first, as the web UI does.
+    var askUser by remember { mutableStateOf<ConsoleTarget?>(null) }
+    askUser?.let { target ->
+        ConsoleUserDialog(target, onDismiss = { askUser = null }) { user ->
+            askUser = null
+            onOpenConsole(target.copy(user = user))
+        }
+    }
 
     SectionContent(state = viewModel.state, emptyText = t("Контейнеры не найдены", "No containers found")) { data ->
         // Only tabs with something in them: a host running plain Docker
@@ -87,7 +103,11 @@ fun ContainersScreen(viewModel: ContainersViewModel, onOpenContainer: (String) -
             when (current.second) {
                 0 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     items(data.docker.containers, key = { it.id }) {
-                        DockerCard(it, enabled, viewModel.pendingKey == it.name, onInspect = { onOpenContainer(it.name) }) { action ->
+                        DockerCard(
+                            it, enabled, viewModel.pendingKey == it.name,
+                            onInspect = { onOpenContainer(it.name) },
+                            onConsole = { askUser = ConsoleTarget(ConsoleKind.DOCKER, it.name) },
+                        ) { action ->
                             viewModel.dockerAction(it.name, action)
                         }
                     }
@@ -99,6 +119,7 @@ fun ContainersScreen(viewModel: ContainersViewModel, onOpenContainer: (String) -
                             it.name, it.image, it.status,
                             containerHealth(it.state), enabled,
                             viewModel.pendingKey == it.name,
+                            onConsole = { askUser = ConsoleTarget(ConsoleKind.PODMAN, it.name) }.takeIf { _ -> running(it.state) },
                         ) { action -> viewModel.podmanAction(it.name, action) }
                     }
                 }
@@ -111,6 +132,7 @@ fun ContainersScreen(viewModel: ContainersViewModel, onOpenContainer: (String) -
                             it.status + it.ipv4.joinToString("") { ip -> " · $ip" },
                             instanceHealth(it.status), enabled,
                             viewModel.pendingKey == it.name,
+                            onConsole = { onOpenConsole(ConsoleTarget(ConsoleKind.LXD, it.name)) }.takeIf { _ -> running(it.status) },
                         ) { action -> viewModel.lxdAction(it.name, action, onOpenJob) }
                     }
                 }
@@ -125,6 +147,7 @@ fun ContainersScreen(viewModel: ContainersViewModel, onOpenContainer: (String) -
                             it.state,
                             instanceHealth(it.state), enabled,
                             viewModel.pendingKey == it.name,
+                            onConsole = { onOpenConsole(ConsoleTarget(ConsoleKind.VM, it.name)) }.takeIf { _ -> running(it.state) },
                         ) { action -> viewModel.vmAction(it.name, action) }
                     }
                 }
@@ -139,6 +162,7 @@ private fun DockerCard(
     enabled: Boolean,
     busy: Boolean,
     onInspect: () -> Unit,
+    onConsole: () -> Unit,
     onAction: (String) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -185,7 +209,7 @@ private fun DockerCard(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
-            ActionRow(enabled, onAction)
+            ActionRow(enabled, onAction, onConsole.takeIf { running(container.state) })
             TextButton(onClick = onInspect) { Text(t("Инспект", "Inspect")) }
         }
     }
@@ -199,6 +223,7 @@ private fun SimpleRuntimeCard(
     health: com.netknownsthat.ui.status.HealthStatus,
     enabled: Boolean,
     busy: Boolean,
+    onConsole: (() -> Unit)? = null,
     onAction: (String) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -218,13 +243,13 @@ private fun SimpleRuntimeCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = statusColor(health),
             )
-            ActionRow(enabled, onAction)
+            ActionRow(enabled, onAction, onConsole)
         }
     }
 }
 
 @Composable
-private fun ActionRow(enabled: Boolean, onAction: (String) -> Unit) {
+private fun ActionRow(enabled: Boolean, onAction: (String) -> Unit, onConsole: (() -> Unit)? = null) {
     Row(
         modifier = Modifier
             .horizontalScroll(rememberScrollState())
@@ -237,8 +262,41 @@ private fun ActionRow(enabled: Boolean, onAction: (String) -> Unit) {
                 modifier = Modifier.padding(end = 8.dp),
             ) { Text(label) }
         }
+        // Only while it runs: there is nothing to exec into otherwise.
+        if (onConsole != null) {
+            OutlinedButton(onClick = onConsole, modifier = Modifier.padding(end = 8.dp)) { Text(t("Консоль", "Console")) }
+        }
     }
 }
+
+/** Docker/LXD/libvirt spell "running" differently ("running", "Running"). */
+private fun running(state: String) = state.equals("running", ignoreCase = true)
+
+/** Whom to exec as; empty — the image's default user. */
+@Composable
+private fun ConsoleUserDialog(target: ConsoleTarget, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
+    var user by remember { mutableStateOf("") }
+    val valid = user.isBlank() || CONSOLE_USER.matches(user.trim())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Консоль ${target.name}", "Console of ${target.name}")) },
+        text = {
+            OutlinedTextField(
+                value = user,
+                onValueChange = { user = it },
+                singleLine = true,
+                isError = !valid,
+                label = { Text(t("Пользователь", "User")) },
+                supportingText = { Text(t("Пусто — пользователь образа по умолчанию", "Empty — the image's default user")) },
+            )
+        },
+        confirmButton = { TextButton(onClick = { onOpen(user.trim()) }, enabled = valid) { Text(t("Открыть", "Open")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Отмена", "Cancel")) } },
+    )
+}
+
+/** The server's rule for the exec user (handlers_console.go). */
+private val CONSOLE_USER = Regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}$")
 
 /**
  * Docker images with a multi-select. The two things worth doing to several

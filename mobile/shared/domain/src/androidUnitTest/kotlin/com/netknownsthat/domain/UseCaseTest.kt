@@ -159,6 +159,7 @@ class UseCaseTest {
                 override fun close() = Unit
             }
         }
+        override fun openConsole(host: HostTarget, target: com.netknownsthat.domain.repository.ConsoleTarget) = open(host, TerminalMode.SHELL)
         override suspend fun tmuxStatus(host: HostTarget) = Outcome.Success(com.netknownsthat.domain.repository.TmuxStatus(tmux))
         override suspend fun tmuxMouse(host: HostTarget): Outcome<Boolean?> = Outcome.Success(null)
         override suspend fun setTmuxMouse(host: HostTarget, on: Boolean) = Outcome.Success(on)
