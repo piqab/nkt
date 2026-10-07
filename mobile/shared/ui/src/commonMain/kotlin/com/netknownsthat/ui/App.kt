@@ -206,7 +206,15 @@ private fun Shell(app: AppViewModel, chrome: Chrome, start: Any, jumps: Flow<Hos
                                     }
                                 }
                             },
-                            actions = { chrome.actions?.invoke(this) },
+                            actions = {
+                                chrome.actions?.invoke(this)
+                                // Background operations of the hub and every
+                                // host — any job, wherever it was started.
+                                com.netknownsthat.ui.hub.ActiveJobsButton(koinViewModel()) { a ->
+                                    val hostId = if (a.hostId < 0) HUB_JOBS else a.hostId
+                                    nav.navigate(JobRoute(hostId, a.hostName, a.job.id))
+                                }
+                            },
                         )
                         Breadcrumbs(nav)
                     }

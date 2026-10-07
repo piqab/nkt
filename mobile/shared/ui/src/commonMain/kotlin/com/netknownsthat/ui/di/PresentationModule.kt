@@ -67,6 +67,7 @@ val presentationModule: Module = module {
 
     viewModel { AppViewModel(get(), get(), get()) }
     viewModel { AuthViewModel(get()) }
+    viewModel { com.netknownsthat.ui.hub.ActiveJobsViewModel(get()) }
     viewModel { AboutViewModel(get(), get(), get()) }
     viewModel { HostListViewModel(get(), get()) }
     viewModel { EventsViewModel(get()) }

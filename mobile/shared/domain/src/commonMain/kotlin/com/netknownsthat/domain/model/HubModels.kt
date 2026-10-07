@@ -63,6 +63,13 @@ data class JobRecord(
         get() = status == "succeeded" || status == "failed" || status == "canceled" || status == "interrupted"
 }
 
+/** A job queued or running now and where: [hostId] -1 — the hub itself. */
+data class ActiveJob(
+    val hostId: Long = 0,
+    val hostName: String = "",
+    val job: JobRecord = JobRecord(),
+)
+
 /** GET /api/jobs/{id}/log?after=N — the job plus lines after seq N. */
 data class JobLogResponse(
     val job: JobRecord = JobRecord(),

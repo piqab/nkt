@@ -71,6 +71,23 @@ class RepositoryTest {
         assertEquals("failed", requests[1].url.parameters["status"])
     }
 
+    /** The background operations indicator: one hub call for every host. */
+    @Test
+    fun activeJobsOfHubAndHosts() = runBlocking {
+        val api = api {
+            respond(
+                """{"jobs":[{"host_id":-1,"host_name":"localhost","job":{"id":3,"title":"Обновить хаб","status":"running","step":2,"steps":4,"step_name":"скачивание"}},
+                   {"host_id":7,"host_name":"web-1","job":{"id":9,"title":"Загрузить образ","status":"queued"}}]}""",
+                headers = jsonHeaders,
+            )
+        }
+        val list = (JobsRepositoryImpl(api).active() as Outcome.Success).value
+        assertEquals("/api/hub/jobs/active", requests[0].url.encodedPath)
+        assertEquals(listOf(-1L, 7L), list.map { it.hostId })
+        assertEquals("скачивание", list[0].job.stepName)
+        assertEquals("queued", list[1].job.status)
+    }
+
     /** Delete with cleanup: the hub answers with the job doing it; without
      * cleanup (or on an older hub) there is no job. */
     @Test

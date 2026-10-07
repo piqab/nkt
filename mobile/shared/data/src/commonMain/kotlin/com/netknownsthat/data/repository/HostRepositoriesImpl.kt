@@ -1,5 +1,7 @@
 package com.netknownsthat.data.repository
 
+import com.netknownsthat.domain.model.ActiveJob
+import com.netknownsthat.data.dto.ActiveJobsResponseDto
 import com.netknownsthat.data.dto.AuditResponseDto
 import com.netknownsthat.data.dto.CertificatesResponseDto
 import com.netknownsthat.data.dto.ClamResponseDto
@@ -319,6 +321,9 @@ class JobsRepositoryImpl(private val api: ApiClient) : JobsRepository {
 
     override suspend fun cancel(owner: JobOwner, jobId: Long): Outcome<Unit> = api.post("${prefix(owner)}/jobs/$jobId/cancel")
     override suspend fun retry(owner: JobOwner, jobId: Long): Outcome<Unit> = api.post("${prefix(owner)}/jobs/$jobId/retry")
+
+    override suspend fun active(): Outcome<List<ActiveJob>> =
+        api.get<ActiveJobsResponseDto>("/hub/jobs/active").map { r -> r.jobs.map { it.toDomain() } }
 }
 
 class SystemRepositoryImpl(private val api: ApiClient) : SystemRepository {
