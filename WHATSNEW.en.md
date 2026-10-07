@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.170 — 2026-10-07
+
+- **"After the hub update, update nkt on all hosts":** with the checkbox
+  ticked, updating the hosts after the hub restarts starts by itself,
+  without a second confirmation window — the job log opens at once.
+  Outdated reachable hosts are updated; those already updating, unreachable
+  ones and those that failed last time are skipped. If there is nothing to
+  update, it says so. The manual "Update all" button still asks for
+  confirmation.
+
 ## v1.11.169 — 2026-10-07
 
 - CI: the mobile app build no longer runs on release tags — GitHub does not
