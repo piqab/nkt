@@ -34,6 +34,21 @@ type hostConn struct {
 	// link — соединение и, для машины внутри хоста, переход под ним.
 	link     *sshLink
 	lastUsed time.Time
+	// active — идущие через него запросы (Proxy): долгий запрос (передача
+	// файла, поток журнала) берёт соединение один раз, и без этого счёта
+	// простой по lastUsed закрывал его посреди передачи.
+	active int
+}
+
+// markBusy отмечает запрос через пуловое соединение хоста (+1 в начале,
+// -1 в конце).
+func (m *Manager) markBusy(hostID int64, client *ssh.Client, delta int) {
+	m.connsMu.Lock()
+	defer m.connsMu.Unlock()
+	if hc, ok := m.conns[hostID]; ok && hc.link.client == client {
+		hc.active += delta
+		hc.lastUsed = time.Now()
+	}
 }
 
 type sessionCache struct {
@@ -67,6 +82,14 @@ func (m *Manager) clientFor(ctx context.Context, hostID int64) (*ssh.Client, err
 	}
 
 	m.connsMu.Lock()
+	if hc, ok := m.conns[hostID]; ok {
+		// Пока дозванивались, соединение уже положил другой запрос — им и
+		// пользоваться, своё закрыть (два соединения на хост — лишнее).
+		hc.lastUsed = time.Now()
+		m.connsMu.Unlock()
+		_ = link.Close()
+		return hc.link.client, nil
+	}
 	m.conns[hostID] = &hostConn{link: link, lastUsed: time.Now()}
 	m.connsMu.Unlock()
 
@@ -100,7 +123,7 @@ func (m *Manager) evictIdleConns(ctx context.Context) {
 		case <-ticker.C:
 			m.connsMu.Lock()
 			for id, hc := range m.conns {
-				if time.Since(hc.lastUsed) > connIdleTTL {
+				if hc.active == 0 && time.Since(hc.lastUsed) > connIdleTTL {
 					delete(m.conns, id)
 					_ = hc.link.Close()
 				}
@@ -315,14 +338,91 @@ const (
 // fails too (a stale pooled SSH conn dying mid-use, say) — always safe to
 // call even when there's nothing to drop.
 func (m *Manager) dialerFor(ctx context.Context, hostID int64) (dial dialFunc, channel string, onFail func(), err error) {
+	dial, channel, onFail, _, err = m.dialerForClient(ctx, hostID)
+	return dial, channel, onFail, err
+}
+
+// dialerForClient — то же и само пуловое соединение (nil у туннеля):
+// Proxy отмечает по нему идущие запросы (markBusy).
+func (m *Manager) dialerForClient(ctx context.Context, hostID int64) (dial dialFunc, channel string, onFail func(), client *ssh.Client, err error) {
 	client, sshErr := m.clientFor(ctx, hostID)
 	if sshErr == nil {
-		return client.Dial, channelSSH, func() { m.dropClient(hostID); m.dropSession(hostID) }, nil
+		return client.Dial, channelSSH, func() { m.failClient(hostID, client) }, client, nil
+	}
+	if relay, ok := m.relayDial(hostID); ok {
+		return relay, channelTunnel, func() {}, nil, nil
+	}
+	return nil, "", nil, nil, sshErr
+}
+
+// dedicatedDialer — своё SSH-соединение на один запрос: большие передачи
+// (образы, архивы, файлы, бэкапы) не идут по общему соединению хоста,
+// через которое ходят опрос, страница и журналы, — гигабайты не забивают
+// его, и обрыв передачи не задевает остальное. Нет SSH — туннель, как у
+// общего соединения.
+func (m *Manager) dedicatedDialer(ctx context.Context, hostID int64) (dial dialFunc, channel string, closeFn func(), err error) {
+	host, err := m.db.HostByID(ctx, hostID)
+	if err == nil && host.Status == store.HostStatusOnline {
+		link, dialErr := m.dialHost(ctx, host)
+		if dialErr == nil {
+			return link.client.Dial, channelSSH, func() { _ = link.Close() }, nil
+		}
+		err = dialErr
 	}
 	if relay, ok := m.relayDial(hostID); ok {
 		return relay, channelTunnel, func() {}, nil
 	}
-	return nil, "", nil, sshErr
+	if err == nil {
+		err = msgs.Errorf("hub.hostReadyYetStatus", host.Name, host.Status)
+	}
+	return nil, "", nil, err
+}
+
+// clientKeepaliveTimeout — сколько ждать ответа на keepalive SSH, прежде
+// чем счесть соединение мёртвым.
+var clientKeepaliveTimeout = 10 * time.Second
+
+// clientAlive — живо ли SSH-соединение: глобальный запрос
+// keepalive@openssh.com. sshd отвечает на него отказом (неизвестный
+// запрос), но отвечает — ошибка значит, что соединение закрыто.
+func clientAlive(c *ssh.Client) bool {
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := c.SendRequest("keepalive@openssh.com", true, nil)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err == nil
+	case <-time.After(clientKeepaliveTimeout):
+		return false
+	}
+}
+
+// failClient — запрос через пуловое соединение не удался. Раньше это
+// закрывало соединение сразу, а с ним — всё, что по нему шло (загрузку
+// образа, журналы заданий, вход на хост, опрос): отменённый браузером
+// запрос или ответ, не успевший за свой короткий срок на нагруженном
+// хосте, обрывали всё остальное, отсюда «unexpected packet in response to
+// channel open» и «хост недоступен» при живом хосте. Теперь соединение
+// закрывается, только если оно и правда мертво, и только если в пуле всё
+// ещё оно, а не уже заменившее его свежее.
+func (m *Manager) failClient(hostID int64, client *ssh.Client) {
+	if clientAlive(client) {
+		return
+	}
+	m.connsMu.Lock()
+	hc, ok := m.conns[hostID]
+	if ok && hc.link.client == client {
+		delete(m.conns, hostID)
+	} else {
+		ok = false
+	}
+	m.connsMu.Unlock()
+	if ok {
+		_ = hc.link.Close()
+		m.dropSession(hostID)
+	}
 }
 
 // Proxy returns a handler that forwards every request it receives to
@@ -332,12 +432,36 @@ func (m *Manager) dialerFor(ctx context.Context, hostID int64) (dial dialFunc, c
 // itself, never to each managed host individually. The caller is expected
 // to have already rewritten the request path to what the remote's own API
 // expects (see server.go's proxyHost).
-func (m *Manager) Proxy(hostID int64) http.Handler {
+func (m *Manager) Proxy(hostID int64) http.Handler { return m.proxy(hostID, false) }
+
+// ProxyTransfer — Proxy для больших передач: по своему SSH-соединению
+// (см. dedicatedDialer).
+func (m *Manager) ProxyTransfer(hostID int64) http.Handler { return m.proxy(hostID, true) }
+
+func (m *Manager) proxy(hostID int64, dedicated bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		apiAddr := m.hostAPIAddr(ctx, hostID)
 
-		dial, channel, onFail, err := m.dialerFor(ctx, hostID)
+		var dial dialFunc
+		var channel string
+		var onFail func()
+		var err error
+		if dedicated {
+			var closeFn func()
+			dial, channel, closeFn, err = m.dedicatedDialer(ctx, hostID)
+			if err == nil {
+				defer closeFn()
+				onFail = func() {}
+			}
+		} else {
+			var client *ssh.Client
+			dial, channel, onFail, client, err = m.dialerForClient(ctx, hostID)
+			if err == nil && client != nil {
+				m.markBusy(hostID, client, 1)
+				defer m.markBusy(hostID, client, -1)
+			}
+		}
 		if err != nil {
 			// writeError, not the stdlib http.Error used here until this fix:
 			// http.Error writes plain text (Content-Type: text/plain), but the
@@ -352,8 +476,20 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 		}
 		m.recordChannel(hostID, channel)
 		cookie, err := m.cookieForWithWait(ctx, hostID, dial)
-		if err != nil {
+		if err != nil && ctx.Err() == nil && !dedicated {
+			// Вход оборвался на канале («unexpected packet in response to
+			// channel open», EOF): проверить соединение (мёртвое уйдёт из
+			// пула) и войти ещё раз.
 			onFail()
+			if dial2, _, onFail2, dErr := m.dialerFor(ctx, hostID); dErr == nil {
+				dial, onFail = dial2, onFail2
+				cookie, err = m.cookieForWithWait(ctx, hostID, dial)
+			}
+		}
+		if err != nil {
+			if ctx.Err() == nil {
+				onFail()
+			}
 			writeErr(w, r, http.StatusBadGateway, err)
 			return
 		}
@@ -431,12 +567,16 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 					return conn, nil
 				},
 			},
-			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
-				// Localizes against the outer r (this handler's own request
-				// param is unused — httputil.ReverseProxy passes it the
-				// proxied request, but that request already carries whatever
-				// headers came from the browser, same as r itself here; using
-				// the outer r just avoids relying on that being true).
+			ErrorHandler: func(w http.ResponseWriter, pr *http.Request, err error) {
+				// Браузер отменил запрос (ушли со страницы, сработал его
+				// срок) — соединение тут ни при чём.
+				if pr.Context().Err() != nil {
+					writeError(w, http.StatusBadGateway, msgs.T(msgs.LangFromRequest(r), "hub.hostUnreachable", err.Error()))
+					return
+				}
+				// Сообщение — на языке внешнего r (его заголовки — от
+				// браузера); соединение проверяется и закрывается, только
+				// если оно и правда мертво (failClient).
 				onFail()
 				writeError(w, http.StatusBadGateway, msgs.T(msgs.LangFromRequest(r), "hub.hostUnreachable", err.Error()))
 			},

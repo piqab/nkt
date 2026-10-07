@@ -147,7 +147,9 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	m.recordChannel(hostID, channel)
 	cookie, err := m.cookieFor(ctx, hostID, dial)
 	if err != nil {
-		onFail()
+		if ctx.Err() == nil {
+			onFail()
+		}
 		// SSH дозвонился, а API — нет: служба nkt не запущена (не
 		// поднялась после обновления пакетов или упала). Это чинится
 		// «обновить» с хаба, и в строке хоста должно быть написано именно
@@ -169,7 +171,9 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 
 	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
-		onFail()
+		if ctx.Err() == nil {
+			onFail()
+		}
 		m.recordUnreachable(ctx, hostID, err)
 		return
 	}
@@ -234,6 +238,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 
 	now := time.Now()
 	m.overviewMu.Lock()
+	delete(m.pollFails, hostID)
 	m.overview[hostID] = hostOverview{
 		reachable:     true,
 		findings:      body.Findings,
@@ -327,10 +332,34 @@ func (m *Manager) recordChannel(hostID int64, channel string) {
 	m.overview[hostID] = cur
 }
 
+// unreachableAfterFails — сколько неудачных опросов подряд делают хост
+// «недоступным».
+const unreachableAfterFails = 2
+
 // recordUnreachable marks a host unreachable without touching whatever
 // findings counts were last successfully polled — see pollHost's doc
 // comment for why.
 func (m *Manager) recordUnreachable(ctx context.Context, hostID int64, err error) {
+	// «Недоступен» — со второй неудачи подряд: одна неудача бывает и у
+	// живого хоста — нагруженного долгой операцией или в первую минуту
+	// после перезапуска хаба, пока заново поднимаются соединения. До
+	// второй — только запомнить причину, не меняя состояния и без события.
+	m.overviewMu.Lock()
+	if m.pollFails == nil {
+		m.pollFails = map[int64]int{}
+	}
+	m.pollFails[hostID]++
+	fails := m.pollFails[hostID]
+	if fails < unreachableAfterFails {
+		if cur, ok := m.overview[hostID]; ok {
+			cur.lastCheckedAt = time.Now()
+			cur.errMsg = err.Error()
+			m.overview[hostID] = cur
+		}
+		m.overviewMu.Unlock()
+		return
+	}
+	m.overviewMu.Unlock()
 	// Событие — до изменения кэша: переход виден только по сравнению с
 	// прошлым состоянием, а после записи сравнивать уже не с чем.
 	m.noteReachability(ctx, hostID, false, err.Error())

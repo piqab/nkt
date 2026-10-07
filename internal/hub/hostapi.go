@@ -32,8 +32,19 @@ func (m *Manager) HostAPI(ctx context.Context, hostID int64, method, path string
 	}
 	m.recordChannel(hostID, channel)
 	cookie, err := m.cookieFor(ctx, hostID, dial)
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
+		// Вход оборвался на канале: проверить соединение (мёртвое уйдёт
+		// из пула) и войти ещё раз по свежему.
 		onFail()
+		if dial2, _, onFail2, dErr := m.dialerFor(ctx, hostID); dErr == nil {
+			dial, onFail = dial2, onFail2
+			cookie, err = m.cookieFor(ctx, hostID, dial)
+		}
+	}
+	if err != nil {
+		if ctx.Err() == nil {
+			onFail()
+		}
 		return 0, err
 	}
 
@@ -57,7 +68,9 @@ func (m *Manager) HostAPI(ctx context.Context, hostID int64, method, path string
 
 	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
-		onFail()
+		if ctx.Err() == nil {
+			onFail()
+		}
 		return 0, err
 	}
 	defer resp.Body.Close()

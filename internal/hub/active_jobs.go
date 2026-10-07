@@ -26,11 +26,11 @@ type ActiveJob struct {
 
 // activeJobsTTL — сколько отдавать собранный список, не опрашивая хосты
 // заново: индикатор открыт во многих вкладках, хостов — десятки.
-const activeJobsTTL = 3 * time.Second
+const activeJobsTTL = 6 * time.Second
 
 // activeJobsHostTimeout — сколько ждать один хост: недоступный не должен
 // задерживать индикатор.
-const activeJobsHostTimeout = 4 * time.Second
+const activeJobsHostTimeout = 10 * time.Second
 
 type activeJobsCache struct {
 	mu   sync.Mutex

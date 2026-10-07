@@ -133,8 +133,13 @@ func TestPollOverviewPopulatesFindings(t *testing.T) {
 
 	// Kill the remote and poll again: the host must flip to unreachable
 	// without losing the findings counts pollOnce just cached — see
-	// pollHost's doc comment.
+	// pollHost's doc comment. «Недоступен» — со второй неудачи подряд (см.
+	// recordUnreachable): после первой хост ещё числится доступным.
 	killRemote()
+	manager.pollOnce(ctx)
+	if ov, _ := manager.Overview(hostID); !ov.Reachable {
+		t.Errorf("after one failed poll: reachable=false, want true until the second failure")
+	}
 	manager.pollOnce(ctx)
 
 	ovAfter, ok := manager.Overview(hostID)
