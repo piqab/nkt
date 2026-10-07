@@ -1362,9 +1362,14 @@ export default function Hosts({
   const outdatedCount = updatePlan.ready.length + updatePlan.failed.length
 
   // Хаб обновили с галочкой «обновить все хосты» — после перезагрузки
-  // сразу окно «Обновить всё».
+  // обновление хостов запускается само, без второго подтверждения: галочка
+  // и была согласием. Хосты — те же, что окно «Обновить всё» берёт по
+  // умолчанию (отставшие и доступные; идущие, недоступные и упавшие в
+  // прошлый раз — нет). Ручная кнопка «Обновить всё» по-прежнему с окном.
   useEffect(() => {
-    if (hosts && takeUpdateAllAfterHub(hubVersion)) setUpdateAllDialog(true)
+    if (!hosts || !takeUpdateAllAfterHub(hubVersion)) return
+    if (updatePlan.ready.length > 0) void updateAllOutdated(false)
+    else setNotice({ kind: 'info', text: tx('hosts.allUpToDate', { version: hubVersion ?? '' }) })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- один раз, когда список пришёл
   }, [!!hosts, hubVersion])
 

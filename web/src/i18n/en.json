@@ -871,7 +871,8 @@
     "exportMonitoring": "\"Monitoring\" history",
     "exportMonitoringHint": "The hourly and daily load and availability summaries of all hosts that the hub keeps. The file is noticeably larger; on import, hosts are matched by name.",
     "importMerge": "merge",
-    "importAllMerge": "merge all"
+    "importAllMerge": "merge all",
+    "allUpToDate": "All hosts are already on the hub version {{version}} — nothing to update."
   },
   "events": {
     "title": "Alerts",
