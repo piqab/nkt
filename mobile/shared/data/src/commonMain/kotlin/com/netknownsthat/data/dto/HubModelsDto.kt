@@ -49,6 +49,11 @@ data class JobListResponseDto(
     val kinds: List<String> = emptyList(),
 )
 
+/** A request answered with the job doing it (?job=1); no job_id — an older
+ * server that did the work within the request. */
+@Serializable
+data class MaybeJobDto(@SerialName("job_id") val jobId: Long? = null)
+
 /** GET /hub/jobs/active. */
 @Serializable
 data class ActiveJobsResponseDto(val jobs: List<ActiveJobDto> = emptyList())

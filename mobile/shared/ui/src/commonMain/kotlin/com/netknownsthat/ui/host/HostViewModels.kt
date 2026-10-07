@@ -135,8 +135,26 @@ class ContainersViewModel(
         d.podman.containers.find { it.name == name }?.let { it.state.equals("running", ignoreCase = true) }
     }
 
-    fun lxdAction(name: String, action: String) = runtimeAction(Runtime.LXD, name, action) { d ->
-        d.lxd.instances.find { it.name == name }?.let { it.status.equals("running", ignoreCase = true) }
+    fun lxdAction(name: String, action: String, onJob: (Long) -> Unit) {
+        // Stopping and restarting wait for the guest to shut down — longer
+        // than a request for a machine: a host job with its log.
+        if (action == "stop" || action == "restart") {
+            startJob({ repo.actionJob(host, Runtime.LXD, name, action) }, onJob)
+            return
+        }
+        runtimeAction(Runtime.LXD, name, action) { d ->
+            d.lxd.instances.find { it.name == name }?.let { it.status.equals("running", ignoreCase = true) }
+        }
+    }
+
+    /** A host job: its log opens; an older host did it at once. */
+    private fun startJob(call: suspend () -> com.netknownsthat.domain.common.Outcome<Long?>, onJob: (Long) -> Unit) {
+        viewModelScope.launch {
+            when (val r = call()) {
+                is com.netknownsthat.domain.common.Outcome.Success -> r.value?.let(onJob) ?: load()
+                is com.netknownsthat.domain.common.Outcome.Failure -> actionMessage = com.netknownsthat.ui.common.failedText(r.error)
+            }
+        }
     }
 
     fun vmAction(name: String, action: String) = runtimeAction(Runtime.VM, name, action) { d ->
@@ -146,7 +164,8 @@ class ContainersViewModel(
     fun removeImages(refs: List<String>, force: Boolean) =
         act(t("Удаление образов выполнено", "Images deleted")) { repo.removeImages(host, refs, force) }
 
-    fun saveImages(refs: List<String>) = act(t("Образы сохранены на хосте", "Images saved on the host")) { repo.saveImages(host, refs) }
+    /** docker save — gigabytes: a host job, one step per image. */
+    fun saveImages(refs: List<String>, onJob: (Long) -> Unit) = startJob({ repo.saveImagesJob(host, refs) }, onJob)
 
     fun pruneImages() = act(t("Осиротевшие образы убраны", "Dangling images removed")) { repo.pruneImages(host) }
 

@@ -7,6 +7,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -17,10 +18,18 @@ import androidx.compose.runtime.setValue
  * the screen the whole height (the terminal does).
  */
 class Chrome {
-    var actions by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
+    /** Top bar buttons, one entry per ScreenActions in composition — a
+     * list, not one slot: with one slot a screen leaving after the next
+     * one had put its buttons (a navigation transition) wiped them, and
+     * two on one page (a section's refresh and the page's own "+")
+     * replaced each other. */
+    val actionEntries = mutableStateListOf<ActionsEntry>()
     var fullScreen by mutableStateOf(false)
     val snackbar = SnackbarHostState()
 }
+
+/** One ScreenActions' buttons. */
+class ActionsEntry(val content: @Composable RowScope.() -> Unit)
 
 val LocalChrome = compositionLocalOf { Chrome() }
 
@@ -30,8 +39,9 @@ fun ScreenActions(content: @Composable RowScope.() -> Unit) {
     val chrome = LocalChrome.current
     val current by rememberUpdatedState(content)
     DisposableEffect(chrome) {
-        chrome.actions = { current() }
-        onDispose { chrome.actions = null }
+        val entry = ActionsEntry { current() }
+        chrome.actionEntries.add(entry)
+        onDispose { chrome.actionEntries.remove(entry) }
     }
 }
 
