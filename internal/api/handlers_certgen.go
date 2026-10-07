@@ -82,6 +82,14 @@ func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if wantsJob(r) {
+		if err := control.ValidateRenewCertbot(req.Lineage); err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		s.startCertbotJob(w, r, CertbotParams{Op: "renew", Lineage: req.Lineage, RestartPIDs: req.RestartPIDs})
+		return
+	}
 	user := auth.Username(r.Context())
 	id, err := s.certs.StartRenewCertbot(user, req.Lineage, restartSet(req.RestartPIDs))
 	if err != nil {
@@ -120,6 +128,15 @@ func (s *Server) handleIssueCertbot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if wantsJob(r) {
+		domains, err := control.ValidateIssueCertbot(req.Domains)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		s.startCertbotJob(w, r, CertbotParams{Op: "issue", Domains: domains, RestartPIDs: req.RestartPIDs, Force: req.Force})
+		return
+	}
 	user := auth.Username(r.Context())
 	id, err := s.certs.StartIssueCertbot(user, req.Domains, restartSet(req.RestartPIDs), req.Force)
 	if err != nil {

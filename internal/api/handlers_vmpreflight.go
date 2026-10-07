@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/msgs"
@@ -140,6 +141,15 @@ func (s *Server) handleAptDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	if !collect.Which(r.Context(), s.scanner.Collector(), "apt-get") {
 		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.aptGetMissing"))
+		return
+	}
+	// ?job=1 — заданием (хаб ждёт его из своего задания): apt-get update и
+	// скачивание — минуты, дольше сроков запроса.
+	if wantsJob(r) {
+		script := "export DEBIAN_FRONTEND=noninteractive\napt-get update -qq && apt-get install -y -qq --download-only " + strings.Join(req.Packages, " ")
+		s.startCmdJob(w, r, "apt.downloadJob", []any{strings.Join(req.Packages, " ")}, "apt",
+			cmdjob.Params{Commands: []cmdjob.Command{{Script: script, StepKey: "apt.downloadJob", StepArgs: []any{strings.Join(req.Packages, " ")}}}},
+			"apt.download", strings.Join(req.Packages, " "))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)

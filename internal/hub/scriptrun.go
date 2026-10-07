@@ -261,15 +261,8 @@ func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *Script
 	switch st.Kind {
 	case script.KindPackages:
 		if st.Action == "remove" {
-			var out struct {
-				Output string `json:"output"`
-			}
-			if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/system/apt/remove",
-				map[string]any{"packages": st.List}, &out); err != nil {
-				return err
-			}
-			r.logTail(jc, out.Output)
-			return nil
+			// Заданием хоста: удаление пакетов бывает дольше сроков запроса.
+			return r.m.runHostJob(ctx, h.ID, "/api/system/apt/remove", map[string]any{"packages": st.List}, hostLog(jc, h.Name))
 		}
 		return r.applyMini(ctx, jc, h, p.Name, map[string]any{"packages": st.List})
 
@@ -355,10 +348,9 @@ func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *Script
 		case "hostname", "timezone":
 			return r.applyMini(ctx, jc, h, p.Name, map[string]any{"system": map[string]any{st.Action: st.Args["value"]}})
 		case "locale":
-			var out map[string]any
-			_, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/system/locales",
-				map[string]any{"generate": []string{st.Args["value"]}, "default": st.Args["value"]}, &out)
-			return err
+			// locale-gen пересобирает все локали — заданием хоста.
+			return r.m.runHostJob(ctx, h.ID, "/api/system/locales",
+				map[string]any{"generate": []string{st.Args["value"]}, "default": st.Args["value"]}, hostLog(jc, h.Name))
 		default: // ntp
 			var out map[string]any
 			_, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/system/timesync",

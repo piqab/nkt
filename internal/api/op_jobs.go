@@ -6,6 +6,7 @@ import (
 	"net/http"
 	gopath "path"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/jobs"
@@ -41,6 +42,20 @@ type localesArgs struct {
 type osUserDeleteArgs struct {
 	Name string `json:"name"`
 	Home bool   `json:"home"`
+}
+
+// longCallTimeout — предел долгих вызовов, которые хаб делает на хосте
+// изнутри своих заданий и ждёт с данными в ответе (проверка compose-стека,
+// скан образов, удаление сайта, сеть WireGuard).
+const longCallTimeout = 30 * time.Minute
+
+// longCall снимает с такого вызова общие сроки: 4-минутный предел
+// маршрутов (он отменял контекст, и команда обрывалась) и 2-минутный срок
+// записи ответа http.Server (ответ после него уже не уходил). Контекст —
+// свой, на longCallTimeout, без отмены по пределу маршрута.
+func longCall(w http.ResponseWriter, r *http.Request) (context.Context, context.CancelFunc) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(longCallTimeout + time.Minute))
+	return context.WithTimeout(context.WithoutCancel(r.Context()), longCallTimeout)
 }
 
 // startHostOp заводит задание операции op с параметрами args.

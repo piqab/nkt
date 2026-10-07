@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.168 — 2026-10-07
+
+- **The third batch of long operations runs as jobs** (log, "Jobs", the
+  background operations indicator):
+  - issuing and renewing a certbot certificate — formerly background work
+    with its own in-memory list, invisible in "Jobs" and lost on an nkt
+    restart;
+  - scanning a host for vulnerabilities (on the host and via the hub);
+  - on the hub — "Update the database" for vulnerabilities and ClamAV (if
+    the database is already being updated on schedule, the job waits for
+    that result) and "Collect now" in monitoring.
+- **Long host calls from hub jobs** — downloading and removing packages,
+  removing Kubernetes from a cluster node, generating locales in scripts —
+  run as host jobs: the hub waits for them, copying the log into its own
+  job, and cancels them along with its own. It used to be a single request,
+  and the host's limits (4 minutes per request, 2 for the reply) cut
+  apt-get or kubeadm off halfway. Checking a compose stack, scanning images,
+  removing a site and the WireGuard mesh return data to the hub — those
+  limits are lifted for them (up to 30 minutes).
+
 ## v1.11.167 — 2026-10-07
 
 - CI: the mobile app build (Android and iOS) runs only when the app itself

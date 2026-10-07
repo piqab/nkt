@@ -69,3 +69,47 @@ func TestHostOpJobs(t *testing.T) {
 		t.Errorf("распаковка без проводника: %d %+v", code, p)
 	}
 }
+
+// Выпуск и продление certbot с ?job=1 — задание хоста; неверный ввод
+// отклоняется до задания.
+func TestCertbotJobs(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	jm := jobs.New(db, slog.New(slog.DiscardHandler))
+	t.Cleanup(jm.Close)
+	release := make(chan struct{})
+	defer close(release)
+	jm.Register(KindCertbot, blockRunner{release})
+	s := &Server{db: db, jobs: jm, cfg: &config.Config{}}
+
+	post := func(h http.HandlerFunc, body any) (int, CertbotParams) {
+		b, _ := json.Marshal(body)
+		rec := httptest.NewRecorder()
+		h(rec, httptest.NewRequest("POST", "/x?job=1", bytes.NewReader(b)))
+		var out struct {
+			JobID int64 `json:"job_id"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		var p CertbotParams
+		if out.JobID > 0 {
+			j, _ := db.JobByID(t.Context(), out.JobID)
+			_ = json.Unmarshal([]byte(j.Params), &p)
+		}
+		return rec.Code, p
+	}
+	if code, p := post(s.handleRenewCertbot, map[string]any{"lineage": "example.com", "restart_pids": []int{42}}); code != 200 || p.Op != "renew" || p.Lineage != "example.com" || len(p.RestartPIDs) != 1 {
+		t.Errorf("продление: %d %+v", code, p)
+	}
+	if code, _ := post(s.handleRenewCertbot, map[string]any{"lineage": "../etc"}); code != 400 {
+		t.Errorf("плохой lineage: %d", code)
+	}
+	if code, p := post(s.handleIssueCertbot, map[string]any{"domains": []string{"new.example.com"}}); code != 200 || p.Op != "issue" || len(p.Domains) != 1 {
+		t.Errorf("выпуск: %d %+v", code, p)
+	}
+	if code, _ := post(s.handleIssueCertbot, map[string]any{"domains": []string{"*.example.com"}}); code != 400 {
+		t.Errorf("wildcard без DNS-проверки: %d", code)
+	}
+}

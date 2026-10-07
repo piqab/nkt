@@ -170,7 +170,10 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	ctx := r.Context()
+	// Вызывает хаб изнутри сухого прогона: образы проверяются по очереди,
+	// это бывает дольше обычных сроков запроса.
+	ctx, cancel := longCall(w, r)
+	defer cancel()
 	c := s.scanner.Collector()
 	res := ComposeCheckResult{ComposeEngineInfo: s.composeEngineInfo(ctx), Env: "none"}
 	res.Simulated = s.cfg.Mode == config.ModeFixtures

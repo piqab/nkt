@@ -11,7 +11,13 @@ import { JobLogModal } from '../pages/Jobs'
  * флаг ?job=1 не знает и выполняет операцию сразу: ответ без job_id —
  * значит, всё уже сделано, onDone вызывается тут же.
  */
-export function useJobLauncher(onDone?: (job: Job | null) => void): {
+export function useJobLauncher(
+  onDone?: (job: Job | null) => void,
+  /** Чьи задания: «/hosts/local» — самого хаба со страниц хаба, где
+   * область запросов не выбрана (без неё журнал спрашивался у хаба, где
+   * заданий нет). По умолчанию — текущий хост. */
+  scope = '',
+): {
   start: (path: string, body?: unknown, method?: 'POST' | 'DELETE') => Promise<void>
   modal: ReactNode
 } {
@@ -21,13 +27,13 @@ export function useJobLauncher(onDone?: (job: Job | null) => void): {
     const url = path + (path.includes('?') ? '&' : '?') + 'job=1'
     const res = await api<{ job_id?: number }>(url, { method, body })
     if (res && typeof res.job_id === 'number') {
-      setJob(await api<Job>(`/jobs/${res.job_id}`))
+      setJob(await api<Job>(`${scope}/jobs/${res.job_id}`))
       return
     }
     onDone?.(null)
   }
 
-  const modal = job ? <JobLogModal job={job} onClose={() => setJob(null)} onDone={(j) => onDone?.(j)} /> : null
+  const modal = job ? <JobLogModal job={job} scope={scope} onClose={() => setJob(null)} onDone={(j) => onDone?.(j)} /> : null
   return { start, modal }
 }
 

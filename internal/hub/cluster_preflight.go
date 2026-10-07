@@ -200,7 +200,7 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 			add(true, !pf.WireGuard, map[bool]string{true: "hub.preflightWGOK", false: "hub.preflightWGMissing"}[pf.WireGuard])
 			if prepare && !pf.WireGuard {
 				jc.Log("hub.preflightPrepPackages", "wireguard-tools")
-				if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/system/apt/download", map[string]any{"packages": []string{"wireguard-tools"}}, nil); err != nil {
+				if err := r.m.runHostJob(ctx, host.ID, "/api/system/apt/download", map[string]any{"packages": []string{"wireguard-tools"}}, hostLog(jc, host.Name)); err != nil {
 					jc.Log("hub.preflightPrepFailed", err)
 				} else {
 					jc.Log("hub.preflightPrepPackagesDone")
@@ -397,7 +397,7 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 			}
 			if len(pf.MissingPackages) > 0 {
 				jc.Log("hub.preflightPrepPackages", strings.Join(pf.MissingPackages, ", "))
-				if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/system/apt/download", map[string]any{"packages": pf.MissingPackages}, nil); err != nil {
+				if err := r.m.runHostJob(ctx, host.ID, "/api/system/apt/download", map[string]any{"packages": pf.MissingPackages}, hostLog(jc, host.Name)); err != nil {
 					jc.Log("hub.preflightPrepFailed", err)
 				} else {
 					jc.Log("hub.preflightPrepPackagesDone")

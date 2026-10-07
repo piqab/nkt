@@ -42,7 +42,12 @@ func (s *Server) handleWGApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.Username(r.Context())
-	err := s.wgMesh().Apply(r.Context(), mesh)
+	// apt-get install wireguard-tools, если его нет, — дольше обычных
+	// сроков запроса. Заданием не сделать: в mesh закрытый ключ, а
+	// параметры задания видны в списке.
+	ctx, cancel := longCall(w, r)
+	defer cancel()
+	err := s.wgMesh().Apply(ctx, mesh)
 	s.db.Audit(r.Context(), user, "wgmesh.apply", mesh.Name, auditResult(err), errText(err))
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)

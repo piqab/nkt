@@ -221,6 +221,10 @@ func (s *Server) handleHubVulnDBStatus(w http.ResponseWriter, r *http.Request) {
 // VulnDBInfo.Refreshing/Progress for status instead of holding this request
 // open.
 func (s *Server) handleHubVulnDBRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("job") == "1" {
+		s.startDBRefreshJob(w, r, "vuln")
+		return
+	}
 	go func() { _ = s.hub.RefreshVulnDB(context.Background()) }()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
 }
@@ -320,6 +324,10 @@ func (s *Server) handleHubClamDBStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHubClamDBRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("job") == "1" {
+		s.startDBRefreshJob(w, r, "clam")
+		return
+	}
 	go func() { _ = s.hub.RefreshClamDB(context.Background()) }()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
 }
@@ -427,8 +435,13 @@ func (s *Server) handleHostVulnScanStart(w http.ResponseWriter, r *http.Request)
 		fail(w, r, err)
 		return
 	}
+	host, _ := s.db.HostByID(r.Context(), id)
 	if err := s.hub.StartHostVulnScan(r.Context(), id); err != nil {
 		writeErr(w, r, http.StatusConflict, err)
+		return
+	}
+	if r.URL.Query().Get("job") == "1" && s.startWatchJob(w, r, jobs.Spec{Kind: KindHostVulnScan, TitleKey: "hub.vulnScanJob",
+		TitleArgs: []any{host.Name}, Queue: fmt.Sprintf("hub-vulnscan:%d", id), Params: HostVulnScanParams{HostID: id, Name: host.Name}}) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})

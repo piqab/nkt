@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/monitor"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
@@ -421,6 +422,12 @@ func (s *Server) handleMonitoringSeries(w http.ResponseWriter, r *http.Request) 
 
 // handleMonitoringCollect — POST /hub/monitoring/collect: собрать сейчас.
 func (s *Server) handleMonitoringCollect(w http.ResponseWriter, r *http.Request) {
+	// ?job=1 — заданием (сбор делает само задание): виден в «Заданиях» и в
+	// индикаторе фоновых операций.
+	if r.URL.Query().Get("job") == "1" && s.startWatchJob(w, r, jobs.Spec{Kind: KindMonCollect, TitleKey: "hub.monCollectJob", Queue: "hub-moncollect"}) {
+		s.db.Audit(r.Context(), auth.Username(r.Context()), "hub.monitoring_collect", "", "ok", nil)
+		return
+	}
 	go s.collectMonitoring(context.WithoutCancel(r.Context()))
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "hub.monitoring_collect", "", "ok", nil)
 	writeJSON(w, http.StatusOK, map[string]any{"started": true})

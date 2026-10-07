@@ -77,6 +77,11 @@ func (m *Manager) ClamDBStatus() ClamDBInfo {
 
 // RefreshClamDB скачивает то, что изменилось на зеркале.
 func (m *Manager) RefreshClamDB(ctx context.Context) error {
+	return m.refreshClamDBWith(ctx, nil)
+}
+
+// refreshClamDBWith — то же, ход дублируется в extra (журнал задания).
+func (m *Manager) refreshClamDBWith(ctx context.Context, extra func(string)) error {
 	m.clamDBMu.Lock()
 	if m.clamDBRefreshing {
 		m.clamDBMu.Unlock()
@@ -88,6 +93,9 @@ func (m *Manager) RefreshClamDB(ctx context.Context) error {
 		m.clamDBMu.Lock()
 		m.clamDBProgress = msg
 		m.clamDBMu.Unlock()
+		if extra != nil {
+			extra(msg)
+		}
 	}
 	err := m.refreshClamDB(ctx, report)
 	m.clamDBMu.Lock()

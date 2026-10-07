@@ -966,7 +966,7 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		jc.StepKey(i+1, total, "hub.clusterStepDeleteVM", h.Name)
 		if h.ParentID == 0 {
 			// Узел-хост: Kubernetes убирается, запись хоста остаётся.
-			if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/k8s/uninstall", nil, nil); err != nil {
+			if err := r.m.runHostJob(ctx, h.ID, "/api/k8s/uninstall", nil, hostLog(jc, h.Name)); err != nil {
 				jc.Log("hub.clusterDeleteVMWarn", h.Name, err)
 			}
 			_ = r.m.db.SetHostCluster(ctx, h.ID, 0, "")

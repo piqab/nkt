@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/parse"
@@ -194,6 +196,15 @@ func (s *Server) handleVulnScanStart(w http.ResponseWriter, r *http.Request) {
 	// has already returned.
 	go s.runVulnScan(msgs.WithLang(context.Background(), msgs.FromContext(r.Context())))
 
+	// ?job=1 — ещё и задание, которое следит за сканом (vuln_job.go).
+	if wantsJob(r) && s.jobs != nil {
+		id, err := s.jobs.Start(r.Context(), jobs.Spec{Kind: KindVulnScan, TitleKey: "vulns.scanJob",
+			Queue: "vuln-scan", Author: auth.Username(r.Context()), Steps: 1})
+		if err == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"status": "started", "job_id": id})
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
 }
 
@@ -364,7 +375,10 @@ type vulnScanImagesResponse struct {
 // (internal/hub/vulnscan.go), which already isn't blocking anything the
 // browser is waiting on either.
 func (s *Server) handleVulnScanImages(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	// Вызывает хаб: скачать trivy и базу и просканировать все образы —
+	// минуты, дольше обычных сроков запроса.
+	ctx, cancel := longCall(w, r)
+	defer cancel()
 	images := s.runningImages(ctx)
 	k8sImgs := s.k8sImages(ctx, images)
 	if len(images) == 0 && len(k8sImgs) == 0 {
