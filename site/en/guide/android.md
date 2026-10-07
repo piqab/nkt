@@ -134,7 +134,7 @@ cd mobile/iosApp && xcodegen generate && open iosApp.xcodeproj
 It can be installed on your own iPhone from Xcode with a free Apple account;
 publishing (TestFlight, App Store) needs a paid Apple Developer account. CI
 (`.github/workflows/mobile.yml`) builds the iOS version for the simulator on
-every change, so it cannot break unnoticed.
+every change to the app (`mobile/`), so it cannot break unnoticed.
 
 Notifications on iOS are best effort: background refresh runs when the
 system decides, and every 15 minutes cannot be guaranteed.

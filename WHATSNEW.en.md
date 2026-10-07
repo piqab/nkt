@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.167 — 2026-10-07
+
+- CI: the mobile app build (Android and iOS) runs only when the app itself
+  (`mobile/`) changes, not on every commit — it used to be triggered by the
+  `VERSION` file, i.e. by any push, together with the costly macOS build.
+  The signed APK for a release is still built by `release.yml`.
+
 ## v1.11.166 — 2026-10-07
 
 - The "Interface has been updated — reload the page" bar shows on top of an

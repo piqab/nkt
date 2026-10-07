@@ -4,11 +4,15 @@ name: mobile
 # for Android, and the iOS app is compiled on a macOS runner (no signing and
 # no publication — that needs an Apple developer account). Also runnable by
 # hand from Actions.
+#
+# VERSION is deliberately not a trigger: it changes with every commit, so
+# this (including the macOS job, whose minutes count tenfold) ran on every
+# push. A release builds the signed APK in release.yml anyway.
 on:
   push:
-    paths: ["mobile/**", "VERSION", ".github/workflows/mobile.yml"]
+    paths: ["mobile/**", ".github/workflows/mobile.yml"]
   pull_request:
-    paths: ["mobile/**", "VERSION", ".github/workflows/mobile.yml"]
+    paths: ["mobile/**", ".github/workflows/mobile.yml"]
   workflow_dispatch:
 
 permissions:
