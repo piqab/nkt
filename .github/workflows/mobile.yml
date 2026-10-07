@@ -8,8 +8,12 @@ name: mobile
 # VERSION is deliberately not a trigger: it changes with every commit, so
 # this (including the macOS job, whose minutes count tenfold) ran on every
 # push. A release builds the signed APK in release.yml anyway.
+#
+# branches — only branch pushes: GitHub ignores the paths filter for tag
+# pushes, so every release tag (v1.11.x) started this too.
 on:
   push:
+    branches: ["**"]
     paths: ["mobile/**", ".github/workflows/mobile.yml"]
   pull_request:
     paths: ["mobile/**", ".github/workflows/mobile.yml"]
