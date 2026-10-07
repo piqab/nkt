@@ -1,6 +1,7 @@
 package com.netknownsthat.data.repository
 
 import com.netknownsthat.domain.model.ActiveJob
+import com.netknownsthat.domain.model.NewTarget
 import com.netknownsthat.data.dto.ActiveJobsResponseDto
 import com.netknownsthat.data.dto.AuditResponseDto
 import com.netknownsthat.data.dto.CertificatesResponseDto
@@ -217,6 +218,24 @@ class HostMonitoringRepositoryImpl(private val api: ApiClient) : HostMonitoringR
     override suspend fun targets(host: HostTarget): Outcome<TargetsResponse> = api.get<TargetsResponseDto>(hostPath(host, "/monitor/targets")).map { it.toDomain() }
     override suspend fun outages(host: HostTarget): Outcome<OutagesResponse> = api.get<OutagesResponseDto>(hostPath(host, "/monitor/outages")).map { it.toDomain() }
     override suspend fun checkTarget(host: HostTarget, targetId: Long): Outcome<Unit> = api.post(hostPath(host, "/monitor/targets/$targetId/check"))
+
+    override suspend fun addTarget(host: HostTarget, target: NewTarget): Outcome<Unit> =
+        api.post(
+            hostPath(host, "/monitor/targets"),
+            buildJsonObject {
+                put("label", target.label.trim())
+                put("kind", target.kind)
+                put("host", target.host.trim())
+                put("port", target.port)
+                put("path", target.path.ifBlank { "/" })
+            },
+        )
+
+    override suspend fun setTargetEnabled(host: HostTarget, targetId: Long, enabled: Boolean): Outcome<Unit> =
+        api.patch(hostPath(host, "/monitor/targets/$targetId"), buildJsonObject { put("enabled", enabled) })
+
+    override suspend fun deleteTarget(host: HostTarget, targetId: Long): Outcome<Unit> =
+        api.delete(hostPath(host, "/monitor/targets/$targetId"))
     override suspend fun usageSources(host: HostTarget): Outcome<List<String>> = api.get<UsageSourcesResponseDto>(hostPath(host, "/monitor/usage/sources")).map { it.sources }
 
     override suspend fun usageTop(host: HostTarget, source: String, metric: String, limit: Int): Outcome<UsageTopResponse> =

@@ -48,6 +48,9 @@ class UseCaseTest {
         override suspend fun targets(host: HostTarget) = Outcome.Success(TargetsResponse())
         override suspend fun outages(host: HostTarget) = Outcome.Success(OutagesResponse())
         override suspend fun checkTarget(host: HostTarget, targetId: Long) = Outcome.Success(Unit)
+        override suspend fun addTarget(host: HostTarget, target: com.netknownsthat.domain.model.NewTarget) = Outcome.Success(Unit)
+        override suspend fun setTargetEnabled(host: HostTarget, targetId: Long, enabled: Boolean) = Outcome.Success(Unit)
+        override suspend fun deleteTarget(host: HostTarget, targetId: Long) = Outcome.Success(Unit)
         override suspend fun usageSources(host: HostTarget) = Outcome.Success(sources)
         override suspend fun usageTop(host: HostTarget, source: String, metric: String, limit: Int) = Outcome.Success(UsageTopResponse(metric, source, top))
         override suspend fun usageSeries(host: HostTarget, source: String, metric: String, agg: String, subjects: List<String>): Outcome<UsageResponse> {

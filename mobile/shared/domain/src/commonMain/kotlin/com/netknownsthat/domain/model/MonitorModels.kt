@@ -9,6 +9,15 @@ data class TargetsResponse(
     val simulated: Boolean = false,
 )
 
+/** A target to add by hand (POST /monitor/targets). */
+data class NewTarget(
+    val label: String = "",
+    val kind: String = "icmp",
+    val host: String = "",
+    val port: Int = 0,
+    val path: String = "/",
+)
+
 data class Target(
     val id: Long = 0,
     val label: String = "",

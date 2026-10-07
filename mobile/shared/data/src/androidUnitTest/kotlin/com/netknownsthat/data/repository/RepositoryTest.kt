@@ -71,6 +71,24 @@ class RepositoryTest {
         assertEquals("failed", requests[1].url.parameters["status"])
     }
 
+    /** Availability targets of your own: add, enable/disable, delete. */
+    @Test
+    fun ownTargets() = runBlocking {
+        val bodies = mutableListOf<String>()
+        val api = api { request ->
+            bodies += (request.body as? io.ktor.http.content.TextContent)?.text.orEmpty()
+            respond("{}", headers = jsonHeaders)
+        }
+        val repo = HostMonitoringRepositoryImpl(api)
+        repo.addTarget(HostTarget(7), com.netknownsthat.domain.model.NewTarget(label = "db", kind = "tcp", host = " 10.0.0.5 ", port = 5432))
+        repo.setTargetEnabled(HostTarget(7), 12, false)
+        repo.deleteTarget(HostTarget(7), 12)
+        assertEquals(listOf("POST /api/hosts/7/monitor/targets", "PATCH /api/hosts/7/monitor/targets/12", "DELETE /api/hosts/7/monitor/targets/12"),
+            requests.map { "${it.method.value} ${it.url.encodedPath}" })
+        assertTrue(bodies[0].contains("\"host\":\"10.0.0.5\"") && bodies[0].contains("\"port\":5432"))
+        assertTrue(bodies[1].contains("\"enabled\":false"))
+    }
+
     /** The background operations indicator: one hub call for every host. */
     @Test
     fun activeJobsOfHubAndHosts() = runBlocking {
