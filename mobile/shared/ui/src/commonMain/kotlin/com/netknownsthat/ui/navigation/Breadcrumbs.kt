@@ -38,6 +38,7 @@ fun crumbOf(entry: NavBackStackEntry): String? {
         d.hasRoute<HostRoute>() -> entry.toRoute<HostRoute>().hostName
         d.hasRoute<HostSectionRoute>() -> sectionTitle(HostSectionKey.valueOf(entry.toRoute<HostSectionRoute>().section))
         d.hasRoute<ContainerRoute>() -> entry.toRoute<ContainerRoute>().container
+        d.hasRoute<ConsoleRoute>() -> t("Консоль ${entry.toRoute<ConsoleRoute>().name}", "Console ${entry.toRoute<ConsoleRoute>().name}")
         d.hasRoute<ConfigFileRoute>() -> entry.toRoute<ConfigFileRoute>().path.substringAfterLast('/')
         d.hasRoute<JobRoute>() -> t("Задание #${entry.toRoute<JobRoute>().jobId}", "Job #${entry.toRoute<JobRoute>().jobId}")
         d.hasRoute<PipelineRoute>() -> entry.toRoute<PipelineRoute>().name

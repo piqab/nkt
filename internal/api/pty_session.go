@@ -745,6 +745,11 @@ func (s *Server) runPTYSession(w http.ResponseWriter, r *http.Request, cmd *exec
 				}
 			}
 			if err != nil {
+				// The process exited (exit in the shell, a container that
+				// stopped): a normal close, so the client shows "session
+				// closed" rather than a network error. Close also unblocks
+				// the Read below.
+				_ = conn.Close(websocket.StatusNormalClosure, "")
 				cancel()
 				return
 			}

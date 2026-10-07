@@ -117,7 +117,21 @@ func TestTerminalRoundTrip(t *testing.T) {
 		}
 	}
 
-	conn.Close(websocket.StatusNormalClosure, "test done")
+	// exit in the shell ends the session with a normal close, not a torn
+	// connection: the app showed "network error: EOF" for a plain exit.
+	if err := conn.Write(ctx, websocket.MessageBinary, []byte("exit\n")); err != nil {
+		t.Fatalf("write exit: %v", err)
+	}
+	for {
+		_, _, err := conn.Read(ctx)
+		if err == nil {
+			continue
+		}
+		if code := websocket.CloseStatus(err); code != websocket.StatusNormalClosure {
+			t.Fatalf("after exit: close status %d, err %v; want a normal closure", code, err)
+		}
+		break
+	}
 }
 
 // TestTerminalRoundTripTmux is TestTerminalRoundTrip's tmux-mode

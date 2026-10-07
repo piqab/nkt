@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.netknownsthat.domain.repository.ConsoleKind
 import com.netknownsthat.domain.repository.TerminalMode
 import com.netknownsthat.terminal.TerminalEmulator
 import com.netknownsthat.terminal.ImeInput
@@ -86,6 +87,9 @@ private const val BTOP_MIN_ROWS = 24
  * bar, no drawer whose swipe could fight the terminal's own gestures); the
  * key bar carries the keys a phone keyboard lacks and, in tmux, a menu of
  * tmux actions so nobody has to type Ctrl+B sequences on glass.
+ *
+ * The same screen is the console of a container, an LXD instance or a VM
+ * (the view model's console): no tmux there.
  */
 @Composable
 fun TerminalScreen(viewModel: TerminalViewModel, btop: Boolean) {
@@ -135,7 +139,9 @@ fun TerminalScreen(viewModel: TerminalViewModel, btop: Boolean) {
                     viewModel.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     // A plain shell dies with the socket — the honest offer
                     // is a new session.
-                    Button(onClick = { viewModel.start() }) { Text(t("Новая сессия", "New session")) }
+                    Button(onClick = { viewModel.start() }) {
+                        Text(if (viewModel.console != null) t("Подключиться снова", "Reconnect") else t("Новая сессия", "New session"))
+                    }
                 }
             }
         }
@@ -164,7 +170,7 @@ private fun StatusLine(viewModel: TerminalViewModel) {
     val (label, health) = when (viewModel.status) {
         TerminalStatus.CONNECTING -> t("Подключение…", "Connecting…") to HealthStatus.WARN
         TerminalStatus.RECONNECTING -> t("Связь потеряна — переподключаюсь к tmux…", "Connection lost — reconnecting to tmux…") to HealthStatus.WARN
-        TerminalStatus.CONNECTED -> when (viewModel.mode) {
+        TerminalStatus.CONNECTED -> if (viewModel.console != null) consoleLabel(viewModel) to HealthStatus.OK else when (viewModel.mode) {
             TerminalMode.TMUX -> t("tmux · сессия переживёт обрыв", "tmux · the session survives a dropped link")
             TerminalMode.BTOP -> "btop"
             else -> t("оболочка", "shell")
@@ -177,6 +183,15 @@ private fun StatusLine(viewModel: TerminalViewModel) {
             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.padding(end = 6.dp).width(12.dp).height(12.dp))
         }
         Text(label, color = statusColor(health), style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+private fun consoleLabel(viewModel: TerminalViewModel): String {
+    val c = viewModel.console ?: return ""
+    return when (c.kind) {
+        ConsoleKind.VM -> t("последовательная консоль ${c.name} · выход из virsh — Ctrl+]", "serial console of ${c.name} · leave virsh with Ctrl+]")
+        ConsoleKind.LXD -> t("консоль LXD · ${c.name}", "LXD console · ${c.name}")
+        else -> t("консоль контейнера · ${c.name}", "container console · ${c.name}") + c.user.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
     }
 }
 

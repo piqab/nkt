@@ -6,6 +6,7 @@ import com.netknownsthat.domain.usecase.hostPath
 import com.netknownsthat.ui.HostJump
 import com.netknownsthat.ui.NktApp
 import com.netknownsthat.ui.platform.PlatformServices
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
@@ -53,7 +54,9 @@ fun openHost(hostId: Long, path: String) {
 }
 
 /** Asks iOS for the next background refresh (it decides when — 15 minutes
- * is only the earliest). */
+ * is only the earliest). The error out-parameter is a C pointer — hence the
+ * opt-in. */
+@OptIn(ExperimentalForeignApi::class)
 fun scheduleNextEventCheck() {
     val request = BGAppRefreshTaskRequest(EVENTS_TASK_ID)
     request.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(15.0 * 60)

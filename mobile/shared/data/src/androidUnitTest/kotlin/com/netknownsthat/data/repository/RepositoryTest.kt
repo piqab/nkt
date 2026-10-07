@@ -155,4 +155,13 @@ class RepositoryTest {
         assertEquals("admin", (me as Outcome.Success).value.username)
         assertTrue(requests.last().headers[HttpHeaders.Cookie].orEmpty().contains("nkt_session=abc"))
     }
+
+    @Test
+    fun consolePathCarriesKindNameAndUser() {
+        val c = com.netknownsthat.domain.repository.ConsoleKind.DOCKER
+        assertEquals("/console/ws?kind=docker&name=web%201&user=app", consolePath(com.netknownsthat.domain.repository.ConsoleTarget(c, "web 1", " app ")))
+        assertEquals("/console/ws?kind=podman&name=db", consolePath(com.netknownsthat.domain.repository.ConsoleTarget(com.netknownsthat.domain.repository.ConsoleKind.PODMAN, "db")))
+        // LXD and VMs take no user: the server ignores it, so it is not sent.
+        assertEquals("/console/ws?kind=vm&name=win", consolePath(com.netknownsthat.domain.repository.ConsoleTarget(com.netknownsthat.domain.repository.ConsoleKind.VM, "win", "root")))
+    }
 }

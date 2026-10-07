@@ -10,11 +10,14 @@ import com.netknownsthat.domain.common.AppError
 import com.netknownsthat.domain.common.HostTarget
 import com.netknownsthat.domain.common.Outcome
 import com.netknownsthat.domain.common.getOrNull
+import com.netknownsthat.domain.repository.ConsoleKind
+import com.netknownsthat.domain.repository.ConsoleTarget
 import com.netknownsthat.domain.repository.StreamEvent
 import com.netknownsthat.domain.repository.TerminalChannel
 import com.netknownsthat.domain.repository.TerminalMode
 import com.netknownsthat.domain.repository.TerminalRepository
 import com.netknownsthat.domain.usecase.OpenTerminalUseCase
+import com.netknownsthat.domain.usecase.OpenedTerminal
 import com.netknownsthat.terminal.TerminalEmulator
 import com.netknownsthat.ui.common.text
 import com.netknownsthat.ui.i18n.t
@@ -33,12 +36,17 @@ enum class TerminalStatus { CONNECTING, CONNECTED, RECONNECTING, CLOSED, FAILED 
  * install it, instead of failing outright (what made the old terminal
  * "sometimes not work").
  *
+ * With [console] it is a console instead: a shell inside a container or an
+ * LXD instance, or a VM's serial console — no tmux there, and a console
+ * that dropped is offered again rather than re-attached.
+ *
  * Output is fed into the emulator on the main thread; [revision] bumps on
  * every change, and Compose coalesces bursts into one redraw per frame.
  */
 class TerminalViewModel(
     private val host: HostTarget,
     private val btop: Boolean,
+    val console: ConsoleTarget?,
     private val openTerminal: OpenTerminalUseCase,
     private val terminal: TerminalRepository,
 ) : ViewModel() {
@@ -73,7 +81,11 @@ class TerminalViewModel(
             var attempt = 0
             while (true) {
                 status = if (attempt == 0) TerminalStatus.CONNECTING else TerminalStatus.RECONNECTING
-                val opened = openTerminal(host, btop)
+                val opened = if (console != null) {
+                    OpenedTerminal(terminal.openConsole(host, console), TerminalMode.SHELL, tmuxMissing = false)
+                } else {
+                    openTerminal(host, btop)
+                }
                 mode = opened.mode
                 tmuxMissing = opened.tmuxMissing
                 channel = opened.channel
@@ -92,6 +104,9 @@ class TerminalViewModel(
                             // The PTY starts at a default size; full-screen
                             // programs draw for it until told otherwise.
                             if (columns > 0) opened.channel.resize(columns, rows)
+                            // A serial console shows nothing until a key is
+                            // pressed: Enter brings up the login prompt.
+                            if (console?.kind == ConsoleKind.VM) opened.channel.send(byteArrayOf('\r'.code.toByte()))
                         }
                         is StreamEvent.Bytes -> {
                             emulator.feed(e.data)

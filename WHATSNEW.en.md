@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.177 — 2026-10-07
+
+- **Mobile app: console** of a Docker or Podman container, an LXD instance
+  and a machine (serial) — the "Console" button on a running one's card in
+  "Containers"; Docker and Podman let you pick the user.
+- Terminal and console: `exit` in the shell closes the session cleanly —
+  the app says "Session closed" rather than "Network error: EOF".
+- Mobile app: when the host refuses a terminal or console, its explanation
+  is shown (e.g. "the web terminal is disabled: set
+  NKT_TERMINAL_ENABLED=true") instead of "Expected HTTP 101".
+- iOS build: fixed the framework compile error (an `ExperimentalForeignApi`
+  opt-in for scheduling the background check).
+
 ## v1.11.176 — 2026-10-07
 
 - **Mobile app:** stopping and restarting an LXD instance and "Save" for

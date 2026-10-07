@@ -93,6 +93,15 @@ without typing `Ctrl+B …`: new window, next and previous, window list,
 splits, scroll mode, detach, mouse on/off. Without tmux a plain shell opens
 with an offer to install tmux — the install runs with live output.
 
+**The console** of a Docker or Podman container, an LXD instance or a
+libvirt machine is the "Console" button on a running one's card in
+"Containers". It opens the same full-screen terminal. Docker and Podman ask
+for the user first (empty — the image's default user); for a machine it is
+the serial console (`virsh console`): the app presses Enter itself to bring
+up the login prompt, and `Ctrl+]` leaves virsh. Like the terminal, the
+console needs `NKT_TERMINAL_ENABLED=true` on the host — otherwise the app
+says so.
+
 **Hub sections:**
 
 | Section | What |

@@ -282,6 +282,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Phone notifications for hub alerts (polled every 15 minutes; kinds as in the hub's alert settings); tapping one opens the host at the right section.
 - Jobs come with a live log and cancel.
 - A full-screen terminal: in tmux when the host has it, re-attaching to the session after a dropped connection, with a menu of tmux actions (windows, splits, scroll mode, mouse); without tmux — a plain shell and a tmux install with live output.
+- The console of a Docker or Podman container (with a choice of user), an LXD instance and a libvirt machine (serial, Enter on connect) — in the same full-screen terminal.
 - Russian and English interface: follows the phone language or the choice on the sign-in screen and in About; server messages come in the same language.
 - A signed APK in every release (`nkt-android-<version>.apk`) and separate beta releases of the app; the app version matches the nkt version; the iOS version is built from source (CI checks the simulator build), not published to the App Store.
 
