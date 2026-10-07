@@ -92,9 +92,15 @@ firewalld, creating LXD instances and Podman containers, downloading LXD
 images and changing guest passwords, stopping LXD instances and their
 snapshots, saving Docker images, uploading files from the computer,
 extracting an archive in the file browser, generating locales, deleting a
-user with the home directory and removing Kubernetes from a node. On the
+user with the home directory, removing Kubernetes from a node, issuing
+and renewing a certbot certificate, scanning for vulnerabilities. On the
 hub — updating the hub itself, "Update all", starting and stopping nkt on
-all hosts, applying a manifest to clusters, deleting a host with cleanup.
+all hosts, applying a manifest to clusters, deleting a host with cleanup,
+updating the vulnerability and ClamAV databases, collecting monitoring,
+scanning a host for vulnerabilities. Long host operations the hub calls
+from its own jobs (downloading and removing packages, removing
+Kubernetes, generating locales) run as host jobs too: their log is copied
+into the hub job's log.
 The button opens the job log window
 right away with percentages (apt's come from its status); a closed window
 reopens from "Jobs". Through the hub it is the same: these are the host's

@@ -121,7 +121,9 @@ function VulnTab({ me }: { me: Me }) {
     setStartError(null)
     setModalDismissed(false)
     try {
-      await api('/vulnerabilities/scan', { method: 'POST' })
+      // ?job=1 — скан ещё и заданием: виден в «Заданиях» и в индикаторе
+      // фоновых операций; ход — по-прежнему в окне этой страницы.
+      await api('/vulnerabilities/scan?job=1', { method: 'POST' })
     } catch (err) {
       setStartError(err instanceof Error ? err.message : String(err))
       return

@@ -169,6 +169,8 @@ func New(d Deps) *Server {
 		s.jobs.Register(KindArchiveFetch, &archiveFetchRunner{s})
 		s.jobs.Register(KindUpload, &uploadRunner{s})
 		s.jobs.Register(KindHostOp, &hostOpRunner{s})
+		s.jobs.Register(KindCertbot, &certbotRunner{s})
+		s.jobs.Register(KindVulnScan, &vulnScanRunner{s})
 	}
 	return s
 }

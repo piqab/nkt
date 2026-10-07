@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useJobLauncher } from '../components/useJobLauncher'
 import { Button, Input, InputNumber, Select, Space, Tabs, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -165,11 +166,12 @@ export default function HubMonitoring({ me, onOpenHost }: { me: Me; onOpenHost: 
   const [chart, setChart] = useState<{ title: string; hostId: number; source: string; subject: string; metric?: string } | null>(null)
   const d = data.data
 
+  const collectJob = useJobLauncher(() => void data.reload(), '/hosts/local')
   async function collect() {
     setBusy(true)
     try {
-      await api('/hub/monitoring/collect', { method: 'POST' })
-      window.setTimeout(() => void data.reload(), 4000)
+      // Заданием хаба: по его концу данные перечитываются.
+      await collectJob.start('/hub/monitoring/collect')
     } finally {
       setBusy(false)
     }
@@ -225,6 +227,7 @@ export default function HubMonitoring({ me, onOpenHost }: { me: Me; onOpenHost: 
 
   return (
     <>
+      {collectJob.modal}
       <div className="page-head spread">
         <h1>
           {t('monitoring.title')}

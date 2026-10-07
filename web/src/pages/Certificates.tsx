@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type {
   Certificate,
+  Job,
   CertificatesResponse,
   CombineResult,
   LineageInfo,
@@ -23,6 +24,7 @@ import { StandaloneConfirm } from '../components/StandaloneConfirm'
 import PackageInstallModal from '../components/PackageInstallModal'
 import { TitleHelp } from '../components/Docs'
 import { msg, tx, type Msg } from '../msg'
+import { JobLogModal } from './Jobs'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -350,6 +352,19 @@ export default function Certificates({ me }: { me: Me }) {
     setJob({ id, label })
   }
 
+  // Выпуск и продление — заданием хоста (?job=1): журнал в стандартном
+  // окне, ход виден в «Заданиях» и в индикаторе фоновых операций. Старый
+  // хост отвечает прежним { job } — тогда прежнее окно хода.
+  const [certJob, setCertJob] = useState<Job | null>(null)
+  async function launchCertJob(path: string, body: Record<string, unknown>, label: string) {
+    const res = await api<{ job_id?: number; job?: string }>(`${path}?job=1`, { method: 'POST', body })
+    if (typeof res.job_id === 'number') {
+      setCertJob(await api<Job>(`/jobs/${res.job_id}`))
+      return
+    }
+    if (res.job) startJob(res.job, label)
+  }
+
   async function renew(cert: Certificate) {
     const lineage = cert.renewal.lineage
     if (!lineage) return
@@ -360,11 +375,7 @@ export default function Certificates({ me }: { me: Me }) {
         setBusy(cert.id)
         setNotice(null)
         try {
-          const res = await api<{ job: string }>('/certificates/renew', {
-            method: 'POST',
-            body: { lineage, restart_pids: restartPIDs },
-          })
-          startJob(res.job, t('certs.renewLabel', { lineage }))
+          await launchCertJob('/certificates/renew', { lineage, restart_pids: restartPIDs }, t('certs.renewLabel', { lineage }))
         } catch (err) {
           setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
         } finally {
@@ -386,11 +397,7 @@ export default function Certificates({ me }: { me: Me }) {
         setBusy(`lineage:${lineageName}`)
         setNotice(null)
         try {
-          const res = await api<{ job: string }>('/certificates/renew', {
-            method: 'POST',
-            body: { lineage: lineageName, restart_pids: restartPIDs },
-          })
-          startJob(res.job, t('certs.renewLabel', { lineage: lineageName }))
+          await launchCertJob('/certificates/renew', { lineage: lineageName, restart_pids: restartPIDs }, t('certs.renewLabel', { lineage: lineageName }))
         } catch (err) {
           setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
         } finally {
@@ -572,7 +579,7 @@ export default function Certificates({ me }: { me: Me }) {
       {me.is_admin && me.allow_mutations && (
         <>
           <IssueForm
-            onStarted={startJob}
+            onLaunch={launchCertJob}
             disabled={!certbotPresent}
             confirm={(title, run) => setStandalone({ title, run })}
           />
@@ -610,6 +617,16 @@ export default function Certificates({ me }: { me: Me }) {
         />
       )}
 
+      {certJob && (
+        <JobLogModal
+          job={certJob}
+          onClose={() => setCertJob(null)}
+          onDone={() => {
+            reload()
+            lineages.reload()
+          }}
+        />
+      )}
       {job && (
         <Modal title={blurText(job.label)} onClose={closeJobModal} maskClosable={false}>
           <RenewLog events={jobStatus?.events ?? []} />
@@ -840,11 +857,11 @@ function lineageLabel(info: LineageInfo): string {
  * the self-signed form below (no real CA involved at all). Runs in the
  * background through the same job/progress Modal "продлить" already uses. */
 function IssueForm({
-  onStarted,
+  onLaunch,
   disabled,
   confirm,
 }: {
-  onStarted: (jobId: string, label: string) => void
+  onLaunch: (path: string, body: Record<string, unknown>, label: string) => Promise<void>
   /** Нет certbot — форма видна, но выпуск не запустить. */
   disabled?: boolean
   /** Подтверждение с держателями 80/443 живёт снаружи: оно общее с продлением. */
@@ -868,12 +885,8 @@ function IssueForm({
       setBusy(true)
       setError(null)
       try {
-        const res = await api<{ job: string }>('/certificates/issue', {
-          method: 'POST',
-          body: { domains: domainList, restart_pids: restartPIDs, force: !!values.force },
-        })
+        await onLaunch('/certificates/issue', { domains: domainList, restart_pids: restartPIDs, force: !!values.force }, t('certs.issuingLabel', { domains: domainList.join(', ') }))
         form.resetFields()
-        onStarted(res.job, t('certs.issuingLabel', { domains: domainList.join(', ') }))
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       } finally {

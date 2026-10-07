@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/model"
@@ -453,6 +454,14 @@ func (s *Server) handleAptRemoveSync(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.cfg.Mode != config.ModeLocal {
 		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "profile.packageInstallationUnavailableMode"))
+		return
+	}
+	// ?job=1 — заданием (хаб ждёт его из своего задания).
+	if wantsJob(r) {
+		script := "export DEBIAN_FRONTEND=noninteractive\napt-get remove -y " + strings.Join(req.Packages, " ")
+		s.startCmdJob(w, r, "apt.removeJob", []any{strings.Join(req.Packages, " ")}, "apt",
+			cmdjob.Params{Commands: []cmdjob.Command{{Script: script, StepKey: "apt.removeJob", StepArgs: []any{strings.Join(req.Packages, " ")}}}, Refresh: true},
+			"apt.remove", strings.Join(req.Packages, " "))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)

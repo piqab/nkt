@@ -49,6 +49,11 @@ func (m *Manager) vulnDBRefreshLoop(ctx context.Context) {
 // check means a manual click when the DB is already fresh just confirms
 // that instead of forcing a redundant ~100MB redownload.
 func (m *Manager) RefreshVulnDB(ctx context.Context) error {
+	return m.refreshVulnDBWith(ctx, nil)
+}
+
+// refreshVulnDBWith — то же, ход дублируется в extra (журнал задания).
+func (m *Manager) refreshVulnDBWith(ctx context.Context, extra func(string)) error {
 	m.vulnDBMu.Lock()
 	if m.vulnDBRefreshing {
 		m.vulnDBMu.Unlock()
@@ -62,6 +67,9 @@ func (m *Manager) RefreshVulnDB(ctx context.Context) error {
 		m.vulnDBMu.Lock()
 		m.vulnDBProgress = msg
 		m.vulnDBMu.Unlock()
+		if extra != nil {
+			extra(msg)
+		}
 	}
 
 	dir := m.vulnDir()

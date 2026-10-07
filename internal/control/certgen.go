@@ -1122,6 +1122,46 @@ func (m *CertManager) runCertbotCertonly(ctx context.Context, user string, domai
 	return res, nil
 }
 
+// ValidateRenewCertbot — имя lineage годится для продления (проверка до
+// задания: ошибочный запрос отклоняется сразу, а не журналом).
+func ValidateRenewCertbot(lineage string) error {
+	if !lineageRe.MatchString(lineage) {
+		return msgs.Errorf("control.invalidCertbotLineageName", lineage)
+	}
+	return nil
+}
+
+// ValidateIssueCertbot — имена годятся для выпуска; отдаёт их в том виде,
+// в каком их получит certbot.
+func ValidateIssueCertbot(domains []string) ([]string, error) {
+	return normaliseCertbotDomains(domains)
+}
+
+// RenewCertbotJob — продление в задании хоста: ход — в его журнал через
+// msg/raw, в конце — пересканирование (как у StartRenewCertbot).
+func (m *CertManager) RenewCertbotJob(ctx context.Context, user, lineage string, restart map[int]bool,
+	msg func(key string, args ...any), raw func(text string)) error {
+	ctx, cancel := context.WithTimeout(ctx, m.cfg.CertbotTimeout+2*time.Minute)
+	defer cancel()
+	msg("certgen.startingRenewal", lineage)
+	_, err := m.renewCertbot(ctx, user, lineage, restart, &certProgress{msg: msg, raw: raw})
+	_, _ = m.scanner.Scan(context.Background())
+	return err
+}
+
+// IssueCertbotJob — выпуск в задании хоста, с остановкой и запуском
+// разрешённых оператором процессов на 80/443 (restart), как у
+// StartIssueCertbot.
+func (m *CertManager) IssueCertbotJob(ctx context.Context, user string, domains []string, restart map[int]bool, force bool,
+	msg func(key string, args ...any), raw func(text string)) error {
+	ctx, cancel := context.WithTimeout(ctx, m.cfg.CertbotTimeout+2*time.Minute)
+	defer cancel()
+	msg("certgen.startingIssuance", strings.Join(domains, ", "))
+	_, err := m.issueCertbot(ctx, user, domains, restart, force, &certProgress{msg: msg, raw: raw})
+	_, _ = m.scanner.Scan(context.Background())
+	return err
+}
+
 // IssueCertbotSync — выпуск в текущем задании (настройка сайта): ход —
 // в журнал задания через msg/raw. force — имя может указывать не на
 // интерфейсы хоста (NAT): хаб уже проверил его снаружи.

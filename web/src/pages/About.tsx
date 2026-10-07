@@ -11,6 +11,7 @@ import { DangerZoneCard } from '../components/PurgeAllModal'
 import { InstallAllCard } from '../components/InstallAllModal'
 import type { HubVersionInfo, HubVulnDBInfo, Job } from '../types'
 import { JobLogModal } from './Jobs'
+import { useJobLauncher } from '../components/useJobLauncher'
 
 interface AptCacheInfo {
   available: boolean
@@ -84,10 +85,15 @@ export default function About({ admin = false }: { admin?: boolean }) {
   useEffect(() => {
     setClamDBFast(!!clamdb.data?.refreshing)
   }, [clamdb.data?.refreshing])
+  const dbJob = useJobLauncher(() => {
+    void vulndb.reload()
+    void clamdb.reload()
+  }, '/hosts/local')
   async function refreshClamDB() {
     setClamDBBusy(true)
     try {
-      await api('/hub/clamdb/refresh', { method: 'POST' })
+      // Заданием хаба: журнал в окне, ход — в «Заданиях» и в индикаторе.
+      await dbJob.start('/hub/clamdb/refresh')
       setClamDBFast(true)
       await clamdb.reload()
     } finally {
@@ -103,7 +109,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
     setVulnDBBusy(true)
     setNotice(null)
     try {
-      await api('/hub/vulndb/refresh', { method: 'POST' })
+      await dbJob.start('/hub/vulndb/refresh')
       setVulnDBFast(true)
       await vulndb.reload()
     } catch (err) {
@@ -294,6 +300,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
       </div>
 
       <ErrorNote error={version.error} />
+      {dbJob.modal}
       {selfJob && <JobLogModal job={selfJob} scope="/hosts/local" onClose={() => setSelfJob(null)} onDone={onSelfUpdateDone} />}
       {notice && (
         <Banner kind={notice.kind} onClose={() => setNotice(null)}>

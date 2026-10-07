@@ -930,8 +930,11 @@ func (s *Server) handleSiteRemove(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	ctx := r.Context()
-	user := auth.Username(ctx)
+	// certbot delete и пересоздание сервиса compose — дольше обычных
+	// сроков запроса; вызывает хаб изнутри своего задания.
+	ctx, cancel := longCall(w, r)
+	defer cancel()
+	user := auth.Username(r.Context())
 	lang := msgs.LangFromRequest(r)
 	c := s.scanner.Collector()
 	all := s.hostSites(ctx)
