@@ -167,7 +167,7 @@ installed apps can no longer be updated.
 
 To publish the app separately from nkt: **Actions → android-beta-release →
 Run workflow**. It runs the tests, signs the APK with the same key and
-creates a pre-release "Android <version> (beta)" tagged
+creates a pre-release `Android <version> (beta)` tagged
 `android-v<version>-beta` with
 `nkt-android-<version>-beta.apk` and `SHA256SUMS`; the app's About shows the
 version as `<version>-beta`. Hubs do not see such a release and do not offer
