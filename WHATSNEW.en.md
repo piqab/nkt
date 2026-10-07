@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.176 — 2026-10-07
+
+- **Mobile app:** stopping and restarting an LXD instance and "Save" for
+  Docker images run as a host job with a log, as in the web interface (they
+  used to be cut off by the request limit on a machine or a big image).
+- Mobile app: top bar buttons no longer disappear — a leaving page wiped
+  the new page's buttons, and a page with two sets (refresh and "+") kept
+  only one.
+
 ## v1.11.175 — 2026-10-07
 
 - **Mobile app, "Availability":** targets of your own — "+" adds a ping,

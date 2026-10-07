@@ -42,7 +42,7 @@ import com.netknownsthat.domain.usecase.ContainerRuntimes
 private val LIFECYCLE get() = listOf("start" to t("Пуск", "Start"), "stop" to t("Стоп", "Stop"), "restart" to t("Рестарт", "Restart"))
 
 @Composable
-fun ContainersScreen(viewModel: ContainersViewModel, onOpenContainer: (String) -> Unit) {
+fun ContainersScreen(viewModel: ContainersViewModel, onOpenContainer: (String) -> Unit, onOpenJob: (Long) -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
 
     SectionContent(state = viewModel.state, emptyText = t("Контейнеры не найдены", "No containers found")) { data ->
@@ -111,11 +111,11 @@ fun ContainersScreen(viewModel: ContainersViewModel, onOpenContainer: (String) -
                             it.status + it.ipv4.joinToString("") { ip -> " · $ip" },
                             instanceHealth(it.status), enabled,
                             viewModel.pendingKey == it.name,
-                        ) { action -> viewModel.lxdAction(it.name, action) }
+                        ) { action -> viewModel.lxdAction(it.name, action, onOpenJob) }
                     }
                 }
 
-                4 -> ImagesTab(viewModel, data)
+                4 -> ImagesTab(viewModel, data, onOpenJob)
 
                 3 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     items(data.vms.vms, key = { it.name }) {
@@ -247,7 +247,7 @@ private fun ActionRow(enabled: Boolean, onAction: (String) -> Unit) {
  * without force and saying so first beats offering an action that fails.
  */
 @Composable
-private fun ImagesTab(viewModel: ContainersViewModel, data: ContainerRuntimes) {
+private fun ImagesTab(viewModel: ContainersViewModel, data: ContainerRuntimes, onOpenJob: (Long) -> Unit) {
     var picked by remember { mutableStateOf(setOf<String>()) }
     var force by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
@@ -294,7 +294,7 @@ private fun ImagesTab(viewModel: ContainersViewModel, data: ContainerRuntimes) {
                 modifier = Modifier.padding(end = 8.dp),
             )
             OutlinedButton(
-                onClick = { viewModel.saveImages(selected.map(::refOf)) },
+                onClick = { viewModel.saveImages(selected.map(::refOf), onOpenJob) },
                 enabled = selected.isNotEmpty() && !viewModel.actionInProgress,
                 modifier = Modifier.padding(end = 8.dp),
             ) { Text(t("Сохранить (${selected.size})", "Save (${selected.size})")) }

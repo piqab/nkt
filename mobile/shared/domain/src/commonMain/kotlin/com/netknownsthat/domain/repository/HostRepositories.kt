@@ -79,6 +79,14 @@ interface ContainersRepository {
     suspend fun removeImages(host: HostTarget, refs: List<String>, force: Boolean): Outcome<Unit>
     suspend fun saveImages(host: HostTarget, refs: List<String>): Outcome<Unit>
     suspend fun pruneImages(host: HostTarget): Outcome<Unit>
+
+    /** The same as [action], as a host job (?job=1) — for what outlasts a
+     * request (an LXD machine shutting down): the job id, or null from an
+     * older host that did it within the request. */
+    suspend fun actionJob(host: HostTarget, runtime: Runtime, name: String, action: String): Outcome<Long?>
+
+    /** docker save as a host job, one step per image (null — older host). */
+    suspend fun saveImagesJob(host: HostTarget, refs: List<String>): Outcome<Long?>
 }
 
 interface UsersRepository {

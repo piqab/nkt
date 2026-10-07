@@ -36,7 +36,7 @@ fun HostSectionScreen(
         HostSectionKey.BTOP -> TerminalScreen(koinViewModel { parametersOf(host, true) }, btop = true)
         HostSectionKey.LOGS -> LogsScreen(koinViewModel(parameters = p))
         HostSectionKey.SERVICES -> Section(koinViewModel<ServicesViewModel>(parameters = p)) { ServicesScreen(it) }
-        HostSectionKey.CONTAINERS -> Section(koinViewModel<ContainersViewModel>(parameters = p)) { ContainersScreen(it, openContainer) }
+        HostSectionKey.CONTAINERS -> Section(koinViewModel<ContainersViewModel>(parameters = p)) { ContainersScreen(it, openContainer, openJob) }
         HostSectionKey.VULNERABILITIES -> Section(koinViewModel<VulnerabilitiesViewModel>(parameters = p)) { VulnerabilitiesScreen(it) }
         HostSectionKey.MALWARE -> Section(koinViewModel<com.netknownsthat.ui.hub.ClamAVViewModel>(parameters = p)) { ClamAVScreen(it, openJob) }
         HostSectionKey.AVAILABILITY -> Section(koinViewModel<AvailabilityViewModel>(parameters = p)) { AvailabilityScreen(it) }

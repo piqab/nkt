@@ -316,6 +316,19 @@ private fun TargetCard(target: Target, onCheck: () -> Unit, onToggle: () -> Unit
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
+
+                Text(
+                    // last_ok is nullable on the Go side: null means the
+                    // target has never been checked, which is not "down".
+                    text = when {
+                        !target.enabled -> t("проверки выключены", "checks disabled")
+                        target.lastOk == true -> t("доступен", "up")
+                        target.lastOk == false -> t("недоступен", "down")
+                        else -> t("не проверялся", "not checked")
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = statusColor(health),
+                )
                 Box {
                     IconButton(onClick = { menu = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = t("Действия с целью", "Target actions"))
@@ -331,18 +344,6 @@ private fun TargetCard(target: Target, onCheck: () -> Unit, onToggle: () -> Unit
                         }
                     }
                 }
-                Text(
-                    // last_ok is nullable on the Go side: null means the
-                    // target has never been checked, which is not "down".
-                    text = when {
-                        !target.enabled -> t("проверки выключены", "checks disabled")
-                        target.lastOk == true -> t("доступен", "up")
-                        target.lastOk == false -> t("недоступен", "down")
-                        else -> t("не проверялся", "not checked")
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = statusColor(health),
-                )
             }
             Text(
                 text = listOfNotNull(

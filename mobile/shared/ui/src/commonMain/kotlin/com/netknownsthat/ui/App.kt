@@ -207,7 +207,7 @@ private fun Shell(app: AppViewModel, chrome: Chrome, start: Any, jumps: Flow<Hos
                                 }
                             },
                             actions = {
-                                chrome.actions?.invoke(this)
+                                chrome.actionEntries.forEach { it.content(this) }
                                 // Background operations of the hub and every
                                 // host — any job, wherever it was started.
                                 com.netknownsthat.ui.hub.ActiveJobsButton(koinViewModel()) { a ->

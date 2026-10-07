@@ -3,6 +3,7 @@ package com.netknownsthat.data.repository
 import com.netknownsthat.domain.model.ActiveJob
 import com.netknownsthat.domain.model.NewTarget
 import com.netknownsthat.data.dto.ActiveJobsResponseDto
+import com.netknownsthat.data.dto.MaybeJobDto
 import com.netknownsthat.data.dto.AuditResponseDto
 import com.netknownsthat.data.dto.CertificatesResponseDto
 import com.netknownsthat.data.dto.ClamResponseDto
@@ -162,6 +163,20 @@ class ContainersRepositoryImpl(private val api: ApiClient) : ContainersRepositor
         }
         return api.post(hostPath(host, "$base/${name.q()}/${action.q()}"))
     }
+
+    override suspend fun actionJob(host: HostTarget, runtime: Runtime, name: String, action: String): Outcome<Long?> {
+        val base = when (runtime) {
+            Runtime.DOCKER -> "/containers"
+            Runtime.PODMAN -> "/podman/containers"
+            Runtime.LXD -> "/lxd/instances"
+            Runtime.VM -> "/vms"
+        }
+        return api.post<MaybeJobDto>(hostPath(host, "$base/${name.q()}/${action.q()}?job=1")).map { it.jobId?.takeIf { id -> id > 0 } }
+    }
+
+    override suspend fun saveImagesJob(host: HostTarget, refs: List<String>): Outcome<Long?> =
+        api.post<MaybeJobDto>(hostPath(host, "/images/save?job=1"), buildJsonObject { put("refs", refs(refs)) })
+            .map { it.jobId?.takeIf { id -> id > 0 } }
 
     override suspend fun inspect(host: HostTarget, name: String, reveal: Boolean): Outcome<ContainerInspect> =
         api.get<ContainerInspectDto>(hostPath(host, "/containers/${name.q()}/inspect" + if (reveal) "?reveal=1" else ""))

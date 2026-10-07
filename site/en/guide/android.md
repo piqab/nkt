@@ -83,7 +83,8 @@ variables), a config file (edit, history, rollback), a job (live log and
 cancel), a pipeline (history and rollback). The host's “⋮” menu has reboot:
 the app first shows what is running and what will not come back by itself. "Availability" has targets of your own (ping, TCP,
 HTTP, HTTPS — an address no host config mentions), and each target has
-"check now" and enabling/disabling checks.
+"check now" and enabling/disabling checks. Stopping and restarting an LXD instance and "Save" for
+Docker images run as a host job — its log opens at once.
 
 **The terminal** takes the whole screen. If the host has tmux, the session
 opens in it and survives a dropped connection: the app re-attaches to the
