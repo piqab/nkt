@@ -204,7 +204,7 @@ jobs:
             echo "::notice::секрета ANDROID_KEYSTORE_BASE64 нет — APK в релиз не попадёт"
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         if: steps.key.outputs.present == 'true'
         with:
           distribution: temurin

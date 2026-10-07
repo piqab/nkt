@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -47,11 +47,24 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      # mobile/gradle.properties keeps Gradle small for a developer machine
+      # that also runs an emulator (1.5 GB heap, Kotlin in-process); linking
+      # the Kotlin/Native + Compose iOS framework needs far more. The user
+      # gradle.properties overrides the project one — on the CI runner only.
+      - name: Gradle memory for Kotlin/Native
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+          kotlin.compiler.execution.strategy=daemon
+          kotlin.daemon.jvmargs=-Xmx3g
+          org.gradle.workers.max=3
+          EOF
       - name: Generate the Xcode project
         working-directory: mobile/iosApp
         run: |
@@ -59,10 +72,22 @@ jobs:
           xcodegen generate
       - name: Build for the simulator (unsigned)
         working-directory: mobile/iosApp
+        # The full log needs repository admin rights to download; the
+        # compiler errors are re-emitted as annotations, which anyone can
+        # read on the run page. ARCHS=arm64: the Kotlin framework is built
+        # for iosSimulatorArm64 only (the runner is Apple silicon), and a
+        # generic simulator destination would also ask for x86_64.
         run: |
           chmod +x ../gradlew
-          xcodebuild -project iosApp.xcodeproj -scheme iosApp \
+          set -o pipefail
+          if ! xcodebuild -project iosApp.xcodeproj -scheme iosApp \
             -sdk iphonesimulator -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             MARKETING_VERSION="$(tr -d '[:space:]' < ../../VERSION)" \
-            CODE_SIGNING_ALLOWED=NO build
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log; then
+            grep -E '(^e: |error:|OutOfMemoryError|FAILURE:|What went wrong)' build.log | sort -u | head -40 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
