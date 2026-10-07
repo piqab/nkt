@@ -1611,6 +1611,8 @@ var enCatalog = map[string]string{
 	"apt.removeJob":                                       "Remove packages: %s",
 	"hub.hostJobFailed":                                   "the job on the host failed: %s",
 	"hub.hostJobLost":                                     "lost touch with job %d on the host: %v",
+	"hub.installAllNoConn":                                "%s: no connection — skipped (%s)",
+	"hub.installAllSummary":                               "Result: updated %d, skipped without a connection %d, install errors %d.",
 	"k8s.uninstall":                                       "removing the node: %s",
 	"k8s.stepSkipped":                                     "      already done — skipping",
 	"hub.clusterGone":                                     "the cluster record is gone — create the cluster again from the form",

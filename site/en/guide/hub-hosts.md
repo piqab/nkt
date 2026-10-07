@@ -155,8 +155,11 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   time (otherwise dozens of SSH connections hit sshd's `MaxStartups` or a
   jump host). The confirmation window shows who gets updated and who
   doesn't: hosts where an update is already running or queued are left
-  alone ("updating: N" next to the button), unreachable ones are skipped,
-  and ones that failed last time only with the "retry failed" checkbox.
+  alone ("updating: N" next to the button), and ones that failed last time
+  only with the "retry failed" checkbox. The job checks the connection
+  itself before installing on each host (up to 3 attempts within a
+  minute): a host without one is skipped, and the log ends with the result
+  "updated, skipped without a connection, install errors".
   While updates run, the host list refreshes every few seconds.
 - **Sudo** — what the hub user is really allowed to do without a password,
   per the latest check of the host (after installation, update,

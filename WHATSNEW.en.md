@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.171 — 2026-10-07
+
+- **"Update all" no longer skips hosts that are "unreachable" only on the
+  first poll after a hub restart.** All outdated hosts are queued except
+  those already updating and those that failed last time (those come with
+  the "retry failed" checkbox). The job checks the connection itself
+  before installing on each host (up to 3 attempts within a minute): a
+  host without one is skipped, and the log ends with the result "updated,
+  skipped without a connection, install errors". The same goes for the
+  automatic run after a hub update.
+
 ## v1.11.170 — 2026-10-07
 
 - **"After the hub update, update nkt on all hosts":** with the checkbox

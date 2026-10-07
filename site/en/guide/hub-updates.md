@@ -55,9 +55,11 @@ after nkt is updated on a host.
 The confirmation has a **"After the hub update, update nkt on all hosts"**
 checkbox, on by default. Then, after the reload, "Hosts" opens right away
 and updating nkt on the hosts **starts by itself**, with no second
-confirmation: the checkbox is the consent. Outdated reachable hosts are
-updated; those already updating, unreachable ones and those that failed
-last time are skipped (do them by hand with "Update all"). The job log
+confirmation: the checkbox is the consent. All outdated hosts are
+updated except those already updating and those that failed last time
+(do them by hand with the "retry failed" checkbox). The "unreachable" flag
+is unreliable right after a hub restart, so the job itself checks the
+connection to each host before installing; a host without one is skipped. The job log
 opens at once; if there is nothing to update, it says so. This happens
 only if the hub version did change; if it has not changed within half an
 hour, the intent is dropped (it is remembered in this browser).

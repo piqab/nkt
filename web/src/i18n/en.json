@@ -798,12 +798,10 @@
     "statusNotPolled": "not polled yet",
     "noData": "no data",
     "updatingNow": "updating: {{count}}",
-    "updateSkippedUnreachable": "unreachable, skipped: {{count}}",
     "updateAllTitle": "Update nkt on hosts",
     "updateAllReady": "Will be brought to the hub version: {{count}}",
     "updateAllRetryFailed": "retry failed ({{count}}):",
     "updateAllActive": "Already updating, left alone: {{names}}",
-    "updateAllUnreachable": "Unreachable, skipped: {{names}}",
     "updateAllStart": "Update ({{count}})",
     "colBanned": "f2b",
     "f2bMissing": "fail2ban is not installed",
@@ -872,7 +870,8 @@
     "exportMonitoringHint": "The hourly and daily load and availability summaries of all hosts that the hub keeps. The file is noticeably larger; on import, hosts are matched by name.",
     "importMerge": "merge",
     "importAllMerge": "merge all",
-    "allUpToDate": "All hosts are already on the hub version {{version}} — nothing to update."
+    "allUpToDate": "All hosts are already on the hub version {{version}} — nothing to update.",
+    "updateAllProbeHint": "Before installing, the job checks the SSH connection to each host (up to 3 attempts within a minute): with no connection the host is skipped."
   },
   "events": {
     "title": "Alerts",
