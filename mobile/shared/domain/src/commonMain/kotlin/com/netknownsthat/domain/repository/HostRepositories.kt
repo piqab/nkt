@@ -1,5 +1,6 @@
 package com.netknownsthat.domain.repository
 
+import com.netknownsthat.domain.model.ActiveJob
 import com.netknownsthat.domain.common.HostTarget
 import com.netknownsthat.domain.common.JobOwner
 import com.netknownsthat.domain.common.Outcome
@@ -153,6 +154,10 @@ interface JobsRepository {
     suspend fun log(owner: JobOwner, jobId: Long, after: Long): Outcome<JobLogResponse>
     suspend fun cancel(owner: JobOwner, jobId: Long): Outcome<Unit>
     suspend fun retry(owner: JobOwner, jobId: Long): Outcome<Unit>
+
+    /** Jobs queued or running right now — the hub's own and every online
+     * host's (GET /hub/jobs/active): the background operations indicator. */
+    suspend fun active(): Outcome<List<ActiveJob>> = Outcome.Success(emptyList())
 }
 
 interface SystemRepository {

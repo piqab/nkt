@@ -49,6 +49,17 @@ data class JobListResponseDto(
     val kinds: List<String> = emptyList(),
 )
 
+/** GET /hub/jobs/active. */
+@Serializable
+data class ActiveJobsResponseDto(val jobs: List<ActiveJobDto> = emptyList())
+
+@Serializable
+data class ActiveJobDto(
+    @SerialName("host_id") val hostId: Long = 0,
+    @SerialName("host_name") val hostName: String = "",
+    val job: JobRecordDto = JobRecordDto(),
+)
+
 @Serializable
 data class JobRecordDto(
     val id: Long = 0,

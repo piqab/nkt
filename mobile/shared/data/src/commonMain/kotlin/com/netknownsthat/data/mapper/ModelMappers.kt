@@ -1,5 +1,7 @@
 package com.netknownsthat.data.mapper
 
+import com.netknownsthat.domain.model.ActiveJob
+import com.netknownsthat.data.dto.ActiveJobDto
 import com.netknownsthat.data.dto.AddHostResponseDto
 import com.netknownsthat.data.dto.AddedRuleDto
 import com.netknownsthat.data.dto.AuditEntryDto
@@ -676,6 +678,8 @@ fun JobRecordDto.toDomain(): JobRecord = JobRecord(
     startedAt = startedAt,
     finishedAt = finishedAt,
 )
+
+fun ActiveJobDto.toDomain(): ActiveJob = ActiveJob(hostId = hostId, hostName = hostName, job = job.toDomain())
 
 fun JobLogResponseDto.toDomain(): JobLogResponse = JobLogResponse(
     job = job.toDomain(),

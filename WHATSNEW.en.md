@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.174 — 2026-10-07
+
+- **Mobile app: the background operations indicator**, as in the web
+  interface — an icon in the top bar with the number of jobs running on
+  the hub and on every host; a list with the step and a bar, and picking
+  one opens the job's log.
+
 ## v1.11.173 — 2026-10-07
 
 - CI, iOS app build: only arm64 is built for the simulator — the Kotlin

@@ -56,6 +56,11 @@ deployments, about). Under the title are breadcrumbs, e.g.
 `Hosts › web-1 › Containers › acme-app`: each one goes back to its level, and
 the system Back button goes back one step.
 
+**Background operations.** While a job runs somewhere — on the hub or on
+any host, whoever started it — the top bar shows an icon with their count.
+A tap shows the list (host, job, step and a bar), and picking one opens the
+job's live log.
+
 **Host list** — by group: state, number of problems, Kubernetes role, sudo
 (passwordless in red), an nkt version behind the hub. The list icon on top
 manages groups (create, rename, delete).
