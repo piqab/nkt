@@ -85,16 +85,16 @@ function isOutdated(h: HubHost, hubVersion?: string): boolean {
   return h.status !== 'new' && !!hubVersion && !!h.nkt_version && h.nkt_version !== hubVersion
 }
 
-/** Кого трогает «обновить всё»: ready — отставшие и доступные; failed —
- * отставшие, у которых прошлое обновление упало (только по галочке);
- * active — установка уже идёт или ждёт очереди (их не трогаем);
- * unreachable — хаб до них сейчас не достаёт (пропускаются). */
+/** Кого трогает «обновить всё»: ready — отставшие (в том числе
+ * помеченные «недоступен»: сразу после перезапуска хаба этот признак ещё не
+ * опрошен и врёт — подключение проверяет само задание и хост без него
+ * пропускает); failed — отставшие, у которых прошлое обновление упало
+ * (только по галочке); active — установка уже идёт или ждёт очереди. */
 function planUpdateAll(hosts: HubHost[], hubVersion?: string) {
-  const plan = { ready: [] as HubHost[], failed: [] as HubHost[], active: [] as HubHost[], unreachable: [] as HubHost[] }
+  const plan = { ready: [] as HubHost[], failed: [] as HubHost[], active: [] as HubHost[] }
   for (const h of hosts) {
     if (h.id === LOCAL_HOST_ID || !isOutdated(h, hubVersion)) continue
     if (h.install_active || h.status === 'installing') plan.active.push(h)
-    else if (h.reachable === false) plan.unreachable.push(h)
     else if (h.status === 'error') plan.failed.push(h)
     else plan.ready.push(h)
   }
@@ -1536,11 +1536,6 @@ export default function Hosts({
               {outdatedCount > 0 ? t('hosts.updateAllCount', { count: outdatedCount }) : t('hosts.updateAllNone')}
             </Button>
             {updatePlan.active.length > 0 && <span className="small muted">{t('hosts.updatingNow', { count: updatePlan.active.length })}</span>}
-            {updatePlan.unreachable.length > 0 && (
-              <Tooltip title={updatePlan.unreachable.map((h) => h.name).join(', ')}>
-                <span className="small muted">{t('hosts.updateSkippedUnreachable', { count: updatePlan.unreachable.length })}</span>
-              </Tooltip>
-            )}
             <Button
               size="small"
               type="primary"
@@ -3057,7 +3052,7 @@ function UpdateAllModal({ plan, onClose, onStart }: { plan: ReturnType<typeof pl
           </Checkbox>
         )}
         {plan.active.length > 0 && <div className="muted">{t('hosts.updateAllActive', { names: names(plan.active) })}</div>}
-        {plan.unreachable.length > 0 && <div className="muted">{t('hosts.updateAllUnreachable', { names: names(plan.unreachable) })}</div>}
+        <div className="muted">{t('hosts.updateAllProbeHint')}</div>
         <div className="row" style={{ justifyContent: 'flex-end' }}>
           <Button type="primary" disabled={count === 0} onClick={() => onStart(retry)}>
             {t('hosts.updateAllStart', { count })}

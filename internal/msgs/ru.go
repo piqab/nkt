@@ -1610,6 +1610,8 @@ var ruCatalog = map[string]string{
 	"apt.removeJob":                                       "Удалить пакеты: %s",
 	"hub.hostJobFailed":                                   "задание на хосте не удалось: %s",
 	"hub.hostJobLost":                                     "связь с заданием %d на хосте потеряна: %v",
+	"hub.installAllNoConn":                                "%s: нет подключения — пропущен (%s)",
+	"hub.installAllSummary":                               "Итог: обновлено %d, пропущено без подключения %d, ошибок установки %d.",
 	"k8s.uninstall":                                       "удаление узла: %s",
 	"k8s.stepSkipped":                                     "      уже сделано — пропускаю",
 	"hub.clusterGone":                                     "запись кластера удалена — создайте кластер заново из формы",

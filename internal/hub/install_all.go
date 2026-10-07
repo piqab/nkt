@@ -85,7 +85,7 @@ func (r *InstallAllRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
 	var mu sync.Mutex
-	done, failed := 0, 0
+	done, failed, skipped := 0, 0, 0
 	step := func(name, key string, args ...any) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -110,6 +110,16 @@ func (r *InstallAllRunner) Run(ctx context.Context, jc *jobs.Context) error {
 				failed++
 				mu.Unlock()
 				step("#"+strconv.FormatInt(id, 10), "hub.installAllGone")
+				return
+			}
+			// Подключение проверяется здесь, а не по признаку «доступен» в
+			// списке: сразу после перезапуска хаба он ещё не опрошен и врёт.
+			// Нет подключения — хост пропускается (не ошибка установки).
+			if err := installAllProbe(r.m, ctx, host); err != nil {
+				mu.Lock()
+				skipped++
+				mu.Unlock()
+				step(host.Name, "hub.installAllNoConn", msgs.Localize(jc.Lang(), err))
 				return
 			}
 			jobID, err := r.m.StartInstall(ctx, id, false, nil)
@@ -140,11 +150,46 @@ func (r *InstallAllRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+	jc.Log("hub.installAllSummary", len(p.HostIDs)-failed-skipped, skipped, failed)
 	r.m.db.Audit(ctx, jc.Job.Author, "hub.install_all", strconv.Itoa(len(p.HostIDs)), auditOK(failed == 0), nil)
 	if failed > 0 {
 		return msgs.Errorf("hub.installAllFailedCount", failed, len(p.HostIDs))
 	}
 	return nil
+}
+
+// Проверка подключения перед установкой: попыток и пауза между ними —
+// за минуту хост, у которого только что перезапустился sshd или туннель,
+// успевает ответить.
+var (
+	installAllProbeAttempts = 3
+	installAllProbeTimeout  = 15 * time.Second
+	installAllProbeGap      = 20 * time.Second
+)
+
+// installAllProbe — есть ли SSH-подключение к хосту (тем же путём, что у
+// установки: напрямую или через родительский хост); подменяется в тестах.
+var installAllProbe = func(m *Manager, ctx context.Context, host store.Host) error {
+	var last error
+	for attempt := 1; attempt <= installAllProbeAttempts; attempt++ {
+		dctx, cancel := context.WithTimeout(ctx, installAllProbeTimeout)
+		link, err := m.dialHost(dctx, host)
+		cancel()
+		if err == nil {
+			_ = link.Close()
+			return nil
+		}
+		last = err
+		if attempt == installAllProbeAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(installAllProbeGap):
+		}
+	}
+	return last
 }
 
 // waitJob — ждать задание установки: итог и текст ошибки.

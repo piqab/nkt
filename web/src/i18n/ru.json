@@ -802,12 +802,10 @@
     "statusNotPolled": "ещё не опрашивался",
     "noData": "нет данных",
     "updatingNow": "обновляется: {{count}}",
-    "updateSkippedUnreachable": "недоступны, пропущены: {{count}}",
     "updateAllTitle": "Обновить nkt на хостах",
     "updateAllReady": "Будут обновлены до версии хаба: {{count}}",
     "updateAllRetryFailed": "повторить неудачные ({{count}}):",
     "updateAllActive": "Уже обновляются, не трогаем: {{names}}",
-    "updateAllUnreachable": "Недоступны, пропускаем: {{names}}",
     "updateAllStart": "Обновить ({{count}})",
     "colBanned": "f2b",
     "f2bMissing": "fail2ban не установлен",
@@ -876,7 +874,8 @@
     "exportMonitoringHint": "Почасовые и суточные сводки нагрузки и доступности всех хостов, что хранит хаб. Файл заметно больше; при импорте хосты сопоставляются по имени.",
     "importMerge": "дополнить",
     "importAllMerge": "все дополнить",
-    "allUpToDate": "Все хосты уже на версии хаба {{version}} — обновлять нечего."
+    "allUpToDate": "Все хосты уже на версии хаба {{version}} — обновлять нечего.",
+    "updateAllProbeHint": "Перед установкой задание проверяет SSH-подключение к каждому хосту (до 3 попыток за минуту): нет подключения — хост пропускается."
   },
   "events": {
     "title": "Оповещения",
