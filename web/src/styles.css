@@ -1170,13 +1170,15 @@ span.vm-toggle {
 .active-jobs-item:hover { background: var(--wash); }
 .active-jobs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* «Интерфейс обновился» (StaleUIBanner) — поверх всего, по центру сверху. */
+/* «Интерфейс обновился» (StaleUIBanner) — поверх всего, по центру сверху,
+   и над модальными окнами (у antd они на 1000): открытое окно журнала
+   обновления закрывало плашку. */
 .stale-ui-banner {
   position: fixed;
   top: 0.6rem;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 1000;
+  z-index: 2000;
   display: flex;
   align-items: center;
   gap: 0.8rem;

@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.166 — 2026-10-07
+
+- The "Interface has been updated — reload the page" bar shows on top of an
+  open window too (the update log window used to hide it).
+- Verified in a browser: after a hub update the page reloads by itself —
+  with the log window open or closed; if the hub has not answered with the
+  new version within 3 minutes, the page says so.
+- Dependencies: `source-map-js` 1.2.2 in the web interface and the docs
+  site (a denial-of-service issue in source map parsing, build tooling
+  only).
+- Docs: fixed the site build (the Android beta release name).
+
 ## v1.11.165 — 2026-10-06
 
 - **After a hub update the page reloads by itself again.** The update log
