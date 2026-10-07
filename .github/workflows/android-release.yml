@@ -40,7 +40,7 @@ jobs:
             echo "::error::нет ключа подписи: задайте секреты ANDROID_KEYSTORE_BASE64 и ANDROID_KEYSTORE_PASSWORD (и ANDROID_KEY_PASSWORD, если пароль ключа другой) — Settings → Secrets and variables → Actions"
             exit 1
           fi
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"

@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.173 — 2026-10-07
+
+- CI, iOS app build: only arm64 is built for the simulator — the Kotlin
+  framework is built for `iosSimulatorArm64`, while a generic "simulator"
+  also asked for x86_64; Gradle on the build server gets 4 GB of memory
+  (the project's frugal settings are for a developer machine and are not
+  enough to link the iOS framework); compiler errors are emitted as
+  annotations, visible on the run page without admin rights.
+- CI: `actions/setup-java` v5 instead of the deprecated v4.
+
 ## v1.11.172 — 2026-10-07
 
 - **The hub no longer drops its link to a host because of one failed
