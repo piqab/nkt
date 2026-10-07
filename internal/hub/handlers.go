@@ -1568,6 +1568,20 @@ func (s *Server) proxyLocal(w http.ResponseWriter, r *http.Request) {
 	s.local.ServeHTTP(w, r2)
 }
 
+// isTransferPath — запрос хоста с большой передачей: загрузка и
+// скачивание архивов образов, образов машин, файлов проводника, бэкапов.
+func isTransferPath(method, rest string) bool {
+	rest = strings.SplitN(rest, "?", 2)[0]
+	switch method {
+	case http.MethodPut, http.MethodPost:
+		return rest == "files/upload" || rest == "images/archives/upload" || rest == "vm/images/upload"
+	case http.MethodGet:
+		return rest == "files/download" || rest == "backups/download" || rest == "vm/images/file/download" ||
+			(strings.HasPrefix(rest, "images/archives/") && strings.HasSuffix(rest, "/download"))
+	}
+	return false
+}
+
 // proxyHost forwards a request under /api/hosts/{id}/* to the same path
 // under /api/* on that host's own nkt — see Manager.Proxy.
 func (s *Server) proxyHost(w http.ResponseWriter, r *http.Request) {
@@ -1585,9 +1599,12 @@ func (s *Server) proxyHost(w http.ResponseWriter, r *http.Request) {
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = "/api/" + rest
 	r2.URL.RawPath = ""
-	if r.Method == http.MethodPut && strings.HasSuffix(rest, "files/upload") {
-		// У запроса с телом второй попытки нет (см. EnsureLive).
-		s.hub.EnsureLive(r.Context(), id)
+	// Большие передачи — по своему SSH-соединению (см. ProxyTransfer):
+	// гигабайты не забивают общее соединение хоста, и обрыв передачи не
+	// роняет опрос, страницу и журналы.
+	if isTransferPath(r.Method, rest) {
+		s.hub.ProxyTransfer(id).ServeHTTP(w, r2)
+		return
 	}
 	s.hub.Proxy(id).ServeHTTP(w, r2)
 }

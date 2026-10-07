@@ -8,6 +8,29 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.172 — 2026-10-07
+
+- **The hub no longer drops its link to a host because of one failed
+  request.** The hub has one SSH connection per host for everything —
+  polling, pages, logs, signing in to the host; an error in any request
+  (including one cancelled by the browser or one that missed its deadline
+  on a loaded host) closed it entirely, cutting everything else on it —
+  hence "ssh: unexpected packet in response to channel open", EOF on sign-in
+  and "host unreachable" for a live host, especially during an image upload
+  and long operations. Now the connection is closed only if it really is
+  dead (an SSH keepalive check), and one busy with running requests is not
+  closed for idleness either.
+- **Large transfers use their own SSH connection** (image archives,
+  machine and cluster images, file browser files, backups): gigabytes no
+  longer clog the host's shared connection.
+- Signing in to a host is retried over a fresh connection if the channel
+  breaks.
+- "Unreachable" from the second failed poll in a row, not the first: a
+  live host can fail once under load or in the first minute after a hub
+  restart.
+- The background operations indicator polls hosts less often and with more
+  time to spare.
+
 ## v1.11.171 — 2026-10-07
 
 - **"Update all" no longer skips hosts that are "unreachable" only on the

@@ -163,7 +163,9 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 	}
 	cookie, err := m.cookieFor(ctx, hostID, dial)
 	if err != nil {
-		onFail()
+		if ctx.Err() == nil {
+			onFail()
+		}
 		fail(err)
 		return
 	}
@@ -173,7 +175,9 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 	report(msgs.Tc(ctx, "hub.vulnFetchingPackages"))
 	hm, err := fetchHostManifest(ctx, client, addr, cookie)
 	if err != nil {
-		onFail()
+		if ctx.Err() == nil {
+			onFail()
+		}
 		fail(err)
 		return
 	}

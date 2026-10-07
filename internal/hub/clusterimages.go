@@ -183,16 +183,17 @@ func (m *Manager) ensureHostImage(ctx context.Context, jc *jobs.Context, hostID 
 }
 
 // HostAPIStream — как HostAPI, но с потоковым телом и без таймаута
-// (образ на гигабайты); тело ответа возвращается как есть.
+// (образ на гигабайты); тело ответа возвращается как есть. По своему
+// SSH-соединению (см. dedicatedDialer): гигабайты не идут по общему.
 func (m *Manager) HostAPIStream(ctx context.Context, hostID int64, method, path string, body io.Reader, contentLength int64) (int, []byte, error) {
-	dial, channel, onFail, err := m.dialerFor(ctx, hostID)
+	dial, channel, closeFn, err := m.dedicatedDialer(ctx, hostID)
 	if err != nil {
 		return 0, nil, err
 	}
+	defer closeFn()
 	m.recordChannel(hostID, channel)
 	cookie, err := m.cookieFor(ctx, hostID, dial)
 	if err != nil {
-		onFail()
 		return 0, nil, err
 	}
 	addr := m.hostAPIAddr(ctx, hostID)
@@ -205,7 +206,6 @@ func (m *Manager) HostAPIStream(ctx context.Context, hostID int64, method, path 
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
 	resp, err := tunnelHTTPClientNoTimeout(dial, addr).Do(req)
 	if err != nil {
-		onFail()
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
