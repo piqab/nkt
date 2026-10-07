@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.169 — 2026-10-07
+
+- CI: the mobile app build no longer runs on release tags — GitHub does not
+  check the paths filter for tag pushes, so every `v1.11.x` tag started it
+  again.
+
 ## v1.11.168 — 2026-10-07
 
 - **The third batch of long operations runs as jobs** (log, "Jobs", the
