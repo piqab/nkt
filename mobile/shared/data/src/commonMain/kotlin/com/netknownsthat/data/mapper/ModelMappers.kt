@@ -1315,3 +1315,20 @@ fun ImageActionResponseDto.toDomain(): ImageActionResponse = ImageActionResponse
     results = results.map { it.toDomain() },
     reclaimed = reclaimed,
 )
+
+fun com.netknownsthat.data.dto.AvailabilityBucketDto.toDomain() = com.netknownsthat.domain.model.AvailabilityBucket(
+    bucket = bucket, total = total, ok = ok, uptime = uptime, avgLatencyMs = avgLatencyMs, maxLatencyMs = maxLatencyMs,
+)
+
+fun com.netknownsthat.data.dto.MonSeriesDto.toDomain() = com.netknownsthat.domain.model.MonSeries(
+    source = source,
+    subject = subject,
+    metric = metric,
+    // A point the hub cannot have produced (short, not a number) is skipped
+    // rather than failing the whole chart.
+    points = points.mapNotNull { p ->
+        val at = (p.getOrNull(0) as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@mapNotNull null
+        fun num(i: Int) = (p.getOrNull(i) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+        com.netknownsthat.domain.model.MonSeriesPoint(at, num(1) ?: return@mapNotNull null, num(2) ?: 0.0, num(3) ?: 0.0)
+    },
+)

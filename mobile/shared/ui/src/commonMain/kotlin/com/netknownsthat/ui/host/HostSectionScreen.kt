@@ -21,6 +21,7 @@ fun HostSectionScreen(
     openSection: (HostSectionKey) -> Unit,
     openContainer: (String) -> Unit,
     openConsole: (ConsoleTarget) -> Unit,
+    openTargetHistory: (com.netknownsthat.domain.model.Target) -> Unit,
     openConfigFile: (String) -> Unit,
     openJob: (Long) -> Unit,
     openHostAt: (Long, String) -> Unit,
@@ -41,7 +42,7 @@ fun HostSectionScreen(
         HostSectionKey.CONTAINERS -> Section(koinViewModel<ContainersViewModel>(parameters = p)) { ContainersScreen(it, openContainer, openJob, openConsole) }
         HostSectionKey.VULNERABILITIES -> Section(koinViewModel<VulnerabilitiesViewModel>(parameters = p)) { VulnerabilitiesScreen(it) }
         HostSectionKey.MALWARE -> Section(koinViewModel<com.netknownsthat.ui.hub.ClamAVViewModel>(parameters = p)) { ClamAVScreen(it, openJob) }
-        HostSectionKey.AVAILABILITY -> Section(koinViewModel<AvailabilityViewModel>(parameters = p)) { AvailabilityScreen(it) }
+        HostSectionKey.AVAILABILITY -> Section(koinViewModel<AvailabilityViewModel>(parameters = p)) { AvailabilityScreen(it, openTargetHistory) }
         HostSectionKey.USAGE -> Section(koinViewModel<UsageViewModel>(parameters = p)) { UsageScreen(it) }
         HostSectionKey.CONFIGS -> Section(koinViewModel<ConfigsViewModel>(parameters = p)) { ConfigsScreen(it, openConfigFile) }
         HostSectionKey.FIREWALL -> Section(koinViewModel<FirewallViewModel>(parameters = p)) { FirewallScreen(it) }

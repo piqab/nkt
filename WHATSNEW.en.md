@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.180 — 2026-10-08
+
+- **Mobile app: touch charts.** A finger on a chart marks a bucket and shows
+  its time and every line's value; slide sideways and the mark follows; the
+  readout stays until a tap outside. New charts, as in the web: a target's
+  history in "Availability" (availability and latency) and a host's charts in
+  the hub's "Monitoring" (CPU, memory, load, disks — from a day to a year).
+- Mobile app: Enter on the terminal's key bar after the arrows; the
+  interface scale can be any percent from 50 to 100.
+
 ## v1.11.179 — 2026-10-08
 
 - The mobile app's CI build (`mobile`) is by hand only, with a choice of

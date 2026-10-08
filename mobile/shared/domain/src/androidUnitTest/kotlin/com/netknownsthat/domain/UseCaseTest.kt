@@ -49,6 +49,7 @@ class UseCaseTest {
         override suspend fun targets(host: HostTarget) = Outcome.Success(TargetsResponse())
         override suspend fun outages(host: HostTarget) = Outcome.Success(OutagesResponse())
         override suspend fun checkTarget(host: HostTarget, targetId: Long) = Outcome.Success(Unit)
+        override suspend fun targetHistory(host: HostTarget, targetId: Long, since: String, tzMinutes: Int) = Outcome.Success(emptyList<com.netknownsthat.domain.model.AvailabilityBucket>())
         override suspend fun addTarget(host: HostTarget, target: com.netknownsthat.domain.model.NewTarget) = Outcome.Success(Unit)
         override suspend fun setTargetEnabled(host: HostTarget, targetId: Long, enabled: Boolean) = Outcome.Success(Unit)
         override suspend fun deleteTarget(host: HostTarget, targetId: Long) = Outcome.Success(Unit)
@@ -220,9 +221,14 @@ class UseCaseTest {
 
     @Test
     fun uiScaleFallsBackToTheDefault() {
-        assertEquals(UiScale.P80, UiScale.of(80))
-        // Nothing saved yet, or a value from a newer app: the default.
+        assertEquals(UiScale(80), UiScale.of(80))
+        assertEquals(UiScale(115), UiScale.of(115))
+        // Any percent 50–100 typed in is kept.
+        assertEquals(UiScale(50), UiScale.of(50))
+        assertEquals(UiScale(73), UiScale.of(73))
+        // Nothing saved yet, or out of range: the default.
         assertEquals(UiScale.DEFAULT, UiScale.of(null))
-        assertEquals(UiScale.DEFAULT, UiScale.of(73))
+        assertEquals(UiScale.DEFAULT, UiScale.of(49))
+        assertEquals(UiScale.DEFAULT, UiScale.of(105))
     }
 }

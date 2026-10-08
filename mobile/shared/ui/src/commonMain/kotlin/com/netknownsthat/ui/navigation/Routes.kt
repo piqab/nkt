@@ -33,6 +33,12 @@ import kotlinx.serialization.Serializable
 /** A console: kind is ConsoleKind's name, user — Docker/Podman only. */
 @Serializable data class ConsoleRoute(val hostId: Long, val hostName: String, val kind: String, val name: String, val user: String = "")
 
+/** A monitoring target's history charts. */
+@Serializable data class TargetHistoryRoute(val hostId: Long, val hostName: String, val targetId: Long, val label: String)
+
+/** A host's charts in the hub's monitoring. */
+@Serializable data class MonHostRoute(val hostId: Long, val hostName: String, val memTotal: Double = 0.0)
+
 /** A configuration file: view, edit, history. */
 @Serializable data class ConfigFileRoute(val hostId: Long, val hostName: String, val path: String)
 

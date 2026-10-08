@@ -432,3 +432,15 @@ data class InstallJobResponseDto(val job: Long = 0)
 /** DELETE /hub/hosts/{id}: with a cleanup, the hub job that does it. */
 @Serializable
 data class DeleteHostResponseDto(@SerialName("job_id") val jobId: Long? = null)
+
+/** GET /hub/monitoring/series: points are [at, avg, max, sum]. */
+@Serializable
+data class MonSeriesResponseDto(val series: List<MonSeriesDto> = emptyList())
+
+@Serializable
+data class MonSeriesDto(
+    val source: String = "",
+    val subject: String = "",
+    val metric: String = "",
+    val points: List<List<kotlinx.serialization.json.JsonElement>> = emptyList(),
+)

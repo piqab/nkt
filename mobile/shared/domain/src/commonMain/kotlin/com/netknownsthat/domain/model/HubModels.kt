@@ -376,3 +376,14 @@ data class AddHostResponse(
 
 /** POST /api/hub/hosts/{id}/install and GET …/install/latest: {"job": N}. */
 data class InstallJobResponse(val job: Long = 0)
+
+/** A metric's history on the hub (GET /hub/monitoring/series): per bucket
+ * the average, the peak and the sum (counters such as network bytes). */
+data class MonSeries(
+    val source: String,
+    val subject: String,
+    val metric: String,
+    val points: List<MonSeriesPoint>,
+)
+
+data class MonSeriesPoint(val at: String, val avg: Double, val max: Double, val sum: Double)

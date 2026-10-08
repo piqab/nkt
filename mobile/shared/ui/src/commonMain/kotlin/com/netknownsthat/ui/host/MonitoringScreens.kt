@@ -190,7 +190,7 @@ private fun VulnCard(finding: VulnFinding) {
 }
 
 @Composable
-fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
+fun AvailabilityScreen(viewModel: AvailabilityViewModel, onHistory: (com.netknownsthat.domain.model.Target) -> Unit = {}) {
     var sourceFilter by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Target?>(null) }
@@ -261,6 +261,7 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
                 TargetCard(
                     target,
                     onCheck = { viewModel.check(target.id) },
+                    onHistory = { onHistory(target) },
                     onToggle = { viewModel.setEnabled(target.id, !target.enabled) },
                     // Only targets added by hand: the rest come from the
                     // host's own configs and would come back on the next scan.
@@ -301,9 +302,10 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
 }
 
 @Composable
-private fun TargetCard(target: Target, onCheck: () -> Unit, onToggle: () -> Unit, onDelete: (() -> Unit)?) {
+private fun TargetCard(target: Target, onCheck: () -> Unit, onHistory: () -> Unit, onToggle: () -> Unit, onDelete: (() -> Unit)?) {
     var menu by remember { mutableStateOf(false) }
-    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+    // A tap opens the history charts, as a row click does in the web.
+    Card(onClick = onHistory, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             val health = targetHealth(target.lastOk, target.enabled)
             Row(
@@ -334,6 +336,7 @@ private fun TargetCard(target: Target, onCheck: () -> Unit, onToggle: () -> Unit
                         Icon(Icons.Default.MoreVert, contentDescription = t("Действия с целью", "Target actions"))
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text(t("История и графики", "History and charts")) }, onClick = { menu = false; onHistory() })
                         DropdownMenuItem(text = { Text(t("Проверить сейчас", "Check now")) }, onClick = { menu = false; onCheck() })
                         DropdownMenuItem(
                             text = { Text(if (target.enabled) t("Выключить проверки", "Disable checks") else t("Включить проверки", "Enable checks")) },

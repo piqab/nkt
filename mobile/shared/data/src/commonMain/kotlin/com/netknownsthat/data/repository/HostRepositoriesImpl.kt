@@ -236,6 +236,10 @@ class HostMonitoringRepositoryImpl(private val api: ApiClient) : HostMonitoringR
     override suspend fun outages(host: HostTarget): Outcome<OutagesResponse> = api.get<OutagesResponseDto>(hostPath(host, "/monitor/outages")).map { it.toDomain() }
     override suspend fun checkTarget(host: HostTarget, targetId: Long): Outcome<Unit> = api.post(hostPath(host, "/monitor/targets/$targetId/check"))
 
+    override suspend fun targetHistory(host: HostTarget, targetId: Long, since: String, tzMinutes: Int): Outcome<List<com.netknownsthat.domain.model.AvailabilityBucket>> =
+        api.get<com.netknownsthat.data.dto.TargetHistoryDto>(hostPath(host, "/monitor/targets/$targetId/history?since=${since.q()}&granularity=hour&tz=$tzMinutes"))
+            .map { r -> r.buckets.map { it.toDomain() } }
+
     override suspend fun addTarget(host: HostTarget, target: NewTarget): Outcome<Unit> =
         api.post(
             hostPath(host, "/monitor/targets"),

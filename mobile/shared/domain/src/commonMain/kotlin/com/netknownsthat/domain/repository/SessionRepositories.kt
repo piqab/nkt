@@ -41,13 +41,19 @@ interface SessionRepository {
  * Scale of the whole interface — text and spacing together, so more fits on
  * a small phone. [percent] of the platform's own size.
  */
-enum class UiScale(val percent: Int) {
-    P80(80), P90(90), P100(100), P115(115);
-
+data class UiScale(val percent: Int) {
     companion object {
+        /** The ready choices; any percent in [CUSTOM] can be typed in. */
+        val PRESETS = listOf(80, 90, 100, 115).map(::UiScale)
+        val CUSTOM = 50..100
+
         /** A phone screen holds little at 100%: the default is a notch smaller. */
-        val DEFAULT = P90
-        fun of(percent: Int?): UiScale = entries.firstOrNull { it.percent == percent } ?: DEFAULT
+        val DEFAULT = UiScale(90)
+
+        fun valid(percent: Int): Boolean = percent in CUSTOM || PRESETS.any { it.percent == percent }
+
+        /** A saved value; nothing saved or out of range — the default. */
+        fun of(percent: Int?): UiScale = if (percent != null && valid(percent)) UiScale(percent) else DEFAULT
     }
 }
 

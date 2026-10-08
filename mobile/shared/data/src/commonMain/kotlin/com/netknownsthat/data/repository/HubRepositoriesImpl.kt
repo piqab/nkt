@@ -124,6 +124,10 @@ class MonitoringRepositoryImpl(private val api: ApiClient) : MonitoringRepositor
         api.get<MonitoringOverviewDto>("/hub/monitoring/overview").map { it.toDomain() }
 
     override suspend fun collectNow(): Outcome<Unit> = api.post("/hub/monitoring/collect")
+
+    override suspend fun series(hostId: Long, source: String, range: String): Outcome<List<com.netknownsthat.domain.model.MonSeries>> =
+        api.get<com.netknownsthat.data.dto.MonSeriesResponseDto>("/hub/monitoring/series?host=$hostId&source=${source.q()}&range=${range.q()}")
+            .map { r -> r.series.map { it.toDomain() } }
 }
 
 class FleetFail2banRepositoryImpl(private val api: ApiClient) : FleetFail2banRepository {

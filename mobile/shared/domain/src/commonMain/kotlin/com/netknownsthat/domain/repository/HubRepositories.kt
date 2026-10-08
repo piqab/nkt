@@ -66,6 +66,10 @@ interface EventsRepository {
 interface MonitoringRepository {
     suspend fun overview(): Outcome<MonitoringOverview>
     suspend fun collectNow(): Outcome<Unit>
+
+    /** A host's metrics over [range] (24h, 7d, 30d, 90d, 365d); [source]:
+     * host (CPU, memory, load) or disk. */
+    suspend fun series(hostId: Long, source: String, range: String): Outcome<List<com.netknownsthat.domain.model.MonSeries>>
 }
 
 /** fail2ban across the fleet. */
