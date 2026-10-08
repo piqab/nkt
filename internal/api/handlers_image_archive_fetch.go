@@ -38,6 +38,8 @@ type ArchiveFetchParams struct {
 	Checksum string `json:"checksum,omitempty"`
 	// Load — после скачивания docker (podman) load.
 	Load bool `json:"load"`
+	// Remove — после успешного load удалить скачанный архив.
+	Remove bool `json:"remove,omitempty"`
 }
 
 // archiveFetchRequest проверяет запрос и строит параметры задания.
@@ -85,6 +87,7 @@ func (s *Server) handleImageArchiveFetch(w http.ResponseWriter, r *http.Request)
 		FileName string `json:"file_name"`
 		Checksum string `json:"checksum"`
 		Load     bool   `json:"load"`
+		Remove   bool   `json:"remove"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -99,6 +102,7 @@ func (s *Server) handleImageArchiveFetch(w http.ResponseWriter, r *http.Request)
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	p.Remove = req.Remove && p.Load
 	// Готовый архив с тем же именем не перезаписывается молча: за ним
 	// может стоять другой образ.
 	if _, err := os.Stat(filepath.Join(s.archiveDir(), p.Name)); err == nil {
@@ -140,6 +144,7 @@ func (a *archiveFetchRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return err
 	}
+	p2.Remove = p.Remove && p2.Load
 	p = p2
 	steps := 1
 	if p.Load {
@@ -187,5 +192,8 @@ func (a *archiveFetchRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return err
 	}
 	jc.Log("archives.loaded", engineName)
+	if p.Remove {
+		removeLoadedArchive(jc, file)
+	}
 	return nil
 }

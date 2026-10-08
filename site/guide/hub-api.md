@@ -168,6 +168,7 @@ docker save app:1.2 | gzip > app.tar.gz
 curl -s -b jar -T app.tar.gz \
   "$HUB/api/hosts/$HOST/images/archives/upload?name=docker__app-1.2.tar.gz&load=1"
 # {"name":"docker__app-1.2.tar.gz","size":…,"job_id":42}
+# &remove=1 — после успешного docker load удалить архив с хоста
 curl -s -b jar $HUB/api/hosts/$HOST/jobs/42     # status: queued, running, succeeded, failed
 curl -s -b jar "$HUB/api/hosts/$HOST/jobs/42/log?after=0"
 ```
@@ -189,7 +190,8 @@ curl -s -H "Authorization: Bearer nkt_<ключ>_<секрет>" -H 'Content-Typ
 # {"job_id":43} — ход и итог: GET /api/hosts/3/jobs/43
 ```
 
-`name` — по желанию, иначе — из ссылки; `checksum` — sha256 архива,
+`"remove": true` — удалить архив после успешной загрузки; `name` — по
+желанию, иначе — из ссылки; `checksum` — sha256 архива,
 неверная сумма — задание завершается ошибкой, и архив не остаётся.
 Токену нужна роль «администратор», хост — в его пределах.
 

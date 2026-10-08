@@ -1633,9 +1633,18 @@ export function composeLinkFor(repo: string, ref: string, file: string): string 
  * «# compose: …» или по repo/ref/file), хосты, имя стека, сервис сайта.
  * Простой построчный разбор: эти поля в описании по ссылке всегда одного
  * вида; не нашлось — поле пустое. */
+/** Значение строки YAML без комментария в конце: «app # стек» → «app»,
+ * как читает сам YAML; в кавычках «#» — часть значения. */
+export function yamlScalar(raw: string): string {
+  const v = raw.trim()
+  const q = /^(["'])(.*?)\1/.exec(v)
+  if (q) return q[2]
+  return v.replace(/(^|\s)#.*$/, '').trim()
+}
+
 export function fromDescription(text: string): { link: string; hosts: string[]; project: string; site: string } {
   const lines = text.split('\n')
-  const top = (k: string) => lines.find((l) => l.startsWith(k + ':'))?.slice(k.length + 1).trim().replace(/^["']|["']$/g, '') ?? ''
+  const top = (k: string) => yamlScalar(lines.find((l) => l.startsWith(k + ':'))?.slice(k.length + 1) ?? '')
   let section = ''
   let sub = ''
   const compose: Record<string, string> = {}
@@ -1650,11 +1659,11 @@ export function fromDescription(text: string): { link: string; hosts: string[]; 
     const m2 = /^ {2}([a-z_]+):\s*(.*)$/.exec(l)
     if (m2) {
       sub = m2[1]
-      compose[m2[1]] = m2[2].trim()
+      compose[m2[1]] = yamlScalar(m2[2])
       continue
     }
-    const m4 = /^ {4}service:\s*(\S+)/.exec(l)
-    if (m4 && sub === 'site') site = m4[1]
+    const m4 = /^ {4}service:(.*)$/.exec(l)
+    if (m4 && sub === 'site') site = yamlScalar(m4[1])
   }
   const mark = lines.find((l) => l.startsWith('# compose: '))?.slice('# compose: '.length).trim() ?? ''
   const hosts = (compose.hosts ?? '').replace(/^\[|\]$/g, '').split(',').map((h) => h.trim()).filter(Boolean)

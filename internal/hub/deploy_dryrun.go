@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -207,7 +208,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			jc.Log("deploy.dryHostError", t.Name, msgs.Localize(lang, err))
 			continue
 		}
-		problems += logComposeCheck(jc, t.Name, c.Project, res, missingEnv, on)
+		problems += logComposeCheck(jc, t.Name, c.Project, res, missingEnv, on, dollarSource{files: files, env: envOf(env)})
 		if res.StackExists && pl.LastCommit == "" && on("stack") {
 			// Стек с таким именем на хосте есть, а этот конвейер его не
 			// выкладывал: файлы перезапишутся.
@@ -243,7 +244,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 }
 
 // logComposeCheck пишет итог хоста в журнал; возвращает число проблем.
-func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, envKeysMissing []string, on dryOn) int {
+func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, envKeysMissing []string, on dryOn, src dollarSource) int {
 	if res.Engine == "" || !res.Compose {
 		if !on("engine") {
 			return 0 // без движка остальное и не проверить
@@ -290,6 +291,9 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, e
 		if unset := withoutNames(res.UnsetVars, envKeysMissing); len(unset) > 0 {
 			problems++
 			jc.Log("deploy.dryUnsetVars", strings.Join(unset, ", "))
+			if where := dollarInValues(unset, src); len(where) > 0 {
+				jc.Log("deploy.dryUnsetDollar", strings.Join(where, ", "))
+			}
 		}
 		if !res.ConfigOK {
 			jc.Log("deploy.dryConfigBad", res.ConfigError)
@@ -626,4 +630,86 @@ func (on dryOn) skippedNames(lang msgs.Lang) string {
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+// dollarSource — тексты стека, в которых искать «переменные», которые на
+// деле — кусок значения со знаком $.
+type dollarSource struct {
+	files map[string]string
+	env   string
+}
+
+func envOf(env *string) string {
+	if env == nil {
+		return ""
+	}
+	return *env
+}
+
+// dollarInValues — где «переменные без значения» на деле — знак $ внутри
+// значения: хеш пароля ($2y$10$…, $apr1$…) или пароль с $. Compose читает
+// каждый $слово как переменную и подставляет пустую строку. Признак — в
+// одном слове (без пробелов) с $имя есть ещё один $: у настоящей
+// переменной так не бывает. Ответ — «файл:строка» без самих значений.
+func dollarInValues(names []string, src dollarSource) []string {
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
+	var out []string
+	seen := map[string]bool{}
+	scan := func(file, text string) {
+		for i, line := range strings.Split(text, "\n") {
+			for _, word := range strings.Fields(line) {
+				if strings.Count(word, "$") < 2 {
+					continue
+				}
+				for _, name := range dollarNames(word) {
+					if want[name] {
+						at := fmt.Sprintf("%s:%d", file, i+1)
+						if !seen[at] {
+							seen[at] = true
+							out = append(out, at)
+						}
+					}
+				}
+			}
+		}
+	}
+	keys := make([]string, 0, len(src.files))
+	for k := range src.files {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		scan(k, src.files[k])
+	}
+	if src.env != "" {
+		scan(".env", src.env)
+	}
+	return out
+}
+
+// dollarNames — имена после одиночного $ в слове ($$ — уже экранированный
+// знак, не переменная).
+func dollarNames(word string) []string {
+	var out []string
+	for i := 0; i < len(word); i++ {
+		if word[i] != '$' {
+			continue
+		}
+		if i+1 < len(word) && word[i+1] == '$' {
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(word) && (word[j] == '_' || word[j] >= 'A' && word[j] <= 'Z' || word[j] >= 'a' && word[j] <= 'z' || j > i+1 && word[j] >= '0' && word[j] <= '9') {
+			j++
+		}
+		if j > i+1 {
+			out = append(out, word[i+1:j])
+		}
+		i = j - 1
+	}
+	return out
 }

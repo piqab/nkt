@@ -80,20 +80,20 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
 
   // Загрузка — заданием хоста с первого байта: журнал открывается сразу,
   // хост пишет в задание проценты, после передачи там же идёт load.
-  async function upload(file: File, load = false) {
+  async function upload(file: File, load = false, remove = false) {
     setError(null)
     // Своя приставка — чтобы архив попал в список этого движка.
     const name = file.name.startsWith(`${engine}__`) ? file.name : `${engine}__${file.name}`
     let begun: Awaited<ReturnType<typeof beginUploadJob>>
     try {
-      begun = await beginUploadJob({ target: 'archive', name, size: file.size, load })
+      begun = await beginUploadJob({ target: 'archive', name, size: file.size, load, remove })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       return
     }
     if (!begun) {
       setNote(tx('upload.oldHost'))
-      legacyUpload(file, name, load)
+      legacyUpload(file, name, load, remove)
       return
     }
     setLoadJob(begun.job)
@@ -113,9 +113,9 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
   }
 
   /** Старый хост без /uploads/begin: передача одним запросом, load — после. */
-  function legacyUpload(file: File, name: string, load: boolean) {
+  function legacyUpload(file: File, name: string, load: boolean, remove: boolean) {
     const xhr = new XMLHttpRequest()
-    xhr.open('PUT', apiURL(`/images/archives/upload?name=${encodeURIComponent(name)}${load ? '&load=1' : ''}`))
+    xhr.open('PUT', apiURL(`/images/archives/upload?name=${encodeURIComponent(name)}${load ? '&load=1' : ''}${load && remove ? '&remove=1' : ''}`))
     setProgress(0)
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
@@ -251,9 +251,9 @@ export function ImageArchivesCard({ engine, canControl, sources }: { engine: Eng
         <AddArchiveModal
           engineName={engineName}
           onClose={() => setAdding(false)}
-          onFile={(file, load) => {
+          onFile={(file, load, remove) => {
             setAdding(false)
-            void upload(file, load)
+            void upload(file, load, remove)
           }}
           onURL={(body) => {
             setAdding(false)
@@ -307,11 +307,15 @@ function AddArchiveModal({
 }: {
   engineName: string
   onClose: () => void
-  onFile: (file: File, load: boolean) => void
-  onURL: (body: { url: string; file_name: string; checksum: string; load: boolean }) => void
+  onFile: (file: File, load: boolean, remove: boolean) => void
+  onURL: (body: { url: string; file_name: string; checksum: string; load: boolean; remove: boolean }) => void
 }) {
   const { t } = useTranslation()
   const [load, setLoad] = useState(true)
+  // Архив нужен только ради образа: загружен — место на диске можно
+  // вернуть. Без загрузки в движок архив и есть результат — галочка серая.
+  const [removeAfter, setRemoveAfter] = useState(true)
+  const remove = load && removeAfter
   const [url, setURL] = useState('')
   const [fileName, setFileName] = useState('')
   const [checksum, setChecksum] = useState('')
@@ -322,6 +326,9 @@ function AddArchiveModal({
       <div className="col" style={{ gap: '0.8rem' }}>
       <Checkbox checked={load} onChange={(e) => setLoad(e.target.checked)}>
         {t('archives.loadNow', { engine: engineName })}
+      </Checkbox>
+      <Checkbox checked={remove} disabled={!load} onChange={(e) => setRemoveAfter(e.target.checked)} style={{ marginTop: '-0.5rem', marginLeft: '1.5rem' }}>
+        {t('archives.removeAfterLoad')}
       </Checkbox>
 
       <Card title={t('archives.byURL')} subtitle={t('archives.byURLHint')}>
@@ -344,7 +351,7 @@ function AddArchiveModal({
             <Button
               type="primary"
               disabled={!validURL}
-              onClick={() => onURL({ url: url.trim(), file_name: fileName.trim(), checksum: checksum.trim(), load })}
+              onClick={() => onURL({ url: url.trim(), file_name: fileName.trim(), checksum: checksum.trim(), load, remove })}
             >
               {t('archives.fetch')}
             </Button>
@@ -362,7 +369,7 @@ function AddArchiveModal({
           style={{ display: 'none' }}
           onChange={(e) => {
             const file = e.target.files?.[0]
-            if (file) onFile(file, load)
+            if (file) onFile(file, load, remove)
           }}
         />
       </Card>

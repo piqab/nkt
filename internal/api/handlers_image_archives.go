@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +17,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
-	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
@@ -184,7 +184,7 @@ func (s *Server) handleImageArchiveUpload(w http.ResponseWriter, r *http.Request
 	// только файл получен целиком: дальше от открытого окна ничего не
 	// зависит.
 	if r.URL.Query().Get("load") == "1" {
-		id, err := s.startArchiveLoadJob(r.Context(), user, archiveKind(filepath.Base(p)), p)
+		id, err := s.startArchiveLoadJob(r.Context(), user, archiveKind(filepath.Base(p)), p, r.URL.Query().Get("remove") == "1")
 		if err != nil {
 			out["load_error"] = msgs.Localize(msgs.LangFromRequest(r), err)
 		} else if id > 0 {
@@ -194,20 +194,23 @@ func (s *Server) handleImageArchiveUpload(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, out)
 }
 
-// startArchiveLoadJob — docker (podman) load из архива фоновым заданием.
-// 0 без ошибки — загружать некуда (демо-режим, архив LXD).
-func (s *Server) startArchiveLoadJob(ctx context.Context, user, engine, path string) (int64, error) {
+// startArchiveLoadJob — docker (podman) load из архива фоновым заданием;
+// remove — после успешной загрузки удалить архив. 0 без ошибки —
+// загружать некуда (демо-режим, архив LXD).
+func (s *Server) startArchiveLoadJob(ctx context.Context, user, engine, path string, remove bool) (int64, error) {
 	if s.cfg.IsFixtures() || s.jobs == nil || (engine != "docker" && engine != "podman") {
 		return 0, nil
 	}
 	name := filepath.Base(path)
 	engineName := map[string]string{"docker": "Docker", "podman": "Podman"}[engine]
+	raw, err := json.Marshal(archiveLoadArgs{Engine: engine, Path: path, Remove: remove})
+	if err != nil {
+		return 0, err
+	}
 	id, err := s.jobs.Start(ctx, jobs.Spec{
-		Kind: cmdjob.Kind, TitleKey: "archives.loadJobTitle", TitleArgs: []any{name, engineName},
+		Kind: KindHostOp, TitleKey: "archives.loadJobTitle", TitleArgs: []any{name, engineName},
 		Queue: "session:image-load:" + engine, Author: user, Steps: 1,
-		Params: cmdjob.Params{Commands: []cmdjob.Command{{
-			Argv: []string{engine, "load", "-i", path}, StepKey: "archives.stepLoad", StepArgs: []any{engineName},
-		}}, Refresh: true},
+		Params: HostOpParams{Op: "archive.load", Args: raw},
 	})
 	if err != nil {
 		return 0, err

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	gopath "path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,6 +38,13 @@ type extractArgs struct {
 type localesArgs struct {
 	Generate []string `json:"generate,omitempty"`
 	Default  string   `json:"default,omitempty"`
+}
+
+// archiveLoadArgs — docker (podman) load архива из каталога архивов.
+type archiveLoadArgs struct {
+	Engine string `json:"engine"`
+	Path   string `json:"path"`
+	Remove bool   `json:"remove,omitempty"`
 }
 
 type osUserDeleteArgs struct {
@@ -136,6 +144,33 @@ func (h *hostOpRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			}
 		}
 		jc.Log("hostop.done")
+		return nil
+	case "archive.load":
+		var a archiveLoadArgs
+		if err := json.Unmarshal(p.Args, &a); err != nil {
+			return err
+		}
+		// Только движки и только файл из каталога архивов: параметры
+		// задания хранятся в базе и не должны вести к чему-то ещё.
+		if (a.Engine != "docker" && a.Engine != "podman") || filepath.Dir(a.Path) != filepath.Clean(s.archiveDir()) {
+			return msgs.Errorf("hostop.unknown", p.Op)
+		}
+		engineName := map[string]string{"docker": "Docker", "podman": "Podman"}[a.Engine]
+		jc.StepKey(1, 1, "archives.stepLoad", engineName)
+		argv := []string{a.Engine, "load", "-i", a.Path}
+		jc.Logf("$ %s", strings.Join(argv, " "))
+		code, err := RunToolingStream(ctx, func(format string, args ...any) { jc.Logf(format, args...) }, argv...)
+		if err == nil && code != 0 {
+			err = msgs.Errorf("cmdjob.exitCode", code)
+		}
+		if err != nil {
+			return err
+		}
+		jc.Log("archives.loaded", engineName)
+		if a.Remove {
+			removeLoadedArchive(jc, a.Path)
+		}
+		s.rescanLater()
 		return nil
 	case "osuser.delete":
 		var a osUserDeleteArgs

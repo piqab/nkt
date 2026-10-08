@@ -551,6 +551,8 @@ var ruCatalog = map[string]string{
 	"archives.saved":                                      "Архив сохранён: %s",
 	"archives.loadJobTitle":                               "Загрузить %s в %s",
 	"archives.loaded":                                     "Образ загружен в %s",
+	"archives.removedAfterLoad":                           "Архив удалён после загрузки: %s",
+	"archives.removeFailed":                               "Архив не удалён (%s): %v",
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",

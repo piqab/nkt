@@ -10,11 +10,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/jobs"
@@ -138,7 +136,7 @@ func TestArchiveUploadStartsLoadJob(t *testing.T) {
 	t.Cleanup(jm.Close)
 	release := make(chan struct{})
 	defer close(release)
-	jm.Register(cmdjob.Kind, blockRunner{release})
+	jm.Register(KindHostOp, blockRunner{release})
 	dir := t.TempDir()
 	s := &Server{db: db, jobs: jm, cfg: &config.Config{}, images: control.NewImageManager(nil, nil, dir)}
 
@@ -152,25 +150,59 @@ func TestArchiveUploadStartsLoadJob(t *testing.T) {
 		}
 		return out
 	}
-	out := upload("name=podman__app.tar&load=1")
-	id, _ := out["job_id"].(float64)
-	if id == 0 {
-		t.Fatalf("нет задания: %v", out)
+	loadArgs := func(out map[string]any) archiveLoadArgs {
+		t.Helper()
+		id, _ := out["job_id"].(float64)
+		if id == 0 {
+			t.Fatalf("нет задания: %v", out)
+		}
+		j, err := db.JobByID(t.Context(), int64(id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var p HostOpParams
+		_ = json.Unmarshal([]byte(j.Params), &p)
+		var a archiveLoadArgs
+		_ = json.Unmarshal(p.Args, &a)
+		if p.Op != "archive.load" {
+			t.Fatalf("операция: %q", p.Op)
+		}
+		return a
 	}
-	j, err := db.JobByID(t.Context(), int64(id))
-	if err != nil {
-		t.Fatal(err)
+	a := loadArgs(upload("name=podman__app.tar&load=1"))
+	if a.Engine != "podman" || a.Path != filepath.Join(dir, "podman__app.tar") || a.Remove {
+		t.Errorf("load: %+v", a)
 	}
-	var p cmdjob.Params
-	_ = json.Unmarshal([]byte(j.Params), &p)
-	want := []string{"podman", "load", "-i", filepath.Join(dir, "podman__app.tar")}
-	if len(p.Commands) != 1 || strings.Join(p.Commands[0].Argv, " ") != strings.Join(want, " ") {
-		t.Errorf("команда: %+v", p.Commands)
+	// «Удалить архив после загрузки» — remove=1.
+	if a := loadArgs(upload("name=docker__rm.tar&load=1&remove=1")); !a.Remove {
+		t.Errorf("remove не передан: %+v", a)
 	}
 	if out := upload("name=docker__b.tar"); out["job_id"] != nil {
 		t.Errorf("без load задание не нужно: %v", out)
 	}
 	if out := upload("name=lxd__c.tar.gz&load=1"); out["job_id"] != nil {
 		t.Errorf("LXD не загружается load: %v", out)
+	}
+}
+
+// Удалить архив после загрузки — только вместе с загрузкой в движок:
+// без load архив и есть результат, его не трогают.
+func TestUploadRemoveOnlyWithLoad(t *testing.T) {
+	s := &Server{cfg: &config.Config{}, images: control.NewImageManager(nil, nil, t.TempDir())}
+	for _, c := range []struct {
+		p    UploadParams
+		want bool
+	}{
+		{UploadParams{Target: uploadTargetArchive, Name: "docker__a.tar", Load: true, Remove: true}, true},
+		{UploadParams{Target: uploadTargetArchive, Name: "docker__a.tar", Remove: true}, false},
+		{UploadParams{Target: uploadTargetArchive, Name: "lxd__a.tar.gz", Load: true, Remove: true}, false},
+	} {
+		p := c.p
+		if err := s.validateUpload(&p); err != nil {
+			t.Fatalf("%+v: %v", c.p, err)
+		}
+		if p.Remove != c.want {
+			t.Errorf("%+v: remove=%v, ждали %v", c.p, p.Remove, c.want)
+		}
 	}
 }

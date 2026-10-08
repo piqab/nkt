@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.183 — 2026-10-08
+
+- **"Add image…": the "Delete the archive after loading" checkbox** (on,
+  active together with "Load into Docker/Podman right away"): after a
+  successful `docker load` the archive is deleted from the host; if loading
+  failed it stays for a retry. In the API — `remove=1` on upload and
+  `"remove": true` on download by URL.
+- Deployments, dry run: when "variables without a value" are really a `$`
+  inside a value (a password hash `$2y$10$…`, a password with `$`), the
+  check names the file and line and suggests `$$` in compose and single
+  quotes in `.env`.
+- Deployments, description window: a comment at the end of a line
+  (`project: app # …`) no longer ends up in the stack name and other fields.
+
 ## v1.11.182 — 2026-10-08
 
 - **Docs:** a self-signed certificate and the terminal — why the browser

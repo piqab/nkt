@@ -88,7 +88,11 @@ file list too.
 
   The **"Load into Docker right away"** checkbox (on by default) — after
   the download or transfer `docker load` is the next step of the same
-  job. LXD keeps the "Upload from computer" button, also as a job, without
+  job. Below it is **"Delete the archive after loading"** (also on; active
+  only together with the first one): after a successful `docker load` the
+  archive is deleted — the disk space comes back, the image is already in
+  the engine. If loading into the engine failed, the archive stays for a
+  retry. LXD keeps the "Upload from computer" button, also as a job, without
   loading into an engine; the same goes for your own machine image in the
   libvirt section (after the transfer the job moves it to the disk
   directory itself).

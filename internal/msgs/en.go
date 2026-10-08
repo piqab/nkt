@@ -552,6 +552,8 @@ var enCatalog = map[string]string{
 	"archives.saved":                                      "Archive saved: %s",
 	"archives.loadJobTitle":                               "Load %s into %s",
 	"archives.loaded":                                     "Image loaded into %s",
+	"archives.removedAfterLoad":                           "Archive removed after loading: %s",
+	"archives.removeFailed":                               "Archive not removed (%s): %v",
 	"api.backgroundJobsAreUnavailable":                    "background jobs are unavailable",
 	"api.curlInstalledHost":                               "curl is not installed on the host",
 	"api.emptyCommand":                                    "empty command",
