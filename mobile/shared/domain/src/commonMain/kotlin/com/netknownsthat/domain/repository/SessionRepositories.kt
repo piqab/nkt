@@ -35,7 +35,18 @@ interface SessionRepository {
 
     /** Forgets the pin: the next connection trusts on first use again. */
     fun forgetPinnedCertificate()
+
+    /** What an embedded browser needs to open a hub page as this session;
+     * null — not signed in. */
+    suspend fun webSession(): WebSession?
 }
+
+/**
+ * The hub as an embedded browser sees it: [origin] ("https://hub:8443"),
+ * the session [cookies] as Set-Cookie values, and the pinned certificate's
+ * SHA-256 (hex) when the hub's certificate is self-signed.
+ */
+data class WebSession(val origin: String, val cookies: List<String>, val pinnedSha256: String?)
 
 /**
  * Scale of the whole interface — text and spacing together, so more fits on

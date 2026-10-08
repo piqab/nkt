@@ -113,6 +113,8 @@ data class VirtualMachine(
     val autostart: Boolean = false,
     val vcpus: Int = 0,
     val memoryKb: Long = 0,
+    /** The machine's screens: "vnc", "spice"; empty — unknown (an old host). */
+    val graphics: List<String> = emptyList(),
 )
 
 /** GET /api/misc — listeners no parsed config accounts for. */

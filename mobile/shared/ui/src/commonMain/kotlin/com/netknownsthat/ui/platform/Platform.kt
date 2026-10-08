@@ -23,3 +23,12 @@ expect fun systemLanguage(): AppLanguage
  */
 @Composable
 expect fun rememberNotificationPermission(onResult: (Boolean) -> Unit): () -> Unit
+
+/**
+ * A hub page in an embedded browser, signed in as [session] — the VM screen
+ * (noVNC / spice-html5), which a native client would have to reimplement.
+ * Only pages of the hub itself are opened; a self-signed hub certificate is
+ * accepted only if it is the one pinned at sign-in.
+ */
+@Composable
+expect fun HubWebView(session: com.netknownsthat.domain.repository.WebSession, path: String, modifier: androidx.compose.ui.Modifier)

@@ -85,6 +85,7 @@ import com.netknownsthat.ui.navigation.ConfigFileRoute
 import com.netknownsthat.ui.navigation.ConsoleRoute
 import com.netknownsthat.ui.navigation.MonHostRoute
 import com.netknownsthat.ui.navigation.TargetHistoryRoute
+import com.netknownsthat.ui.navigation.VmScreenRoute
 import com.netknownsthat.ui.navigation.ContainerRoute
 import com.netknownsthat.ui.navigation.DeploymentsRoute
 import com.netknownsthat.ui.navigation.EventsRoute
@@ -307,6 +308,10 @@ private fun Routes(nav: NavHostController, app: AppViewModel, start: Any, openHo
                 com.netknownsthat.ui.charts.MonHostChartsScreen(vm, r.memTotal) { openHostAt(r.hostId, "/usage") }
             }
         }
+        composable<VmScreenRoute> { entry ->
+            val r = entry.toRoute<VmScreenRoute>()
+            com.netknownsthat.ui.host.VmScreen(r.hostId, r.kind, r.name, r.proto)
+        }
         composable<TargetHistoryRoute> { entry ->
             val r = entry.toRoute<TargetHistoryRoute>()
             Section(koinViewModel<com.netknownsthat.ui.charts.TargetHistoryViewModel> { parametersOf(HostTarget(r.hostId), r.targetId) }) { vm ->
@@ -361,6 +366,7 @@ private fun Routes(nav: NavHostController, app: AppViewModel, start: Any, openHo
                 openContainer = { nav.navigate(ContainerRoute(r.hostId, r.hostName, it)) },
                 openConsole = { c -> nav.navigate(ConsoleRoute(r.hostId, r.hostName, c.kind.name, c.name, c.user)) },
                 openTargetHistory = { tg -> nav.navigate(TargetHistoryRoute(r.hostId, r.hostName, tg.id, tg.label)) },
+                openScreen = { kind, name, proto -> nav.navigate(VmScreenRoute(r.hostId, r.hostName, kind, name, proto)) },
                 openConfigFile = { nav.navigate(ConfigFileRoute(r.hostId, r.hostName, it)) },
                 openJob = { nav.navigate(JobRoute(r.hostId, r.hostName, it)) },
                 openHostAt = openHostAt,

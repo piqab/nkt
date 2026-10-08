@@ -1258,6 +1258,7 @@ fun VirtualMachineDto.toDomain(): VirtualMachine = VirtualMachine(
     autostart = autostart,
     vcpus = vcpus,
     memoryKb = memoryKb,
+    graphics = graphics,
 )
 
 fun MiscResponseDto.toDomain(): MiscResponse = MiscResponse(

@@ -282,6 +282,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Phone notifications for hub alerts (polled every 15 minutes; kinds as in the hub's alert settings); tapping one opens the host at the right section.
 - Jobs come with a live log and cancel.
 - A full-screen terminal: in tmux when the host has it, re-attaching to the session after a dropped connection, with a menu of tmux actions (windows, splits, scroll mode, mouse); without tmux — a plain shell and a tmux install with live output.
+- A libvirt machine's screen (VNC or SPICE) and an LXD VM's (SPICE) on Android — the hub's page in an embedded browser signed in as the app, with an Esc/Tab/arrows/Ctrl+Alt+Del bar and the on-screen keyboard.
 - The console of a Docker or Podman container (with a choice of user), an LXD instance and a libvirt machine (serial, Enter on connect) — in the same full-screen terminal.
 - Charts of “Usage”, an availability target's history and a host in the hub's monitoring (CPU, memory, load, disks); a finger on a chart shows the bucket's time and values, and the readout stays until a tap outside.
 - Interface scale 80–115 % or your own from 50 to 100 % (90 % by default): text and spacing together; button rows wrap; rotating the screen does not interrupt the terminal.

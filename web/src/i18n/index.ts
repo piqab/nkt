@@ -11,6 +11,10 @@ const LANG_KEY = 'nkt-lang'
  * OS-preference-fallback pattern as useTheme, so the two behave
  * consistently rather than one remembering a choice and the other not. */
 export function getStoredLang(): Lang {
+  // ?lang= in the address wins, without being remembered: the mobile app
+  // opens a page (the VM screen) in its own language, whatever the phone's.
+  const asked = new URLSearchParams(window.location.search).get('lang')
+  if (asked === 'en' || asked === 'ru') return asked
   const stored = localStorage.getItem(LANG_KEY)
   if (stored === 'en' || stored === 'ru') return stored
   // Only a Russian browser locale defaults to Russian — everything else
