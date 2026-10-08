@@ -100,13 +100,39 @@ HTTPS-only by default (`NKT_COOKIE_SECURE=true`). Three ways to reach it:
   and open `http://127.0.0.1:8077`. The tunnel serves plain HTTP, so
   `nkt.env` needs `NKT_COOKIE_SECURE=false`.
 - **Its own HTTPS** — `NKT_TLS_ENABLED=true`. On first start nkt issues a
-  self-signed certificate into `NKT_DATA_DIR/tls/` and reuses it (the
-  browser warns once). By default it covers `127.0.0.1`, `::1` and the
-  host name; other names and addresses —
-  `NKT_TLS_HOSTS=127.0.0.1,::1,vps.example.internal`. Your own
-  certificate — `NKT_TLS_CERT` and `NKT_TLS_KEY` (both together).
+  self-signed certificate into `NKT_DATA_DIR/tls/` and reuses it. By
+  default it covers `127.0.0.1`, `::1` and the host name; add the address
+  you open nkt by (a LAN IP, a name) yourself —
+  `NKT_TLS_HOSTS=192.168.1.10,127.0.0.1,::1,host-name` — or the certificate
+  will not match it even when trusted. Your own certificate —
+  `NKT_TLS_CERT` and `NKT_TLS_KEY` (both together). A self-signed
+  certificate needs the browser's trust — see below.
 - **A reverse proxy** with TLS (nginx, Caddy) in front of
   `127.0.0.1:8077`.
+
+::: warning A self-signed certificate and the terminal
+"Advanced → Proceed" on the browser's warning does **not** last: Chrome
+forgets that decision after a while (or after a restart). The open page
+keeps working — its requests use the connection already established — but
+everything that opens a new WebSocket connection fails silently: the
+terminal, consoles, live job and log output, a machine's screen ("Could not
+connect…", and an empty `WebSocket connection … failed:` in the browser
+console). The browser shows no warning for a WebSocket.
+
+- **Right away:** open the nkt address again (or sign out and in) and
+  accept the certificate again.
+- **For good:** make the certificate trusted. Make sure `NKT_TLS_HOSTS`
+  has the address you open nkt by (restart the service after editing — the
+  certificate is reissued). Then download it (the padlock in the address
+  bar → certificate → export, or `NKT_DATA_DIR/tls/cert.pem`) and install it
+  among trusted roots: Windows — "Trusted Root Certification Authorities",
+  macOS — Keychain → "Always Trust", Linux — the browser's store or
+  `/usr/local/share/ca-certificates` + `update-ca-certificates`. Or a real
+  certificate (your own CA, certbot) or a reverse proxy with one.
+
+The mobile app is not affected: it checks the certificate pinned at sign-in
+itself.
+:::
 
 Which other ports exist and which of them to open — on the
 [Ports and access](/en/guide/ports) page.

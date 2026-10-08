@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.182 — 2026-10-08
+
+- **Docs:** a self-signed certificate and the terminal — why the browser
+  after a while stops opening the terminal, consoles and live logs, and how
+  to fix it for good (the address in `NKT_TLS_HOSTS`, a trusted
+  certificate); the hub's connection to a host (one shared SSH connection,
+  large transfers separately, "unreachable" from the second failed poll).
+- API docs: uploading Docker and Podman images to hosts (signed in as an
+  administrator, and by URL with a token), jobs, whole-tab pages, `?lang=`;
+  corrected: file uploads are closed to tokens.
+- Docs: mobile app screenshots (Russian and English) and reshot "Hosts",
+  "About", "Certificates".
+
 ## v1.11.181 — 2026-10-08
 
 - **Mobile app (Android): a machine's screen.** "Screen" on a running

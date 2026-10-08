@@ -63,11 +63,34 @@ cookie. Чтение доступно любой роли, изменения �
 | Безопасность | `/vulnerabilities*`, `/malware`, `/clamav/*` | Уязвимости, вредоносное, ClamAV |
 | Система | `/system/*`, `/updates*`, `/disks*`, `/files*`, `/hardware`, `/network*`, `/interfaces` | Пакеты, обновления, диски, файлы, железо, сеть |
 | Учётные записи | `/users*`, `/os-users*`, `/audit` | Пользователи nkt и ОС, журнал действий |
-| WebSocket | `/terminal/ws`, `/console/ws`, `/jobs/{id}/ws`, `/vms/{name}/vnc/ws`, `*/spice/ws`, `*/logs/ws` | Терминал, консоли, журнал задания, экран, логи |
+| Архивы образов | `/images/archives*`, `/uploads/begin` | Архивы Docker, Podman и LXD: список, загрузка (`PUT …/upload?name=&load=1`), скачивание по ссылке (`POST …/fetch`), загрузка в движок, удаление |
+| WebSocket | `/terminal/ws`, `/console/ws?kind=&name=&user=`, `/jobs/{id}/ws`, `/vms/{name}/vnc/ws`, `*/spice/ws`, `*/logs/ws` | Терминал, консоли контейнера, инстанса и машины, журнал задания, экран, логи |
 
-Долгие операции (установки, бэкапы, создание машин, обновления)
-возвращают номер задания; журнал — `GET /api/jobs/{id}` и поток
-`/api/jobs/{id}/ws`.
+Долгие операции (установки, бэкапы, создание машин, обновления,
+загрузки) идут заданиями: ответ — `{"job_id": N}`, состояние —
+`GET /api/jobs/{id}` (`status`: `queued`, `running`, `succeeded`,
+`failed`), журнал — `GET /api/jobs/{id}/log?after=<строка>` и поток
+`/api/jobs/{id}/ws`. У многих действий, которые умеют и сразу, и
+заданием, задание включает `?job=1`. Идущие сейчас задания —
+`GET /api/jobs?status=queued,running`, на хабе по всем хостам —
+`GET /api/hub/jobs/active`.
+
+Пример — загрузка образа Docker на хост через хаб с `docker load` —
+в [API и токены](/guide/hub-api#загрузка-образов-docker-и-podman).
+
+## Страницы на всю вкладку
+
+Без меню, для встраивания и отдельного окна; адрес хоста — параметр
+`host` (номер, `-1` — машина хаба):
+
+| Страница | Что |
+|---|---|
+| `/terminal/popout?host=` | терминал |
+| `/logs/popout?host=` | логи |
+| `/screen/popout?host=&kind=vm\|lxd&name=&proto=vnc\|spice` | экран машины — его открывает мобильное приложение |
+
+`?lang=ru` или `?lang=en` у любой страницы задаёт язык интерфейса, не
+запоминая его.
 
 ## Хаб
 

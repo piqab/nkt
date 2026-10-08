@@ -63,11 +63,34 @@ For example, `GET /api/hosts/3/services` — the services of host 3.
 | Security | `/vulnerabilities*`, `/malware`, `/clamav/*` | Vulnerabilities, malware, ClamAV |
 | System | `/system/*`, `/updates*`, `/disks*`, `/files*`, `/hardware`, `/network*`, `/interfaces` | Packages, updates, disks, files, hardware, network |
 | Accounts | `/users*`, `/os-users*`, `/audit` | nkt and OS users, audit log |
-| WebSocket | `/terminal/ws`, `/console/ws`, `/jobs/{id}/ws`, `/vms/{name}/vnc/ws`, `*/spice/ws`, `*/logs/ws` | Terminal, consoles, job log, screen, logs |
+| Image archives | `/images/archives*`, `/uploads/begin` | Docker, Podman and LXD archives: list, upload (`PUT …/upload?name=&load=1`), download by URL (`POST …/fetch`), load into the engine, delete |
+| WebSocket | `/terminal/ws`, `/console/ws?kind=&name=&user=`, `/jobs/{id}/ws`, `/vms/{name}/vnc/ws`, `*/spice/ws`, `*/logs/ws` | Terminal, container, instance and machine consoles, job log, screen, logs |
 
-Long operations (installs, backups, machine creation, upgrades) return a
-job ID; the log is at `GET /api/jobs/{id}` and the stream at
-`/api/jobs/{id}/ws`.
+Long operations (installs, backups, machine creation, upgrades, uploads)
+run as jobs: the answer is `{"job_id": N}`, the state is
+`GET /api/jobs/{id}` (`status`: `queued`, `running`, `succeeded`,
+`failed`), the log is `GET /api/jobs/{id}/log?after=<line>` and the stream
+`/api/jobs/{id}/ws`. Many actions that can run either right away or as a
+job take `?job=1` for the job. Jobs running now —
+`GET /api/jobs?status=queued,running`, on a hub across all hosts —
+`GET /api/hub/jobs/active`.
+
+An example — uploading a Docker image to a host through the hub with
+`docker load` — is in [API and tokens](/en/guide/hub-api#uploading-docker-and-podman-images).
+
+## Whole-tab pages
+
+No menu, for embedding and a separate window; the host is the `host`
+parameter (a number, `-1` — the hub's machine):
+
+| Page | What |
+|---|---|
+| `/terminal/popout?host=` | terminal |
+| `/logs/popout?host=` | logs |
+| `/screen/popout?host=&kind=vm\|lxd&name=&proto=vnc\|spice` | a machine's screen — the mobile app opens it |
+
+`?lang=ru` or `?lang=en` on any page sets the interface language without
+remembering it.
 
 ## Hub
 
