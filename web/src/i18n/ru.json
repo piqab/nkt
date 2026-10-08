@@ -3383,7 +3383,7 @@
     "notSet": "не задан",
     "tokenPlaceholder": "токен (https) или логин:токен",
     "keyPlaceholder": "закрытый ключ развёртывания (ssh), -----BEGIN OPENSSH PRIVATE KEY-----…",
-    "registryPlaceholder": "registry: логин:токен",
+    "registryPlaceholder": "registry: логин:токен — для тегов, проверки образа и pull на хостах",
     "saveAccess": "Сохранить",
     "clearGit": "Убрать доступ к репозиторию",
     "clearRegistry": "Убрать доступ к registry",
@@ -3584,7 +3584,11 @@
       "adminEmail": "почта администратора",
       "wpDbPassword": "пароль базы WordPress",
       "mariadbRootPassword": "пароль root MariaDB"
-    }
+    },
+    "envEdit": "Править .env",
+    "envEditConfirm": "Открыть текущий .env для правки? Значения — секреты: показ записывается в журнал действий.",
+    "envDiffConfirm": "Записать .env? Добавлены: {{added}}; изменены: {{changed}}; удалены: {{removed}}. Значения не показываются. Прежний останется в «Истории .env»; на хосты — со следующей выкладкой.",
+    "accessAutoName": "Ключи для закрытого репозитория и registry, .env стека. Конвейер сначала сохранится — без имени его назовёт project: из описания или ссылка на compose"
   },
   "edge": {
     "subtitle": "Вход из интернета без открытого хаба: edge на VPS принимает только своё — вебхуки выкладок и (или) подписанные запросы API-токенов, хаб сам держит к нему туннель. Edge может быть несколько.",

@@ -3375,7 +3375,7 @@
     "notSet": "not set",
     "tokenPlaceholder": "token (https) or login:token",
     "keyPlaceholder": "private deploy key (ssh), -----BEGIN OPENSSH PRIVATE KEY-----…",
-    "registryPlaceholder": "registry: login:token",
+    "registryPlaceholder": "registry: login:token — for tags, the image check and pulls on hosts",
     "saveAccess": "Save",
     "clearGit": "Remove repository access",
     "clearRegistry": "Remove registry access",
@@ -3576,7 +3576,11 @@
       "adminEmail": "admin email",
       "wpDbPassword": "WordPress database password",
       "mariadbRootPassword": "MariaDB root password"
-    }
+    },
+    "envEdit": "Edit .env",
+    "envEditConfirm": "Open the current .env for editing? The values are secrets: showing them is written to the audit log.",
+    "envDiffConfirm": "Save the .env? Added: {{added}}; changed: {{changed}}; removed: {{removed}}. Values are not shown. The previous one stays in \".env history\"; it reaches the hosts with the next deployment.",
+    "accessAutoName": "Keys for a private repository and registry, the stack .env. The pipeline is saved first — without a name it is named after project: in the description or the compose link"
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",

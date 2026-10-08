@@ -415,3 +415,26 @@ func hostPortOf(p string) int {
 	n, _ := strconv.Atoi(parts[len(parts)-2])
 	return n
 }
+
+// ComposeImages — образы сервисов compose-файла (services.*.image), без
+// повторов; файл, который не разобрать, — пустой список.
+func ComposeImages(text string) []string {
+	var doc struct {
+		Services map[string]struct {
+			Image string `yaml:"image"`
+		} `yaml:"services"`
+	}
+	if yaml.Unmarshal([]byte(text), &doc) != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, svc := range doc.Services {
+		if img := strings.TrimSpace(svc.Image); img != "" && !seen[img] {
+			seen[img] = true
+			out = append(out, img)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
