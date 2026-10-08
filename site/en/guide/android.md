@@ -156,9 +156,11 @@ cd mobile/iosApp && xcodegen generate && open iosApp.xcodeproj
 ```
 
 It can be installed on your own iPhone from Xcode with a free Apple account;
-publishing (TestFlight, App Store) needs a paid Apple Developer account. CI
-(`.github/workflows/mobile.yml`) builds the iOS version for the simulator on
-every change to the app (`mobile/`), so it cannot break unnoticed.
+publishing (TestFlight, App Store) needs a paid Apple Developer account. The
+app's CI build (`.github/workflows/mobile.yml`) is started by hand: Actions →
+"mobile" → Run workflow, platform `android` (tests and a debug APK), `ios`
+(the simulator build) or `both`; from a terminal —
+`gh workflow run mobile.yml --ref main -f platform=ios`.
 
 Notifications on iOS are best effort: background refresh runs when the
 system decides, and every 15 minutes cannot be guaranteed.
