@@ -286,6 +286,7 @@ var enSitesCatalog = map[string]string{
 	"deploy.hostDaemonDown":         "%s: %s is installed but its daemon does not answer (%s)",
 	"deploy.dryDaemonDown":          "✗ %s is installed but its daemon does not answer: %s; start it (systemctl start docker)",
 	"deploy.dryUnsetVars":           "✗ ${…} without a value in compose: %s; set it in the pipeline .env (“Access”) or in the file, otherwise it becomes an empty string",
+	"deploy.dryUnsetDollar":         "  this looks like a $ inside a value — a password hash ($2y$…, $apr1$…) or a password with $: %s. In compose double every $ ($$), in .env put the value in single quotes — otherwise compose substitutes empty strings and spoils the value",
 	"deploy.dryResources":           "  host resources: %s of free memory, %s of space for images",
 	"deploy.dryDiskLow":             "✗ little space for images (%d MB): the images will not pull; free some (docker system prune) or grow the disk",
 	"deploy.dryMemLow":              "✗ almost no free memory (%d MB): the stack will most likely not come up",

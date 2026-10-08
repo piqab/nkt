@@ -14,6 +14,8 @@ export async function beginUploadJob(body: {
   name: string
   size: number
   load?: boolean
+  /** После успешной загрузки в движок удалить архив (только с load). */
+  remove?: boolean
 }): Promise<{ job: Job; token: string } | null> {
   let res: { job_id: number; token: string }
   try {

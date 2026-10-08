@@ -4376,7 +4376,8 @@
     "byFile": "From the computer",
     "byFileHint": "The browser sends the file: do not close or reload the tab until the transfer ends. Loading into the engine afterwards runs as a job and no longer depends on the window.",
     "uploadKeepOpen": "Transfer in progress — keep the tab open.",
-    "chooseFile": "Choose a file…"
+    "chooseFile": "Choose a file…",
+    "removeAfterLoad": "Delete the archive after loading"
   },
   "activeJobs": {
     "title": "Background operations",

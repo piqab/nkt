@@ -171,6 +171,7 @@ docker save app:1.2 | gzip > app.tar.gz
 curl -s -b jar -T app.tar.gz \
   "$HUB/api/hosts/$HOST/images/archives/upload?name=docker__app-1.2.tar.gz&load=1"
 # {"name":"docker__app-1.2.tar.gz","size":…,"job_id":42}
+# &remove=1 — delete the archive from the host after a successful docker load
 curl -s -b jar $HUB/api/hosts/$HOST/jobs/42     # status: queued, running, succeeded, failed
 curl -s -b jar "$HUB/api/hosts/$HOST/jobs/42/log?after=0"
 ```
@@ -192,7 +193,8 @@ curl -s -H "Authorization: Bearer nkt_<key>_<secret>" -H 'Content-Type: applicat
 # {"job_id":43} — progress and result: GET /api/hosts/3/jobs/43
 ```
 
-`name` is optional, otherwise taken from the URL; `checksum` is the
+`"remove": true` deletes the archive after a successful load; `name` is
+optional, otherwise taken from the URL; `checksum` is the
 archive's sha256 — a wrong sum fails the job and leaves no archive behind.
 The token needs the administrator role, and the host must be within its
 limits.

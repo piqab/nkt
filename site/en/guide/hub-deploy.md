@@ -335,7 +335,10 @@ substitutions, collects the stack files and, on each host, checks:
   image on an arm64 host is a problem (`exec format error`).
 
 The dry run also checks. **Problems** (the deployment or the site would
-fail): a `${VAR}` in compose with no value in `.env`; the docker daemon not
+fail): a `${VAR}` in compose with no value in `.env` (when the "variable"
+is really part of a value with a `$` sign, such as a password hash
+`$2y$10$…`, the check names the file and line: in compose such a `$` is
+doubled — `$$`, in `.env` the value goes in single quotes); the docker daemon not
 running; too little space for images or memory; who holds 80/443 on the
 host (not the site proxy: certbot and the proxy would not start); the name
 already in another nginx config and whether nginx reads `conf.d`; an AAAA

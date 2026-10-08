@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,8 @@ type UploadParams struct {
 	Engine string `json:"engine,omitempty"`
 	Size   int64  `json:"size"`
 	Load   bool   `json:"load,omitempty"`
+	// Remove — после успешной загрузки в движок удалить архив (только с Load).
+	Remove bool `json:"remove,omitempty"`
 }
 
 // uploadSession — одна передача: её видят и обработчик, принимающий файл,
@@ -212,6 +215,7 @@ func (s *Server) validateUpload(p *UploadParams) error {
 		if p.Engine == "lxd" {
 			p.Load = false
 		}
+		p.Remove = p.Remove && p.Load
 		return nil
 	case uploadTargetVMImage:
 		if s.vmimages == nil {
@@ -221,6 +225,7 @@ func (s *Server) validateUpload(p *UploadParams) error {
 			return msgs.Errorf("vmcreate.invalidFileName", p.Name)
 		}
 		p.Load = false
+		p.Remove = false
 		return nil
 	}
 	return msgs.Errorf("upload.badTarget", p.Target)
@@ -420,6 +425,9 @@ func (u *uploadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			return err
 		}
 		jc.Log("archives.loaded", engineName)
+		if p.Remove {
+			removeLoadedArchive(jc, path)
+		}
 		u.s.rescanLater()
 	case uploadTargetVMImage:
 		jc.StepKey(2, 2, "upload.stepVMImage", p.Name)
@@ -440,4 +448,15 @@ func uploadTokenOf(r *http.Request) string {
 		return ""
 	}
 	return t
+}
+
+// removeLoadedArchive удаляет архив, образ из которого уже загружен в
+// движок («удалить архив после загрузки»). Неудача удаления — запись в
+// журнале, а не ошибка задания: образ-то загружен.
+func removeLoadedArchive(jc *jobs.Context, path string) {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		jc.Log("archives.removeFailed", filepath.Base(path), err)
+		return
+	}
+	jc.Log("archives.removedAfterLoad", filepath.Base(path))
 }
