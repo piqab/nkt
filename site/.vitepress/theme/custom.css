@@ -41,3 +41,18 @@
   border: 1px solid var(--vp-c-divider);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
+
+/* Скриншоты мобильного приложения — рядом, узкими колонками, а не во всю
+   ширину страницы, как у веб-интерфейса. */
+.phone-shots p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.phone-shots img {
+  width: 220px;
+  max-width: calc(50% - 6px);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+}

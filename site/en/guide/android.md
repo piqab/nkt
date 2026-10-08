@@ -50,6 +50,14 @@ there.
 
 ## What's inside
 
+<div class="phone-shots">
+
+![Host list](/screens/en/app-hosts.png)
+![Host sections](/screens/en/app-host.png)
+![About: language and scale](/screens/en/app-about.png)
+
+</div>
+
 **Navigation.** At the bottom (at the side on a tablet or in landscape) are
 the hub sections: hosts, alerts, monitoring, jobs, “more” (fail2ban,
 deployments, about). The top bar's title is breadcrumbs, e.g.
@@ -63,6 +71,12 @@ Rows of buttons wrap to the next line instead of running off the edge.
 Rotating the phone does not interrupt the terminal or a console, and with a
 phone on its side the hub sections are a rail at the side so they take no
 height.
+
+<div class="phone-shots">
+
+![A chart with the readout under a finger](/screens/en/app-chart.png)
+
+</div>
 
 **Charts** are the web's: the host's "Usage", a target's history in
 "Availability" (tap a target — availability in % and latency over a day, a
@@ -109,6 +123,13 @@ same session by itself. The key bar has Enter after the arrows. The “tmux ▾�
 without typing `Ctrl+B …`: new window, next and previous, window list,
 splits, scroll mode, detach, mouse on/off. Without tmux a plain shell opens
 with an offer to install tmux — the install runs with live output.
+
+<div class="phone-shots">
+
+![Containers: Console and Inspect](/screens/en/app-containers.png)
+![A container console](/screens/en/app-console.png)
+
+</div>
 
 **The console** of a Docker or Podman container, an LXD instance or a
 libvirt machine is the "Console" button on a running one's card in

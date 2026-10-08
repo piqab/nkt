@@ -186,6 +186,19 @@ API on the host is not up" — with diagnostics gathered over SSH:
 the unit state, who listens on the API port, the last journal lines.
 "Update" from the hub reinstalls and restarts the service over SSH.
 
+**The hub's connection to a host.** The hub keeps one shared SSH
+connection per host: polling, pages, live logs and the terminal all go over
+it. A failed request (the browser left the page, a request ran out of time
+on a busy host) does not close it — the hub checks it with an SSH keepalive
+and closes it only if it is really dead; one busy with running requests is
+not closed for idleness either. A hub login to the host cut off on the
+channel is retried over a fresh connection. Large transfers — uploading and
+downloading image archives, machine images, file browser files, backups —
+go over an SSH connection of their own: gigabytes do not clog the shared
+one, and a broken transfer does not affect the rest. The red "unreachable"
+icon appears only after **two** failed polls in a row — one chance failure
+does not light it.
+
 ## Narrow sudo
 
 `NOPASSWD: ALL` makes root out of anyone who signs in as that user:

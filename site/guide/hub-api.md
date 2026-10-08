@@ -137,7 +137,8 @@ function sign(secret, method, uri, body = '') {
 | `POST /api/hub/pipelines/dryrun` | администратор | сухой прогон (`{"pipeline_id":1,"skip":[]}`) → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | администратор | бан или разбан (`{"action":"ban","ips":[…],"host_ids":[…]}`) |
 | `POST /api/hosts/{id}/vulnerabilities/scan` | администратор | сканирование уязвимостей |
-| `POST/PUT/DELETE /api/hosts/{id}/<раздел>/…` | администратор | действия хоста: службы, контейнеры, обновления пакетов и прочее, кроме закрытого выше |
+| `POST/PUT/DELETE /api/hosts/{id}/<раздел>/…` | администратор | действия хоста: службы, контейнеры, обновления пакетов и прочее, кроме закрытого выше и **загрузки файлов** (архивы образов, образы машин, файлы проводника, бэкапы — у них свои маршруты, токену они закрыты) |
+| `POST /api/hosts/{id}/images/archives/fetch` | администратор | скачать архив образа по ссылке на хост и загрузить в Docker или Podman → `job_id` (см. ниже) |
 
 Машина хаба — `/api/hosts/local/…`, в пределах токена её номер `-1`.
 Токен с пределами видит только свои хосты, их оповещения и сайты;
@@ -148,6 +149,49 @@ function sign(secret, method, uri, body = '') {
 Выкладка и сухой прогон — задания: ответ — `job_id`, итог — в
 `GET /api/hub/jobs/{id}` (`status`: `queued`, `running`, `succeeded`,
 `failed`), журнал — в `/log?after=<номер последней строки>`.
+
+## Загрузка образов Docker и Podman
+
+Собранный у себя образ на хосты — два пути.
+
+**С компьютера — по входу администратора** (токену загрузка файлов
+закрыта). Архив идёт на хост через хаб по отдельному SSH-соединению; до
+10 ГБ, срок передачи через хаб — 6 часов. `load=1` — как только файл
+получен целиком, хост сам запускает `docker load` (или `podman load`)
+заданием:
+
+```sh
+HUB=https://hub.example.com HOST=3          # номер хоста: GET /api/hub/hosts; машина хаба — local
+curl -s -c jar -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"…"}' $HUB/api/auth/login
+docker save app:1.2 | gzip > app.tar.gz
+curl -s -b jar -T app.tar.gz \
+  "$HUB/api/hosts/$HOST/images/archives/upload?name=docker__app-1.2.tar.gz&load=1"
+# {"name":"docker__app-1.2.tar.gz","size":…,"job_id":42}
+curl -s -b jar $HUB/api/hosts/$HOST/jobs/42     # status: queued, running, succeeded, failed
+curl -s -b jar "$HUB/api/hosts/$HOST/jobs/42/log?after=0"
+```
+
+Имя архива — `docker__<имя>` или `podman__<имя>` (в какой движок
+загружать) с расширением `.tar`, `.tar.gz`, `.tgz`, `.tar.xz` или
+`.tar.zst`; архив с тем же именем заменяется. Без `load=1` архив только
+ложится в «Архивы образов» хоста. По нескольким хостам — тот же `curl -T`
+в цикле по номерам.
+
+**По ссылке — с токеном.** Хост сам скачивает архив (свой HTTP-сервер,
+хранилище артефактов CI, S3 по подписанной ссылке) и загружает его в
+движок; ссылка должна открываться с хоста:
+
+```sh
+curl -s -H "Authorization: Bearer nkt_<ключ>_<секрет>" -H 'Content-Type: application/json' \
+  -d '{"engine":"docker","url":"https://files.example.com/app-1.2.tar.gz","checksum":"<sha256, по желанию>","load":true}' \
+  $HUB/api/hosts/3/images/archives/fetch
+# {"job_id":43} — ход и итог: GET /api/hosts/3/jobs/43
+```
+
+`name` — по желанию, иначе — из ссылки; `checksum` — sha256 архива,
+неверная сумма — задание завершается ошибкой, и архив не остаётся.
+Токену нужна роль «администратор», хост — в его пределах.
 
 ## Ответы об ошибках
 

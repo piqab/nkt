@@ -141,7 +141,8 @@ to the hub through the tunnel. Conditions:
 | `POST /api/hub/pipelines/dryrun` | admin | dry run (`{"pipeline_id":1,"skip":[]}`) → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | admin | ban or unban (`{"action":"ban","ips":[…],"host_ids":[…]}`) |
 | `POST /api/hosts/{id}/vulnerabilities/scan` | admin | vulnerability scan |
-| `POST/PUT/DELETE /api/hosts/{id}/<section>/…` | admin | host actions: services, containers, package updates and so on, except what is closed above |
+| `POST/PUT/DELETE /api/hosts/{id}/<section>/…` | admin | host actions: services, containers, package updates and so on, except what is closed above and **file uploads** (image archives, machine images, file browser files, backups — they have routes of their own, closed to tokens) |
+| `POST /api/hosts/{id}/images/archives/fetch` | admin | download an image archive to the host by URL and load it into Docker or Podman → `job_id` (see below) |
 
 The hub machine is `/api/hosts/local/…`; in a token's scope its number is
 `-1`. A scoped token sees only its hosts, their alerts and sites; only
@@ -151,6 +152,50 @@ a saved pipeline. A scoped token sees only the hub jobs it started itself.
 Deployments and dry runs are jobs: the response is `job_id`, the outcome is
 in `GET /api/hub/jobs/{id}` (`status`: `queued`, `running`, `succeeded`,
 `failed`), and the log is in `/log?after=<last line number>`.
+
+## Uploading Docker and Podman images
+
+An image built on your machine goes to hosts one of two ways.
+
+**From your computer — signed in as an administrator** (file uploads are
+closed to tokens). The archive goes to the host through the hub over an SSH
+connection of its own; up to 10 GB, the transfer through the hub may take
+up to 6 hours. `load=1` — as soon as the whole file is in, the host starts
+`docker load` (or `podman load`) itself as a job:
+
+```sh
+HUB=https://hub.example.com HOST=3          # host number: GET /api/hub/hosts; the hub's machine — local
+curl -s -c jar -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"…"}' $HUB/api/auth/login
+docker save app:1.2 | gzip > app.tar.gz
+curl -s -b jar -T app.tar.gz \
+  "$HUB/api/hosts/$HOST/images/archives/upload?name=docker__app-1.2.tar.gz&load=1"
+# {"name":"docker__app-1.2.tar.gz","size":…,"job_id":42}
+curl -s -b jar $HUB/api/hosts/$HOST/jobs/42     # status: queued, running, succeeded, failed
+curl -s -b jar "$HUB/api/hosts/$HOST/jobs/42/log?after=0"
+```
+
+The archive name is `docker__<name>` or `podman__<name>` (which engine to
+load into) with a `.tar`, `.tar.gz`, `.tgz`, `.tar.xz` or `.tar.zst`
+extension; an archive with the same name is replaced. Without `load=1` the
+archive only lands in the host's "Image archives". For several hosts — the
+same `curl -T` in a loop over their numbers.
+
+**By URL — with a token.** The host downloads the archive itself (your HTTP
+server, a CI artifact store, S3 with a signed URL) and loads it into the
+engine; the URL must be reachable from the host:
+
+```sh
+curl -s -H "Authorization: Bearer nkt_<key>_<secret>" -H 'Content-Type: application/json' \
+  -d '{"engine":"docker","url":"https://files.example.com/app-1.2.tar.gz","checksum":"<sha256, optional>","load":true}' \
+  $HUB/api/hosts/3/images/archives/fetch
+# {"job_id":43} — progress and result: GET /api/hosts/3/jobs/43
+```
+
+`name` is optional, otherwise taken from the URL; `checksum` is the
+archive's sha256 — a wrong sum fails the job and leaves no archive behind.
+The token needs the administrator role, and the host must be within its
+limits.
 
 ## Error responses
 
