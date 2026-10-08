@@ -119,6 +119,17 @@ up the login prompt, and `Ctrl+]` leaves virsh. Like the terminal, the
 console needs `NKT_TERMINAL_ENABLED=true` on the host — otherwise the app
 says so.
 
+**A machine's screen** (Android) is the "Screen" button on a running libvirt
+machine's card (VNC when the machine has it, SPICE otherwise) and on an LXD
+virtual machine (SPICE). It opens the web interface's own screen page (noVNC
+and spice-html5) full-screen in an embedded browser, already signed in. A tap
+is a click, a moving finger is the mouse, two fingers zoom. At the top are
+Esc, Tab, arrows, ⌫, ⏎ and Ctrl+Alt+Del, and "⌨ Keyboard" opens the on-screen
+keyboard: what you type reaches the machine as typed on a US layout. The
+embedded browser opens only the hub's pages; it accepts a self-signed hub
+certificate only if it is the one pinned at sign-in (Android 10 and newer).
+There is no screen on iOS yet.
+
 **Hub sections:**
 
 | Section | What |

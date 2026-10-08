@@ -21,6 +21,7 @@ import { notifyNewEvents } from './notifications'
 import { NAV_ITEMS } from './navItems'
 import { applyNavLayout, type NavLayout } from './navLayout'
 import type { ReactNode } from 'react'
+import ScreenPopout from './pages/ScreenPopout'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import { LOCAL_HOST_ID, api, hostScope, onUnauthorized, readSelectedHost, type SelectedHost, useApi, writeSelectedHost } from './api'
@@ -280,7 +281,9 @@ export default function App() {
   // hand without the param.
   const isPopoutTerminal = me?.is_admin && location.pathname === '/terminal/popout'
   const isPopoutLogs = !!me && location.pathname === '/logs/popout'
-  if ((isPopoutTerminal || isPopoutLogs) && me) {
+  // Экран машины на всю страницу — его открывает мобильное приложение.
+  const isPopoutScreen = me?.is_admin && location.pathname === '/screen/popout'
+  if ((isPopoutTerminal || isPopoutLogs || isPopoutScreen) && me) {
     if (me.mode !== 'hub') {
       hostScope.id = null
     } else {
@@ -302,6 +305,8 @@ export default function App() {
         <TerminalPage me={me} />
       ) : isPopoutLogs ? (
         <LogsPage />
+      ) : isPopoutScreen ? (
+        <ScreenPopout />
       ) : (
         <Shell me={me} theme={theme} setTheme={setTheme} onLogout={() => setMe(null)} reloadMe={loadMe} />
       )}

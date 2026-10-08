@@ -18,6 +18,8 @@ type SpiceModule = {
     onsuccess?: () => void
   }) => SpiceConn
   sendCtrlAltDel: (sc: SpiceConn) => void
+  typeText: (sc: SpiceConn, text: string, delayMs?: number) => Promise<unknown>
+  pressKey: (sc: SpiceConn, code: string) => boolean
 }
 
 let spiceModule: Promise<SpiceModule> | null = null
@@ -32,11 +34,12 @@ function loadSpice(): Promise<SpiceModule> {
   return spiceModule
 }
 
-/** Экран машины по SPICE: libvirt со SPICE-графикой или VM LXD. */
-export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: string; wsPath: string; onClose: () => void; extra?: ReactNode; below?: ReactNode }) {
+/**
+ * Подключение spice-html5 к элементу screen (его id — screenId) по wsPath:
+ * для окна «Экран» и для полноэкранной страницы /screen/popout.
+ */
+export function useSpice(screen: HTMLDivElement | null, screenId: string, wsPath: string) {
   const { t } = useTranslation()
-  const screenId = 'spice-' + useId().replace(/[^a-zA-Z0-9]/g, '')
-  const [screen, setScreen] = useState<HTMLDivElement | null>(null)
   const connRef = useRef<SpiceConn | null>(null)
   const modRef = useRef<SpiceModule | null>(null)
   const [state, setState] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
@@ -94,6 +97,16 @@ export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: st
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- одно соединение на окно и элемент
   }, [wsPath, screen])
+
+  return { connRef, modRef, state, reason }
+}
+
+/** Экран машины по SPICE: libvirt со SPICE-графикой или VM LXD. */
+export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: string; wsPath: string; onClose: () => void; extra?: ReactNode; below?: ReactNode }) {
+  const { t } = useTranslation()
+  const screenId = 'spice-' + useId().replace(/[^a-zA-Z0-9]/g, '')
+  const [screen, setScreen] = useState<HTMLDivElement | null>(null)
+  const { connRef, modRef, state, reason } = useSpice(screen, screenId, wsPath)
 
   return (
     <Modal title={title} onClose={onClose} width="min(96vw, 1280px)" maskClosable={false} sizeKey="screen">

@@ -205,6 +205,7 @@ class UseCaseTest {
             override suspend fun logout() = Unit
             override fun pinnedCertificate(): String? = null
             override fun forgetPinnedCertificate() = Unit
+            override suspend fun webSession(): com.netknownsthat.domain.repository.WebSession? = null
         }
         val events = object : EventsRepository {
             var list = listOf(HubEvent(id = 5, kind = "unreachable"), HubEvent(id = 6, kind = "recovered"))

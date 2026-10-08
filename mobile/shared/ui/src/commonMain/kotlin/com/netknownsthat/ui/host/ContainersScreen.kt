@@ -52,6 +52,7 @@ fun ContainersScreen(
     onOpenContainer: (String) -> Unit,
     onOpenJob: (Long) -> Unit = {},
     onOpenConsole: (ConsoleTarget) -> Unit = {},
+    onOpenScreen: (kind: String, name: String, proto: String) -> Unit = { _, _, _ -> },
 ) {
     var tab by remember { mutableIntStateOf(0) }
     // Docker and Podman ask whom to exec as first, as the web UI does.
@@ -135,6 +136,9 @@ fun ContainersScreen(
                             instanceHealth(it.status), enabled,
                             viewModel.pendingKey == it.name,
                             onConsole = { onOpenConsole(ConsoleTarget(ConsoleKind.LXD, it.name)) }.takeIf { _ -> running(it.status) },
+                            // An LXD virtual machine shows its screen over SPICE.
+                            onScreen = { onOpenScreen("lxd", it.name, "spice") }
+                                .takeIf { _ -> running(it.status) && it.type == "virtual-machine" && screenNameOk(it.name) },
                         ) { action -> viewModel.lxdAction(it.name, action, onOpenJob) }
                     }
                 }
@@ -150,6 +154,10 @@ fun ContainersScreen(
                             instanceHealth(it.state), enabled,
                             viewModel.pendingKey == it.name,
                             onConsole = { onOpenConsole(ConsoleTarget(ConsoleKind.VM, it.name)) }.takeIf { _ -> running(it.state) },
+                            // VNC when the machine has it (or nothing is known —
+                            // an old host), SPICE otherwise.
+                            onScreen = screenProto(it.graphics)?.let { proto -> { onOpenScreen("vm", it.name, proto) } }
+                                ?.takeIf { _ -> running(it.state) && screenNameOk(it.name) },
                         ) { action -> viewModel.vmAction(it.name, action) }
                     }
                 }
@@ -227,6 +235,7 @@ private fun SimpleRuntimeCard(
     enabled: Boolean,
     busy: Boolean,
     onConsole: (() -> Unit)? = null,
+    onScreen: (() -> Unit)? = null,
     onAction: (String) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -246,7 +255,9 @@ private fun SimpleRuntimeCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = statusColor(health),
             )
-            ActionRow(enabled, onAction, onConsole)
+            ActionRow(enabled, onAction, onConsole) {
+                if (onScreen != null) OutlinedButton(onClick = onScreen, contentPadding = COMPACT_BUTTON) { Text(t("Экран", "Screen")) }
+            }
         }
     }
 }
@@ -276,6 +287,13 @@ private fun ActionRow(
 }
 
 private val COMPACT_BUTTON = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+
+/** The protocol to open a libvirt machine's screen with; null — none. */
+private fun screenProto(graphics: List<String>): String? = when {
+    graphics.isEmpty() || "vnc" in graphics -> "vnc"
+    "spice" in graphics -> "spice"
+    else -> null
+}
 
 /** Docker/LXD/libvirt spell "running" differently ("running", "Running"). */
 private fun running(state: String) = state.equals("running", ignoreCase = true)

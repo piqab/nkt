@@ -93,6 +93,14 @@ class SessionRepositoryImpl(
         return api.pins.pinnedFor("${base.host}:${base.port}")
     }
 
+    override suspend fun webSession(): com.netknownsthat.domain.repository.WebSession? {
+        val base = api.baseUrl ?: return null
+        val origin = api.url("")?.removeSuffix("/api") ?: return null
+        val cookies = api.cookies.get(base).map { io.ktor.http.renderSetCookieHeader(it) }
+        if (cookies.isEmpty()) return null
+        return com.netknownsthat.domain.repository.WebSession(origin, cookies, pinnedCertificate())
+    }
+
     override fun forgetPinnedCertificate() {
         val base = api.baseUrl ?: return
         api.pins.forget("${base.host}:${base.port}")

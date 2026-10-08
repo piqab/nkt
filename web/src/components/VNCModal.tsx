@@ -7,26 +7,19 @@ import { Banner, Modal } from './ui'
 import { msg, tx, type Msg } from '../msg'
 
 /**
- * Экран виртуальной машины в браузере (noVNC): WebSocket до хоста (и
- * через туннель хаба), дальше — VNC-порт машины на 127.0.0.1 хоста
- * (api.handleVMVNCWS). Установщик, BIOS, рабочий стол, машина без сети —
- * всё, что последовательная консоль не покажет.
+ * Подключение noVNC к элементу screen по wsPath (относительно хоста, см.
+ * wsURL): состояние, причина отказа и сам RFB — для окна «Экран» и для
+ * полноэкранной страницы /screen/popout (её открывает мобильное приложение).
  */
-export function VNCModal({ name, onClose, extra, below }: { name: string; onClose: () => void; extra?: React.ReactNode; below?: React.ReactNode }) {
+export function useVNC(screen: HTMLDivElement | null, wsPath: string) {
   const { t } = useTranslation()
-  // Элемент экрана — через callback-ref: окно antd рисует содержимое
-  // после открытия, и в момент первого эффекта обычный ref ещё пуст —
-  // соединение тогда не создавалось вовсе.
-  const [screen, setScreen] = useState<HTMLDivElement | null>(null)
   const rfbRef = useRef<RFB | null>(null)
   const [state, setState] = useState<'connecting' | 'connected' | 'disconnected' | 'password'>('connecting')
   const [reason, setReason] = useState<Msg | null>(null)
-  const [password, setPassword] = useState('')
-  const [viewOnly, setViewOnly] = useState(false)
 
   useEffect(() => {
     if (!screen) return
-    const rfb = new RFB(screen, wsURL(`/vms/${encodeURIComponent(name)}/vnc/ws`), { wsProtocols: ['binary'] })
+    const rfb = new RFB(screen, wsURL(wsPath), { wsProtocols: ['binary'] })
     rfb.scaleViewport = true
     rfb.resizeSession = false
     rfb.focusOnClick = true
@@ -70,7 +63,30 @@ export function VNCModal({ name, onClose, extra, below }: { name: string; onClos
       rfbRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- одно соединение на окно и элемент
-  }, [name, screen])
+  }, [wsPath, screen])
+
+  const sendCredentials = (password: string) => {
+    rfbRef.current?.sendCredentials({ password })
+    setState('connecting')
+  }
+  return { rfbRef, state, reason, sendCredentials }
+}
+
+/**
+ * Экран виртуальной машины в браузере (noVNC): WebSocket до хоста (и
+ * через туннель хаба), дальше — VNC-порт машины на 127.0.0.1 хоста
+ * (api.handleVMVNCWS). Установщик, BIOS, рабочий стол, машина без сети —
+ * всё, что последовательная консоль не покажет.
+ */
+export function VNCModal({ name, onClose, extra, below }: { name: string; onClose: () => void; extra?: React.ReactNode; below?: React.ReactNode }) {
+  const { t } = useTranslation()
+  // Элемент экрана — через callback-ref: окно antd рисует содержимое
+  // после открытия, и в момент первого эффекта обычный ref ещё пуст —
+  // соединение тогда не создавалось вовсе.
+  const [screen, setScreen] = useState<HTMLDivElement | null>(null)
+  const { rfbRef, state, reason, sendCredentials } = useVNC(screen, `/vms/${encodeURIComponent(name)}/vnc/ws`)
+  const [password, setPassword] = useState('')
+  const [viewOnly, setViewOnly] = useState(false)
 
   useEffect(() => {
     if (rfbRef.current) rfbRef.current.viewOnly = viewOnly
@@ -95,10 +111,7 @@ export function VNCModal({ name, onClose, extra, below }: { name: string; onClos
           <Input.Password placeholder={t('vnc.password')} value={password} onChange={(e) => setPassword(e.target.value)} style={{ maxWidth: '16rem' }} />
           <Button
             type="primary"
-            onClick={() => {
-              rfbRef.current?.sendCredentials({ password })
-              setState('connecting')
-            }}
+            onClick={() => sendCredentials(password)}
           >
             {t('vnc.send')}
           </Button>

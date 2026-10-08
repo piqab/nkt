@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.181 — 2026-10-08
+
+- **Mobile app (Android): a machine's screen.** "Screen" on a running
+  libvirt machine (VNC or SPICE) and an LXD VM (SPICE) opens the web's own
+  page full-screen, already signed in: a tap is a click, a finger is the
+  mouse; at the top Esc, Tab, arrows, ⌫, ⏎, Ctrl+Alt+Del and the on-screen
+  keyboard. A self-signed hub certificate is accepted only if it was pinned
+  at sign-in.
+- Web interface: a machine's screen as a whole page (`/screen/popout`); the
+  page language can be set with `?lang=`.
+
 ## v1.11.180 — 2026-10-08
 
 - **Mobile app: touch charts.** A finger on a chart marks a bucket and shows

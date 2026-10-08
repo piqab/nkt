@@ -18,7 +18,9 @@ component stays under its own license.
   these are separate files served at `/vendor/spice-html5/`.
 - **Source:** <https://gitlab.freedesktop.org/spice/spice-html5>, a
   snapshot of the master branch from 2026-09-07.
-- **Modifications:** none. The files are neither modified nor minified.
+- **Modifications:** nkt adds a `pressKey` function to `inputs.js`
+  (exported from `main.js`): one key by name, for a phone's on-screen
+  keyboard (Backspace, Esc, Tab, arrows). The files are not minified.
   They are not part of the nkt UI bundle: the browser loads them with a
   separate dynamic import, and only when a SPICE window opens.
 - **License:** GNU LGPL version 3 or later. The license texts sit next to

@@ -128,6 +128,7 @@ data class VirtualMachineDto(
     val autostart: Boolean = false,
     val vcpus: Int = 0,
     @SerialName("memory_kb") val memoryKb: Long = 0,
+    val graphics: List<String> = emptyList(),
 )
 
 /** GET /api/misc — listeners no parsed config accounts for. */

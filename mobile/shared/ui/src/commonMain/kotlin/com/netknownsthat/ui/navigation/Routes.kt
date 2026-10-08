@@ -33,6 +33,9 @@ import kotlinx.serialization.Serializable
 /** A console: kind is ConsoleKind's name, user — Docker/Podman only. */
 @Serializable data class ConsoleRoute(val hostId: Long, val hostName: String, val kind: String, val name: String, val user: String = "")
 
+/** A machine's screen: kind "vm" or "lxd", proto "vnc" or "spice". */
+@Serializable data class VmScreenRoute(val hostId: Long, val hostName: String, val kind: String, val name: String, val proto: String)
+
 /** A monitoring target's history charts. */
 @Serializable data class TargetHistoryRoute(val hostId: Long, val hostName: String, val targetId: Long, val label: String)
 

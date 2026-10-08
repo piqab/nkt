@@ -490,7 +490,23 @@ function typeText(sc, text, delay_ms)
     });
 }
 
+/* One key by its KeyboardEvent.code name ("Backspace", "ArrowUp"…): a
+   press, a hold and a release. For a keyboard that has no such key — the
+   on-screen keyboard of a phone — and for the extended (two-byte) keys
+   typeText cannot send. False when the key is unknown or the channel is
+   gone. */
+function pressKey(sc, codeName)
+{
+    var code = code_to_scancode[codeName];
+    if (!code || !inputs_live(sc))
+        return false;
+    update_modifier(true, code, sc);
+    window.setTimeout(function () { update_modifier(false, code, sc); }, KEY_HOLD_MS);
+    return true;
+}
+
 export {
+  pressKey,
   SpiceInputsConn,
   handle_mousemove,
   handle_mousedown,
