@@ -160,8 +160,10 @@ cd mobile/iosApp && xcodegen generate && open iosApp.xcodeproj
 
 Поставить на свой iPhone можно из Xcode с бесплатной учётной записью
 Apple; публикация (TestFlight, App Store) требует платного аккаунта Apple
-Developer. CI (`.github/workflows/mobile.yml`) на каждое изменение
-приложения (`mobile/`) собирает iOS-версию под симулятор, чтобы она не ломалась незаметно.
+Developer. Сборку приложения в CI (`.github/workflows/mobile.yml`) запускают
+вручную: Actions → «mobile» → Run workflow, платформа — `android` (тесты и
+отладочный APK), `ios` (сборка под симулятор) или `both`; из терминала —
+`gh workflow run mobile.yml --ref main -f platform=ios`.
 
 Уведомления на iOS приходят «по возможности»: фоновое обновление
 запускает сама система, когда сочтёт нужным, и раз в 15 минут его не

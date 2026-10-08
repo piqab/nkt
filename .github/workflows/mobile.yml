@@ -1,29 +1,28 @@
 name: mobile
 
-# The Kotlin Multiplatform app (mobile/): every change is tested and built
-# for Android, and the iOS app is compiled on a macOS runner (no signing and
-# no publication — that needs an Apple developer account). Also runnable by
-# hand from Actions.
+# The Kotlin Multiplatform app (mobile/): tests and a debug APK for Android,
+# and the iOS app compiled on a macOS runner (no signing and no
+# publication — that needs an Apple developer account).
 #
-# VERSION is deliberately not a trigger: it changes with every commit, so
-# this (including the macOS job, whose minutes count tenfold) ran on every
-# push. A release builds the signed APK in release.yml anyway.
-#
-# branches — only branch pushes: GitHub ignores the paths filter for tag
-# pushes, so every release tag (v1.11.x) started this too.
+# By hand only: Actions → «mobile» → Run workflow, choosing the platform
+# (gh workflow run mobile.yml --ref main -f platform=ios). On every push it
+# ran the macOS job too, whose minutes count tenfold. A release still builds
+# the signed APK in release.yml, and android-release.yml makes a beta.
 on:
-  push:
-    branches: ["**"]
-    paths: ["mobile/**", ".github/workflows/mobile.yml"]
-  pull_request:
-    paths: ["mobile/**", ".github/workflows/mobile.yml"]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: "What to build"
+        type: choice
+        options: [android, ios, both]
+        default: android
 
 permissions:
   contents: read
 
 jobs:
   android:
+    if: inputs.platform != 'ios'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -44,6 +43,7 @@ jobs:
           retention-days: 7
 
   ios:
+    if: inputs.platform != 'android'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7

@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.179 — 2026-10-08
+
+- The mobile app's CI build (`mobile`) is by hand only, with a choice of
+  platform: `android`, `ios` or both. It used to run on every commit to the
+  app and took a macOS runner each time.
+
 ## v1.11.178 — 2026-10-07
 
 - **Mobile app on a small screen:** the interface scale in About — 80, 90

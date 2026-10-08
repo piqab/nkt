@@ -283,7 +283,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - The console of a Docker or Podman container (with a choice of user), an LXD instance and a libvirt machine (serial, Enter on connect) — in the same full-screen terminal.
 - Interface scale 80–115 % (90 % by default): text and spacing together; button rows wrap; rotating the screen does not interrupt the terminal.
 - Russian and English interface: follows the phone language or the choice on the sign-in screen and in About; server messages come in the same language.
-- A signed APK in every release (`nkt-android-<version>.apk`) and separate beta releases of the app; the app version matches the nkt version; the iOS version is built from source (CI checks the simulator build), not published to the App Store.
+- A signed APK in every release (`nkt-android-<version>.apk`) and separate beta releases of the app; the app version matches the nkt version; the iOS version is built from source (a simulator build in CI, started by hand), not published to the App Store.
 
 ## Terminal UI (`nkt tui`)
 
