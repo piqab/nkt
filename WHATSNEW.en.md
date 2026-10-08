@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.12.0 — 2026-10-08
+
+- **Version numbering is semver.** New features bump the second number (the
+  first new feature after a release: 1.11 → 1.12), fixes bump the third.
+  This version's features are in the 1.11.x sections below.
+
 ## v1.11.184 — 2026-10-08
 
 - **Deployments: the pipeline registry key works for the deployment.** The
