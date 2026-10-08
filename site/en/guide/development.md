@@ -55,6 +55,13 @@ A `vX.Y.Z-beta` tag (`git tag v$(cat VERSION)-beta`) builds a beta: a
 pre-release, version `X.Y.Z-beta`, images `:X.Y.Z-beta` and `:beta`; the
 hub offers it only with the "use beta versions" checkbox.
 
+**Numbering is semver.** `VERSION` changes with every commit: the first
+new feature after the last tag bumps minor and resets patch (`1.11.184` →
+`1.12.0`), everything else — fixes, docs, CI and further features until the
+next tag — bumps patch (`1.12.0` → `1.12.1`); major is only for
+incompatible changes. Patch stays below 1000: the Android app's
+`versionCode` is derived from the version.
+
 Release notes come not from commits but from `WHATSNEW.md` and
 `WHATSNEW.en.md`: a `## vX.Y.Z` section is written in the same commit as
 the `VERSION` bump, and on release `scripts/release-notes.sh` collects
