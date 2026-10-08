@@ -185,6 +185,10 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			jc.Log("deploy.dryEnvForwardRef", ref[0], ref[1], ref[1], ref[0])
 		}
 	}
+	reg, hasReg := s.registryFor(pl, spec, deploy.ComposeImages(files[main]))
+	if !hasReg && len(pl.RegistryCred) > 0 && spec.Registry == "" {
+		jc.Log("deploy.dryRegistryKeyWhich")
+	}
 	for _, t := range targets {
 		var res composeCheck
 		body := composeBody(c, main, files, env, pl.EnvSHA, "")
@@ -207,6 +211,9 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			problems++
 			jc.Log("deploy.dryHostError", t.Name, msgs.Localize(lang, err))
 			continue
+		}
+		if hasReg && on("images") {
+			recheckImages(ctx, &res, reg)
 		}
 		problems += logComposeCheck(jc, t.Name, c.Project, res, missingEnv, on, dollarSource{files: files, env: envOf(env)})
 		if res.StackExists && pl.LastCommit == "" && on("stack") {
@@ -356,9 +363,15 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, e
 			} else {
 				jc.Log("deploy.dryImageLocal", img.Image)
 			}
+		case "registry-key":
+			jc.Log("deploy.dryImageRegistryKey", img.Image)
 		case "missing":
 			problems++
-			jc.Log("deploy.dryImageMissing", img.Image, img.Detail)
+			detail := img.Detail
+			if detail == "key" {
+				detail = msgs.T(jc.Lang(), "deploy.dryImageMissingKey")
+			}
+			jc.Log("deploy.dryImageMissing", img.Image, detail)
 		default:
 			jc.Log("deploy.dryImageUnknown", img.Image, img.Detail)
 		}

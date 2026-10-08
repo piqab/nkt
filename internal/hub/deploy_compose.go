@@ -180,9 +180,18 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	if envChanged {
 		jc.Log("deploy.envChangedRecreate")
 	}
+	// Ключ registry конвейера — хосту на время pull (закрытый образ без
+	// docker login на хосте).
+	reg, hasReg := s.registryFor(pl, spec, deploy.ComposeImages(files[main]))
+	if hasReg && c.PullImages() {
+		jc.Log("deploy.registryKeyPull", reg.Host)
+	}
 	for i, t := range targets {
 		jc.StepKey(2+i, 2+len(targets), "deploy.stepCompose", t.Name)
 		body := composeBody(c, main, files, env, pl.EnvSHA, msgs.T(lang, "deploy.composeNote", pl.Name, deploy.ShortSHA(vars.Commit)))
+		if hasReg && c.PullImages() {
+			body["registry_auth"] = reg
+		}
 		if old := replaceOn(prev, t.ID, c.Project); old != "" {
 			body["replace"] = old
 			jc.Log("deploy.stackRenamed", old, c.Project, t.Name)
@@ -270,7 +279,7 @@ func bindComposePorts(jc *jobs.Context, files map[string]string, main string, c 
 // запроса: старый хост их не знает и отвергает тело целиком («unknown
 // field»). Тогда запрос повторяется без них — выкладка работает, а
 // проверки, которых старому хосту не сделать, в журнале названы.
-var composeOptionalFields = []string{"env_sha", "site_service", "site_port", "skip", "force_recreate", "replace"}
+var composeOptionalFields = []string{"env_sha", "site_service", "site_port", "skip", "force_recreate", "replace", "registry_auth"}
 
 // composeHostPost — POST к хосту с откатом на старый хост.
 func (s *Server) composeHostPost(ctx context.Context, jc *jobs.Context, user string, t targetHost, path string, body map[string]any, out any) (int, error) {

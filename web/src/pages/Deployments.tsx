@@ -535,7 +535,18 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
           content = fromLink.yaml
           setDraft(content)
         }
-        const res = await api<{ id: number }>('/hub/pipelines', { method: 'POST', body: { name, content } })
+        // Имени ещё нет — из описания (project:) или из ссылки на compose:
+        // «Доступ» нужен и до того, как придумано имя.
+        let pname = name.trim()
+        if (!pname) {
+          const base = fromDescription(content).project || fromLink?.name || (/^repo:\s*(\S+)/m.exec(content)?.[1] ?? '').replace(/\.git$/, '').split(/[/:]/).pop() || 'pipeline'
+          // Имя занято другим конвейером — base-2, base-3…
+          const taken = new Set((await api<Pipeline[] | { pipelines: Pipeline[] }>('/hub/pipelines').then((r) => (Array.isArray(r) ? r : r.pipelines)).catch(() => [] as Pipeline[])).map((x) => x.name))
+          pname = base
+          for (let i = 2; taken.has(pname); i++) pname = `${base}-${i}`
+          setName(pname)
+        }
+        const res = await api<{ id: number }>('/hub/pipelines', { method: 'POST', body: { name: pname, content } })
         id = res.id
         onSaved()
       }
@@ -612,8 +623,8 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
                 </Tooltip>
               )}
               {pipeline && <Input size="small" style={{ width: '20rem' }} value={note} placeholder={t('deploy.notePlaceholder')} onChange={(e) => setNote(e.target.value)} />}
-              <Tooltip title={!pipeline && !name.trim() ? t('deploy.accessNeedsName') : t('deploy.accessFromEditor')}>
-                <Button size="small" disabled={busy || (!pipeline && !name.trim())} onClick={() => void openAccess()}>
+              <Tooltip title={!pipeline && !name.trim() ? t('deploy.accessAutoName') : t('deploy.accessFromEditor')}>
+                <Button size="small" disabled={busy} onClick={() => void openAccess()}>
                   {t('deploy.access')}
                 </Button>
               </Tooltip>
@@ -1175,6 +1186,9 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
   const [key, setKey] = useState('')
   const [registry, setRegistry] = useState('')
   const [env, setEnv] = useState('')
+  // «Править .env»: текущий текст в редакторе. envOrig — с чем сравнивать
+  // перед записью (null — не загружали: вводится новый .env целиком).
+  const [envOrig, setEnvOrig] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [envHistory, setEnvHistory] = useState(false)
@@ -1198,9 +1212,39 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
     void runCheck()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- при открытии окна
   }, [p.id])
-  // Новый .env — сначала разница по именам с текущим (значения — секреты).
+  // Текущий .env — в редактор. Значения — секреты: показ по подтверждению
+  // и с записью в журнал действий (тот же reveal, что в истории).
+  async function editEnv() {
+    setError(null)
+    if (!p.has_env) {
+      setEnv('')
+      setEnvOrig('')
+      return
+    }
+    if (!(await confirmAction(t('deploy.envEditConfirm')))) return
+    try {
+      const vs = await api<{ versions: EnvVersion[] }>(`/hub/pipelines/${p.id}/env/versions`)
+      const cur = vs.versions.find((v) => v.current && !v.cleared)
+      const text = cur ? (await api<{ content: string }>(`/hub/pipelines/${p.id}/env/versions/${cur.id}/reveal`, { method: 'POST' })).content : ''
+      setEnv(text)
+      setEnvOrig(text)
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  const envChanged = envOrig === null ? env !== '' : env !== envOrig
+  // Новый .env — сначала разница с текущим по ключам (значения — секреты,
+  // не показываются): добавлены, изменены, удалены.
   async function save() {
-    if (env) {
+    if (envChanged && envOrig !== null) {
+      const before = envMap(envOrig)
+      const after = envMap(env)
+      const added = [...after.keys()].filter((k) => !before.has(k))
+      const removed = [...before.keys()].filter((k) => !after.has(k))
+      const changed = [...after.keys()].filter((k) => before.has(k) && before.get(k) !== after.get(k))
+      const text = t('deploy.envDiffConfirm', { added: added.join(', ') || '—', changed: changed.join(', ') || '—', removed: removed.join(', ') || '—' })
+      if (!(await confirmAction(text))) return
+    } else if (envChanged) {
       let current: string[] = []
       try {
         const vs = await api<{ versions: EnvVersion[] }>(`/hub/pipelines/${p.id}/env/versions`)
@@ -1214,7 +1258,7 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
       const text = t('deploy.envSaveConfirm', { appear: appear.join(', ') || '—', vanish: vanish.join(', ') || '—', count: next.length })
       if (!(await confirmAction(text))) return
     }
-    await send({ git_token: token, ssh_key: key, registry, env })
+    await send({ git_token: token, ssh_key: key, registry, env: envChanged ? env : '', clear_env: envChanged && env.trim() === '' && envOrig !== null && envOrig !== '' })
   }
   async function send(body: Record<string, unknown>) {
     setBusy(true)
@@ -1228,6 +1272,7 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
       setRegistry('')
       setEnvSaved(!!body.env || !!body.clear_env)
       setEnv('')
+      setEnvOrig(null)
       setSaved(true)
       setP(await api<Pipeline>(`/hub/pipelines/${p.id}`).catch(() => p))
       await runCheck()
@@ -1258,9 +1303,15 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
         <Input.Password size="small" value={token} placeholder={t('deploy.tokenPlaceholder')} onChange={(e) => setToken(e.target.value)} autoComplete="new-password" />
         <Input.TextArea rows={4} className="mono sensitive-area" value={key} placeholder={t('deploy.keyPlaceholder')} onChange={(e) => setKey(e.target.value)} />
         <Input.Password size="small" value={registry} placeholder={t('deploy.registryPlaceholder')} onChange={(e) => setRegistry(e.target.value)} autoComplete="new-password" />
-        <Input.TextArea rows={4} className="mono sensitive-area" value={env} placeholder={t('deploy.envPlaceholder')} onChange={(e) => setEnv(e.target.value)} />
+        <Input.TextArea
+          rows={envOrig !== null ? 10 : 4}
+          className="mono sensitive-area"
+          value={env}
+          placeholder={t('deploy.envPlaceholder')}
+          onChange={(e) => setEnv(e.target.value)}
+        />
         <Space wrap>
-          <Button type="primary" loading={busy} disabled={!token && !key && !registry && !env} onClick={() => void save()}>
+          <Button type="primary" loading={busy} disabled={!token && !key && !registry && !envChanged} onClick={() => void save()}>
             {t('deploy.saveAccess')}
           </Button>
           {p.has_git_cred && (
@@ -1278,6 +1329,11 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
               {t('deploy.clearEnv')}
             </Button>
           )}
+          {envOrig === null && (
+            <Button size="small" onClick={() => void editEnv()}>
+              {t('deploy.envEdit')}
+            </Button>
+          )}
           <Button size="small" onClick={() => setEnvHistory(true)}>
             {t('deploy.envHistory')}
           </Button>
@@ -1286,6 +1342,19 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
       {envHistory && <EnvHistoryModal p={p} onClose={() => setEnvHistory(false)} onChanged={onSaved} />}
     </Modal>
   )
+}
+
+/** Переменные .env: имя → значение как написано (для сравнения версий). */
+function envMap(text: string): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim().replace(/^export\s+/, '')
+    if (!line || line.startsWith('#')) continue
+    const i = line.indexOf('=')
+    const k = (i < 0 ? line : line.slice(0, i)).trim()
+    if (k) out.set(k, i < 0 ? '' : line.slice(i + 1))
+  }
+  return out
 }
 
 /** Имена переменных .env (как их читает docker compose). */

@@ -587,8 +587,9 @@ page.
 
 The **"Access"** window opens from the pipeline's button in the list and
 from the **"Access"** button in the description window. For a new pipeline
-that button first saves it under the entered name (it is disabled without
-a name), and the window then edits the saved pipeline. On opening and
+that button first saves it under the entered name, or without one under the
+name from the description's `project:` or the compose link; the window then
+edits the saved pipeline. On opening and
 after "Save", the window checks access with the saved keys right away:
 `git ls-remote` on `repo:` gives "access granted, branch found", "no
 access" with the reason (`Permission denied`, a wrong token) or "no such
@@ -626,7 +627,17 @@ A pipeline's "Access":
 
 - **Repository** — a token (for `https://`, e.g. a GitHub fine-grained
   token with Contents: read) or a private deploy key (for `ssh`/`git@`).
-- **Registry** — `login:token` for a private registry (for tag watching).
+- **Registry** — `login:token` for a private registry. The hub watches tags
+  with it (`registry:`), the dry run checks a private image with it (from
+  the hub — "in the registry, checked with the pipeline key"), and the
+  deployment pulls images on the host with it: the host gets the key only
+  for the `pull` — in a temporary Docker config (`docker --config`, a 0600
+  file in nkt's data directory, deleted right after) — so the host needs no
+  `docker login` of its own. The key belongs to the registry in the
+  description's `registry:`, or without it to the stack's only registry
+  besides Docker Hub (a private ghcr.io image next to public `postgres`,
+  `redis`); for images from two registries of your own, set `registry:`.
+  The key is not passed to podman — the host needs `podman login`.
 - **Stack .env** — for `action: compose`: the stack's environment
   variables (`KEY=value` per line). The order of lines only matters when a
   value refers to another variable (`FORGEJO_ROOT_URL=https://${FORGEJO_DOMAIN}/`):
@@ -643,8 +654,11 @@ repository, as a background job on the hub machine).
 
 **Stack `.env`.** Each deployment writes it to `/srv/compose/<stack>/.env`
 (0600) and replaces what is on the host; a pipeline without `.env` leaves
-the host's file alone. Saving a new `.env` first shows which variable names
-appear and disappear. **".env history"** in "Access": every change is a
+the host's file alone. **"Edit .env"** in "Access" opens the current `.env`
+in an editor (the values are secrets: shown after a confirmation and
+written to the audit log); before saving — the difference by keys: added,
+changed, removed (values are not shown). Pasting a whole new `.env` first
+shows which variable names appear and disappear. **".env history"** in "Access": every change is a
 version (encrypted); differences show names only (+ added, − removed,
 ~ changed value); **"Show values"** is for administrators and is written
 to the audit log; **"Restore"** makes a version current (hosts get it with

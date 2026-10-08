@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"os"
 	"path"
 	"regexp"
 	"slices"
@@ -70,6 +71,9 @@ type composeDeployRequest struct {
 	// ForceRecreate — пересоздать контейнеры, даже если compose не видит
 	// изменений (хаб: .env поменялся с прошлой выкладки).
 	ForceRecreate bool `json:"force_recreate,omitempty"`
+	// RegistryAuth — ключ registry конвейера на время pull (см.
+	// compose_pull_auth.go); в параметры задания не идёт.
+	RegistryAuth *composeRegistryAuth `json:"registry_auth,omitempty"`
 }
 
 // ComposeDeployParams — вход задания (без содержимого файлов).
@@ -82,6 +86,11 @@ type ComposeDeployParams struct {
 	Replace     string `json:"replace,omitempty"`
 	// ForceRecreate — up --force-recreate.
 	ForceRecreate bool `json:"force_recreate,omitempty"`
+	// AuthDir — временный каталог docker --config с ключом registry для
+	// pull (путь не секрет; сам файл удаляется после pull).
+	AuthDir string `json:"auth_dir,omitempty"`
+	// AuthUnused — ключ прислан, но этот движок им не воспользуется.
+	AuthUnused bool `json:"auth_unused,omitempty"`
 }
 
 func composeStackDir(project string) string { return parse.ComposeStacksDir + "/" + project }
@@ -229,12 +238,28 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 	if wait <= 0 || wait > 3600 {
 		wait = 300
 	}
+	params := ComposeDeployParams{Project: req.Project, File: req.File, Engine: engine, Pull: req.Pull, WaitTimeout: wait, Replace: req.Replace, ForceRecreate: req.ForceRecreate}
+	if req.RegistryAuth != nil && req.Pull {
+		if engine == "docker" {
+			authDir, err := s.writePullAuth(*req.RegistryAuth)
+			if err != nil {
+				writeErr(w, r, http.StatusBadRequest, err)
+				return
+			}
+			params.AuthDir = authDir
+		} else {
+			params.AuthUnused = true
+		}
+	}
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindComposeDeploy, TitleKey: "compose.jobTitle", TitleArgs: []any{req.Project},
 		Queue: "compose:" + req.Project, Author: user, Steps: 3,
-		Params: ComposeDeployParams{Project: req.Project, File: req.File, Engine: engine, Pull: req.Pull, WaitTimeout: wait, Replace: req.Replace, ForceRecreate: req.ForceRecreate},
+		Params: params,
 	})
 	if err != nil {
+		if params.AuthDir != "" {
+			_ = os.RemoveAll(params.AuthDir)
+		}
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
@@ -270,9 +295,16 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	c := d.s.scanner.Collector()
 	defer d.s.rescanLater()
+	// Ключ registry — только на время pull; каталог убирается в любом
+	// случае, и при ошибке до pull.
+	authDir := d.s.pullAuthDir(p.AuthDir)
+	if authDir != "" {
+		defer os.RemoveAll(authDir)
+	}
 	var lastOutput string
+	var global []string // флаги docker перед compose (--config на время pull)
 	run := func(timeout time.Duration, extra ...string) error {
-		args := append(composeArgs(c, p.Project, p.File), extra...)
+		args := append(append(append([]string{}, global...), composeArgs(c, p.Project, p.File)...), extra...)
 		jc.Logf("$ %s %s", p.Engine, strings.Join(args, " "))
 		res, err := c.RunTimeout(ctx, timeout, p.Engine, args...)
 		lastOutput = res.Output()
@@ -317,7 +349,18 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	wait := time.Duration(p.WaitTimeout) * time.Second
 	jc.StepKey(1, 3, "compose.stepPull", p.Project)
 	if p.Pull {
-		if err := run(20*time.Minute, "pull"); err != nil {
+		if authDir != "" {
+			jc.Log("compose.pullWithKey")
+			global = []string{"--config", authDir}
+		} else if p.AuthUnused {
+			jc.Log("compose.pullKeyPodman")
+		}
+		err := run(20*time.Minute, "pull")
+		global = nil
+		if authDir != "" {
+			_ = os.RemoveAll(authDir)
+		}
+		if err != nil {
 			return composePullCause(lastOutput, err)
 		}
 	}

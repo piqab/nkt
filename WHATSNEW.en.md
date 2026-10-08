@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.184 — 2026-10-08
+
+- **Deployments: the pipeline registry key works for the deployment.** The
+  "login:token" in "Access" used to serve tag watching only: the dry run
+  said "could not check: unauthorized" about a private image, and the
+  deployment did not pull it without `docker login` on the host. Now the dry
+  run checks the image from the hub with this key, and the deployment hands
+  it to the host only for the `pull` (a temporary Docker config, deleted
+  right after). The key belongs to the registry in `registry:` or to the
+  stack's only registry besides Docker Hub. It is not passed to podman
+  (`podman login` is needed).
+- **"Access" in a new pipeline's window is always active:** without a name
+  the pipeline is saved under the name from `project:` or the compose link
+  (taken — `-2`, `-3`).
+- **`.env` is editable:** "Edit .env" opens the current text (shown after a
+  confirmation and written to the audit log); before saving — the
+  difference by keys: added, changed, removed, without values.
+
 ## v1.11.183 — 2026-10-08
 
 - **"Add image…": the "Delete the archive after loading" checkbox** (on,

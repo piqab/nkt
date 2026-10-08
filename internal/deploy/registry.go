@@ -214,3 +214,64 @@ func CompareVersions(a, b string) int {
 	}
 	return strings.Compare(a, b)
 }
+
+// RegistryHost — хост registry образа («ghcr.io», «docker.io» для Docker
+// Hub и коротких имён): к какому registry относится ключ конвейера.
+func RegistryHost(image string) string {
+	first, _, ok := strings.Cut(image, "/")
+	if ok && (strings.ContainsAny(first, ".:") || first == "localhost") && first != "docker.io" {
+		return first
+	}
+	return "docker.io"
+}
+
+// manifestAccept — индексы и манифесты, OCI и Docker: HEAD отвечает на
+// любой из них.
+const manifestAccept = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, " +
+	"application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
+
+// ManifestExists — есть ли образ (тег или дайджест) в registry: HEAD
+// манифеста, без скачивания слоёв; вход — как у ListTags.
+func ManifestExists(ctx context.Context, image, cred string) (bool, error) {
+	name, ref := image, "latest"
+	if at := strings.LastIndex(name, "@"); at > 0 {
+		name, ref = name[:at], name[at+1:]
+	} else if colon := strings.LastIndex(name, ":"); colon > strings.LastIndex(name, "/") {
+		name, ref = name[:colon], name[colon+1:]
+	}
+	base, repo := registryBase(name)
+	u := base + "/v2/" + repo + "/manifests/" + ref
+	head := func(auth string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodHead, u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", manifestAccept)
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		return registryClient.Do(req)
+	}
+	resp, err := head("")
+	if err != nil {
+		return false, err
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		auth, err := registryAuth(ctx, resp.Header.Get("WWW-Authenticate"), cred)
+		if err != nil {
+			return false, err
+		}
+		if resp, err = head(auth); err != nil {
+			return false, err
+		}
+		resp.Body.Close()
+	}
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	}
+	return false, msgs.Errorf("deploy.registryHTTP", image, resp.StatusCode)
+}
