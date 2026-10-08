@@ -1,5 +1,10 @@
 package com.netknownsthat.ui.host
 
+import com.netknownsthat.ui.common.ChartPoint
+import com.netknownsthat.ui.common.ChartSeries
+import com.netknownsthat.ui.common.LineChart
+import com.netknownsthat.ui.common.SERIES_COLORS
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -59,12 +64,6 @@ private val USAGE_METRICS: List<Pair<String, String>>
         "net_rx_bytes" to t("Сеть ↓", "Network ↓"),
         "net_tx_bytes" to t("Сеть ↑", "Network ↑"),
     )
-
-/** Distinct series colours that read on both light and dark backgrounds. */
-private val SERIES_COLORS = listOf(
-    Color(0xFF3B82F6), Color(0xFFF59E0B), Color(0xFF10B981), Color(0xFFEF4444),
-    Color(0xFF8B5CF6), Color(0xFF06B6D4), Color(0xFFEC4899), Color(0xFF84CC16),
-)
 
 private fun formatValue(metric: String, v: Double): String = when {
     metric == "cpu_pct" -> "${v.fmt(1)}%"
@@ -221,38 +220,25 @@ private fun ChipRow(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** Plain line chart: one line per subject over the hourly buckets. A chart
- * library would be a heavy dependency for exactly this. */
+/** One line per subject over the hourly buckets; a finger on it reads the
+ * values out (LineChart). */
 @Composable
 private fun UsageChart(series: UsageResponse, subjects: List<String>, metric: String) {
-    val buckets = series.points.map { it.bucket }.distinct().sorted()
-    if (buckets.size < 2) return
     val bySubject = series.points.groupBy { it.subject }
-    val max = series.points.maxOf { it.value }.coerceAtLeast(1e-9)
-    val axis = MaterialTheme.colorScheme.outlineVariant
+    val lines = subjects.mapIndexed { i, subject ->
+        ChartSeries(
+            name = subject,
+            points = bySubject[subject].orEmpty().map { ChartPoint(it.bucket, it.value) },
+            color = SERIES_COLORS[i % SERIES_COLORS.size],
+        )
+    }
+    if (series.points.map { it.bucket }.distinct().size < 2) return
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(t("макс ${formatValue(metric, max)}", "max ${formatValue(metric, max)}"), style = MaterialTheme.typography.labelSmall)
-            Canvas(modifier = Modifier.fillMaxWidth().height(160.dp).padding(vertical = 4.dp)) {
-                drawLine(axis, Offset(0f, size.height), Offset(size.width, size.height))
-                val step = size.width / (buckets.size - 1)
-                subjects.forEachIndexed { i, subject ->
-                    val values = bySubject[subject]?.associate { it.bucket to it.value } ?: return@forEachIndexed
-                    val path = Path()
-                    var started = false
-                    buckets.forEachIndexed { x, b ->
-                        val v = values[b] ?: run { started = false; return@forEachIndexed }
-                        val pt = Offset(x * step, size.height - (v / max * size.height).toFloat())
-                        if (started) path.lineTo(pt.x, pt.y) else path.moveTo(pt.x, pt.y)
-                        started = true
-                    }
-                    drawPath(path, SERIES_COLORS[i % SERIES_COLORS.size], style = Stroke(width = 2.dp.toPx()))
-                }
-            }
-            Row {
-                Text(buckets.first().substringAfter('T'), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                Text(buckets.last().substringAfter('T'), style = MaterialTheme.typography.labelSmall)
-            }
-        }
+        LineChart(
+            series = lines,
+            formatValue = { formatValue(metric, it) },
+            formatX = { it.substringAfter('T') },
+            modifier = Modifier.padding(12.dp),
+        )
     }
 }

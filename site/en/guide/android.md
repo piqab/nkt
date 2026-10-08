@@ -57,11 +57,21 @@ deployments, about). The top bar's title is breadcrumbs, e.g.
 the system Back button goes back one step.
 
 **A small screen.** About has the interface scale: 80, 90 (the default), 100
-or 115 % — text and spacing shrink together, so more fits on the screen.
+or 115 %, or a percent of your own from 50 to 100 — text and spacing shrink
+together, so more fits on the screen.
 Rows of buttons wrap to the next line instead of running off the edge.
 Rotating the phone does not interrupt the terminal or a console, and with a
 phone on its side the hub sections are a rail at the side so they take no
 height.
+
+**Charts** are the web's: the host's "Usage", a target's history in
+"Availability" (tap a target — availability in % and latency over a day, a
+week, a month) and a host's charts in the hub's "Monitoring" (tap a host —
+CPU, memory, load, disk fill over a day up to a year). A finger on a chart
+marks the nearest bucket and shows its time and every line's value; slide
+sideways and the mark follows. The readout stays after the finger is
+lifted and goes away with a tap outside the chart; up and down the page
+scrolls as usual.
 
 **Background operations.** While a job runs somewhere — on the hub or on
 any host, whoever started it — the top bar shows an icon with their count.
@@ -95,7 +105,7 @@ Docker images run as a host job — its log opens at once.
 
 **The terminal** takes the whole screen. If the host has tmux, the session
 opens in it and survives a dropped connection: the app re-attaches to the
-same session by itself. The “tmux ▾” button on the key bar has tmux actions
+same session by itself. The key bar has Enter after the arrows. The “tmux ▾” button on the key bar has tmux actions
 without typing `Ctrl+B …`: new window, next and previous, window list,
 splits, scroll mode, detach, mouse on/off. Without tmux a plain shell opens
 with an offer to install tmux — the install runs with live output.

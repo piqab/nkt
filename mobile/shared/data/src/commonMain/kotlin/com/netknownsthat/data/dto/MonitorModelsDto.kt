@@ -158,3 +158,16 @@ data class K8sUsageNodeDto(
     val ip: String = "",
     @SerialName("control_plane") val controlPlane: Boolean = false,
 )
+
+@Serializable
+data class TargetHistoryDto(val buckets: List<AvailabilityBucketDto> = emptyList())
+
+@Serializable
+data class AvailabilityBucketDto(
+    val bucket: String = "",
+    val total: Int = 0,
+    val ok: Int = 0,
+    val uptime: Double = 0.0,
+    @SerialName("avg_latency_ms") val avgLatencyMs: Double = 0.0,
+    @SerialName("max_latency_ms") val maxLatencyMs: Double = 0.0,
+)

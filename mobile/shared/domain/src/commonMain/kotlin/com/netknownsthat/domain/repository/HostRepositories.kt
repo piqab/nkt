@@ -113,6 +113,10 @@ interface HostMonitoringRepository {
     suspend fun outages(host: HostTarget): Outcome<OutagesResponse>
     suspend fun checkTarget(host: HostTarget, targetId: Long): Outcome<Unit>
 
+    /** Hourly history of a target over [since] ("24h", "7d"…); [tzMinutes]
+     * — the device's UTC offset, so the hours are local. */
+    suspend fun targetHistory(host: HostTarget, targetId: Long, since: String, tzMinutes: Int): Outcome<List<com.netknownsthat.domain.model.AvailabilityBucket>>
+
     /** A target of your own (source "manual"): an address no host config
      * mentions. kind: icmp | tcp | http | https. */
     suspend fun addTarget(host: HostTarget, target: NewTarget): Outcome<Unit>

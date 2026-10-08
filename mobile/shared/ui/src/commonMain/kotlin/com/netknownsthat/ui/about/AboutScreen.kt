@@ -21,6 +21,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.rememberScrollState
@@ -74,16 +76,7 @@ fun AboutScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            androidx.compose.foundation.layout.Row(modifier = Modifier.padding(top = 8.dp)) {
-                                com.netknownsthat.domain.repository.UiScale.entries.forEach { s ->
-                                    androidx.compose.material3.FilterChip(
-                                        selected = s == uiScale,
-                                        onClick = { onUiScale(s) },
-                                        label = { Text("${s.percent}%") },
-                                        modifier = Modifier.padding(end = 6.dp),
-                                    )
-                                }
-                            }
+                            UiScalePicker(uiScale, onUiScale)
                         }
                     }
                     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
@@ -193,5 +186,51 @@ fun AboutScreen(
                 }
             }
         }
+    }
+}
+
+/** The ready scales as chips, and a field for any percent 50–100. */
+@Composable
+private fun UiScalePicker(
+    current: com.netknownsthat.domain.repository.UiScale,
+    onPick: (com.netknownsthat.domain.repository.UiScale) -> Unit,
+) {
+    val presets = com.netknownsthat.domain.repository.UiScale.PRESETS
+    val range = com.netknownsthat.domain.repository.UiScale.CUSTOM
+    androidx.compose.foundation.layout.FlowRow(modifier = Modifier.padding(top = 8.dp)) {
+        presets.forEach { s ->
+            androidx.compose.material3.FilterChip(
+                selected = s == current,
+                onClick = { onPick(s) },
+                label = { Text("${s.percent}%") },
+                modifier = Modifier.padding(end = 6.dp),
+            )
+        }
+        // A typed-in scale is shown as its own chip, selected.
+        if (current !in presets) {
+            androidx.compose.material3.FilterChip(selected = true, onClick = {}, label = { Text(t("свой: ${current.percent}%", "custom: ${current.percent}%")) })
+        }
+    }
+    var text by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    val value = text.trim().toIntOrNull()
+    val valid = value != null && value in range
+    androidx.compose.foundation.layout.Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(top = 8.dp),
+    ) {
+        androidx.compose.material3.OutlinedTextField(
+            value = text,
+            onValueChange = { v -> text = v.filter(Char::isDigit).take(3) },
+            singleLine = true,
+            isError = text.isNotEmpty() && !valid,
+            label = { Text(t("Свой, ${range.first}–${range.last} %", "Custom, ${range.first}–${range.last} %")) },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+            modifier = Modifier.weight(1f),
+        )
+        androidx.compose.material3.TextButton(
+            onClick = { onPick(com.netknownsthat.domain.repository.UiScale(value!!)); text = "" },
+            enabled = valid,
+            modifier = Modifier.padding(start = 8.dp),
+        ) { Text(t("Применить", "Apply")) }
     }
 }

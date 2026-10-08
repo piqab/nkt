@@ -40,7 +40,11 @@ private fun pctHealth(pct: Double): HealthStatus = when {
  * disks, then the k8s clusters' nodes.
  */
 @Composable
-fun MonitoringScreen(viewModel: MonitoringViewModel, onOpenHost: (hostId: Long, path: String) -> Unit) {
+fun MonitoringScreen(
+    viewModel: MonitoringViewModel,
+    onOpenHost: (hostId: Long, path: String) -> Unit,
+    onOpenCharts: (MonHost) -> Unit = { onOpenHost(it.id, "/usage") },
+) {
     SectionContent(state = viewModel.state) { r ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             item {
@@ -61,7 +65,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel, onOpenHost: (hostId: Long, 
                 items(r.insights) { InsightCard(it, onOpenHost) }
             }
             item { Header(t("Хосты", "Hosts")) }
-            items(r.hosts, key = { it.id }) { HostLoadCard(it, onOpen = { onOpenHost(it.id, "/usage") }) }
+            items(r.hosts, key = { it.id }) { HostLoadCard(it, onOpen = { onOpenCharts(it) }) }
             if (r.clusters.isNotEmpty()) {
                 item { Header("Kubernetes") }
                 items(r.clusters, key = { it.hostId }) { c ->

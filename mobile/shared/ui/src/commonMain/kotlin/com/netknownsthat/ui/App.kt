@@ -83,6 +83,8 @@ import com.netknownsthat.ui.navigation.AboutRoute
 import com.netknownsthat.ui.navigation.Breadcrumbs
 import com.netknownsthat.ui.navigation.ConfigFileRoute
 import com.netknownsthat.ui.navigation.ConsoleRoute
+import com.netknownsthat.ui.navigation.MonHostRoute
+import com.netknownsthat.ui.navigation.TargetHistoryRoute
 import com.netknownsthat.ui.navigation.ContainerRoute
 import com.netknownsthat.ui.navigation.DeploymentsRoute
 import com.netknownsthat.ui.navigation.EventsRoute
@@ -106,6 +108,7 @@ import com.netknownsthat.ui.about.AboutScreen
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.window.core.layout.WindowSizeClass
+import com.netknownsthat.ui.common.countChartTouches
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
@@ -130,11 +133,12 @@ fun NktApp(jumps: Flow<HostJump> = emptyFlow()) {
 
 @Composable
 private fun NktRoot(app: AppViewModel, jumps: Flow<HostJump>) {
+    val chartTouches = remember { com.netknownsthat.ui.common.ChartTouches() }
     NktTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
+        Surface(modifier = Modifier.fillMaxSize().countChartTouches(chartTouches)) {
             val chrome = remember { Chrome() }
             if (app.showBetaNotice) BetaNotice(onDismiss = app::dismissBetaNotice)
-            CompositionLocalProvider(LocalChrome provides chrome) {
+            CompositionLocalProvider(LocalChrome provides chrome, com.netknownsthat.ui.common.LocalChartTouches provides chartTouches) {
                 when (app.start) {
                     Start.Loading -> Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
                     Start.SignIn -> Shell(app, chrome, LoginRoute, jumps)
@@ -293,7 +297,21 @@ private fun Routes(nav: NavHostController, app: AppViewModel, start: Any, openHo
             }
         }
         composable<MonitoringRoute> {
-            Section(koinViewModel<com.netknownsthat.ui.hub.MonitoringViewModel>()) { vm -> MonitoringScreen(vm, openHostAt) }
+            Section(koinViewModel<com.netknownsthat.ui.hub.MonitoringViewModel>()) { vm ->
+                MonitoringScreen(vm, openHostAt) { h -> nav.navigate(MonHostRoute(h.id, h.name, h.memTotal)) }
+            }
+        }
+        composable<MonHostRoute> { entry ->
+            val r = entry.toRoute<MonHostRoute>()
+            Section(koinViewModel<com.netknownsthat.ui.charts.MonHostChartsViewModel> { parametersOf(r.hostId) }) { vm ->
+                com.netknownsthat.ui.charts.MonHostChartsScreen(vm, r.memTotal) { openHostAt(r.hostId, "/usage") }
+            }
+        }
+        composable<TargetHistoryRoute> { entry ->
+            val r = entry.toRoute<TargetHistoryRoute>()
+            Section(koinViewModel<com.netknownsthat.ui.charts.TargetHistoryViewModel> { parametersOf(HostTarget(r.hostId), r.targetId) }) { vm ->
+                com.netknownsthat.ui.charts.TargetHistoryScreen(vm)
+            }
         }
         composable<HubJobsRoute> {
             Section(koinViewModel<com.netknownsthat.ui.hub.JobsViewModel> { parametersOf(JobOwner.Hub) }) { vm -> JobsScreen(vm, openHubJob) }
@@ -342,6 +360,7 @@ private fun Routes(nav: NavHostController, app: AppViewModel, start: Any, openHo
                 openSection = { nav.navigate(HostSectionRoute(r.hostId, r.hostName, it.name)) },
                 openContainer = { nav.navigate(ContainerRoute(r.hostId, r.hostName, it)) },
                 openConsole = { c -> nav.navigate(ConsoleRoute(r.hostId, r.hostName, c.kind.name, c.name, c.user)) },
+                openTargetHistory = { tg -> nav.navigate(TargetHistoryRoute(r.hostId, r.hostName, tg.id, tg.label)) },
                 openConfigFile = { nav.navigate(ConfigFileRoute(r.hostId, r.hostName, it)) },
                 openJob = { nav.navigate(JobRoute(r.hostId, r.hostName, it)) },
                 openHostAt = openHostAt,

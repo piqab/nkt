@@ -149,3 +149,14 @@ data class K8sUsageNode(
     val ip: String = "",
     val controlPlane: Boolean = false,
 )
+
+/** One bucket of a target's history (GET /monitor/targets/{id}/history):
+ * [bucket] is local time, as asked for with the device's offset. */
+data class AvailabilityBucket(
+    val bucket: String,
+    val total: Int = 0,
+    val ok: Int = 0,
+    val uptime: Double = 0.0,
+    val avgLatencyMs: Double = 0.0,
+    val maxLatencyMs: Double = 0.0,
+)

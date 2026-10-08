@@ -72,6 +72,8 @@ val presentationModule: Module = module {
     viewModel { HostListViewModel(get(), get()) }
     viewModel { EventsViewModel(get()) }
     viewModel { MonitoringViewModel(get()) }
+    viewModel { (id: Long) -> com.netknownsthat.ui.charts.MonHostChartsViewModel(id, get()) }
+    viewModel { (h: HostTarget, id: Long) -> com.netknownsthat.ui.charts.TargetHistoryViewModel(h, id, get()) }
     viewModel { FleetFail2banViewModel(get()) }
     viewModel { DeploymentsViewModel(get()) }
     viewModel { (pipelineId: Long) -> PipelineViewModel(pipelineId, get()) }

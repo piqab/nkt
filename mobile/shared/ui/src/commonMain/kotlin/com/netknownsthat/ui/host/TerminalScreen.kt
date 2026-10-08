@@ -333,6 +333,9 @@ private fun KeyBar(
         listOf(
             "Esc" to TerminalKeys.ESC, "Tab" to TerminalKeys.TAB,
             "↑" to TerminalKeys.UP, "↓" to TerminalKeys.DOWN, "←" to TerminalKeys.LEFT, "→" to TerminalKeys.RIGHT,
+            // Enter next to the arrows: picking from a menu (arrows, then
+            // Enter) without reaching for the keyboard.
+            "⏎ Enter" to TerminalKeys.ENTER,
             "^C" to TerminalKeys.ctrl('C'), "^D" to TerminalKeys.ctrl('D'), "^Z" to TerminalKeys.ctrl('Z'), "^L" to TerminalKeys.ctrl('L'),
             "Home" to TerminalKeys.HOME, "End" to TerminalKeys.END, "PgUp" to TerminalKeys.PAGE_UP, "PgDn" to TerminalKeys.PAGE_DOWN,
         ).forEach { (label, bytes) ->
