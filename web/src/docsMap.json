@@ -37,6 +37,6 @@
   "hub:slack": { "page": "bots", "ru": "Slack", "en": "Slack" },
   "deploy:compose": { "page": "hub-deploy", "ru": "Compose-стек", "en": "Compose stack" },
   "deploy:site": { "page": "hub-deploy", "ru": "Сайт в конвейере", "en": "A site in the pipeline" },
-  "deploy:access": { "page": "hub-deploy", "ru": "Доступ и секреты", "en": "Access and secrets" },
+  "deploy:access": { "page": "hub-deploy", "ru": "Секреты", "en": "Secrets" },
   "deploy:sites": { "page": "hub-deploy", "ru": "Сайты", "en": "Sites" }
 }

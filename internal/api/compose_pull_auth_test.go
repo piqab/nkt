@@ -15,9 +15,22 @@ import (
 // не принимается; кривой ключ — отказ.
 func TestPullAuth(t *testing.T) {
 	s := &Server{cfg: &config.Config{DataDir: t.TempDir()}}
-	dir, err := s.writePullAuth(composeRegistryAuth{Host: "ghcr.io", User: "piqab", Token: "ghp_x"})
+	ca := "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+	dir, caHosts, err := s.writePullAuth([]composeRegistryAuth{
+		{Host: "ghcr.io", User: "piqab", Token: "ghp_x"},
+		{Host: "harbor.example.com:8443", User: "robot$team+deploy", Token: "h", CA: ca},
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(caHosts) != 1 || caHosts[0] != "harbor.example.com:8443" {
+		t.Errorf("CA: %v", caHosts)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, caFile("harbor.example.com:8443"))); string(b) != ca {
+		t.Errorf("файл CA: %q", b)
+	}
+	if certsDir("docker", "harbor.example.com:8443") != "/etc/docker/certs.d/harbor.example.com:8443" || certsDir("podman", "h") != "/etc/containers/certs.d/h" {
+		t.Error("certs.d")
 	}
 	if s.pullAuthDir(dir) != dir || s.pullAuthDir("/etc") != "" || s.pullAuthDir(filepath.Join(dir, "x")) != "" {
 		t.Errorf("каталог из параметров: %q", s.pullAuthDir(dir))
@@ -36,7 +49,10 @@ func TestPullAuth(t *testing.T) {
 	if got, _ := base64.StdEncoding.DecodeString(cfg.Auths["ghcr.io"].Auth); string(got) != "piqab:ghp_x" {
 		t.Errorf("auth: %q", got)
 	}
-	hub, err := s.writePullAuth(composeRegistryAuth{Host: "docker.io", User: "u", Token: "t"})
+	if got, _ := base64.StdEncoding.DecodeString(cfg.Auths["harbor.example.com:8443"].Auth); string(got) != "robot$team+deploy:h" {
+		t.Errorf("auth harbor: %q", got)
+	}
+	hub, _, err := s.writePullAuth([]composeRegistryAuth{{Host: "docker.io", User: "u", Token: "t"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +67,9 @@ func TestPullAuth(t *testing.T) {
 		{Host: "ghcr.io/evil", User: "u", Token: "t"},
 		{Host: "ghcr.io", User: "u", Token: "t\nx"},
 		{Host: "ghcr.io", User: "", Token: "t"},
+		{Host: "ghcr.io", User: "u", Token: "t", CA: "not a pem"},
 	} {
-		if _, err := s.writePullAuth(bad); err == nil {
+		if _, _, err := s.writePullAuth([]composeRegistryAuth{bad}); err == nil {
 			t.Errorf("принят: %+v", bad)
 		}
 	}

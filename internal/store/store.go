@@ -604,6 +604,9 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	// cert / cert_key — сертификат сайта: "" и auto — certbot при
 	// необходимости, manual — только готовый, /путь — свой файл.
 	{"sites", "cert", `ALTER TABLE sites ADD COLUMN cert TEXT NOT NULL DEFAULT ''`},
+	// repo_creds_enc / registries_enc — ключи submodules и registry списками.
+	{"pipelines", "repo_creds_enc", `ALTER TABLE pipelines ADD COLUMN repo_creds_enc BLOB`},
+	{"pipelines", "registries_enc", `ALTER TABLE pipelines ADD COLUMN registries_enc BLOB`},
 	{"sites", "cert_key", `ALTER TABLE sites ADD COLUMN cert_key TEXT NOT NULL DEFAULT ''`},
 	// failed_commit / failed_tag — на чём упала выкладка (опрос не повторяет).
 	{"pipelines", "failed_commit", `ALTER TABLE pipelines ADD COLUMN failed_commit TEXT NOT NULL DEFAULT ''`},

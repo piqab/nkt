@@ -2,6 +2,8 @@ package deploy
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -25,6 +27,31 @@ const DefaultRegistryTags = `^v?\d+(\.\d+){1,2}$`
 
 var registryClient = &http.Client{Timeout: 20 * time.Second}
 
+// RegistryAccess — вход в registry: «логин:токен» (пусто — анонимно) и
+// свой CA в PEM (пусто — системные корни), если у registry сертификат
+// своего центра (Harbor в своей сети).
+type RegistryAccess struct {
+	Cred string
+	CA   string
+}
+
+// Client — HTTP-клиент с доверием к CA registry (вдобавок к системным).
+func (a RegistryAccess) Client() (*http.Client, error) {
+	if strings.TrimSpace(a.CA) == "" {
+		return registryClient, nil
+	}
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM([]byte(a.CA)) {
+		return nil, msgs.Errorf("deploy.registryBadCA")
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: pool}
+	return &http.Client{Timeout: registryClient.Timeout, Transport: tr}, nil
+}
+
 // registryBase — адрес registry и имя образа: docker.io и короткие имена —
 // Docker Hub (library/ для одиночных).
 func registryBase(image string) (string, string) {
@@ -47,24 +74,29 @@ func registryBase(image string) (string, string) {
 var bearerParamRe = regexp.MustCompile(`(\w+)="([^"]*)"`)
 
 // ListTags — теги образа (до 10 страниц).
-func ListTags(ctx context.Context, image, cred string) ([]string, error) {
+func ListTags(ctx context.Context, image string, acc RegistryAccess) ([]string, error) {
+	client, err := acc.Client()
+	if err != nil {
+		return nil, err
+	}
+	cred := acc.Cred
 	base, repo := registryBase(image)
 	next := base + "/v2/" + repo + "/tags/list?n=1000"
 	var tags []string
 	auth := ""
 	for page := 0; page < 10 && next != ""; page++ {
-		resp, err := registryGet(ctx, next, auth)
+		resp, err := registryGet(ctx, client, next, auth)
 		if err != nil {
 			return nil, err
 		}
 		if resp.StatusCode == http.StatusUnauthorized && auth == "" {
 			challenge := resp.Header.Get("WWW-Authenticate")
 			resp.Body.Close()
-			auth, err = registryAuth(ctx, challenge, cred)
+			auth, err = registryAuth(ctx, client, challenge, cred)
 			if err != nil {
 				return nil, err
 			}
-			resp, err = registryGet(ctx, next, auth)
+			resp, err = registryGet(ctx, client, next, auth)
 			if err != nil {
 				return nil, err
 			}
@@ -93,7 +125,7 @@ func ListTags(ctx context.Context, image, cred string) ([]string, error) {
 	return tags, nil
 }
 
-func registryGet(ctx context.Context, u, auth string) (*http.Response, error) {
+func registryGet(ctx context.Context, client *http.Client, u, auth string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -102,11 +134,11 @@ func registryGet(ctx context.Context, u, auth string) (*http.Response, error) {
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
-	return registryClient.Do(req)
+	return client.Do(req)
 }
 
 // registryAuth — заголовок Authorization по вызову сервера.
-func registryAuth(ctx context.Context, challenge, cred string) (string, error) {
+func registryAuth(ctx context.Context, client *http.Client, challenge, cred string) (string, error) {
 	scheme, params, _ := strings.Cut(challenge, " ")
 	user, pass, hasCred := strings.Cut(cred, ":")
 	switch strings.ToLower(scheme) {
@@ -141,7 +173,7 @@ func registryAuth(ctx context.Context, challenge, cred string) (string, error) {
 		if hasCred {
 			req.SetBasicAuth(user, pass)
 		}
-		resp, err := registryClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			return "", err
 		}
@@ -232,7 +264,12 @@ const manifestAccept = "application/vnd.oci.image.index.v1+json, application/vnd
 
 // ManifestExists — есть ли образ (тег или дайджест) в registry: HEAD
 // манифеста, без скачивания слоёв; вход — как у ListTags.
-func ManifestExists(ctx context.Context, image, cred string) (bool, error) {
+func ManifestExists(ctx context.Context, image string, acc RegistryAccess) (bool, error) {
+	client, err := acc.Client()
+	if err != nil {
+		return false, err
+	}
+	cred := acc.Cred
 	name, ref := image, "latest"
 	if at := strings.LastIndex(name, "@"); at > 0 {
 		name, ref = name[:at], name[at+1:]
@@ -250,7 +287,7 @@ func ManifestExists(ctx context.Context, image, cred string) (bool, error) {
 		if auth != "" {
 			req.Header.Set("Authorization", auth)
 		}
-		return registryClient.Do(req)
+		return client.Do(req)
 	}
 	resp, err := head("")
 	if err != nil {
@@ -258,7 +295,7 @@ func ManifestExists(ctx context.Context, image, cred string) (bool, error) {
 	}
 	resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		auth, err := registryAuth(ctx, resp.Header.Get("WWW-Authenticate"), cred)
+		auth, err := registryAuth(ctx, client, resp.Header.Get("WWW-Authenticate"), cred)
 		if err != nil {
 			return false, err
 		}
@@ -274,4 +311,43 @@ func ManifestExists(ctx context.Context, image, cred string) (bool, error) {
 		return false, nil
 	}
 	return false, msgs.Errorf("deploy.registryHTTP", image, resp.StatusCode)
+}
+
+// RegistryLogin — вход в registry host этим доступом: GET /v2/, по вызову
+// — токен (Bearer) или базовая авторизация; nil — вход есть.
+func RegistryLogin(ctx context.Context, host string, acc RegistryAccess) error {
+	client, err := acc.Client()
+	if err != nil {
+		return err
+	}
+	base := "https://" + host
+	if host == "docker.io" {
+		base = "https://registry-1.docker.io"
+	}
+	resp, err := registryGet(ctx, client, base+"/v2/", "")
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return nil // registry без входа
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		return msgs.Errorf("deploy.registryHTTP", host, resp.StatusCode)
+	}
+	auth, err := registryAuth(ctx, client, resp.Header.Get("WWW-Authenticate"), acc.Cred)
+	if err != nil {
+		return err
+	}
+	resp, err = registryGet(ctx, client, base+"/v2/", auth)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	// Docker Hub на /v2/ с токеном без scope отвечает 401 — токен выдан,
+	// значит логин и пароль приняты.
+	if resp.StatusCode == http.StatusOK || (resp.StatusCode == http.StatusUnauthorized && strings.HasPrefix(auth, "Bearer ")) {
+		return nil
+	}
+	return msgs.Errorf("deploy.registryHTTP", host, resp.StatusCode)
 }

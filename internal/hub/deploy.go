@@ -116,7 +116,7 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 		return err
 	}
 	autoRetry = spec.Poll != "" || spec.Registry != ""
-	g := deploy.Git{Dir: s.pipelineDir(pl.ID), Cred: s.pipelineCred(pl)}
+	g := s.pipelineGit(pl, "")
 
 	// Коммит: заданный (откат), иначе вершина тега или ветки.
 	ref := d.Ref

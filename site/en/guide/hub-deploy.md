@@ -29,7 +29,7 @@ sits at the top of the “Deployments” section.
 "New pipeline" → a name and a YAML description. Editing happens in a
 window with a diff, the description has a revision history with notes;
 it is validated before it is saved. There are no secrets in the
-description — they are in "Access".
+description — they are in "Secrets".
 
 ```yaml
 repo: https://github.com/org/app.git
@@ -51,7 +51,7 @@ clusters: [prod]          # hub clusters
 
 | Field | For | Value |
 |---|---|---|
-| `repo` | always | `https://…`, `ssh://…` or `git@host:path`. No login or password in the URL — a token or key goes into "Access" |
+| `repo` | always | `https://…`, `ssh://…` or `git@host:path`. No login or password in the URL — a token or key goes into "Secrets" |
 | `ref` | branch | A push to it deploys its head. `ref` or `tags` is required |
 | `tags` | tags | A pattern (glob, `v*`): a repository tag matching it deploys that tag |
 | `action` | always | `manifest`, `helm` or `script` |
@@ -182,7 +182,7 @@ compose:
   pair as a problem, and the deployment refuses before touching any host.
   Different specific addresses (`127.0.0.1` and `192.168.1.5`) and
   different protocols (`53/tcp` and `53/udp`) are not a conflict.
-- **The stack's `.env`** is set in the pipeline's "Access": stored on the
+- **The stack's `.env`** is set in the pipeline's "Secrets": stored on the
   hub encrypted, written to the host with 0600 permissions, never in the
   version history or logs. It reaches the hosts with the **next
   deployment** — press “Deploy” after saving (the webhook and repository
@@ -219,7 +219,7 @@ in the repository's `examples/`. The chosen example is remembered: clicking
 completely again.
 
 For your own link the hub **fetches the compose file itself** (one commit,
-no history; a private repository with the pipeline's keys from "Access")
+no history; a private repository with the pipeline's keys from "Secrets")
 and builds the description from it:
 
 - **the site**: the web service found by image ports (`EXPOSE` from the
@@ -287,7 +287,7 @@ under which name the last successful deployment put the stack:
   compose pipeline” below.
 
 A private repository without keys: the window says "the repository is
-private: set the name and “Access”, then “Fill in the description” again",
+private: set the name and “Secrets”, then “Fill in the description” again",
 and for now the description comes from the link alone, with the
 placeholders `<service from compose>` and `<container port>` in `site:`:
 
@@ -608,21 +608,22 @@ the description with that tag. The response is `202` —
 Ready CI pipelines — on the [CI/CD examples](/en/guide/cicd-examples)
 page.
 
-## Access and secrets
+## Secrets
 
-The **"Access"** window opens from the pipeline's button in the list and
-from the **"Access"** button in the description window. For a new pipeline
+The **"Secrets"** window opens from the pipeline's button in the list and
+from the **"Secrets"** button in the description window. For a new pipeline
 that button first saves it under the entered name, or without one under the
 name from the description's `project:` or the compose link; the window then
-edits the saved pipeline. On opening and
-after "Save", the window checks access with the saved keys right away:
+edits the saved pipeline. The window has three tabs: **"Repositories"**,
+**"Registries"** and **".env"**. On opening and after a key is saved, the
+"Repositories" tab checks access with the saved keys right away:
 `git ls-remote` on `repo:` gives "access granted, branch found", "no
 access" with the reason (`Permission denied`, a wrong token) or "no such
 branch"; if the description has `registry:`, it also logs in to the
 registry and counts the tags. "Check again" repeats it.
 
 If a compose link is already pasted in the description window but "Fill
-in the description" has not been clicked, "Access" first fills the
+in the description" has not been clicked, "Secrets" first fills the
 description from the link, so the link's repository is checked rather than
 the template placeholder (`github.com/org/app`; if the description is still
 the template, the check says so directly). Refusals are explained in words
@@ -648,22 +649,43 @@ server. After the keys are saved, the "repository is private" note in the
 description window disappears, and "Fill in the description" notes that the
 file was fetched with the pipeline's keys.
 
-A pipeline's "Access":
+The "Secrets" tabs:
 
-- **Repository** — a token (for `https://`, e.g. a GitHub fine-grained
-  token with Contents: read) or a private deploy key (for `ssh`/`git@`).
-- **Registry** — `login:token` for a private registry. The hub watches tags
-  with it (`registry:`), the dry run checks a private image with it (from
-  the hub — "in the registry, checked with the pipeline key"), and the
-  deployment pulls images on the host with it: the host gets the key only
-  for the `pull` — in a temporary Docker config (`docker --config`, a 0600
-  file in nkt's data directory, deleted right after) — so the host needs no
-  `docker login` of its own. The key belongs to the registry in the
-  description's `registry:`, or without it to the stack's only registry
-  besides Docker Hub (a private ghcr.io image next to public `postgres`,
-  `redis`); for images from two registries of your own, set `registry:`.
-  The key is not passed to podman — the host needs `podman login`.
-- **Stack .env** — for `action: compose`: the stack's environment
+- **Repositories** — the key of the main repository (`repo:`): a token (for
+  `https://`, e.g. a GitHub fine-grained token with Contents: read) or a
+  private deploy key (for `ssh`/`git@`). Below it are keys for **other
+  repositories**, matched by the start of the address: `github.com/vendor/`
+  covers every vendor repository, `git.example.com/team/lib` just one. They
+  are for **submodules**: when the repository has `.gitmodules`, the hub
+  fetches them itself (`git submodule update --init --recursive`, first
+  only the latest commit), and each submodule gets the key for its own
+  address — a token or an ssh key, different for different servers;
+  relative submodule addresses (`../lib.git`) resolve against `repo:`. The
+  longest matching start wins; the main key applies to `repo:` only.
+  "Replace" sets a new key, "Delete" removes it.
+- **Registries** — a list of registry keys: the address
+  (`harbor.example.com`, `ghcr.io`, `registry.example.com:5000`), login,
+  token and, if needed, **its own CA** (PEM as text or from a file) — for a
+  registry whose certificate is not from a public authority. Any number of
+  keys; each image of the stack uses its own: the dry run checks a private
+  image from the hub with its registry's key ("in the registry, checked
+  with the pipeline key"), and the deployment pulls images on the host with
+  the keys of all the stack's registries — the host gets them only for the
+  pull: Docker in a temporary config (`docker --config`), Podman in a
+  temporary `--authfile`; a 0600 file in nkt's data directory, deleted
+  right after, so the host needs no `docker login` / `podman login` of its
+  own. Images from public registries (`postgres`, `redis`) need no key. The
+  hub watches tags (`registry:`) with the same key. The "Login check" column
+  tries each registry with its key; "Edit" changes the address, login or CA
+  (an empty token keeps the current one), "Delete" removes the key. The hub
+  uses the CA when checking; on deployment the host puts it into its
+  engine's `certs.d` — `/etc/docker/certs.d/<registry>/ca.crt` or
+  `/etc/containers/certs.d/<registry>/ca.crt` (only if the file differs);
+  the host's system-wide trust is not changed. An older single key
+  (`login:token` without an address) shows as "registry not set" and
+  applies, as before, to the registry in `registry:`, or without it to the
+  stack's only registry besides Docker Hub; "Edit" binds it to an address.
+- **.env** — for `action: compose`: the stack's environment
   variables (`KEY=value` per line). The order of lines only matters when a
   value refers to another variable (`FORGEJO_ROOT_URL=https://${FORGEJO_DOMAIN}/`):
   docker compose only substitutes what is set above in `.env`, so such a
@@ -679,11 +701,11 @@ repository, as a background job on the hub machine).
 
 **Stack `.env`.** Each deployment writes it to `/srv/compose/<stack>/.env`
 (0600) and replaces what is on the host; a pipeline without `.env` leaves
-the host's file alone. **"Edit .env"** in "Access" opens the current `.env`
+the host's file alone. **"Edit .env"** in "Secrets" opens the current `.env`
 in an editor (the values are secrets: shown after a confirmation and
 written to the audit log); before saving — the difference by keys: added,
 changed, removed (values are not shown). Pasting a whole new `.env` first
-shows which variable names appear and disappear. **".env history"** in "Access": every change is a
+shows which variable names appear and disappear. **".env history"** in "Secrets": every change is a
 version (encrypted); differences show names only (+ added, − removed,
 ~ changed value); **"Show values"** is for administrators and is written
 to the audit log; **"Restore"** makes a version current (hosts get it with
@@ -768,7 +790,7 @@ Docker Compose. Step by step — [CI/CD examples](/en/guide/cicd-examples).
 | `ufw … '/etc/ufw/user.rules' is not writable` | The nkt service runs in a systemd sandbox without `/etc/ufw` open: since 1.11.64 the ufw rule is added outside the sandbox (and new installs open `/etc/ufw` in the service). The site setup no longer stops on it; the ports can be opened by hand: `ufw allow 80,443/tcp` |
 | `git is not installed on the hub` | The "Install git" button on the "Pipelines" tab, or `apt install git` on the hub machine |
 | `the repository has no branch or tag …` | A typo in `ref`, the tag isn't pushed yet (`git push origin v1.0.0`) |
-| `git …: Authentication failed` / `Permission denied (publickey)` | A private repository without "Access", the token can't read, the key isn't added as a deploy key |
+| `git …: Authentication failed` / `Permission denied (publickey)` | A private repository without a key in "Secrets", the token can't read, the key isn't added as a deploy key |
 | `the repository has no file …` | Paths in `manifests`, `helm.values` or `script` are from the repository root |
 | `Helm is not installed on the host` | Install Helm on the control plane: the node's Kubernetes tab → Helm → "Install Helm" |
 | Pods in `ImagePullBackOff` | The image is private: make the package public or add an `imagePullSecret` to the cluster; the image tag doesn't match what CI built |

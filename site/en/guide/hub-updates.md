@@ -141,7 +141,7 @@ shows a short hint on hover and, when clicked, opens this site's section
 for the current page of the interface, in a window inside nkt;
 **"Detach"** moves the help into a separate browser window (like the
 terminal), **"In a new tab"** opens a regular tab. The pipeline editor,
-"Access" and the "Sites" wizard have buttons straight to their sections.
+"Secrets" and the "Sites" wizard have buttons straight to their sections.
 
 ![Help icon](/screens/en/help-hover.png)
 

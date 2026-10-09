@@ -129,7 +129,7 @@ registry_poll: 5m
 
 Every 5 minutes the hub looks at the image tags and deploys a new
 version. No hub secrets in CI, the hub isn't exposed. A private registry
-— `login:token` in the pipeline's "Access".
+— a registry key (address, login, token) in the pipeline's "Secrets" → "Registries".
 
 ### The first deployment
 

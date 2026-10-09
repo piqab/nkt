@@ -255,6 +255,12 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 			p.GitCred, e2 = reenc(p.GitCred)
 			p.RegistryCred, e3 = reenc(p.RegistryCred)
 			p.EnvEnc, e4 = reenc(p.EnvEnc)
+			var e5, e6 error
+			p.RepoCreds, e5 = reenc(p.RepoCreds)
+			p.Registries, e6 = reenc(p.Registries)
+			if e4 == nil {
+				e4 = errors.Join(e5, e6)
+			}
 			// История .env — тем же ключом; копия, файл вызывающего не меняется.
 			envs := make([]store.EnvVersionExport, len(p.EnvVersions))
 			for i, v := range p.EnvVersions {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -74,6 +76,9 @@ type composeDeployRequest struct {
 	// RegistryAuth — ключ registry конвейера на время pull (см.
 	// compose_pull_auth.go); в параметры задания не идёт.
 	RegistryAuth *composeRegistryAuth `json:"registry_auth,omitempty"`
+	// RegistryAuths — ключи всех registry стека (с CA); RegistryAuth —
+	// один, от хаба, который знает только его.
+	RegistryAuths []composeRegistryAuth `json:"registry_auths,omitempty"`
 }
 
 // ComposeDeployParams — вход задания (без содержимого файлов).
@@ -89,8 +94,11 @@ type ComposeDeployParams struct {
 	// AuthDir — временный каталог docker --config с ключом registry для
 	// pull (путь не секрет; сам файл удаляется после pull).
 	AuthDir string `json:"auth_dir,omitempty"`
-	// AuthUnused — ключ прислан, но этот движок им не воспользуется.
+	// AuthUnused — ключ прислан, но этот движок им не воспользуется
+	// (прежние задания: теперь podman берёт ключи через --authfile).
 	AuthUnused bool `json:"auth_unused,omitempty"`
+	// CAHosts — registry со своим CA (файлы — в AuthDir).
+	CAHosts []string `json:"ca_hosts,omitempty"`
 }
 
 func composeStackDir(project string) string { return parse.ComposeStacksDir + "/" + project }
@@ -239,17 +247,17 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 		wait = 300
 	}
 	params := ComposeDeployParams{Project: req.Project, File: req.File, Engine: engine, Pull: req.Pull, WaitTimeout: wait, Replace: req.Replace, ForceRecreate: req.ForceRecreate}
-	if req.RegistryAuth != nil && req.Pull {
-		if engine == "docker" {
-			authDir, err := s.writePullAuth(*req.RegistryAuth)
-			if err != nil {
-				writeErr(w, r, http.StatusBadRequest, err)
-				return
-			}
-			params.AuthDir = authDir
-		} else {
-			params.AuthUnused = true
+	auths := req.RegistryAuths
+	if len(auths) == 0 && req.RegistryAuth != nil {
+		auths = []composeRegistryAuth{*req.RegistryAuth}
+	}
+	if len(auths) > 0 && req.Pull {
+		authDir, caHosts, err := s.writePullAuth(auths)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
 		}
+		params.AuthDir, params.CAHosts = authDir, caHosts
 	}
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindComposeDeploy, TitleKey: "compose.jobTitle", TitleArgs: []any{req.Project},
@@ -350,12 +358,25 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	jc.StepKey(1, 3, "compose.stepPull", p.Project)
 	if p.Pull {
 		if authDir != "" {
+			d.installRegistryCAs(ctx, jc, p.Engine, authDir, p.CAHosts)
+		}
+		var err error
+		switch {
+		case authDir != "" && p.Engine == "podman":
+			// У podman compose нет общего флага для ключей: каждый образ
+			// стека — podman pull --authfile, compose pull не нужен.
+			jc.Log("compose.pullWithKey")
+			err = d.podmanPullWithAuth(ctx, jc, c, p, authDir, run)
+		case authDir != "":
 			jc.Log("compose.pullWithKey")
 			global = []string{"--config", authDir}
-		} else if p.AuthUnused {
-			jc.Log("compose.pullKeyPodman")
+			err = run(20*time.Minute, "pull")
+		default:
+			if p.AuthUnused {
+				jc.Log("compose.pullKeyPodman")
+			}
+			err = run(20*time.Minute, "pull")
 		}
-		err := run(20*time.Minute, "pull")
 		global = nil
 		if authDir != "" {
 			_ = os.RemoveAll(authDir)
@@ -561,4 +582,61 @@ func oneShotsDone(configJSON string, entries []composePSEntry) []string {
 		}
 	}
 	return done
+}
+
+// installRegistryCAs кладёт свои CA registry в certs.d движка (если там
+// не тот же файл): docker и podman доверяют такому CA только для этого
+// registry. Не вышло — запись в журнале: pull скажет сам, если без него
+// не пройдёт.
+func (d *composeDeployRunner) installRegistryCAs(ctx context.Context, jc *jobs.Context, engine, authDir string, hosts []string) {
+	c := d.s.scanner.Collector()
+	for _, host := range hosts {
+		if !registryHostRe.MatchString(host) {
+			continue
+		}
+		src := filepath.Join(authDir, caFile(host))
+		want, err := os.ReadFile(src)
+		if err != nil {
+			continue
+		}
+		dir := certsDir(engine, host)
+		if have, err := c.ReadFile(dir + "/ca.crt"); err == nil && bytes.Equal(have, want) {
+			continue
+		}
+		res, err := RunUnrestricted(ctx, "sh", "-c", caInstallScript, "nkt-ca", dir, src)
+		if err == nil && !res.OK() {
+			err = msgs.Errorf("compose.commandFailed", "install ca", res.ExitCode)
+		}
+		if err != nil {
+			jc.Log("compose.caFailed", host, msgs.Localize(jc.Lang(), err))
+			continue
+		}
+		jc.Log("compose.caInstalled", host, dir+"/ca.crt")
+	}
+}
+
+// podmanPullWithAuth — образы стека по одному: podman pull --authfile.
+func (d *composeDeployRunner) podmanPullWithAuth(ctx context.Context, jc *jobs.Context, c collect.Collector, p ComposeDeployParams,
+	authDir string, run func(time.Duration, ...string) error) error {
+	res, err := c.RunTimeout(ctx, 2*time.Minute, p.Engine, append(composeArgs(c, p.Project, p.File), "config")...)
+	if err != nil || !res.OK() {
+		// Конфигурацию не прочитать — обычный pull, без ключей.
+		return run(20*time.Minute, "pull")
+	}
+	for _, img := range deploy.ComposeImages(res.Stdout) {
+		jc.Logf("$ podman pull --authfile … %s", img)
+		out, err := c.RunTimeout(ctx, 20*time.Minute, "podman", "pull", "--authfile", filepath.Join(authDir, "config.json"), "--", img)
+		for _, l := range strings.Split(strings.TrimSpace(out.Output()), "\n") {
+			if strings.TrimSpace(l) != "" {
+				jc.Logf("      %s", l)
+			}
+		}
+		if err == nil && !out.OK() {
+			err = msgs.Errorf("compose.commandFailed", "podman pull "+img, out.ExitCode)
+		}
+		if err != nil {
+			return composePullCause(out.Output(), err)
+		}
+	}
+	return nil
 }

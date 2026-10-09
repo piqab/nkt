@@ -129,11 +129,11 @@ func TestRegistryTags(t *testing.T) {
 	registryClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	defer func() { registryClient = old }()
 	host := strings.TrimPrefix(srv.URL, "https://")
-	tags, err := ListTags(context.Background(), host+"/org/app", "bot:pat")
+	tags, err := ListTags(context.Background(), host+"/org/app", RegistryAccess{Cred: "bot:pat"})
 	if err != nil || strings.Join(tags, ",") != "v1.0.0,v1.1.0,v1.2.0" {
 		t.Fatalf("теги: %v %v", tags, err)
 	}
-	if _, err := ListTags(context.Background(), host+"/org/app", "bot:wrong"); err == nil {
+	if _, err := ListTags(context.Background(), host+"/org/app", RegistryAccess{Cred: "bot:wrong"}); err == nil {
 		t.Error("неверный доступ принят")
 	}
 }
