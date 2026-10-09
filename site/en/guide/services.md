@@ -29,5 +29,8 @@ the "Packages" section.
   "Ports" column.
 - **Port check**: TCP, HTTP/HTTPS, TLS handshake, an arbitrary `curl` —
   with the response body, headers, a rendering of the page and a download
-  of the response. The same is available from “Network interfaces” for
+  of the response. Without “do not verify the certificate”, trust is
+  checked for a bare address too: if it fails (by IP, almost always on the
+  name), the certificate is still shown with the reason, but no data is
+  exchanged; for the service's answer tick the box. The same is available from “Network interfaces” for
   ports open on `0.0.0.0`.

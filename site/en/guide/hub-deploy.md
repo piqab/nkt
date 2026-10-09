@@ -148,7 +148,9 @@ compose:
 - Ready images only: the hub rejects a service with `build:` and no
   `image:` before touching any host; building is CI's job. For someone
   else's compose file with `build:` (without a fork), use `images:` in the
-  pipeline description: the hub gives the service a ready image and drops
+  pipeline description: the hub gives the service a ready image with
+  `pull_policy: always` (an image from the description is always taken from
+  the registry, even when the same tag is already on the host) and drops
   `build:`:
 
   ```yaml
@@ -163,6 +165,19 @@ compose:
   `ports:` replaces the service's publications entirely
   (`["127.0.0.1:8080:80"]`); an empty list removes them, in someone else's
   file without a fork.
+- **Image name** — `address[:port]/path:tag`, without `http://` or
+  `https://`: Docker talks to the registry over https itself. An image from
+  a variable (`image: ${APP_IMAGE:-ghcr.io/org/app:latest}`) is expanded with
+  the pipeline `.env`, and the hub picks the registry key from "Secrets" by
+  the expanded name. A name with a scheme or without an address
+  (`/test/app:1` — an empty variable before `/`) is rejected by the hub in
+  the description and on the host before the pull, naming the service and
+  what to fix.
+- **`pull_policy`.** With `missing` (`if_not_present`) or `never`,
+  `compose pull` does not pull an image already on the host — `latest`
+  won't update and the old one starts. The deployment log names such
+  services; to take the image from the registry, use `pull_policy: always`
+  (in the compose file or a `.env` variable) or set the image in `images:`.
 - **Ports on 127.0.0.1 only.** A publication without an address
   (`8080:80`) listens on all addresses, and docker opens it with its own
   iptables rules, bypassing ufw and firewalld. So the hub gives such
@@ -333,6 +348,14 @@ substitutions, collects the stack files and, on each host, checks:
   stack) is a problem, since `up` would fail on it;
 - the image architecture against the host's (`uname -m`): an amd64-only
   image on an arm64 host is a problem (`exec format error`).
+- image names after `.env` substitution: `http(s)://` in the address or an
+  empty address (`/path`) is a problem; `pull_policy` other than `always`
+  with the image already on the host is a warning ("the old one will be
+  deployed"); `pull_policy: never` without the image is a problem; `build:`
+  from a directory that is not on the host (`context: ../..`) is a warning,
+  with `pull_policy: build` a problem;
+- registry keys in "Secrets" that match no image of the stack (a typo in the
+  key or image address) — a warning.
 
 The dry run also checks. **Problems** (the deployment or the site would
 fail): a `${VAR}` in compose with no value in `.env` (when the "variable"

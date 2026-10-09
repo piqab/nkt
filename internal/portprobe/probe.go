@@ -13,7 +13,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"io"
@@ -98,6 +100,9 @@ type TLSInfo struct {
 	// Verified — сертификат прошёл проверку доверия; при Insecure всегда
 	// false, потому что проверки не было.
 	Verified bool `json:"verified"`
+	// Untrusted — почему сертификат не принят (проверка была и не
+	// прошла); рукопожатие оборвано, версии и шифра нет.
+	Untrusted string `json:"untrusted,omitempty"`
 }
 
 // Result — что вышло.
@@ -317,13 +322,20 @@ func Probe(ctx context.Context, r Request) Result {
 		cfg := &tls.Config{InsecureSkipVerify: r.Insecure, ServerName: r.Host} //nolint:gosec // осознанно: проверка стенда с самоподписанным
 		if cfg.ServerName == "" {
 			cfg.ServerName = r.Address
-			// По голому адресу проверка доверия почти всегда провалится
-			// на имени — это не ошибка сервиса, поэтому доверие тут не
-			// требуем, а сертификат показываем как есть.
-			cfg.InsecureSkipVerify = true
 		}
 		tconn := tls.Client(conn, cfg)
 		if err := tconn.HandshakeContext(ctx); err != nil {
+			// Доверие не подтвердилось (по голому адресу — почти всегда на
+			// имени): сертификат всё равно показываем, но соединение
+			// закрыто — обмена нет, ответ — только с «не проверять».
+			var cve *tls.CertificateVerificationError
+			if errors.As(err, &cve) && len(cve.UnverifiedCertificates) > 0 {
+				res.OK = true
+				res.TLS = &TLSInfo{Untrusted: cve.Err.Error()}
+				certFields(res.TLS, cve.UnverifiedCertificates[0])
+				res.Error = msgs.Tc(ctx, "portprobe.tlsUntrusted", cve.Err)
+				return res
+			}
 			res.Error = msgs.Tc(ctx, "portprobe.tlsHandshake", err)
 			return res
 		}
@@ -452,14 +464,18 @@ func isPrintable(b []byte) bool {
 func tlsInfo(st tls.ConnectionState, verified bool) *TLSInfo {
 	info := &TLSInfo{Version: tls.VersionName(st.Version), Cipher: tls.CipherSuiteName(st.CipherSuite), Verified: verified}
 	if len(st.PeerCertificates) > 0 {
-		c := st.PeerCertificates[0]
-		info.Subject = c.Subject.String()
-		info.Issuer = c.Issuer.String()
-		info.DNSNames = c.DNSNames
-		info.NotBefore = c.NotBefore.UTC().Format(time.RFC3339)
-		info.NotAfter = c.NotAfter.UTC().Format(time.RFC3339)
+		certFields(info, st.PeerCertificates[0])
 	}
 	return info
+}
+
+// certFields — поля сертификата сервера.
+func certFields(info *TLSInfo, c *x509.Certificate) {
+	info.Subject = c.Subject.String()
+	info.Issuer = c.Issuer.String()
+	info.DNSNames = c.DNSNames
+	info.NotBefore = c.NotBefore.UTC().Format(time.RFC3339)
+	info.NotAfter = c.NotAfter.UTC().Format(time.RFC3339)
 }
 
 // dialError переводит самые частые исходы на язык, по которому понятно,

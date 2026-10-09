@@ -152,6 +152,39 @@ func (s *Server) unboundKeyLost(pl store.Pipeline, spec deploy.Spec, images []st
 	return false
 }
 
+// unusedRegistryKeys — адреса ключей, которые не подходят ни одному образу
+// стека и не нужны registry: (опечатка в адресе ключа или в имени образа).
+func unusedRegistryKeys(keys []registryKey, spec deploy.Spec, images []string) []string {
+	used := map[string]bool{}
+	for _, img := range images {
+		used[deploy.RegistryHost(img)] = true
+	}
+	if spec.Registry != "" {
+		used[deploy.RegistryHost(spec.Registry)] = true
+	}
+	var out []string
+	for _, k := range keys {
+		if k.Host != "" && !used[k.Host] {
+			out = append(out, k.Host)
+		}
+	}
+	return out
+}
+
+// imageRegistries — registry образов стека (для подсказки).
+func imageRegistries(images []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, img := range images {
+		if h := deploy.RegistryHost(img); !seen[h] {
+			seen[h] = true
+			out = append(out, h)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // recheckImages — образы, которые хост проверить не смог (закрытый
 // registry без входа на хосте), проверяются с хаба ключом их registry.
 func recheckImages(ctx context.Context, res *composeCheck, keys map[string]registryKey) {
@@ -174,4 +207,12 @@ func recheckImages(ctx context.Context, res *composeCheck, keys map[string]regis
 			img.State, img.Detail = "missing", "key"
 		}
 	}
+}
+
+// orDash — «—» вместо пустой строки в журнале.
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
 }

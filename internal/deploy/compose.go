@@ -165,6 +165,9 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 // {{nkt.tag}} подставляется до проверки на хосте, поэтому допустим.
 var imageRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9._/:-]|\{\{nkt\.(tag|commit|ref)\}\}){0,254}(@sha256:[0-9a-f]{64})?$`)
 
+// nktVarRe — подстановки {{nkt.…}} в имени образа.
+var nktVarRe = regexp.MustCompile(`\{\{nkt\.(tag|commit|ref)\}\}`)
+
 // composeServiceRe — имя сервиса compose.
 var composeServiceRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$`)
 
@@ -173,6 +176,14 @@ func validateImages(images map[string]string) error {
 	for svc, img := range images {
 		if !composeServiceRe.MatchString(svc) {
 			return msgs.Errorf("deploy.specBad", "compose.images", svc)
+		}
+		// {{nkt.tag}} и прочие подставятся до выкладки: проверяется имя
+		// с образцом вместо них.
+		switch ImageRefProblem(nktVarRe.ReplaceAllString(img, "x")) {
+		case ImageRefScheme:
+			return msgs.Errorf("deploy.specImageScheme", "compose.images."+svc, img)
+		case ImageRefNoHost:
+			return msgs.Errorf("deploy.specImageNoHost", "compose.images."+svc, img)
 		}
 		if !imageRe.MatchString(img) {
 			return msgs.Errorf("deploy.specBad", "compose.images."+svc, img)
@@ -235,7 +246,7 @@ func (c ComposeSpec) AllEnvKeys() []string {
 }
 
 // OverrideImages ставит сервисам готовые образы (compose.images): image —
-// из описания конвейера, build убирается. Так выкладывается чужой
+// из описания конвейера, pull_policy: always, build убирается. Так выкладывается чужой
 // compose-файл, который собирает образ из исходников, без форка. Сервиса
 // нет в файле — ошибка (опечатка не должна пройти молча).
 func OverrideImages(text string, images map[string]string) (string, error) {
@@ -286,7 +297,7 @@ func OverrideServices(text string, images map[string]string, ports map[string][]
 		var kept []*yaml.Node
 		for i := 0; i+1 < len(svc.Content); i += 2 {
 			k := svc.Content[i].Value
-			if setImage && (k == "build" || k == "image") {
+			if setImage && (k == "build" || k == "image" || k == "pull_policy") {
 				continue
 			}
 			if setPorts && k == "ports" {
@@ -306,9 +317,14 @@ func OverrideServices(text string, images map[string]string, ports map[string][]
 			kept = withEnvRefs(kept, keys)
 		}
 		if setImage {
+			// Образ из описания — всегда из registry: pull_policy файла
+			// (missing, build) оставил бы на хосте прежний образ с тем же
+			// тегом.
 			kept = append([]*yaml.Node{
 				{Kind: yaml.ScalarNode, Tag: "!!str", Value: "image"},
 				{Kind: yaml.ScalarNode, Tag: "!!str", Value: img},
+				{Kind: yaml.ScalarNode, Tag: "!!str", Value: "pull_policy"},
+				{Kind: yaml.ScalarNode, Tag: "!!str", Value: "always"},
 			}, kept...)
 		}
 		svc.Content = kept

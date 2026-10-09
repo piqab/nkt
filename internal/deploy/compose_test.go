@@ -68,14 +68,22 @@ func TestOverrideImages(t *testing.T) {
 	if names := BuildOnlyServices(out); names != nil {
 		t.Fatal(names)
 	}
+	// pull_policy файла (missing) заменяется на always: иначе на хосте
+	// остался бы прежний образ с тем же тегом.
+	withPolicy := "services:\n  station:\n    image: ${IMG:-ghcr.io/o/s:latest}\n    pull_policy: ${POLICY:-missing}\n    build:\n      context: ../..\n"
+	out, err = OverrideImages(withPolicy, map[string]string{"station": "rgstr.example.com/test/station:latest"})
+	if err != nil || strings.Contains(out, "missing") || strings.Count(out, "pull_policy") != 1 || !strings.Contains(out, "pull_policy: always") || strings.Contains(out, "build") {
+		t.Fatalf("%v\n%s", err, out)
+	}
 	if _, err := OverrideImages(src, map[string]string{"web": "nginx"}); err == nil {
 		t.Fatal("unknown service accepted")
 	}
 	base := "repo: https://github.com/postmanlabs/httpbin.git\nref: master\naction: compose\ncompose:\n  file: docker-compose.yml\n  project: httpbin\n  hosts: [cn4]\n"
-	if _, err := ParseSpec(base + "  images:\n    httpbin: kennethreitz/httpbin\n"); err != nil {
+	if _, err := ParseSpec(base + "  images:\n    httpbin: kennethreitz/httpbin\n    web: rgstr.example.com:8443/test/web:{{nkt.tag}}\n"); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []string{"  images:\n    httpbin: 'x; rm -rf /'\n", "  images:\n    'a b': nginx\n"} {
+	for _, bad := range []string{"  images:\n    httpbin: 'x; rm -rf /'\n", "  images:\n    'a b': nginx\n",
+		"  images:\n    httpbin: http://rgstr.example.com/test/a:latest\n", "  images:\n    httpbin: /test/a:latest\n"} {
 		if _, err := ParseSpec(base + bad); err == nil {
 			t.Fatalf("accepted: %s", bad)
 		}

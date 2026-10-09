@@ -47,6 +47,13 @@ type composeCheck struct {
 		Arches       []string `json:"arches"`
 		ArchMismatch bool     `json:"arch_mismatch"`
 	} `json:"images"`
+	ImageIssues []struct {
+		Service string `json:"service"`
+		Image   string `json:"image"`
+		Kind    string `json:"kind"`
+		Policy  string `json:"policy"`
+		Context string `json:"context"`
+	} `json:"image_issues"`
 	PortsBusy []struct {
 		Addr   string `json:"addr"`
 		Holder string `json:"holder"`
@@ -185,10 +192,15 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			jc.Log("deploy.dryEnvForwardRef", ref[0], ref[1], ref[1], ref[0])
 		}
 	}
-	images := deploy.ComposeImages(files[main])
+	images := deploy.ComposeImagesEnv(files[main], envValues(env))
 	regs := s.registriesFor(pl, spec, images)
 	if s.unboundKeyLost(pl, spec, images) {
 		jc.Log("deploy.dryRegistryKeyWhich")
+	}
+	if on("images") {
+		for _, u := range unusedRegistryKeys(s.pipelineRegistries(pl), spec, images) {
+			jc.Log("deploy.dryRegistryKeyUnused", u, orDash(strings.Join(imageRegistries(images), ", ")))
+		}
 	}
 	for _, t := range targets {
 		var res composeCheck
@@ -342,6 +354,27 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, e
 		}
 		problems++
 		jc.Log("deploy.dryNameBusy", nb.Name, nb.Project)
+	}
+	for _, is := range res.ImageIssues {
+		if !on("images") {
+			break
+		}
+		switch is.Kind {
+		case "stale":
+			jc.Log("deploy.dryPullStale", is.Service, is.Image, is.Policy)
+		case "build_outside":
+			jc.Log("deploy.dryBuildOutside", is.Service, is.Context)
+		case "scheme", "nohost", "bad", "never", "build_policy":
+			problems++
+			switch is.Kind {
+			case "never":
+				jc.Log("deploy.dryPullNever", is.Service, is.Image)
+			case "build_policy":
+				jc.Log("deploy.dryBuildPolicy", is.Service, is.Context)
+			default:
+				jc.Log("deploy.dryImage."+is.Kind, is.Service, is.Image)
+			}
+		}
 	}
 	for _, img := range res.Images {
 		if !on("images") {

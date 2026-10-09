@@ -48,6 +48,7 @@ interface ProbeResult {
     not_before: string
     not_after: string
     verified: boolean
+    untrusted?: string
   }
   command: string
 }
@@ -511,7 +512,9 @@ function ProbeOutcome({
       {result.tls && (
         <div className="small">
           <div>
-            {result.tls.version} · {result.tls.cipher} · {result.tls.verified ? t('probe.certVerified') : t('probe.certUnverified')}
+            {[result.tls.version, result.tls.cipher, result.tls.verified ? t('probe.certVerified') : result.tls.untrusted ? t('probe.certUntrusted') : t('probe.certUnverified')]
+              .filter(Boolean)
+              .join(' · ')}
           </div>
           <div className="mono">{result.tls.subject}</div>
           <div className="muted">

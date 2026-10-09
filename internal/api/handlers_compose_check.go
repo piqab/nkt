@@ -124,6 +124,9 @@ type ComposeCheckResult struct {
 	ConfigError string              `json:"config_error,omitempty"`
 	Services    []string            `json:"services,omitempty"`
 	Images      []ComposeImageCheck `json:"images,omitempty"`
+	// ImageIssues — имена образов, которые движок не примет, pull_policy,
+	// при которой образ не обновится, сборка без исходников.
+	ImageIssues []ComposeImageIssue `json:"image_issues,omitempty"`
 	// UnsetVars — ${VAR} в compose без значения (compose подставит пустую
 	// строку).
 	UnsetVars []string `json:"unset_vars,omitempty"`
@@ -254,9 +257,13 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 	on := func(k string) bool { return !slices.Contains(req.Skip, k) }
 	if on("images") {
 		res.HostArch = hostArch(ctx, c)
+		issues, bad := composeImageIssues(ctx, c, res.Engine, work, composeServices(ctx, c, res.Engine, args))
+		res.ImageIssues = issues
 		if out, err := c.RunTimeout(ctx, time.Minute, res.Engine, append(args, "config", "--images")...); err == nil && out.OK() {
 			for _, img := range dedupe(splitLines(out.Stdout)) {
-				res.Images = append(res.Images, s.checkImage(ctx, c, res.Engine, img, res.HostArch))
+				if !bad[img] {
+					res.Images = append(res.Images, s.checkImage(ctx, c, res.Engine, img, res.HostArch))
+				}
 			}
 		}
 	}
