@@ -1,6 +1,6 @@
 module github.com/piqab/nkt
 
-go 1.26.8
+go 1.26.9
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -13,7 +13,7 @@ require (
 	github.com/pkg/sftp v1.13.11
 	github.com/rivo/tview v0.42.0
 	golang.org/x/crypto v0.57.0
-	golang.org/x/net v0.58.0
+	golang.org/x/net v0.60.0
 	golang.org/x/term v0.46.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.59.0

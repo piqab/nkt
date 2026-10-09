@@ -144,8 +144,9 @@ func (a *archiveFetchRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return err
 	}
-	p2.Remove = p.Remove && p2.Load
+	remove := p.Remove
 	p = p2
+	p.Remove = remove && p.Load
 	steps := 1
 	if p.Load {
 		steps = 2

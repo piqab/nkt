@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -38,8 +39,12 @@ func (a composeRegistryAuth) valid() bool {
 	return registryHostRe.MatchString(a.Host) && clean(a.User) && clean(a.Token) && !strings.Contains(a.User, ":") && caOK
 }
 
-// caFile — имя файла CA registry в каталоге ключей.
-func caFile(host string) string { return "ca-" + strings.ReplaceAll(host, ":", "_") + ".crt" }
+// caFile — имя файла CA registry в каталоге ключей: по хэшу адреса, чтобы
+// путь не собирался из присланной строки.
+func caFile(host string) string {
+	sum := sha256.Sum256([]byte(host))
+	return "ca-" + hex.EncodeToString(sum[:8]) + ".crt"
+}
 
 // pullAuthStale — каталоги старше этого (хост перезапускался посреди
 // выкладки) убираются при следующей.

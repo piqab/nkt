@@ -98,14 +98,14 @@ func (s *Server) handlePipelineSecretRepo(w http.ResponseWriter, r *http.Request
 	if strings.TrimSpace(req.Prefix) != "" {
 		prefix = deploy.NormalizePrefix(req.Prefix)
 		if !prefixRe.MatchString(strings.TrimSuffix(prefix, "/")) {
-			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "deploy.secretBadPrefix", req.Prefix))
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "deploy.keyBadPrefix", req.Prefix))
 			return
 		}
 	}
 	cred := deploy.Cred{Token: strings.TrimSpace(req.Token), SSHKey: strings.TrimSpace(req.SSHKey)}
 	del := r.Method == http.MethodDelete
 	if !del && cred.Token == "" && cred.SSHKey == "" {
-		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "deploy.secretEmpty"))
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "deploy.keyEmpty"))
 		return
 	}
 	var err error
@@ -180,7 +180,7 @@ func (s *Server) handlePipelineSecretRegistry(w http.ResponseWriter, r *http.Req
 	host := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(req.Host, "https://"), "http://")))
 	host = strings.TrimSuffix(host, "/")
 	if !del && !registryHostRe.MatchString(host) {
-		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "deploy.secretBadRegistry", req.Host))
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "deploy.keyBadRegistry", req.Host))
 		return
 	}
 	user, token, ca := strings.TrimSpace(req.User), strings.TrimSpace(req.Token), strings.TrimSpace(req.CA)
@@ -218,7 +218,7 @@ func (s *Server) handlePipelineSecretRegistry(w http.ResponseWriter, r *http.Req
 			}
 		}
 		if k.Token == "" {
-			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "deploy.secretEmpty"))
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "deploy.keyEmpty"))
 			return
 		}
 		out = append(out, k)
