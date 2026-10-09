@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.2 — 2026-10-09
+
+- Security: built with Go 1.26.9 and golang.org/x/net 0.60.0 — fixes in
+  net/http, HTTP/2 and crypto/tls. The registry CA file on the host is
+  named by a hash of the address rather than the address itself.
+
 ## v1.13.1 — 2026-10-09
 
 - The pipeline's "Access" button is now **"Secrets"**, and the window has
