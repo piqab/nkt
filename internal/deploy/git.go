@@ -3,11 +3,13 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,11 +29,22 @@ type Cred struct {
 	SSHKey string `json:"ssh_key,omitempty"`
 }
 
+// RepoCred — доступ к другим репозиториям (submodules, соседние
+// репозитории организации): по началу адреса «хост/путь»
+// («github.com/vendor/» — все репозитории этой организации).
+type RepoCred struct {
+	Prefix string `json:"prefix"`
+	Cred
+}
+
 // Git — вызовы git в рабочем каталоге конвейера.
 type Git struct {
 	// Dir — каталог конвейера на хабе (ключи, known_hosts, checkout).
 	Dir  string
 	Cred Cred
+	// Extra — ключи других репозиториев (submodules): у каждого адреса —
+	// самый длинный подходящий префикс; основной репозиторий — Cred.
+	Extra []RepoCred
 	// Repo — адрес репозитория (для вида токена; ставится Remote и
 	// Checkout сами).
 	Repo string
@@ -50,16 +63,119 @@ func TokenLogin(repo, token string) (string, string) {
 	return tokenUser(repo), token
 }
 
-// gitPromptScript — отвечает git на «Username…» и «Password…» значениями из
-// окружения; в самом файле секретов нет.
-const gitPromptScript = "#!/bin/sh\ncase \"$1\" in\n  Username*|username*) printf '%s\\n' \"$NKT_GIT_USER\" ;;\n  *) printf '%s\\n' \"$NKT_GIT_PASS\" ;;\nesac\n"
+// gitPromptScript — отвечает git на «Username for 'адрес'» и «Password for
+// 'адрес'» значениями из окружения: ключи NKT_GIT_P<i> (префикс «хост/путь»,
+// от длинного к короткому), NKT_GIT_U<i>, NKT_GIT_W<i>; первый подходящий
+// префикс — его логин и токен. git с credential.useHttpPath называет в
+// вопросе адрес целиком. В самом файле секретов нет.
+const gitPromptScript = `#!/bin/sh
+url=${1#*\'}
+url=${url%\'*}
+url=${url#*://}
+url=${url#*@}
+url=${url%.git}
+host=${url%%/*}
+rest=${url#*/}
+url=${host%%:*}/$rest
+i=0
+while [ "$i" -lt "${NKT_GIT_N:-0}" ]; do
+  eval "p=\${NKT_GIT_P$i}"
+  case "$url/" in
+    "$p"*)
+      case "$1" in
+        Username*|username*) eval "printf '%s\n' \"\${NKT_GIT_U$i}\"" ;;
+        *) eval "printf '%s\n' \"\${NKT_GIT_W$i}\"" ;;
+      esac
+      exit 0 ;;
+  esac
+  i=$((i+1))
+done
+printf '\n'
+`
 
-func writeAskpass(dir string) (string, error) {
-	p := filepath.Join(dir, "askpass.sh")
-	if b, err := os.ReadFile(p); err == nil && string(b) == gitPromptScript {
+// gitSSHScript — ssh с ключом под адрес: git вызывает его как
+// «… [-p порт] пользователь@хост "git-upload-pack 'путь'"»; ключ — файл
+// NKT_SSH_K<i> первого подходящего префикса NKT_SSH_P<i>, иначе без ключа.
+// Ключ развёртывания GitHub привязан к одному репозиторию: перебирать все
+// ключи подряд нельзя — первый чужой «войдёт» и ответит «нет репозитория».
+const gitSSHScript = `#!/bin/sh
+last=""
+host=""
+for a in "$@"; do host=$last; last=$a; done
+path=${last#*\'}
+path=${path%\'*}
+path=${path#/}
+path=${path%.git}
+h=${host#*@}
+key=""
+i=0
+while [ "$i" -lt "${NKT_SSH_N:-0}" ]; do
+  eval "p=\${NKT_SSH_P$i}"
+  case "$h/$path/" in
+    "$p"*) eval "key=\${NKT_SSH_K$i}"; break ;;
+  esac
+  i=$((i+1))
+done
+if [ -n "$key" ]; then
+  exec ssh $NKT_SSH_OPTS -o IdentitiesOnly=yes -i "$key" "$@"
+fi
+exec ssh $NKT_SSH_OPTS "$@"
+`
+
+// RepoKey — адрес репозитория как «хост/путь» без схемы, логина и .git:
+// по нему подбираются ключи (git@host:org/app.git, ssh://git@host/org/app,
+// https://host/org/app.git → host/org/app).
+func RepoKey(repo string) string {
+	r := strings.TrimSpace(repo)
+	if scpRepoRe.MatchString(r) {
+		at := strings.Index(r, "@")
+		host, path, _ := strings.Cut(r[at+1:], ":")
+		return strings.ToLower(host) + "/" + strings.TrimSuffix(strings.Trim(path, "/"), ".git")
+	}
+	if u, err := url.Parse(r); err == nil && u.Host != "" {
+		return strings.ToLower(u.Hostname()) + "/" + strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
+	}
+	// «хост[:порт]/путь» без схемы: порт не участвует (у ssh его нет в
+	// адресе вовсе — он идёт отдельным -p).
+	r = strings.TrimSuffix(strings.Trim(r, "/"), ".git")
+	host, path, _ := strings.Cut(r, "/")
+	host, _, _ = strings.Cut(host, ":")
+	if path == "" {
+		return strings.ToLower(host)
+	}
+	return strings.ToLower(host) + "/" + path
+}
+
+// NormalizePrefix — префикс ключа из поля: адрес или «хост/путь», без
+// схемы и .git, с «/» в конце (чтобы org/app не подходил к org/app2).
+func NormalizePrefix(p string) string {
+	k := RepoKey(p)
+	if k == "" {
+		return ""
+	}
+	return strings.TrimSuffix(k, "/") + "/"
+}
+
+// creds — все ключи: основной (по адресу основного репозитория) и
+// дополнительные, от длинного префикса к короткому.
+func (g Git) creds() []RepoCred {
+	out := append([]RepoCred(nil), g.Extra...)
+	if g.Repo != "" && (g.Cred.Token != "" || g.Cred.SSHKey != "") {
+		out = append(out, RepoCred{Prefix: RepoKey(g.Repo), Cred: g.Cred})
+	}
+	for i := range out {
+		out[i].Prefix = NormalizePrefix(out[i].Prefix)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return len(out[i].Prefix) > len(out[j].Prefix) })
+	return out
+}
+
+func writeScript(dir, name, body string) (string, error) {
+	p := filepath.Join(dir, name)
+	if b, err := os.ReadFile(p); err == nil && string(b) == body {
 		return p, nil
 	}
-	if err := os.WriteFile(p, []byte(gitPromptScript), 0o700); err != nil {
+	if err := os.WriteFile(p, []byte(body), 0o700); err != nil {
 		return "", err
 	}
 	return p, nil
@@ -145,42 +261,66 @@ func (g Git) run(cmd *exec.Cmd, dir, what string) (string, error) {
 	if err := os.MkdirAll(g.Dir, 0o700); err != nil {
 		return "", err
 	}
-	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
-	if g.Cred.Token != "" {
-		// Вход — как у обычного git: сервер отвечает 401, git спрашивает
-		// логин и пароль у askpass. Заранее отправленный заголовок
-		// отбрасывают некоторые прокси перед сервером и переадресации, а
-		// ответ на запрос входа доходит всегда. Сам askpass — сценарий
-		// без секретов: значения берёт из окружения процесса git.
-		user, pass := TokenLogin(g.Repo, g.Cred.Token)
-		askpass, err := writeAskpass(g.Dir)
-		if err != nil {
-			return "", err
-		}
-		env = append(env, "GIT_ASKPASS="+askpass, "NKT_GIT_USER="+user, "NKT_GIT_PASS="+pass)
-	} else {
-		env = append(env, "GIT_ASKPASS=/bin/false")
+	// Протоколы — только сетевые: адреса submodules берутся из самого
+	// репозитория, file:// и ext:: открыли бы файлы и команды хаба.
+	protocols := "https:http:ssh"
+	if allowLocalRepos {
+		protocols += ":file" // тесты: репозитории в каталогах
 	}
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C", "GIT_ALLOW_PROTOCOL="+protocols)
+	// Вход — как у обычного git: сервер отвечает 401, git спрашивает логин
+	// и пароль у askpass (по адресу — свой ключ: основной репозиторий,
+	// submodules). Заранее отправленный заголовок отбрасывают некоторые
+	// прокси перед сервером и переадресации, а ответ на запрос входа
+	// доходит всегда. Сам askpass — сценарий без секретов: значения берёт
+	// из окружения процесса git.
+	askpass, err := writeScript(g.Dir, "askpass.sh", gitPromptScript)
+	if err != nil {
+		return "", err
+	}
+	sshWrap, err := writeScript(g.Dir, "ssh.sh", gitSSHScript)
+	if err != nil {
+		return "", err
+	}
+	env = append(env, "GIT_ASKPASS="+askpass)
+	var secrets []string
+	n, ns := 0, 0
+	for _, c := range g.creds() {
+		if c.Token != "" {
+			user, pass := TokenLogin("https://"+c.Prefix, c.Token)
+			env = append(env, fmt.Sprintf("NKT_GIT_P%d=%s", n, c.Prefix), fmt.Sprintf("NKT_GIT_U%d=%s", n, user), fmt.Sprintf("NKT_GIT_W%d=%s", n, pass))
+			secrets = append(secrets, pass)
+			n++
+		}
+		if c.SSHKey != "" {
+			key := filepath.Join(g.Dir, fmt.Sprintf("deploy_key_%d", ns))
+			if err := os.WriteFile(key, []byte(strings.TrimSpace(c.SSHKey)+"\n"), 0o600); err != nil {
+				return "", err
+			}
+			defer os.Remove(key)
+			env = append(env, fmt.Sprintf("NKT_SSH_P%d=%s", ns, c.Prefix), fmt.Sprintf("NKT_SSH_K%d=%s", ns, key))
+			ns++
+		}
+	}
+	env = append(env, fmt.Sprintf("NKT_GIT_N=%d", n), fmt.Sprintf("NKT_SSH_N=%d", ns))
 	// Только доступ конвейера: хранилища паролей системы и пользователя
 	// (credential.helper store и т. п.) не подмешиваются — иначе закрытый
-	// репозиторий «открывался» бы чужими сохранёнными паролями.
-	env = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=")
-	sshOpts := "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=" + filepath.Join(g.Dir, "known_hosts")
-	if g.Cred.SSHKey != "" {
-		key := filepath.Join(g.Dir, "deploy_key")
-		if err := os.WriteFile(key, []byte(strings.TrimSpace(g.Cred.SSHKey)+"\n"), 0o600); err != nil {
-			return "", err
-		}
-		defer os.Remove(key)
-		sshOpts += " -o IdentitiesOnly=yes -i " + key
-	}
-	env = append(env, "GIT_SSH_COMMAND="+sshOpts)
+	// репозиторий «открывался» бы чужими сохранёнными паролями. useHttpPath
+	// — чтобы askpass видел адрес с путём (ключи по репозиториям).
+	env = append(env, "GIT_CONFIG_COUNT=2", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
+		"GIT_CONFIG_KEY_1=credential.useHttpPath", "GIT_CONFIG_VALUE_1=true")
+	env = append(env, "NKT_SSH_OPTS=-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="+filepath.Join(g.Dir, "known_hosts"),
+		"GIT_SSH_COMMAND="+sshWrap)
 	cmd.Dir = dir
 	cmd.Env = env
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
-		return "", msgs.Errorf("deploy.git", what, strings.TrimSpace(redact(errb.String(), g.Cred.Token)))
+		text := errb.String()
+		for _, sec := range append(secrets, g.Cred.Token) {
+			text = redact(text, sec)
+		}
+		return "", msgs.Errorf("deploy.git", what, strings.TrimSpace(text))
 	}
 	return out.String(), nil
 }
@@ -242,6 +382,11 @@ func (g Git) Checkout(ctx context.Context, repo, ref, sha, dest string) error {
 	if _, err := g.run(exec.CommandContext(ctx, "git", "init", "-q"), dest, "init"); err != nil {
 		return err
 	}
+	// origin — адрес основного репозитория: относительные адреса
+	// submodules («../lib.git») git разрешает от него.
+	if _, err := g.run(exec.CommandContext(ctx, "git", "remote", "add", "origin", "--", repo), dest, "remote"); err != nil {
+		return err
+	}
 	if _, err := g.run(exec.CommandContext(ctx, "git", "fetch", "-q", "--depth", "1", "--", repo, sha), dest, "fetch"); err != nil {
 		if ref == "" {
 			return err
@@ -256,7 +401,24 @@ func (g Git) Checkout(ctx context.Context, repo, ref, sha, dest string) error {
 	if err := os.WriteFile(filepath.Join(dest, ".git", "HEAD"), []byte(sha+"\n"), 0o644); err != nil {
 		return err
 	}
-	_, err := g.run(exec.CommandContext(ctx, "git", "reset", "-q", "--hard"), dest, "checkout")
+	if _, err := g.run(exec.CommandContext(ctx, "git", "reset", "-q", "--hard"), dest, "checkout"); err != nil {
+		return err
+	}
+	return g.submodules(ctx, dest)
+}
+
+// submodules подтягивает submodules, если они есть (.gitmodules): у
+// каждого — свой ключ из Extra по адресу (см. creds). Сначала только
+// нужные коммиты (--depth 1), не вышло (сервер не отдаёт коммит по хэшу) —
+// целиком.
+func (g Git) submodules(ctx context.Context, dest string) error {
+	if _, err := os.Stat(filepath.Join(dest, ".gitmodules")); err != nil {
+		return nil
+	}
+	if _, err := g.run(exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive", "--depth", "1"), dest, "submodule"); err == nil {
+		return nil
+	}
+	_, err := g.run(exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive"), dest, "submodule")
 	return err
 }
 

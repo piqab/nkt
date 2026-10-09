@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,6 +40,8 @@ func TestManifestExistsBearer(t *testing.T) {
 		case r.Header.Get("Authorization") != "Bearer tok":
 			w.Header().Set("WWW-Authenticate", `Bearer realm="`+srv.URL+`/token",service="reg",scope="repository:piqab/app:pull"`)
 			w.WriteHeader(http.StatusUnauthorized)
+		case r.URL.Path == "/v2/":
+			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodHead && r.URL.Path == "/v2/piqab/app/manifests/1.0":
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -50,15 +53,32 @@ func TestManifestExistsBearer(t *testing.T) {
 	registryClient = srv.Client()
 	defer func() { registryClient = old }()
 	host := strings.TrimPrefix(srv.URL, "https://")
-	ok, err := ManifestExists(context.Background(), host+"/piqab/app:1.0", "piqab:secret")
+	ok, err := ManifestExists(context.Background(), host+"/piqab/app:1.0", RegistryAccess{Cred: "piqab:secret"})
 	if err != nil || !ok {
 		t.Fatalf("есть: %v %v", ok, err)
 	}
-	ok, err = ManifestExists(context.Background(), host+"/piqab/app:2.0", "piqab:secret")
+	ok, err = ManifestExists(context.Background(), host+"/piqab/app:2.0", RegistryAccess{Cred: "piqab:secret"})
 	if err != nil || ok {
 		t.Fatalf("нет тега: %v %v", ok, err)
 	}
-	if _, err := ManifestExists(context.Background(), host+"/piqab/app:1.0", "piqab:wrong"); err == nil {
+	if _, err := ManifestExists(context.Background(), host+"/piqab/app:1.0", RegistryAccess{Cred: "piqab:wrong"}); err == nil {
 		t.Error("неверный ключ принят")
+	}
+	if err := RegistryLogin(context.Background(), host, RegistryAccess{Cred: "piqab:secret"}); err != nil {
+		t.Errorf("вход: %v", err)
+	}
+	if err := RegistryLogin(context.Background(), host, RegistryAccess{Cred: "piqab:wrong"}); err == nil {
+		t.Error("вход с неверным ключом")
+	}
+
+	// Свой CA registry (сертификат тестового сервера) — без него TLS не
+	// проходит, с ним — вход есть.
+	registryClient = old
+	if err := RegistryLogin(context.Background(), host, RegistryAccess{Cred: "piqab:secret"}); err == nil {
+		t.Error("чужой сертификат принят без CA")
+	}
+	ca := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}))
+	if err := RegistryLogin(context.Background(), host, RegistryAccess{Cred: "piqab:secret", CA: ca}); err != nil {
+		t.Errorf("со своим CA: %v", err)
 	}
 }

@@ -87,7 +87,7 @@ func (r *DeployRunner) dryRun(ctx context.Context, jc *jobs.Context, p DeployPar
 		}
 		dir = s.pipelineDir(pl.ID)
 	}
-	g := deploy.Git{Dir: dir, Cred: s.pipelineCred(pl)}
+	g := s.pipelineGit(pl, dir)
 	ref := p.Ref
 	if ref == "" {
 		ref = spec.Ref
@@ -185,8 +185,9 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			jc.Log("deploy.dryEnvForwardRef", ref[0], ref[1], ref[1], ref[0])
 		}
 	}
-	reg, hasReg := s.registryFor(pl, spec, deploy.ComposeImages(files[main]))
-	if !hasReg && len(pl.RegistryCred) > 0 && spec.Registry == "" {
+	images := deploy.ComposeImages(files[main])
+	regs := s.registriesFor(pl, spec, images)
+	if s.unboundKeyLost(pl, spec, images) {
 		jc.Log("deploy.dryRegistryKeyWhich")
 	}
 	for _, t := range targets {
@@ -212,8 +213,8 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			jc.Log("deploy.dryHostError", t.Name, msgs.Localize(lang, err))
 			continue
 		}
-		if hasReg && on("images") {
-			recheckImages(ctx, &res, reg)
+		if len(regs) > 0 && on("images") {
+			recheckImages(ctx, &res, regs)
 		}
 		problems += logComposeCheck(jc, t.Name, c.Project, res, missingEnv, on, dollarSource{files: files, env: envOf(env)})
 		if res.StackExists && pl.LastCommit == "" && on("stack") {

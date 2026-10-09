@@ -1179,26 +1179,77 @@ function HistoryModal({ p, onClose, onOpenJob, onChanged }: { p: Pipeline; onClo
 
 /** Доступ к репозиторию и registry — значения не показываются, только
  * задаются или убираются. */
+interface SecretsRepo {
+  prefix: string
+  kind: 'token' | 'ssh'
+  hint?: string
+}
+interface SecretsRegistry {
+  host: string
+  user: string
+  hint?: string
+  ca: boolean
+}
+interface SecretsInfo {
+  repo: string
+  repos: SecretsRepo[]
+  registries: SecretsRegistry[]
+  has_env: boolean
+}
+
+/** «Секреты» конвейера — вкладками: ключи репозиториев (основной и другие —
+ * submodules), ключи registry (адрес, логин, токен, свой CA), .env стека.
+ * Значения не показываются: только вид ключа и хвост токена. */
 function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: () => void; onSaved: () => void }) {
   const { t } = useTranslation()
-  // Отметки «задан / не задан» — по свежему конвейеру после каждой записи.
   const [p, setP] = useState<Pipeline>(initialP)
-  const [token, setToken] = useState('')
-  const [key, setKey] = useState('')
-  const [registry, setRegistry] = useState('')
-  const [env, setEnv] = useState('')
-  // «Править .env»: текущий текст в редакторе. envOrig — с чем сравнивать
-  // перед записью (null — не загружали: вводится новый .env целиком).
-  const [envOrig, setEnvOrig] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState<SecretsInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [envHistory, setEnvHistory] = useState(false)
-  // Проверка доступа с сохранёнными ключами: при открытии и после записи.
+  const [tab, setTab] = useState('repos')
+  const reload = async () => {
+    try {
+      setInfo(await api<SecretsInfo>(`/hub/pipelines/${p.id}/secrets`))
+      setP(await api<Pipeline>(`/hub/pipelines/${p.id}`).catch(() => p))
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  useEffect(() => {
+    void reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- при открытии окна
+  }, [p.id])
+  const changed = () => {
+    onSaved()
+    void reload()
+  }
+  return (
+    <Modal title={t('deploy.accessTitle', { name: p.name })} onClose={onClose} width={820} sizeKey="pipeline-secrets">
+      <Space size={4} wrap>
+        <span className="small muted">{t('deploy.accessHint')}</span>
+        <HelpButton docKey="deploy:access" isHub admin />
+      </Space>
+      {error && <Banner kind="error">{error}</Banner>}
+      <Tabs
+        activeKey={tab}
+        onChange={setTab}
+        items={[
+          { key: 'repos', label: t('deploy.secretsTabRepos', { n: info?.repos.length ?? 0 }), children: <SecretsRepos p={p} info={info} onChanged={changed} /> },
+          { key: 'registries', label: t('deploy.secretsTabRegistries', { n: info?.registries.length ?? 0 }), children: <SecretsRegistries p={p} info={info} onChanged={changed} /> },
+          { key: 'env', label: p.has_env ? t('deploy.secretsTabEnvSet') : t('deploy.secretsTabEnv'), children: <SecretsEnv p={p} onChanged={changed} /> },
+        ]}
+      />
+    </Modal>
+  )
+}
+
+/** Вкладка «Репозитории»: проверка основного и ключи по началу адреса. */
+function SecretsRepos({ p, info, onChanged }: { p: Pipeline; info: SecretsInfo | null; onChanged: () => void }) {
+  const { t } = useTranslation()
   const [check, setCheck] = useState<AccessCheck | null>(null)
   const [checking, setChecking] = useState(false)
-  const [saved, setSaved] = useState(false)
-  // .env записан на хабе — на хосты он попадёт только следующей выкладкой.
-  const [envSaved, setEnvSaved] = useState(false)
+  // edit: main — ключ основного репозитория; иначе prefix ('' — новый).
+  const [edit, setEdit] = useState<{ main: boolean; prefix: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
   async function runCheck() {
     setChecking(true)
     try {
@@ -1211,8 +1262,349 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
   }
   useEffect(() => {
     void runCheck()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- при открытии окна
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- при открытии вкладки
   }, [p.id])
+  async function remove(r: SecretsRepo) {
+    if (!(await confirmAction(t('deploy.secretRepoDeleteConfirm', { what: r.prefix || t('deploy.secretMainRepo') })))) return
+    try {
+      await api(`/hub/pipelines/${p.id}/secrets/repo?prefix=${encodeURIComponent(r.prefix)}`, { method: 'DELETE' })
+      onChanged()
+      void runCheck()
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  const repos = info?.repos ?? []
+  const hasMain = repos.some((r) => r.prefix === '')
+  const rows: (SecretsRepo & { missing?: boolean })[] = hasMain ? repos : [{ prefix: '', kind: 'token', missing: true }, ...repos]
+  return (
+    <div className="col" style={{ gap: '0.6rem' }}>
+      <AccessCheckView check={check} checking={checking} onRecheck={() => void runCheck()} />
+      {error && <Banner kind="error">{error}</Banner>}
+      <DataTable
+        rowKey={(r) => r.prefix || '(main)'}
+        dataSource={rows}
+        pagination={false}
+        size="small"
+        columns={[
+          {
+            title: t('deploy.secretColRepo'),
+            key: 'prefix',
+            render: (_, r) =>
+              r.prefix ? (
+                <span className="mono">{r.prefix}</span>
+              ) : (
+                <span>
+                  {t('deploy.secretMainRepo')} <span className="mono small muted">{info?.repo}</span>
+                </span>
+              ),
+          },
+          {
+            title: t('deploy.secretColKey'),
+            key: 'kind',
+            render: (_, r) =>
+              r.missing ? (
+                <span className="small muted">{t('deploy.secretNoKey')}</span>
+              ) : r.kind === 'ssh' ? (
+                t('deploy.secretKindSSH')
+              ) : (
+                <span>
+                  {t('deploy.secretKindToken')} {r.hint && <span className="mono">…{r.hint}</span>}
+                </span>
+              ),
+          },
+          {
+            title: '',
+            key: 'actions',
+            align: 'right',
+            render: (_, r) => (
+              <Space size={4}>
+                <Button size="small" onClick={() => setEdit({ main: r.prefix === '', prefix: r.prefix })}>
+                  {r.missing ? t('deploy.secretSet') : t('deploy.secretReplace')}
+                </Button>
+                {!r.missing && (
+                  <Button size="small" danger onClick={() => void remove(r)}>
+                    {t('deploy.secretDelete')}
+                  </Button>
+                )}
+              </Space>
+            ),
+          },
+        ]}
+      />
+      <div>
+        <Button size="small" type="dashed" onClick={() => setEdit({ main: false, prefix: '' })}>
+          {t('deploy.secretAddRepo')}
+        </Button>
+        <span className="small muted" style={{ marginLeft: '0.5rem' }}>
+          {t('deploy.secretReposHint')}
+        </span>
+      </div>
+      {edit && (
+        <RepoKeyModal
+          p={p}
+          main={edit.main}
+          repo={info?.repo ?? ''}
+          prefix={edit.prefix}
+          onClose={() => setEdit(null)}
+          onSaved={() => {
+            setEdit(null)
+            onChanged()
+            void runCheck()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** Ключ репозитория: основной (prefix пуст) или по началу адреса. */
+function RepoKeyModal({ p, main, repo, prefix, onClose, onSaved }: { p: Pipeline; main: boolean; repo: string; prefix: string; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation()
+  const [addr, setAddr] = useState(prefix)
+  const [token, setToken] = useState('')
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function save() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api(`/hub/pipelines/${p.id}/secrets/repo`, { method: 'PUT', body: { prefix: main ? '' : addr.trim(), token: token.trim(), ssh_key: key.trim() } })
+      onSaved()
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={main || prefix ? t('deploy.secretRepoEditTitle') : t('deploy.secretRepoAddTitle')} onClose={onClose} width={620}>
+      <div className="col" style={{ gap: '0.5rem' }}>
+        {main ? (
+          <span className="small">
+            {t('deploy.secretMainRepo')} <span className="mono muted">{repo}</span>
+          </span>
+        ) : (
+          <label>
+            {t('deploy.secretPrefixLabel')}
+            <Input value={addr} disabled={prefix !== ''} placeholder="github.com/vendor/ · git.example.com/team/lib" onChange={(e) => setAddr(e.target.value)} />
+          </label>
+        )}
+        <Input.Password value={token} placeholder={t('deploy.tokenPlaceholder')} onChange={(e) => setToken(e.target.value)} autoComplete="new-password" />
+        <Input.TextArea rows={4} className="mono sensitive-area" value={key} placeholder={t('deploy.keyPlaceholder')} onChange={(e) => setKey(e.target.value)} />
+        {error && <Banner kind="error">{error}</Banner>}
+        <Space>
+          <Button type="primary" loading={busy} disabled={(!token.trim() && !key.trim()) || (!main && !addr.trim())} onClick={() => void save()}>
+            {t('deploy.saveAccess')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </Space>
+      </div>
+    </Modal>
+  )
+}
+
+/** Вкладка «Реестры»: ключи по адресу registry, вход проверяется. */
+function SecretsRegistries({ p, info, onChanged }: { p: Pipeline; info: SecretsInfo | null; onChanged: () => void }) {
+  const { t } = useTranslation()
+  const [check, setCheck] = useState<Record<string, { ok: boolean; error?: string }> | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [edit, setEdit] = useState<SecretsRegistry | 'new' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  async function runCheck() {
+    setChecking(true)
+    try {
+      const r = await api<{ registries: { host: string; ok: boolean; error?: string }[] }>(`/hub/pipelines/${p.id}/secrets/check`, { method: 'POST' })
+      setCheck(Object.fromEntries(r.registries.map((x) => [x.host, x])))
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setChecking(false)
+    }
+  }
+  const hosts = (info?.registries ?? []).map((r) => r.host).join(',')
+  useEffect(() => {
+    if (hosts) void runCheck()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- при смене списка
+  }, [hosts])
+  async function remove(r: SecretsRegistry) {
+    if (!(await confirmAction(t('deploy.secretRegistryDeleteConfirm', { host: r.host || t('deploy.secretRegistryUnbound') })))) return
+    try {
+      await api(`/hub/pipelines/${p.id}/secrets/registry?host=${encodeURIComponent(r.host)}`, { method: 'DELETE' })
+      onChanged()
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  return (
+    <div className="col" style={{ gap: '0.6rem' }}>
+      <span className="small muted">{t('deploy.secretRegistriesHint')}</span>
+      {error && <Banner kind="error">{error}</Banner>}
+      <DataTable
+        rowKey={(r) => r.host || '(unbound)'}
+        dataSource={info?.registries ?? []}
+        pagination={false}
+        size="small"
+        locale={{ emptyText: t('deploy.secretRegistriesEmpty') }}
+        columns={[
+          {
+            title: t('deploy.secretColRegistry'),
+            key: 'host',
+            render: (_, r) => (r.host ? <span className="mono">{r.host}</span> : <Tag color="warning">{t('deploy.secretRegistryUnbound')}</Tag>),
+          },
+          { title: t('deploy.secretColLogin'), key: 'user', render: (_, r) => <span className="mono">{r.user}</span> },
+          { title: t('deploy.secretColToken'), key: 'hint', render: (_, r) => (r.hint ? <span className="mono">…{r.hint}</span> : '•••') },
+          { title: 'CA', key: 'ca', render: (_, r) => (r.ca ? <Tag>{t('deploy.secretOwnCA')}</Tag> : '—') },
+          {
+            title: t('deploy.secretColCheck'),
+            key: 'check',
+            render: (_, r) => {
+              if (!r.host) return <span className="small muted">{t('deploy.secretRegistryUnboundHint')}</span>
+              const c = check?.[r.host]
+              if (!c) return checking ? <Spin size="small" /> : '—'
+              return c.ok ? (
+                <Tag color="success">{t('deploy.secretLoginOK')}</Tag>
+              ) : (
+                <Tooltip title={c.error}>
+                  <Tag color="error">{t('deploy.secretLoginFailed')}</Tag>
+                </Tooltip>
+              )
+            },
+          },
+          {
+            title: '',
+            key: 'actions',
+            align: 'right',
+            render: (_, r) => (
+              <Space size={4}>
+                <Button size="small" onClick={() => setEdit(r)}>
+                  {t('deploy.secretEdit')}
+                </Button>
+                <Button size="small" danger onClick={() => void remove(r)}>
+                  {t('deploy.secretDelete')}
+                </Button>
+              </Space>
+            ),
+          },
+        ]}
+      />
+      <Space>
+        <Button size="small" type="dashed" onClick={() => setEdit('new')}>
+          {t('deploy.secretAddRegistry')}
+        </Button>
+        {hosts && (
+          <Button size="small" loading={checking} onClick={() => void runCheck()}>
+            {t('deploy.secretRecheck')}
+          </Button>
+        )}
+      </Space>
+      {edit && (
+        <RegistryKeyModal
+          p={p}
+          current={edit === 'new' ? null : edit}
+          onClose={() => setEdit(null)}
+          onSaved={() => {
+            setEdit(null)
+            onChanged()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** Ключ registry: адрес, логин, токен, свой CA (PEM текстом или файлом). */
+function RegistryKeyModal({ p, current, onClose, onSaved }: { p: Pipeline; current: SecretsRegistry | null; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation()
+  const [host, setHost] = useState(current?.host ?? '')
+  const [user, setUser] = useState(current?.user ?? '')
+  const [token, setToken] = useState('')
+  const [ca, setCA] = useState('')
+  const [clearCA, setClearCA] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  async function save() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api(`/hub/pipelines/${p.id}/secrets/registry`, {
+        method: 'PUT',
+        body: { host: host.trim(), old_host: current?.host ?? '', user: user.trim(), token: token.trim(), ca: ca.trim(), clear_ca: clearCA },
+      })
+      onSaved()
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={current ? t('deploy.secretRegistryEditTitle') : t('deploy.secretRegistryAddTitle')} onClose={onClose} width={620}>
+      <div className="col" style={{ gap: '0.5rem' }}>
+        <label>
+          {t('deploy.secretColRegistry')}
+          <Input className="mono" value={host} placeholder="harbor.example.com · ghcr.io · registry.example.com:5000" onChange={(e) => setHost(e.target.value)} />
+        </label>
+        <label>
+          {t('deploy.secretColLogin')}
+          <Input className="mono" value={user} placeholder="robot$team+deploy" onChange={(e) => setUser(e.target.value)} autoComplete="off" />
+        </label>
+        <label>
+          {t('deploy.secretColToken')}
+          <Input.Password value={token} placeholder={current ? t('deploy.secretTokenKeep') : ''} onChange={(e) => setToken(e.target.value)} autoComplete="new-password" />
+        </label>
+        <label>
+          {t('deploy.secretCALabel')}
+          <Input.TextArea rows={4} className="mono" value={ca} placeholder={current?.ca ? t('deploy.secretCAKeep') : '-----BEGIN CERTIFICATE-----'} onChange={(e) => setCA(e.target.value)} />
+        </label>
+        <Space wrap>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".crt,.pem,.cer"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void f.text().then(setCA)
+              e.target.value = ''
+            }}
+          />
+          <Button size="small" onClick={() => fileRef.current?.click()}>
+            {t('deploy.secretCAFile')}
+          </Button>
+          {current?.ca && (
+            <Checkbox checked={clearCA} onChange={(e) => setClearCA(e.target.checked)}>
+              {t('deploy.secretCAClear')}
+            </Checkbox>
+          )}
+        </Space>
+        <span className="small muted">{t('deploy.secretCAHint')}</span>
+        {error && <Banner kind="error">{error}</Banner>}
+        <Space>
+          <Button type="primary" loading={busy} disabled={!host.trim() || !user.trim() || (!current && !token.trim())} onClick={() => void save()}>
+            {t('deploy.saveAccess')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </Space>
+      </div>
+    </Modal>
+  )
+}
+
+/** Вкладка «.env»: правка с разницей по ключам, история, очистка. */
+function SecretsEnv({ p, onChanged }: { p: Pipeline; onChanged: () => void }) {
+  const { t } = useTranslation()
+  const [env, setEnv] = useState('')
+  // «Править .env»: текущий текст в редакторе. envOrig — с чем сравнивать
+  // перед записью (null — не загружали: вводится новый .env целиком).
+  const [envOrig, setEnvOrig] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [envHistory, setEnvHistory] = useState(false)
+  // .env записан на хабе — на хосты он попадёт только следующей выкладкой.
+  const [envSaved, setEnvSaved] = useState(false)
   // Текущий .env — в редактор. Значения — секреты: показ по подтверждению
   // и с записью в журнал действий (тот же reveal, что в истории).
   async function editEnv() {
@@ -1259,24 +1651,17 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
       const text = t('deploy.envSaveConfirm', { appear: appear.join(', ') || '—', vanish: vanish.join(', ') || '—', count: next.length })
       if (!(await confirmAction(text))) return
     }
-    await send({ git_token: token, ssh_key: key, registry, env: envChanged ? env : '', clear_env: envChanged && env.trim() === '' && envOrig !== null && envOrig !== '' })
+    await send({ env: envChanged ? env : '', clear_env: envChanged && env.trim() === '' && envOrig !== null && envOrig !== '' })
   }
   async function send(body: Record<string, unknown>) {
     setBusy(true)
     setError(null)
     try {
       await api(`/hub/pipelines/${p.id}/credentials`, { method: 'POST', body })
-      onSaved()
-      // Окно остаётся открытым: сразу проверка с новыми ключами.
-      setToken('')
-      setKey('')
-      setRegistry('')
+      onChanged()
       setEnvSaved(!!body.env || !!body.clear_env)
       setEnv('')
       setEnvOrig(null)
-      setSaved(true)
-      setP(await api<Pipeline>(`/hub/pipelines/${p.id}`).catch(() => p))
-      await runCheck()
     } catch (err) {
       setError(errText(err))
     } finally {
@@ -1284,64 +1669,39 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
     }
   }
   return (
-    <Modal title={t('deploy.accessTitle', { name: p.name })} onClose={onClose} width={700}>
-      <Space size={4} wrap>
-        <span className="small muted">{t('deploy.accessHint')}</span>
-        <HelpButton docKey="deploy:access" isHub admin />
-      </Space>
+    <div className="col" style={{ gap: '0.5rem' }}>
       {error && <Banner kind="error">{error}</Banner>}
-      {saved && <Banner kind="info">{t('deploy.accessSaved')}</Banner>}
       {envSaved && <Banner kind="warn">{t('deploy.envSavedRedeploy')}</Banner>}
-      <AccessCheckView check={check} checking={checking} onRecheck={() => void runCheck()} />
-      <p className="small">
-        {t('deploy.gitCred')}: <Tag color={p.has_git_cred ? 'success' : 'default'}>{p.has_git_cred ? t('deploy.set') : t('deploy.notSet')}</Tag>
-        {' · '}
-        {t('deploy.registryCred')}: <Tag color={p.has_registry_cred ? 'success' : 'default'}>{p.has_registry_cred ? t('deploy.set') : t('deploy.notSet')}</Tag>
-        {' · '}
+      <span className="small">
         {t('deploy.envCred')}: <Tag color={p.has_env ? 'success' : 'default'}>{p.has_env ? t('deploy.set') : t('deploy.notSet')}</Tag>
-      </p>
-      <div className="col" style={{ gap: '0.5rem' }}>
-        <Input.Password size="small" value={token} placeholder={t('deploy.tokenPlaceholder')} onChange={(e) => setToken(e.target.value)} autoComplete="new-password" />
-        <Input.TextArea rows={4} className="mono sensitive-area" value={key} placeholder={t('deploy.keyPlaceholder')} onChange={(e) => setKey(e.target.value)} />
-        <Input.Password size="small" value={registry} placeholder={t('deploy.registryPlaceholder')} onChange={(e) => setRegistry(e.target.value)} autoComplete="new-password" />
-        <Input.TextArea
-          rows={envOrig !== null ? 10 : 4}
-          className="mono sensitive-area"
-          value={env}
-          placeholder={t('deploy.envPlaceholder')}
-          onChange={(e) => setEnv(e.target.value)}
-        />
-        <Space wrap>
-          <Button type="primary" loading={busy} disabled={!token && !key && !registry && !envChanged} onClick={() => void save()}>
-            {t('deploy.saveAccess')}
+      </span>
+      <Input.TextArea
+        rows={envOrig !== null ? 12 : 4}
+        className="mono sensitive-area"
+        value={env}
+        placeholder={t('deploy.envPlaceholder')}
+        onChange={(e) => setEnv(e.target.value)}
+      />
+      <Space wrap>
+        <Button type="primary" loading={busy} disabled={!envChanged} onClick={() => void save()}>
+          {t('deploy.saveAccess')}
+        </Button>
+        {envOrig === null && (
+          <Button size="small" onClick={() => void editEnv()}>
+            {t('deploy.envEdit')}
           </Button>
-          {p.has_git_cred && (
-            <Button danger size="small" onClick={() => void send({ clear_git: true })}>
-              {t('deploy.clearGit')}
-            </Button>
-          )}
-          {p.has_registry_cred && (
-            <Button danger size="small" onClick={() => void send({ clear_registry: true })}>
-              {t('deploy.clearRegistry')}
-            </Button>
-          )}
-          {p.has_env && (
-            <Button danger size="small" onClick={() => void send({ clear_env: true })}>
-              {t('deploy.clearEnv')}
-            </Button>
-          )}
-          {envOrig === null && (
-            <Button size="small" onClick={() => void editEnv()}>
-              {t('deploy.envEdit')}
-            </Button>
-          )}
-          <Button size="small" onClick={() => setEnvHistory(true)}>
-            {t('deploy.envHistory')}
+        )}
+        <Button size="small" onClick={() => setEnvHistory(true)}>
+          {t('deploy.envHistory')}
+        </Button>
+        {p.has_env && (
+          <Button danger size="small" onClick={() => void send({ clear_env: true })}>
+            {t('deploy.clearEnv')}
           </Button>
-        </Space>
-      </div>
-      {envHistory && <EnvHistoryModal p={p} onClose={() => setEnvHistory(false)} onChanged={onSaved} />}
-    </Modal>
+        )}
+      </Space>
+      {envHistory && <EnvHistoryModal p={p} onClose={() => setEnvHistory(false)} onChanged={onChanged} />}
+    </div>
   )
 }
 

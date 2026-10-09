@@ -16,6 +16,12 @@ type Pipeline struct {
 	HookSecret   []byte `json:"-"`
 	GitCred      []byte `json:"-"`
 	RegistryCred []byte `json:"-"`
+	// RepoCredsEnc — ключи других репозиториев (submodules), зашифрованный
+	// JSON []deploy.RepoCred; RegistriesEnc — ключи registry по адресам,
+	// зашифрованный JSON (hub.registryKey). Прежний одиночный RegistryCred
+	// читается, пока список не записан.
+	RepoCredsEnc  []byte `json:"-"`
+	RegistriesEnc []byte `json:"-"`
 	// EnvEnc — .env compose-стека (action: compose), зашифрован.
 	EnvEnc     []byte `json:"-"`
 	Enabled    bool   `json:"enabled"`
@@ -80,13 +86,15 @@ const (
 	DeployFailed    = "failed"
 )
 
-const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, env_enc, enabled, last_commit, last_tag, failed_commit, failed_tag, env_sha, removal, dry_skip, author, created_at, updated_at`
+const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, repo_creds_enc, registries_enc, env_enc, enabled, last_commit, last_tag, failed_commit, failed_tag, env_sha, removal, dry_skip, author, created_at, updated_at`
 
 func scanPipeline(row interface{ Scan(...any) error }) (Pipeline, error) {
 	var p Pipeline
-	err := row.Scan(&p.ID, &p.Name, &p.Content, &p.HookID, &p.HookSecret, &p.GitCred, &p.RegistryCred, &p.EnvEnc, &p.Enabled,
+	err := row.Scan(&p.ID, &p.Name, &p.Content, &p.HookID, &p.HookSecret, &p.GitCred, &p.RegistryCred, &p.RepoCredsEnc, &p.RegistriesEnc, &p.EnvEnc, &p.Enabled,
 		&p.LastCommit, &p.LastTag, &p.FailedCommit, &p.FailedTag, &p.EnvSHA, &p.Removal, &p.DrySkip, &p.Author, &p.CreatedAt, &p.UpdatedAt)
-	p.HasGitCred, p.HasRegistryCred, p.HasEnv = len(p.GitCred) > 0, len(p.RegistryCred) > 0, len(p.EnvEnc) > 0
+	p.HasGitCred = len(p.GitCred) > 0 || len(p.RepoCredsEnc) > 0
+	p.HasRegistryCred = len(p.RegistryCred) > 0 || len(p.RegistriesEnc) > 0
+	p.HasEnv = len(p.EnvEnc) > 0
 	return p, err
 }
 
@@ -156,6 +164,28 @@ func (db *DB) SetPipelineSecrets(ctx context.Context, id int64, hookSecret, gitC
 	return nil
 }
 
+// SetPipelineRepoCreds — ключи других репозиториев (зашифрованный список;
+// пусто — убрать).
+func (db *DB) SetPipelineRepoCreds(ctx context.Context, id int64, enc []byte) error {
+	v := any(enc)
+	if len(enc) == 0 {
+		v = nil
+	}
+	_, err := db.ExecContext(ctx, `UPDATE pipelines SET repo_creds_enc = ? WHERE id = ?`, v, id)
+	return err
+}
+
+// SetPipelineRegistries — ключи registry (зашифрованный список; пусто —
+// убрать); прежний одиночный ключ при этом убирается: он уже в списке.
+func (db *DB) SetPipelineRegistries(ctx context.Context, id int64, enc []byte) error {
+	v := any(enc)
+	if len(enc) == 0 {
+		v = nil
+	}
+	_, err := db.ExecContext(ctx, `UPDATE pipelines SET registries_enc = ?, registry_cred = NULL WHERE id = ?`, v, id)
+	return err
+}
+
 // SetPipelineEnv — .env compose-стека (зашифрованный; пусто — убрать).
 func (db *DB) SetPipelineEnv(ctx context.Context, id int64, envEnc []byte) error {
 	v := any(envEnc)
@@ -213,7 +243,7 @@ type EnvVersion struct {
 	EnvEnc     []byte `json:"-"`
 }
 
-// AddEnvVersion записывает версию .env (после каждой смены в «Доступе»).
+// AddEnvVersion записывает версию .env (после каждой смены в «Секретах»).
 func (db *DB) AddEnvVersion(ctx context.Context, v EnvVersion) (int64, error) {
 	enc := any(v.EnvEnc)
 	if len(v.EnvEnc) == 0 {

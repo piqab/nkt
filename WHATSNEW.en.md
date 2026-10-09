@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.1 — 2026-10-09
+
+- The pipeline's "Access" button is now **"Secrets"**, and the window has
+  tabs: "Repositories", "Registries", ".env".
+- **Repositories:** besides the main repository's key — keys for other
+  repositories by address prefix (`github.com/vendor/`). When the
+  repository has `.gitmodules`, submodules are fetched automatically, each
+  with its own key (token or ssh).
+- **Registries:** a list of registry keys — address, login, token and an
+  own CA for registries with a self-signed certificate (Harbor and the
+  like); add, edit, delete, login check. Each image of the stack is checked
+  and pulled with its own registry's key — images from several private
+  registries in one stack. Now with Podman too, without `podman login` on
+  the host. The host puts the CA into its engine's `certs.d`; system-wide
+  trust is not changed.
+- An older single registry key works as before and shows as "registry not
+  set" — "Edit" binds it to an address.
+
 ## v1.13.0 — 2026-10-09
 
 - **Deployments: a site's certificate is manual by default.** A site from a

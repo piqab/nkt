@@ -50,7 +50,7 @@ func (s *Server) handlePipelineScan(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, r, http.StatusNotFound, store.ErrNotFound)
 			return
 		}
-		g = deploy.Git{Dir: s.pipelineDir(pl.ID), Cred: s.pipelineCred(pl)}
+		g = s.pipelineGit(pl, "")
 	}
 	work, err := os.MkdirTemp(filepath.Join(s.hub.cfg.DataDir), "scan-")
 	if err != nil {

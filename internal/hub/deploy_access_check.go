@@ -6,7 +6,6 @@ import (
 
 	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/msgs"
-	"github.com/piqab/nkt/internal/secretbox"
 )
 
 // AccessCheck — проверка доступа конвейера: репозиторий (git ls-remote с
@@ -33,7 +32,7 @@ type AccessCheck struct {
 }
 
 // handlePipelineAccessCheck — POST /hub/pipelines/{id}/access/check:
-// доступ с сохранёнными ключами конвейера (окно «Доступ» вызывает его при
+// доступ с сохранёнными ключами конвейера (окно «Секреты» вызывает его при
 // открытии и после записи ключей).
 func (s *Server) handlePipelineAccessCheck(w http.ResponseWriter, r *http.Request) {
 	pl, ok := s.pipelineFromReq(w, r)
@@ -47,7 +46,7 @@ func (s *Server) handlePipelineAccessCheck(w http.ResponseWriter, r *http.Reques
 	}
 	ctx := r.Context()
 	res := AccessCheck{Repo: spec.Repo, Ref: spec.Ref}
-	g := deploy.Git{Dir: s.pipelineDir(pl.ID), Cred: s.pipelineCred(pl)}
+	g := s.pipelineGit(pl, "")
 	res.HasToken, res.HasKey = g.Cred.Token != "", g.Cred.SSHKey != ""
 	res.TokenHint = deploy.TokenHint(g.Cred.Token)
 	refs, err := map[string]string(nil), error(nil)
@@ -70,13 +69,12 @@ func (s *Server) handlePipelineAccessCheck(w http.ResponseWriter, r *http.Reques
 	}
 	if spec.Registry != "" {
 		res.Registry = spec.Registry
-		cred := ""
-		if len(pl.RegistryCred) > 0 {
-			if raw, err := secretbox.Decrypt(s.hub.key, pl.RegistryCred); err == nil {
-				cred = string(raw)
-			}
+		acc := deploy.RegistryAccess{}
+		host := deploy.RegistryHost(spec.Registry)
+		if k, ok := registryKeyFor(s.pipelineRegistries(pl), host, host); ok {
+			acc = k.access()
 		}
-		tags, err := deploy.ListTags(ctx, spec.Registry, cred)
+		tags, err := deploy.ListTags(ctx, spec.Registry, acc)
 		if err != nil {
 			res.RegistryError = strings.TrimSpace(msgs.Localize(msgs.FromContext(ctx), err))
 		} else {

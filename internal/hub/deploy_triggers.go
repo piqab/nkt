@@ -172,7 +172,7 @@ func (s *Server) checkPipelines(ctx context.Context, w *pipelineWatch, now time.
 
 // pollRepo — новый коммит в ветке: выкладка.
 func (s *Server) pollRepo(ctx context.Context, pl store.Pipeline, spec deploy.Spec) {
-	g := deploy.Git{Dir: s.pipelineDir(pl.ID), Cred: s.pipelineCred(pl)}
+	g := s.pipelineGit(pl, "")
 	refs, err := g.Remote(ctx, spec.Repo)
 	if err != nil {
 		return
@@ -187,13 +187,12 @@ func (s *Server) pollRepo(ctx context.Context, pl store.Pipeline, spec deploy.Sp
 
 // pollRegistry — новый тег образа: выкладка ветки с этим тегом.
 func (s *Server) pollRegistry(ctx context.Context, pl store.Pipeline, spec deploy.Spec) {
-	cred := ""
-	if len(pl.RegistryCred) > 0 {
-		if raw, err := secretbox.Decrypt(s.hub.key, pl.RegistryCred); err == nil {
-			cred = string(raw)
-		}
+	acc := deploy.RegistryAccess{}
+	host := deploy.RegistryHost(spec.Registry)
+	if k, ok := registryKeyFor(s.pipelineRegistries(pl), host, host); ok {
+		acc = k.access()
 	}
-	tags, err := deploy.ListTags(ctx, spec.Registry, cred)
+	tags, err := deploy.ListTags(ctx, spec.Registry, acc)
 	if err != nil {
 		return
 	}
