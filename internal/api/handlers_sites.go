@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"github.com/piqab/nkt/internal/config"
 	"net/http"
 	"path"
@@ -47,8 +49,11 @@ type HostSite struct {
 	ContainerPort int      `json:"container_port,omitempty"`
 	HostPort      int      `json:"host_port,omitempty"`
 	Lineage       string   `json:"lineage,omitempty"`
-	File          string   `json:"file,omitempty"`
-	UpdatedAt     string   `json:"updated_at"`
+	// CertFile / KeyFile — свой сертификат (cert: /путь у сайта выкладки).
+	CertFile  string `json:"cert_file,omitempty"`
+	KeyFile   string `json:"key_file,omitempty"`
+	File      string `json:"file,omitempty"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 func (s *Server) hostSites(ctx context.Context) []HostSite {
@@ -442,6 +447,27 @@ func (s *Server) handleSiteDry(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	c := s.scanner.Collector()
+	// Свой файл сертификата (cert: /путь) — годится ли.
+	if cert := q.Get("cert"); validCertPath(cert) {
+		key := q.Get("cert_key")
+		if key != "" && !validCertPath(key) {
+			key = ""
+		}
+		if days, err := s.siteCertFromFile(cert, key, domains); err != nil {
+			out["cert_file"] = map[string]any{"path": cert, "error": msgs.Localize(msgs.LangFromRequest(r), err)}
+		} else {
+			out["cert_file"] = map[string]any{"path": cert, "days_left": days}
+		}
+	}
+	// У HAProxy свой frontend на 80/443 вне блока nkt — прокси настроен
+	// вручную: свой frontend nkt рядом не поставить.
+	if proxy == site.ProxyHAProxy {
+		if main, err := c.ReadFile(s.cfg.HAProxyMainConf); err == nil {
+			if port, busy := site.HAProxyForeignBind(string(main)); busy {
+				out["haproxy_foreign"] = port
+			}
+		}
+	}
 	if proxy == site.ProxyNginx && collect.Which(ctx, c, "nginx") {
 		main, _ := c.ReadFile(s.cfg.NginxMainConfig)
 		out["nginx_conf_d"] = strings.Contains(string(main), "conf.d/*.conf")
@@ -492,6 +518,32 @@ type SiteApplyParams struct {
 	// Force — имя указывает не на интерфейсы хоста (NAT), но хаб уже
 	// проверил, что снаружи оно ведёт сюда.
 	Force bool `json:"force"`
+	// Cert — откуда сертификат: "" и "auto" — найти действующий или
+	// выпустить certbot (с остановкой прокси на время --standalone);
+	// "manual" — только готовый действующий Let's Encrypt, без certbot;
+	// "/путь" — свой файл (CertKey — ключ, пусто — в том же файле).
+	Cert    string `json:"cert,omitempty"`
+	CertKey string `json:"cert_key,omitempty"`
+}
+
+// certPathRe — путь своего сертификата: абсолютный, без «..» и пробелов.
+var certPathRe = regexp.MustCompile(`^/[A-Za-z0-9._/@+-]{1,255}$`)
+
+func validCertPath(p string) bool { return certPathRe.MatchString(p) && !strings.Contains(p, "..") }
+
+// checkCert — режим сертификата сайта.
+func checkCert(cert, key string) error {
+	switch {
+	case cert == "" || cert == "auto" || cert == "manual":
+		if key != "" {
+			return msgs.Errorf("site.badCert", key)
+		}
+	case !validCertPath(cert):
+		return msgs.Errorf("site.badCert", cert)
+	case key != "" && !validCertPath(key):
+		return msgs.Errorf("site.badCert", key)
+	}
+	return nil
 }
 
 func (p *SiteApplyParams) check() error {
@@ -502,6 +554,9 @@ func (p *SiteApplyParams) check() error {
 	p.Domains = d
 	if !slices.Contains(site.Proxies, p.Proxy) {
 		return msgs.Errorf("site.badProxy", p.Proxy)
+	}
+	if err := checkCert(p.Cert, p.CertKey); err != nil {
+		return err
 	}
 	if p.Stack != "" {
 		if !site.ValidName(p.Stack) || !site.ValidName(p.Service) || p.ContainerPort < 1 || p.ContainerPort > 65535 {
@@ -632,11 +687,31 @@ func (sr *siteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// 4. Сертификат (Caddy получает свой сам).
 	jc.StepKey(4, 5, "site.stepCert", strings.Join(p.Domains, ", "))
 	if p.Proxy != site.ProxyCaddy {
-		lineage, err := s.siteCertificate(ctx, jc, user, p.Domains, p.Force)
-		if err != nil {
-			return err
+		switch {
+		case validCertPath(p.Cert):
+			days, err := s.siteCertFromFile(p.Cert, p.CertKey, p.Domains)
+			if err != nil {
+				return err
+			}
+			jc.Log("site.certFile", p.Cert, days)
+			rec.CertFile, rec.KeyFile = p.Cert, p.CertKey
+		case p.Cert == "manual":
+			lineage, days := s.siteLineage(p.Domains, 0)
+			if lineage == "" {
+				return msgs.Errorf("site.certManualMissing", strings.Join(p.Domains, ", "))
+			}
+			jc.Log("site.certManual", lineage, days)
+			if days < 30 {
+				jc.Log("site.certSoon", lineage, days)
+			}
+			rec.Lineage = lineage
+		default:
+			lineage, err := s.siteCertificate(ctx, jc, user, p.Domains, p.Force)
+			if err != nil {
+				return err
+			}
+			rec.Lineage = lineage
 		}
-		rec.Lineage = lineage
 	} else {
 		jc.Log("site.caddyOwnCert")
 	}
@@ -778,21 +853,7 @@ func (s *Server) sitePublish(ctx context.Context, jc *jobs.Context, snap *model.
 // siteCertificate — lineage certbot на все имена: действующий (дольше
 // 20 дней) — как есть, иначе выпуск certbot --standalone.
 func (s *Server) siteCertificate(ctx context.Context, jc *jobs.Context, user string, domains []string, force bool) (string, error) {
-	find := func() (string, int) {
-		list, _ := s.certs.ListLetsEncryptLineages()
-		for _, l := range list {
-			covers := true
-			for _, d := range domains {
-				if !slices.Contains(l.Names, d) {
-					covers = false
-				}
-			}
-			if covers {
-				return l.Name, l.DaysLeft
-			}
-		}
-		return "", 0
-	}
+	find := func() (string, int) { return s.siteLineage(domains, 20) }
 	if name, days := find(); name != "" && days > 20 {
 		jc.Log("site.certExisting", name, days)
 		return name, nil
@@ -825,7 +886,7 @@ func (s *Server) siteWriteProxy(ctx context.Context, jc *jobs.Context, user stri
 	}
 	c := s.scanner.Collector()
 	note := msgs.T(lang, "site.noteProxy", rec.Domains[0])
-	cfg := site.Config{Domains: rec.Domains, Upstream: rec.Upstream, Lineage: rec.Lineage}
+	cfg := site.Config{Domains: rec.Domains, Upstream: rec.Upstream, Lineage: rec.Lineage, CertFile: rec.CertFile, KeyFile: rec.KeyFile}
 	write := func(p, content string) error {
 		res, err := s.configs.Write(ctx, lang, user, p, content, note, true)
 		if err != nil {
@@ -870,7 +931,7 @@ func (s *Server) siteWriteProxy(ctx context.Context, jc *jobs.Context, user stri
 		if port, busy := site.HAProxyForeignBind(string(main)); busy {
 			return "", msgs.Errorf("site.haproxyForeignBind", port)
 		}
-		pem, err := s.siteCombinedPEM(rec.Lineage)
+		pem, err := s.siteCombinedPEMFor(rec)
 		if err != nil {
 			return "", err
 		}
@@ -881,7 +942,7 @@ func (s *Server) siteWriteProxy(ctx context.Context, jc *jobs.Context, user stri
 		var sites []site.Config
 		for _, o := range append(others, rec) {
 			if o.Proxy == site.ProxyHAProxy {
-				sites = append(sites, site.Config{Domains: o.Domains, Upstream: o.Upstream, Lineage: o.Lineage})
+				sites = append(sites, site.Config{Domains: o.Domains, Upstream: o.Upstream, Lineage: o.Lineage, CertFile: o.CertFile, KeyFile: o.KeyFile})
 			}
 		}
 		if err := write(mainPath, site.ReplaceHAProxyBlock(string(main), site.HAProxyBlock(sites))); err != nil {
@@ -897,6 +958,101 @@ func (s *Server) siteWriteProxy(ctx context.Context, jc *jobs.Context, user stri
 		jc.Log("site.proxyStarted", rec.Proxy)
 	}
 	return file, nil
+}
+
+// siteCombinedPEMFor — PEM сайта для HAProxy: свой файл (с ключом рядом
+// или внутри) или lineage certbot.
+func (s *Server) siteCombinedPEMFor(rec HostSite) ([]byte, error) {
+	if rec.CertFile == "" {
+		return s.siteCombinedPEM(rec.Lineage)
+	}
+	c := s.scanner.Collector()
+	cert, err := c.ReadFile(rec.CertFile)
+	if err != nil {
+		return nil, err
+	}
+	if rec.KeyFile == "" {
+		return cert, nil
+	}
+	key, err := c.ReadFile(rec.KeyFile)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(append([]byte{}, cert...), '\n'), key...), nil
+}
+
+// siteLineage — действующий lineage certbot на все имена, которому
+// осталось больше minDays дней (0 — любой ещё не истёкший).
+func (s *Server) siteLineage(domains []string, minDays int) (string, int) {
+	if s.certs == nil {
+		return "", 0
+	}
+	list, _ := s.certs.ListLetsEncryptLineages()
+	best, bestDays := "", -1
+	for _, l := range list {
+		if !l.Known || l.DaysLeft <= minDays || l.DaysLeft <= 0 {
+			continue
+		}
+		covers := true
+		for _, d := range domains {
+			if !slices.Contains(l.Names, d) {
+				covers = false
+			}
+		}
+		if covers && l.DaysLeft > bestDays {
+			best, bestDays = l.Name, l.DaysLeft
+		}
+	}
+	if best == "" {
+		return "", 0
+	}
+	return best, bestDays
+}
+
+// siteCertFromFile — свой сертификат: файл читается, первый сертификат
+// покрывает все имена (точно или «*.домен») и не истёк; ключ — в том же
+// файле или отдельным файлом. Ответ — сколько дней осталось.
+func (s *Server) siteCertFromFile(certPath, keyPath string, domains []string) (int, error) {
+	c := s.scanner.Collector()
+	raw, err := c.ReadFile(certPath)
+	if err != nil {
+		return 0, msgs.Errorf("site.certFileUnreadable", certPath, err)
+	}
+	var leaf *x509.Certificate
+	hasKey := false
+	for rest := raw; ; {
+		var b *pem.Block
+		b, rest = pem.Decode(rest)
+		if b == nil {
+			break
+		}
+		switch {
+		case b.Type == "CERTIFICATE" && leaf == nil:
+			leaf, _ = x509.ParseCertificate(b.Bytes)
+		case strings.HasSuffix(b.Type, "PRIVATE KEY"):
+			hasKey = true
+		}
+	}
+	if leaf == nil {
+		return 0, msgs.Errorf("site.certFileNoCert", certPath)
+	}
+	if keyPath != "" {
+		if _, err := c.ReadFile(keyPath); err != nil {
+			return 0, msgs.Errorf("site.certFileUnreadable", keyPath, err)
+		}
+	} else if !hasKey {
+		return 0, msgs.Errorf("site.certFileNoKey", certPath)
+	}
+	days := int(time.Until(leaf.NotAfter).Hours() / 24)
+	if days <= 0 {
+		return 0, msgs.Errorf("site.certFileExpired", certPath)
+	}
+	for _, d := range domains {
+		if leaf.VerifyHostname(d) != nil {
+			return 0, msgs.Errorf("site.certFileNames", certPath, d, strings.Join(leaf.DNSNames, ", "))
+		}
+	}
+	return days, nil
 }
 
 // siteCombinedPEM — сертификат и ключ lineage одним файлом (HAProxy);
@@ -969,7 +1125,7 @@ func (s *Server) handleSiteRemove(w http.ResponseWriter, r *http.Request) {
 		var sites []site.Config
 		for _, o := range kept {
 			if o.Proxy == site.ProxyHAProxy {
-				sites = append(sites, site.Config{Domains: o.Domains, Upstream: o.Upstream, Lineage: o.Lineage})
+				sites = append(sites, site.Config{Domains: o.Domains, Upstream: o.Upstream, Lineage: o.Lineage, CertFile: o.CertFile, KeyFile: o.KeyFile})
 			}
 		}
 		var res control.WriteResult

@@ -54,6 +54,8 @@ type SiteExport struct {
 	Upstream      string   `json:"upstream,omitempty"`
 	OpenFirewall  bool     `json:"open_firewall"`
 	Pipeline      string   `json:"pipeline,omitempty"`
+	Cert          string   `json:"cert,omitempty"`
+	CertKey       string   `json:"cert_key,omitempty"`
 	Status        string   `json:"status,omitempty"`
 	Error         string   `json:"error,omitempty"`
 	Author        string   `json:"author,omitempty"`

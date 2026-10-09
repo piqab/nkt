@@ -462,6 +462,7 @@ compose:
     port: 80                     # the container port
     proxy: nginx                 # optional: otherwise whichever the host has, with none — nginx
     firewall: true               # open 80/443 (yes by default)
+    cert: manual                 # certificate: manual (default), auto or /path to your own file
 ```
 
 - **First deployment:** the stack, then the site, the same way as "Set up"
@@ -508,6 +509,30 @@ compose:
   from outside, whether the stack has
   that service and whether the port is declared; a port mismatch counts as
   a problem.
+- **The certificate is manual by default** (`cert: manual` or no `cert`).
+  The deployment does not run certbot and does not stop the proxy: it takes
+  a ready valid Let's Encrypt certificate for all the names from
+  `/etc/letsencrypt/live` — issued in "Certificates", by hand or earlier. If
+  there is none or it expired, the site is not set up ("issue it in
+  "Certificates" or set `cert: auto`"), the stack is still deployed; under
+  30 days left — a line in the log. Renewal is nkt's automatic renewal or
+  "Certificates".
+  - `cert: auto` — as before: a good certificate (over 20 days) is taken,
+    otherwise `certbot --standalone` issues one and the proxy (nginx,
+    HAProxy) is stopped for the check — the sites on it are down for those
+    seconds.
+  - `cert: /etc/ssl/app.pem` — your own file: a certificate for all the
+    names (`*.domain` fits too), the key in the same file or separately —
+    `cert_key: /etc/ssl/app.key`. For HAProxy nkt builds one PEM from them.
+  - The dry run says which certificate will be taken and how long it has
+    left, or that there is none (a problem).
+- **The proxy is configured by hand.** If HAProxy on the host has its own
+  frontend on 80/443 or the name is already in someone else's nginx
+  `server`, nkt leaves that configuration alone: the site gets the **"proxy
+  by hand"** state (the reason is in a tooltip on the "Sites" tab), and later
+  deployments only check HTTPS — no setup, no certbot, no proxy stop. To keep
+  nkt from trying at all, write `site:` as a string. To leave this state,
+  change the site in `site:` or press "Set up" on the "Sites" tab.
 - A `site: name` string still means only an HTTPS check after the
   deployment.
 - Editing such a site in the wizard works, but the next deployment restores

@@ -592,7 +592,18 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 	}
 	body := map[string]any{"domains": st.Domains, "proxy": st.Proxy, "stack": st.Stack, "service": st.Service,
 		"container_port": st.ContainerPort, "upstream": st.Upstream, "open_firewall": st.OpenFirewall, "force": force}
-	if _, err := s.hostCall(ctx, user, t.ID, "POST", "/api/sites/apply", body, &started); err != nil {
+	if st.Cert != "" {
+		body["cert"], body["cert_key"] = st.Cert, st.CertKey
+	}
+	code, err := s.hostCall(ctx, user, t.ID, "POST", "/api/sites/apply", body, &started)
+	if err != nil && code == http.StatusBadRequest && st.Cert != "" && strings.Contains(msgs.Localize(msgs.EN, err), "unknown field") {
+		// Старый nkt на хосте режима сертификата не знает — по-старому.
+		jc.Log("deploy.siteCertOldHost", t.Name)
+		delete(body, "cert")
+		delete(body, "cert_key")
+		_, err = s.hostCall(ctx, user, t.ID, "POST", "/api/sites/apply", body, &started)
+	}
+	if err != nil {
 		return err
 	}
 	_ = s.db.SetSiteState(ctx, st.ID, store.SiteSettingUp, "", 0)

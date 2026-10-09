@@ -104,3 +104,17 @@ func TestRemoveOverride(t *testing.T) {
 		t.Fatal("removed a mapping nkt did not add")
 	}
 }
+
+// Свой файл сертификата — в ssl_certificate вместо lineage certbot; без
+// отдельного ключа ключ берётся из того же файла.
+func TestNginxOwnCert(t *testing.T) {
+	conf := Nginx(Config{Domains: []string{"app.example.com"}, Upstream: "127.0.0.1:8080", CertFile: "/etc/ssl/app.pem"})
+	if !strings.Contains(conf, "ssl_certificate /etc/ssl/app.pem;") || !strings.Contains(conf, "ssl_certificate_key /etc/ssl/app.pem;") ||
+		strings.Contains(conf, "letsencrypt") {
+		t.Errorf("свой файл:\n%s", conf)
+	}
+	conf = Nginx(Config{Domains: []string{"app.example.com"}, Upstream: "127.0.0.1:8080", CertFile: "/etc/ssl/a.pem", KeyFile: "/etc/ssl/a.key"})
+	if !strings.Contains(conf, "ssl_certificate_key /etc/ssl/a.key;") {
+		t.Errorf("ключ отдельно:\n%s", conf)
+	}
+}

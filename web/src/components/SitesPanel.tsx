@@ -76,7 +76,7 @@ interface Site {
   updated_at: string
 }
 
-const STATUS_COLOR: Record<string, string> = { ok: 'success', failed: 'error', 'setting-up': 'processing', removing: 'processing', 'remove-failed': 'error' }
+const STATUS_COLOR: Record<string, string> = { ok: 'success', failed: 'error', 'setting-up': 'processing', removing: 'processing', 'remove-failed': 'error', 'proxy-manual': 'default' }
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 function portTag(t: (k: string) => string, v?: string) {
@@ -181,8 +181,15 @@ export function SitesPanel({ me }: { me: Me }) {
                 key: 'state',
                 render: (_, s) => (
                   <Space size={4} wrap>
-                    <Tag color={STATUS_COLOR[s.status] ?? 'default'}>{t(`sites.status.${s.status || 'new'}`)}</Tag>
-                    {s.error && (
+                    {s.status === 'proxy-manual' ? (
+                      // Не ошибка: прокси настроен вручную, причина — подсказкой.
+                      <Tooltip title={s.error}>
+                        <Tag color="default">{t('sites.status.proxy-manual')}</Tag>
+                      </Tooltip>
+                    ) : (
+                      <Tag color={STATUS_COLOR[s.status] ?? 'default'}>{t(`sites.status.${s.status || 'new'}`)}</Tag>
+                    )}
+                    {s.error && s.status !== 'proxy-manual' && (
                       <Tooltip title={s.error}>
                         <span className="small" style={{ color: 'var(--status-error)' }}>{t('sites.hasError')}</span>
                       </Tooltip>

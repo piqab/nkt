@@ -3580,7 +3580,8 @@
     "envEdit": "Edit .env",
     "envEditConfirm": "Open the current .env for editing? The values are secrets: showing them is written to the audit log.",
     "envDiffConfirm": "Save the .env? Added: {{added}}; changed: {{changed}}; removed: {{removed}}. Values are not shown. The previous one stays in \".env history\"; it reaches the hosts with the next deployment.",
-    "accessAutoName": "Keys for a private repository and registry, the stack .env. The pipeline is saved first — without a name it is named after project: in the description or the compose link"
+    "accessAutoName": "Keys for a private repository and registry, the stack .env. The pipeline is saved first — without a name it is named after project: in the description or the compose link",
+    "fromLinkCertComment": "a ready certificate (default); auto — certbot issues it, stopping the proxy; /path — your own file"
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",
@@ -3899,7 +3900,8 @@
       "ok": "working",
       "failed": "error",
       "removing": "deleting",
-      "remove-failed": "deletion unfinished"
+      "remove-failed": "deletion unfinished",
+      "proxy-manual": "proxy by hand"
     },
     "port": {
       "open": "open",

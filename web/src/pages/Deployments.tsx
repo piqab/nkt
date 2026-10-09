@@ -863,6 +863,7 @@ function ComposeFromLink({
       `  #   domains: [${ex ? ex.project : proj}.example.com]\n` +
       `  #   service: ${site.service}\n` +
       `  #   port: ${site.port}\n` +
+      `  #   cert: manual   # ${t('deploy.fromLinkCertComment')}\n` +
       `\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n` +
       envTemplate
     return yaml
@@ -1660,7 +1661,7 @@ function scannedYaml(
   }
   for (const s of sc.services.filter((x) => x.unpinned && x.image)) lines.push(`  # ${t('deploy.scanUnpinned', { image: s.image, name: s.name })}`)
   if (siteService) {
-    lines.push(`  # site:  # ${t('deploy.fromLinkSiteComment')}`, `  #   domains: [${proj}.example.com]`, `  #   service: ${siteService}`, `  #   port: ${sitePort || t('deploy.fromLinkSitePort')}`)
+    lines.push(`  # site:  # ${t('deploy.fromLinkSiteComment')}`, `  #   domains: [${proj}.example.com]`, `  #   service: ${siteService}`, `  #   port: ${sitePort || t('deploy.fromLinkSitePort')}`, `  #   cert: manual   # ${t('deploy.fromLinkCertComment')}`)
   } else if (choice !== 'none') {
     lines.push(`  # ${t('deploy.scanNoWeb')}`)
   }

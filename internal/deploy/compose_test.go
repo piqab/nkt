@@ -32,6 +32,15 @@ func TestSiteSpec(t *testing.T) {
 	if err != nil || !s.Compose.Site.Managed() || s.Compose.Site.Domains[0] != "app.example.com" || !s.Compose.Site.OpenFirewall() {
 		t.Fatalf("block form: %+v %v", s.Compose.Site, err)
 	}
+	if m := s.Compose.Site.CertMode(); m != "manual" {
+		t.Errorf("по умолчанию: %q", m)
+	}
+	for in, want := range map[string]string{"auto": "auto", "manual": "manual", "/etc/ssl/app.pem\n    cert_key: /etc/ssl/app.key": "/etc/ssl/app.pem"} {
+		s, err := ParseSpec(block + "    cert: " + in + "\n")
+		if err != nil || s.Compose.Site.CertMode() != want {
+			t.Errorf("cert: %s → %+v %v", in, s.Compose.Site, err)
+		}
+	}
 	for _, bad := range []string{
 		strings.Replace(block, "hosts: [web1]", "hosts: [web1, web2]", 1),
 		strings.Replace(block, "hosts: [web1]", "group: prod", 1),
@@ -39,6 +48,9 @@ func TestSiteSpec(t *testing.T) {
 		strings.Replace(block, "service: web", "service: 'a b'", 1),
 		block + "    proxy: apache\n",
 		block + "    unknown: 1\n",
+		block + "    cert: sometimes\n",
+		block + "    cert: ../etc/x.pem\n",
+		block + "    cert: manual\n    cert_key: /etc/x.key\n",
 	} {
 		if _, err := ParseSpec(bad); err == nil {
 			t.Fatalf("accepted:\n%s", bad)

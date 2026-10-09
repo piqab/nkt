@@ -36,6 +36,7 @@ var enCatalog = map[string]string{
 	"certgen.errorPrefix":          "Error: %s",
 	"certgen.running":              "Running: %s",
 	"certgen.certRenewed":          "certbot: certificate renewed",
+	"certgen.certNotDue":           "certbot: the certificate for %s is valid — certbot did not reissue it",
 	"certgen.certIssued":           "certbot: certificate issued for %s",
 	"certgen.recombinedFile":       "Rebuilt the file for %s: %s",
 	"certgen.checkingPort":         "Checking port %d…",

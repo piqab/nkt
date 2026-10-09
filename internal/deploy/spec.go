@@ -363,6 +363,7 @@ clusters: [prod]        # кластеры хаба
 #   #   service: web             # сервис стека
 #   #   port: 80                 # порт контейнера
 #   #   proxy: nginx             # необязательно: иначе какой есть, нет ни одного — nginx
+#   #   cert: manual             # готовый сертификат (по умолчанию); auto — выпуск certbot; /путь — свой файл
 #   # .env стека — в «Доступ» конвейера, хранится зашифрованным
 
 # Когда ещё выкладывать, кроме вебхука и кнопки:
@@ -414,6 +415,7 @@ clusters: [prod]        # hub clusters
 #   #   service: web             # the stack service
 #   #   port: 80                 # the container port
 #   #   proxy: nginx             # optional: otherwise whichever is there, with none — nginx
+#   #   cert: manual             # a ready certificate (default); auto — certbot issues it; /path — your own file
 #   # the stack's .env goes into the pipeline's "Access", stored encrypted
 
 # When else to deploy, besides the webhook and the button:
