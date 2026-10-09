@@ -601,6 +601,10 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"pipelines", "env_enc", `ALTER TABLE pipelines ADD COLUMN env_enc BLOB`},
 	// pipeline_id — сайт описан блоком site: конвейера (0 — заведён вручную).
 	{"sites", "pipeline_id", `ALTER TABLE sites ADD COLUMN pipeline_id INTEGER NOT NULL DEFAULT 0`},
+	// cert / cert_key — сертификат сайта: "" и auto — certbot при
+	// необходимости, manual — только готовый, /путь — свой файл.
+	{"sites", "cert", `ALTER TABLE sites ADD COLUMN cert TEXT NOT NULL DEFAULT ''`},
+	{"sites", "cert_key", `ALTER TABLE sites ADD COLUMN cert_key TEXT NOT NULL DEFAULT ''`},
 	// failed_commit / failed_tag — на чём упала выкладка (опрос не повторяет).
 	{"pipelines", "failed_commit", `ALTER TABLE pipelines ADD COLUMN failed_commit TEXT NOT NULL DEFAULT ''`},
 	{"pipelines", "failed_tag", `ALTER TABLE pipelines ADD COLUMN failed_tag TEXT NOT NULL DEFAULT ''`},

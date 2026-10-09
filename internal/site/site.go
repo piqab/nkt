@@ -98,6 +98,23 @@ type Config struct {
 	Lineage string
 	// PEM — объединённый файл сертификата и ключа (HAProxy).
 	PEM string
+	// CertFile / KeyFile — свой сертификат вместо certbot (cert: /путь у
+	// сайта выкладки); KeyFile пуст — ключ в том же файле.
+	CertFile string
+	KeyFile  string
+}
+
+// certPaths — сертификат и ключ для nginx: свой файл или lineage certbot.
+func (c Config) certPaths() (string, string) {
+	if c.CertFile != "" {
+		key := c.KeyFile
+		if key == "" {
+			key = c.CertFile
+		}
+		return c.CertFile, key
+	}
+	live := "/etc/letsencrypt/live/" + c.Lineage
+	return live + "/fullchain.pem", live + "/privkey.pem"
 }
 
 // ID — имя сайта в конфигурациях: первый домен.
@@ -113,7 +130,7 @@ func NginxFile(root, domain string) string { return root + "/conf.d/nkt-" + doma
 // Nginx — сервер 80 (редирект) и 443 с сертификатом и проксированием.
 func Nginx(c Config) string {
 	names := strings.Join(c.Domains, " ")
-	live := "/etc/letsencrypt/live/" + c.Lineage
+	certFile, keyFile := c.certPaths()
 	conn := "$nkt_conn_" + slug(c.ID())
 	return "# Managed by nkt: site " + c.ID() + "\n" +
 		"map $http_upgrade " + conn + " {\n    default upgrade;\n    ''      close;\n}\n\n" +
@@ -124,8 +141,8 @@ func Nginx(c Config) string {
 		"server {\n" +
 		"    listen 443 ssl http2;\n    listen [::]:443 ssl http2;\n" +
 		"    server_name " + names + ";\n" +
-		"    ssl_certificate " + live + "/fullchain.pem;\n" +
-		"    ssl_certificate_key " + live + "/privkey.pem;\n" +
+		"    ssl_certificate " + certFile + ";\n" +
+		"    ssl_certificate_key " + keyFile + ";\n" +
 		"    client_max_body_size 64m;\n\n" +
 		"    location / {\n" +
 		"        proxy_pass http://" + c.Upstream + ";\n" +

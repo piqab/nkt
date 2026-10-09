@@ -1086,7 +1086,13 @@ func (m *CertManager) issueCertbot(
 	if err != nil {
 		return finish(res, err)
 	}
-	report.Msg("certgen.certIssued", strings.Join(domains, ", "))
+	// «not yet due for renewal; no action taken» — certbot ничего не
+	// выпускал: сертификат действующий, так и сказать.
+	if strings.Contains(res.Output(), "no action taken") || strings.Contains(res.Output(), "not yet due for renewal") {
+		report.Msg("certgen.certNotDue", strings.Join(domains, ", "))
+	} else {
+		report.Msg("certgen.certIssued", strings.Join(domains, ", "))
+	}
 	return finish(res, nil)
 }
 

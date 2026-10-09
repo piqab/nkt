@@ -8,6 +8,25 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.0 — 2026-10-09
+
+- **Deployments: a site's certificate is manual by default.** A site from a
+  `site:` block no longer issues its certificate itself: a ready valid Let's
+  Encrypt certificate for all the names is taken, certbot is not run and the
+  proxy is not stopped. With no certificate the site is not set up, with a
+  hint ("issue it in “Certificates” or set `cert: auto`"); the stack is
+  deployed. `cert: auto` keeps the old behaviour (certbot issues it,
+  stopping the proxy for the check), `cert: /path` uses your own file (the
+  key next to it or `cert_key:`). Before, every deployment could stop
+  HAProxy for certbot even though the certificate was valid.
+- **nkt leaves a hand-configured proxy alone.** HAProxy's own frontend on
+  80/443 or the name in someone else's nginx `server` — the site gets the
+  "proxy by hand" state, and later deployments only check HTTPS. The dry
+  run warns in advance.
+- The certbot log no longer says "certificate issued" when certbot answered
+  "no action taken": "the certificate is valid — certbot did not reissue
+  it".
+
 ## v1.12.0 — 2026-10-08
 
 - **Version numbering is semver.** New features bump the second number (the

@@ -47,6 +47,23 @@ type SiteSpec struct {
 	Port     int      `yaml:"port"`
 	Proxy    string   `yaml:"proxy"`
 	Firewall *bool    `yaml:"firewall"`
+	// Cert — сертификат сайта: по умолчанию (пусто, manual) — только
+	// готовый действующий Let's Encrypt, без certbot и без остановки
+	// прокси; auto — выпуск certbot при необходимости; /путь — свой файл
+	// (CertKey — ключ, пусто — в том же файле).
+	Cert    string `yaml:"cert"`
+	CertKey string `yaml:"cert_key"`
+}
+
+// certPathRe — свой файл сертификата: абсолютный путь без пробелов и «..».
+var certPathRe = regexp.MustCompile(`^/[A-Za-z0-9._/@+-]{1,255}$`)
+
+// CertMode — режим сертификата для хоста: manual, auto или путь.
+func (s *SiteSpec) CertMode() string {
+	if s == nil || s.Cert == "" {
+		return "manual"
+	}
+	return s.Cert
 }
 
 // UnmarshalYAML — строка или блок; в блоке — только известные ключи.
@@ -57,7 +74,7 @@ func (s *SiteSpec) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.MappingNode {
 		return msgs.Errorf("deploy.specBad", "compose.site", n.Value)
 	}
-	known := map[string]bool{"domains": true, "service": true, "port": true, "proxy": true, "firewall": true}
+	known := map[string]bool{"domains": true, "service": true, "port": true, "proxy": true, "firewall": true, "cert": true, "cert_key": true}
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		if k := n.Content[i].Value; !known[k] {
 			return msgs.Errorf("deploy.specBad", "compose.site."+k, n.Content[i+1].Value)
@@ -130,6 +147,16 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 	}
 	if s.Proxy != "" && !slices.Contains(site.Proxies, s.Proxy) {
 		return msgs.Errorf("deploy.specBad", "compose.site.proxy", s.Proxy)
+	}
+	switch c := s.Cert; {
+	case c == "" || c == "manual" || c == "auto":
+		if s.CertKey != "" {
+			return msgs.Errorf("deploy.specBad", "compose.site.cert_key", s.CertKey)
+		}
+	case !certPathRe.MatchString(c) || strings.Contains(c, ".."):
+		return msgs.Errorf("deploy.specBad", "compose.site.cert", c)
+	case s.CertKey != "" && (!certPathRe.MatchString(s.CertKey) || strings.Contains(s.CertKey, "..")):
+		return msgs.Errorf("deploy.specBad", "compose.site.cert_key", s.CertKey)
 	}
 	return nil
 }

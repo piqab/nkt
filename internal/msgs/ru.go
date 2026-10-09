@@ -35,6 +35,7 @@ var ruCatalog = map[string]string{
 	"certgen.errorPrefix":          "Ошибка: %s",
 	"certgen.running":              "Запускаю: %s",
 	"certgen.certRenewed":          "certbot: сертификат продлён",
+	"certgen.certNotDue":           "certbot: сертификат на %s действующий — certbot его не перевыпускал",
 	"certgen.certIssued":           "certbot: сертификат выпущен для %s",
 	"certgen.recombinedFile":       "Пересобран файл для %s: %s",
 	"certgen.checkingPort":         "Проверяю порт %d…",

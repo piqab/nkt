@@ -39,7 +39,7 @@ func (m *Manager) exportSites(ctx context.Context, export *store.HubExport) erro
 		}
 		export.Sites = append(export.Sites, store.SiteExport{Domains: s.Domains, Host: host, Proxy: s.Proxy, Stack: s.Stack,
 			Service: s.Service, ContainerPort: s.ContainerPort, Upstream: s.Upstream, OpenFirewall: s.OpenFirewall,
-			Pipeline: pipes[s.PipelineID], Status: s.Status, Error: s.Error, Author: s.Author, CreatedAt: s.CreatedAt})
+			Pipeline: pipes[s.PipelineID], Cert: s.Cert, CertKey: s.CertKey, Status: s.Status, Error: s.Error, Author: s.Author, CreatedAt: s.CreatedAt})
 	}
 	return nil
 }
@@ -101,7 +101,7 @@ func (m *Manager) importSites(ctx context.Context, list []store.SiteExport, res 
 			}
 		}
 		s := store.Site{Domains: e.Domains, HostID: hostID, Proxy: e.Proxy, Stack: e.Stack, Service: e.Service,
-			ContainerPort: e.ContainerPort, Upstream: e.Upstream, OpenFirewall: e.OpenFirewall, PipelineID: pipelineID, Author: e.Author}
+			ContainerPort: e.ContainerPort, Upstream: e.Upstream, OpenFirewall: e.OpenFirewall, PipelineID: pipelineID, Cert: e.Cert, CertKey: e.CertKey, Author: e.Author}
 		if id, taken := ids[name]; taken {
 			if !res.Replace(store.SectionSites, name) {
 				cnt.Skipped++

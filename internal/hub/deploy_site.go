@@ -81,7 +81,18 @@ func (s *Server) pipelineSiteFor(ctx context.Context, pl store.Pipeline, domains
 // sameSite — настройки сайта не изменились.
 func sameSite(a, b store.Site) bool {
 	return slices.Equal(a.Domains, b.Domains) && a.HostID == b.HostID && a.Proxy == b.Proxy && a.Stack == b.Stack &&
-		a.Service == b.Service && a.ContainerPort == b.ContainerPort && a.OpenFirewall == b.OpenFirewall && a.Upstream == ""
+		a.Service == b.Service && a.ContainerPort == b.ContainerPort && a.OpenFirewall == b.OpenFirewall && a.Upstream == "" &&
+		siteCert(a) == siteCert(b) && a.CertKey == b.CertKey
+}
+
+// siteCert — режим сертификата сайта выкладки: пустой (сайт заведён до
+// cert:) — то же, что manual, иначе каждый такой сайт после обновления
+// хаба настраивался бы заново один раз без всякой причины.
+func siteCert(s store.Site) string {
+	if s.Cert == "" && s.PipelineID > 0 {
+		return "manual"
+	}
+	return s.Cert
 }
 
 // pipelineSite — сайт после выкладки стека на хост t.
@@ -110,10 +121,13 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 		}
 	}
 	want := store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy, Stack: c.Project, Service: sp.Service,
-		ContainerPort: port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID, Author: user}
+		ContainerPort: port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID, Author: user,
+		Cert: sp.CertMode(), CertKey: sp.CertKey}
 	if cur != nil {
 		want.ID = cur.ID
-		if sameSite(*cur, want) && cur.Status == store.SiteOK {
+		// Настроен (или прокси настроен вручную) и ничего не поменялось —
+		// только проверка HTTPS: ни прокси, ни сертификат не трогаются.
+		if sameSite(*cur, want) && (cur.Status == store.SiteOK || cur.Status == store.SiteProxyManual) {
 			chk := httpsCheck(ctx, want.Domains[0])
 			var full SiteCheck
 			_ = json.Unmarshal(cur.Check, &full)
@@ -140,6 +154,25 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 			}
 		}
 	}
+	// Прокси на хосте настроен вручную (свой frontend HAProxy на 80/443,
+	// имя в чужом server nginx) — nkt его не трогает и сертификат ради него
+	// не выпускает: каждая выкладка иначе останавливала бы прокси ради
+	// certbot и падала на чужой конфигурации.
+	if why := s.siteProxyManual(ctx, jc.Lang(), user, t, proxy, want.Domains); why != "" {
+		id, err := s.db.SaveSite(ctx, want)
+		if err != nil {
+			return err
+		}
+		_ = s.db.SetSiteState(ctx, id, store.SiteProxyManual, why, jc.Job.ID)
+		jc.Log("deploy.siteProxyManual", want.Domains[0], why)
+		chk := httpsCheck(ctx, want.Domains[0])
+		if chk.OK {
+			jc.Log("deploy.siteOK", want.Domains[0], chk.Status, chk.CertDaysLeft)
+		} else {
+			jc.Log("deploy.siteFailed", want.Domains[0], chk.Error)
+		}
+		return nil
+	}
 	id, err := s.db.SaveSite(ctx, want)
 	if err != nil {
 		return err
@@ -147,6 +180,26 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 	want.ID = id
 	jc.Log("deploy.siteSetup", strings.Join(want.Domains, ", "), proxy, t.Name)
 	return s.setupSite(ctx, jc, user, want, true, false)
+}
+
+// siteProxyManual — почему прокси на хосте считается настроенным вручную
+// ("" — не считается или хост не ответил: тогда обычная настройка).
+func (s *Server) siteProxyManual(ctx context.Context, lang msgs.Lang, user string, t targetHost, proxy string, domains []string) string {
+	var dry struct {
+		HAProxyForeign string   `json:"haproxy_foreign"`
+		Conflicts      []string `json:"conflicts"`
+	}
+	q := "/api/sites/dry?domains=" + url.QueryEscape(strings.Join(domains, ",")) + "&proxy=" + url.QueryEscape(proxy)
+	if _, err := s.hostCall(ctx, user, t.ID, "GET", q, nil, &dry); err != nil {
+		return ""
+	}
+	switch {
+	case dry.HAProxyForeign != "":
+		return msgs.T(lang, "deploy.siteManualHAProxy", dry.HAProxyForeign)
+	case len(dry.Conflicts) > 0:
+		return msgs.T(lang, "deploy.siteManualNginx", strings.Join(dry.Conflicts, "; "))
+	}
+	return ""
 }
 
 // autoSitePort — site.port: auto (или не задан): порт, который объявляет
@@ -226,8 +279,8 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	if port == 0 {
 		port = sp.Port
 	}
-	if cur != nil && cur.Status == store.SiteOK && sameSite(*cur, store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy,
-		Stack: c.Project, Service: sp.Service, ContainerPort: port, OpenFirewall: sp.OpenFirewall()}) {
+	if cur != nil && (cur.Status == store.SiteOK || cur.Status == store.SiteProxyManual) && sameSite(*cur, store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy,
+		Stack: c.Project, Service: sp.Service, ContainerPort: port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID, Cert: sp.CertMode(), CertKey: sp.CertKey}) {
 		jc.Log("deploy.drySiteSame", sp.Domains[0])
 		return problems
 	}
@@ -375,8 +428,18 @@ func (s *Server) dryRunHostSite(ctx context.Context, jc *jobs.Context, user stri
 		} `json:"cert"`
 		NginxConfD *bool    `json:"nginx_conf_d"`
 		Conflicts  []string `json:"conflicts"`
+		CertFile   *struct {
+			Path     string `json:"path"`
+			DaysLeft int    `json:"days_left"`
+			Error    string `json:"error"`
+		} `json:"cert_file"`
+		HAProxyForeign string `json:"haproxy_foreign"`
 	}
 	q := "/api/sites/dry?domains=" + url.QueryEscape(strings.Join(sp.Domains, ",")) + "&proxy=" + url.QueryEscape(proxy)
+	mode := sp.CertMode()
+	if strings.HasPrefix(mode, "/") {
+		q += "&cert=" + url.QueryEscape(mode) + "&cert_key=" + url.QueryEscape(sp.CertKey)
+	}
 	code, err := s.hostCall(ctx, user, t.ID, "GET", q, nil, &dry)
 	switch {
 	case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:
@@ -386,9 +449,29 @@ func (s *Server) dryRunHostSite(ctx context.Context, jc *jobs.Context, user stri
 		jc.Log("deploy.drySiteWarn", msgs.Localize(jc.Lang(), err))
 		return problems
 	}
+	if dry.HAProxyForeign != "" {
+		jc.Log("deploy.drySiteProxyManual", msgs.T(jc.Lang(), "deploy.siteManualHAProxy", dry.HAProxyForeign))
+	}
 	switch {
 	case proxy == site.ProxyCaddy:
 		jc.Log("deploy.drySiteCertCaddy")
+	case strings.HasPrefix(mode, "/"):
+		switch {
+		case dry.CertFile == nil:
+			jc.Log("deploy.drySiteOldHost", t.Name)
+		case dry.CertFile.Error != "":
+			problems++
+			jc.Log("deploy.drySiteCertFileBad", dry.CertFile.Error)
+		default:
+			jc.Log("deploy.drySiteCertFile", dry.CertFile.Path, dry.CertFile.DaysLeft)
+		}
+	case mode == "manual":
+		if dry.Cert != nil && dry.Cert.DaysLeft > 0 {
+			jc.Log("deploy.drySiteCertManual", dry.Cert.Lineage, dry.Cert.DaysLeft)
+		} else {
+			problems++
+			jc.Log("deploy.drySiteCertManualMissing", strings.Join(sp.Domains, ", "))
+		}
 	case dry.Cert != nil && dry.Cert.DaysLeft > 20:
 		jc.Log("deploy.drySiteCertReuse", dry.Cert.Lineage, dry.Cert.DaysLeft)
 	default:

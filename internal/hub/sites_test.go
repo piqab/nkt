@@ -626,3 +626,56 @@ func TestSiteSetupInstallsCertbot(t *testing.T) {
 		t.Fatalf("certbot install path: %+v\n%s", j, log)
 	}
 }
+
+// Свой frontend HAProxy на 443 — прокси настроен вручную: выкладка не
+// настраивает сайт и certbot не зовёт, сайт — «прокси вручную», конфиг
+// HAProxy не тронут; пустой cert сайта выкладки — то же, что manual.
+func TestDeployComposeSiteProxyManual(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git не установлен")
+	}
+	deploy.AllowLocalReposForTest(true)
+	defer deploy.AllowLocalReposForTest(false)
+	srv, db, root := localFixtureHub(t)
+	ctx := context.Background()
+	hcfg := filepath.Join(root, "etc", "haproxy", "haproxy.cfg")
+	mine := "global\n    daemon\n\nfrontend mine\n    bind :443 ssl crt /etc/haproxy/certs/\n    default_backend app\n\nbackend app\n    server a 127.0.0.1:9000\n"
+	_ = os.MkdirAll(filepath.Dir(hcfg), 0o755)
+	if err := os.WriteFile(hcfg, []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repo := t.TempDir()
+	testGit(t, repo, "init", "-q", "-b", "main")
+	_ = os.WriteFile(filepath.Join(repo, "compose.yaml"), []byte("services:\n  web:\n    image: nginx\n"), 0o644)
+	testGit(t, repo, "add", ".")
+	testGit(t, repo, "commit", "-q", "-m", "one")
+	content := "repo: " + repo + "\nref: main\naction: compose\ncompose:\n  file: compose.yaml\n  project: rgstr\n  hosts: [localhost]\n" +
+		"  site:\n    domains: [shop.example.com]\n    service: web\n    port: 80\n    proxy: haproxy\n"
+	secret, _ := secretbox.Encrypt(srv.hub.key, []byte("s"))
+	pid, err := db.CreatePipeline(ctx, store.Pipeline{Name: "rgstr", Content: content, HookID: "hook-site-2", HookSecret: secret, Author: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pl, _ := db.PipelineByID(ctx, pid)
+	d, err := srv.startDeployment(ctx, pl, store.Deployment{Trigger: "manual", Author: "admin"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	got := waitDeployment(t, wctx, db, d.ID)
+	log := jobLogText(t, ctx, db, d.JobID)
+	if got.Status != store.DeploySucceeded || strings.Contains(log, "certbot certonly") {
+		t.Fatalf("deployment: %+v\n%s", got, log)
+	}
+	sites, _ := db.ListSites(ctx)
+	if len(sites) != 1 || sites[0].Status != store.SiteProxyManual || !strings.Contains(sites[0].Error, "443") || sites[0].Cert != "manual" {
+		t.Fatalf("site: %+v\n%s", sites, log)
+	}
+	if b, _ := os.ReadFile(hcfg); string(b) != mine {
+		t.Fatalf("haproxy.cfg тронут:\n%s", b)
+	}
+	if siteCert(store.Site{PipelineID: 1}) != "manual" || siteCert(store.Site{}) != "" {
+		t.Error("siteCert: пустой у сайта выкладки — manual")
+	}
+}
