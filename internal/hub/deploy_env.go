@@ -51,6 +51,23 @@ func envVars(text string) map[string]string {
 	return out
 }
 
+// envValues — переменные .env со значениями, как их видит compose:
+// кавычки вокруг значения снимаются.
+func envValues(env *string) map[string]string {
+	if env == nil {
+		return nil
+	}
+	out := envVars(*env)
+	for k, v := range out {
+		v = strings.TrimSpace(v)
+		if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+			v = v[1 : len(v)-1]
+		}
+		out[k] = v
+	}
+	return out
+}
+
 // envNameDiff — какие имена появились, пропали и чьи значения сменились.
 func envNameDiff(old, cur map[string]string) (added, removed, changed []string) {
 	for k, v := range cur {

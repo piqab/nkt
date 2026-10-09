@@ -116,8 +116,14 @@ func TestProbeHTTPSAndTLS(t *testing.T) {
 	}
 
 	tlsOnly := Probe(context.Background(), Request{Address: host, Port: port, Kind: KindTLS})
-	if !tlsOnly.OK || tlsOnly.TLS == nil || tlsOnly.TLS.NotAfter == "" {
+	// Без «не проверять» доверие проверяется и по голому адресу: не
+	// прошло — сертификат виден, причина названа, проверенным не считается.
+	if !tlsOnly.OK || tlsOnly.TLS == nil || tlsOnly.TLS.NotAfter == "" || tlsOnly.TLS.Verified || tlsOnly.TLS.Untrusted == "" || tlsOnly.Error == "" {
 		t.Errorf("TLS-рукопожатие: ok=%v err=%q tls=%+v", tlsOnly.OK, tlsOnly.Error, tlsOnly.TLS)
+	}
+	tlsLoose := Probe(context.Background(), Request{Address: host, Port: port, Kind: KindTLS, Insecure: true})
+	if !tlsLoose.OK || tlsLoose.TLS == nil || tlsLoose.TLS.Verified || tlsLoose.TLS.Untrusted != "" || tlsLoose.TLS.Version == "" {
+		t.Errorf("TLS с Insecure: ok=%v err=%q tls=%+v", tlsLoose.OK, tlsLoose.Error, tlsLoose.TLS)
 	}
 	if !strings.HasPrefix(tlsOnly.Command, "openssl s_client") {
 		t.Errorf("команда = %s", tlsOnly.Command)

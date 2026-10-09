@@ -182,7 +182,9 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	}
 	// Ключ registry конвейера — хосту на время pull (закрытый образ без
 	// docker login на хосте).
-	regs := registryList(s.registriesFor(pl, spec, deploy.ComposeImages(files[main])))
+	// Образ бывает задан переменной (${IMAGE:-…}) — имена раскрываются
+	// значениями .env конвейера.
+	regs := registryList(s.registriesFor(pl, spec, deploy.ComposeImagesEnv(files[main], envValues(env))))
 	if len(regs) > 0 && c.PullImages() {
 		hosts := make([]string, len(regs))
 		for i, k := range regs {

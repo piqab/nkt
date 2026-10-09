@@ -356,6 +356,17 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	wait := time.Duration(p.WaitTimeout) * time.Second
 	jc.StepKey(1, 3, "compose.stepPull", p.Project)
+	// Имя образа, которое движок не примет (http:// в адресе, пустая
+	// переменная перед «/»), — понятной ошибкой до pull.
+	svcs := composeServices(ctx, c, p.Engine, composeArgs(c, p.Project, p.File))
+	for _, sv := range svcs {
+		if sv.Image == "" {
+			continue
+		}
+		if prob := deploy.ImageRefProblem(sv.Image); prob != "" {
+			return msgs.Errorf("compose.image."+prob, sv.Name, sv.Image)
+		}
+	}
 	if p.Pull {
 		if authDir != "" {
 			d.installRegistryCAs(ctx, jc, p.Engine, authDir, p.CAHosts)
@@ -384,6 +395,7 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		if err != nil {
 			return composePullCause(lastOutput, err)
 		}
+		logPullSkipped(jc, lastOutput, svcs)
 	}
 	jc.StepKey(2, 3, "compose.stepUp", p.Project)
 	// Переименованный стек: старый держит те же порты и имена контейнеров —
@@ -537,10 +549,28 @@ func composePullCause(out string, pullErr error) error {
 		return msgs.Errorf("compose.pullRateLimit")
 	case strings.Contains(low, "pull access denied") || strings.Contains(low, "unauthorized") || strings.Contains(low, "denied: "):
 		return msgs.Errorf("compose.pullDenied")
+	case strings.Contains(low, "invalid reference format"):
+		return msgs.Errorf("compose.pullBadRef")
 	case strings.Contains(low, "manifest unknown") || strings.Contains(low, "not found: manifest") || strings.Contains(low, ": not found"):
 		return msgs.Errorf("compose.pullNotFound")
 	}
 	return pullErr
+}
+
+// logPullSkipped — compose pull что-то пропустил («Skipped»): почему,
+// словами — образ с pull_policy missing/never остаётся прежним.
+func logPullSkipped(jc *jobs.Context, out string, svcs []composeService) {
+	if !strings.Contains(strings.ToLower(out), "skipped") {
+		return
+	}
+	for _, sv := range svcs {
+		switch {
+		case sv.Image != "" && pullKeepsLocal(sv.PullPolicy):
+			jc.Log("compose.pullSkippedLocal", sv.Name, sv.Image, sv.PullPolicy)
+		case sv.PullPolicy == "build":
+			jc.Log("compose.pullSkippedBuild", sv.Name)
+		}
+	}
 }
 
 // oneShotsOnly — разовые сервисы стека, завершившиеся с кодом 0, если

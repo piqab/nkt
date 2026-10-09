@@ -8,6 +8,28 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.3 — 2026-10-09
+
+- **Deployment: an image from `compose.images` is always pulled.** Besides
+  dropping `build:`, the hub sets `pull_policy: always` for a service with
+  an image from the pipeline description — before, `pull_policy: missing`
+  from someone else's compose file kept the old `latest` on the host
+  ("Skipped").
+- **Registry key for an image from a variable.** `image: ${APP_IMAGE:-…}` is
+  expanded with the pipeline `.env`, and the key from "Secrets" is picked by
+  the real address — before, the hub saw only the `${…}` text and passed no
+  key to the host.
+- **Clear image name errors:** `http(s)://` in the address or an empty
+  variable before `/` — in the description, the dry run and on the host
+  before the pull, naming the service with a hint.
+- **The dry run** warns: `pull_policy` other than `always` with the image
+  already on the host — the old one will be deployed; `build:` from a
+  directory that is not on the host; a registry key that matches no image of
+  the stack. The deployment log explains "Skipped" from `compose pull`.
+- **Port check (TLS to a bare address)** no longer turns off certificate
+  verification by itself: if it fails, the certificate is shown with the
+  reason; the service's answer needs “do not verify the certificate”.
+
 ## v1.13.2 — 2026-10-09
 
 - Security: built with Go 1.26.9 and golang.org/x/net 0.60.0 — fixes in
