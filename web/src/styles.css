@@ -1213,3 +1213,10 @@ span.vm-toggle {
     fill: var(--text-primary);
   }
 }
+
+/* Столбец состояния в списке хостов: значок по центру, по 4 px с боков. */
+.ant-table-cell.host-status-cell {
+  text-align: center;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+}

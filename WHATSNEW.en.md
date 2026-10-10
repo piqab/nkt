@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.9 — 2026-10-10
+
+- Host list: the status icon in the first column is centred with equal
+  space on both sides; the column is narrower, the freed space goes to the
+  name.
+
 ## v1.13.8 — 2026-10-10
 
 - The tab icon shows in Safari too: besides the SVG — `favicon.ico` (16,
