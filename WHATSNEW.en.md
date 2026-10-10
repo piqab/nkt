@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.7 — 2026-10-10
+
+- App: the “No nkt on the machine” dialog is fully translated — the English
+  interface no longer shows Russian text in it (the app build in CI passes
+  its tests again).
+
 ## v1.13.6 — 2026-10-10
 
 - **A machine's screen in the app takes the whole screen.** Keys, zoom and

@@ -91,14 +91,16 @@ fun HostListScreen(
             onDismissRequest = { noNkt = null },
             title = { Text(t("На машине нет nkt", "No nkt on the machine")) },
             text = {
-                Text(
-                    t(
-                        "На ${host.name} nkt не установлен — разделы и терминал недоступны. " +
-                            if (screen != null) "Экран открывается через её хост." else "Экран — когда машина запущена.",
-                        "nkt is not installed on ${host.name} — sections and the terminal are unavailable. " +
-                            if (screen != null) "The screen opens through its host." else "The screen — once the machine is running.",
-                    ),
+                val first = t(
+                    "На ${host.name} nkt не установлен — разделы и терминал недоступны.",
+                    "nkt is not installed on ${host.name} — sections and the terminal are unavailable.",
                 )
+                val second = if (screen != null) {
+                    t("Экран открывается через её хост.", "The screen opens through its host.")
+                } else {
+                    t("Экран — когда машина запущена.", "The screen — once the machine is running.")
+                }
+                Text("$first $second")
             },
             confirmButton = {
                 if (screen != null) {
