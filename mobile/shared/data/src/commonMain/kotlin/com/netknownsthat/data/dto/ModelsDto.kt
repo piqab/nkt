@@ -68,6 +68,9 @@ data class HubHostDto(
     /** The hub's own version — a host behind it is offered «Обновить». */
     @SerialName("hub_version") val hubVersion: String = "",
     @SerialName("os_info") val osInfo: OsInfoDto? = null,
+    @SerialName("parent_id") val parentId: Long = 0,
+    @SerialName("vm_state") val vmState: String = "",
+    @SerialName("vm_graphics") val vmGraphics: List<String> = emptyList(),
 ) {
     /** Version the host actually runs (falls back to what was installed). */
     val shownVersion: String get() = runningVersion?.ifBlank { null } ?: nktVersion

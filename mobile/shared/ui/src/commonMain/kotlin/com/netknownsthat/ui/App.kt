@@ -290,6 +290,7 @@ private fun Routes(nav: NavHostController, app: AppViewModel, start: Any, openHo
                 viewModel = koinViewModel(),
                 onOpenHost = { nav.navigate(HostRoute(it.id, it.name)) },
                 onOpenJob = openHubJob,
+                onOpenScreen = { vm, parent, proto -> nav.navigate(VmScreenRoute(vm.parentId, parent, "vm", vm.name, proto)) },
             )
         }
         composable<EventsRoute> {

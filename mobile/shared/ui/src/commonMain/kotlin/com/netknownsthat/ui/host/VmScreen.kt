@@ -22,6 +22,13 @@ import org.koin.compose.koinInject
 /** Names that go into the page address as they are (libvirt, LXD). */
 private val SCREEN_NAME = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
+/** The protocol to open a libvirt machine's screen with; null — none. */
+fun screenProto(graphics: List<String>): String? = when {
+    graphics.isEmpty() || "vnc" in graphics -> "vnc"
+    "spice" in graphics -> "spice"
+    else -> null
+}
+
 /** Whether [name] can be opened on the screen page at all. */
 fun screenNameOk(name: String) = SCREEN_NAME.matches(name)
 

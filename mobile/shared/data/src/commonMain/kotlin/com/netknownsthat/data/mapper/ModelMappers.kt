@@ -1017,6 +1017,9 @@ fun HubHostDto.toDomain(): HubHost = HubHost(
     installActive = installActive,
     hubVersion = hubVersion,
     osInfo = osInfo?.toDomain(),
+    parentId = parentId,
+    vmState = vmState,
+    vmGraphics = vmGraphics,
 )
 
 fun HubVersionInfoDto.toDomain(): HubVersionInfo = HubVersionInfo(

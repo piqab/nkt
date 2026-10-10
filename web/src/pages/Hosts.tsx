@@ -284,9 +284,10 @@ function TunnelChannelBadge({ host }: { host: HubHost }) {
  * запасом на все пять уровней с трёхзначными числами. */
 const HOST_COL_WIDTH: Record<string, string> = {
   status: '2rem',
-  name: '20.5rem',
+  // + значок ОС перед именем (14 px и 3 px зазора).
+  name: '21.75rem',
   addr: '4.5rem',
-  problems: '15.75rem',
+  problems: '14.5rem',
   banned: '3rem',
   sudo: '4.25rem',
   channel: '6.25rem',
@@ -992,6 +993,14 @@ export default function Hosts({
     }
   }
 
+  /** Экран машины в отдельном окне — через её хост. */
+  function openVMScreen(h: HubHost) {
+    const g = h.vm_graphics ?? []
+    const proto = g.includes('vnc') || g.length === 0 ? 'vnc' : 'spice'
+    const q = new URLSearchParams({ host: String(h.parent_id), kind: 'vm', name: h.name, proto, lang: i18n.language })
+    window.open(`/screen/popout?${q}`, `nkt-screen-${h.parent_id}-${h.name}`, 'width=1280,height=860')
+  }
+
   function renderActions(h: HubHost) {
     // "localhost" (the hub's own machine, see internal/hub/handlers.go's
     // localHostEntry) has no SSH install to manage — it's just a link into
@@ -1029,6 +1038,9 @@ export default function Hosts({
           <>
             <RowAction action="shutdown" label={t('hosts.vmShutdown')} danger loading={vmActing === h.id} disabled={busy} onClick={() => void vmDomainAction(h, 'shutdown')} />
             <RowAction action="destroy" label={t('hosts.vmDestroy')} danger disabled={busy} onClick={() => void vmDomainAction(h, 'destroy')} />
+            {/* Экран — через хост машины (virsh на нём): работает и без
+                nkt внутри, у Windows-машины это единственный вход. */}
+            <RowAction action="screen" label={t('screen.action')} onClick={() => openVMScreen(h)} />
           </>
         ) : null}
         {h.status === 'online' && (
@@ -1163,8 +1175,8 @@ export default function Hosts({
               >
                 <div className="row spread">
                   <span className="small">
+                    <OsIcon os={vm.os_info} gap={3} />
                     <strong>
-                      <OsIcon os={vm.os_info} />
                       <Sensitive>{vm.name}</Sensitive>
                     </strong>{' '}
                     {isAddrUnknown(vm) ? (
@@ -1218,10 +1230,14 @@ export default function Hosts({
       // сдвигало остальные; целиком оно в подсказке.
       render: (_, h) => (
         <div className="row row-nowrap" style={{ gap: '0.5rem' }}>
-          <strong className="host-name" title={h.name}>
-            <OsIcon os={h.os_info} />
-            <Sensitive>{h.name}</Sensitive>
-          </strong>
+          {/* Значок — вне поля имени: у того ширина в 10 знаков, и
+              значок внутри съедал бы их. */}
+          <span className="row row-nowrap" style={{ gap: 0, alignItems: 'center' }}>
+            <OsIcon os={h.os_info} gap={3} />
+            <strong className="host-name" title={h.name}>
+              <Sensitive>{h.name}</Sensitive>
+            </strong>
+          </span>
           {renderVMToggle(h)}
           {renderActions(h)}
         </div>

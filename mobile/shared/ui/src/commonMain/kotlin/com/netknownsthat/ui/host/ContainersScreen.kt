@@ -296,12 +296,6 @@ private fun ActionRow(
 
 private val COMPACT_BUTTON = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
 
-/** The protocol to open a libvirt machine's screen with; null — none. */
-private fun screenProto(graphics: List<String>): String? = when {
-    graphics.isEmpty() || "vnc" in graphics -> "vnc"
-    "spice" in graphics -> "spice"
-    else -> null
-}
 
 /** Docker/LXD/libvirt spell "running" differently ("running", "Running"). */
 private fun running(state: String) = state.equals("running", ignoreCase = true)

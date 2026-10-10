@@ -28,14 +28,14 @@ export function osGlyph(os?: OSInfo | null): OsGlyph | null {
 
 /** Значок ОС перед именем хоста, машины или контейнера; подсказка — полное
  * имя и откуда оно известно. Догадка — полупрозрачный значок с «?». */
-export function OsIcon({ os, size = 14 }: { os?: OSInfo | null; size?: number }) {
+export function OsIcon({ os, size = 14, gap = '0.35em' }: { os?: OSInfo | null; size?: number; gap?: string | number }) {
   const { t } = useTranslation()
   const glyph = osGlyph(os)
   const guess = os?.source === 'guess'
   const name = os?.name || glyph?.title || t('os.unknown')
   const source = os?.source ? t(`os.source.${os.source}`, { defaultValue: os.source }) : ''
   const tip = guess ? t('os.guessTip', { name }) : source ? `${name} · ${source}` : name
-  const style = { width: size, height: size, flex: 'none', verticalAlign: '-0.15em', marginRight: '0.35em' } as const
+  const style = { width: size, height: size, flex: 'none', verticalAlign: '-0.15em', marginRight: gap } as const
   return (
     <Tooltip title={tip}>
       <span className="os-icon-wrap" style={{ position: 'relative', display: 'inline-flex' }} aria-label={tip} role="img">

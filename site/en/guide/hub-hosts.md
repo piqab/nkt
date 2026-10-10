@@ -138,7 +138,10 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   known one, a host never polled shows “?”. The same icon is in the opened
   host's header, host pickers, monitoring, alerts, fail2ban and hub jobs,
   and machines and containers inside a host show their own OS (see
-  [Containers and VMs](/en/guide/containers)).
+  [Containers and VMs](/en/guide/containers)). A machine without its own nkt
+  (Windows) takes its OS from its host's machine list. A running machine
+  under "+" has a **"Screen"** button: the screen window opens through its
+  host, no nkt inside the machine is needed.
 - **Address** (before "nkt") — `user@address:port`, with only the first
   two or three characters visible, so neither the user nor the address can
   be read on screen; in full in the tooltip, and the icon next to it
