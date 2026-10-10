@@ -283,9 +283,11 @@ function TunnelChannelBadge({ host }: { host: HubHost }) {
 /** Ширины колонок списка хостов (общие для всех групп). «Проблемы» — с
  * запасом на все пять уровней с трёхзначными числами. */
 const HOST_COL_WIDTH: Record<string, string> = {
-  status: '2rem',
-  // + значок ОС перед именем (14 px и 3 px зазора).
-  name: '21.75rem',
+  // Значок состояния (16 px) и по 4 px с каждой стороны.
+  status: '1.5rem',
+  // + значок ОС перед именем (14 px и 3 px зазора) и 0.5rem от столбца
+  // состояния.
+  name: '22.25rem',
   addr: '4.5rem',
   problems: '14.5rem',
   banned: '3rem',
@@ -1217,8 +1219,9 @@ export default function Hosts({
       // ошибки остаётся в подсказке.
       title: '',
       key: 'status',
-      width: '2rem',
-      className: 'nowrap',
+      width: '1.5rem',
+      // По центру: отступы слева и справа от значка равны.
+      className: 'nowrap host-status-cell',
       render: (_, h) => <HostStatusIcon host={h} onRecheck={() => recheckHost(h)} />,
     },
     {
