@@ -6,6 +6,8 @@ export interface InactiveSummaryProps<T> {
   items: T[]
   getKey: (item: T) => string
   getLabel: (item: T) => string
+  /** Значок перед именем (ОС машины или контейнера). */
+  getIcon?: (item: T) => ReactNode
   getTooltip: (item: T) => ReactNode
   onRescan: () => void
   rescanning: boolean
@@ -38,6 +40,7 @@ export function InactiveSummary<T>({
   items,
   getKey,
   getLabel,
+  getIcon,
   getTooltip,
   onRescan,
   rescanning,
@@ -59,6 +62,7 @@ export function InactiveSummary<T>({
               style={{ cursor: clickable ? 'pointer' : 'default' }}
               onClick={clickable ? () => onItemClick!(item) : undefined}
             >
+              {getIcon?.(item)}
               {getLabel(item)}
             </Tag>
           </Tooltip>

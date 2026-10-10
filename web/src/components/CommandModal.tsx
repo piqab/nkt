@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Modal } from './ui'
 import { useTranslation } from 'react-i18next'
 import { usePty, wsURL } from '../hooks/usePty'
@@ -15,6 +15,7 @@ import { JobFirst } from './useJobLauncher'
  */
 function CommandLive({
   title,
+  titleNode,
   description,
   wsPath,
   onClose,
@@ -24,6 +25,8 @@ function CommandLive({
   sendOnConnect,
 }: {
   title: string
+  /** Заголовок с разметкой (значок ОС перед именем); title — текстом. */
+  titleNode?: ReactNode
   description?: string
   wsPath: string
   onClose: () => void
@@ -63,7 +66,7 @@ function CommandLive({
   }
 
   return (
-    <Modal title={title} onClose={handleClose} maskClosable={false} width={860} sizeKey="command">
+    <Modal title={titleNode ?? title} onClose={handleClose} maskClosable={false} width={860} sizeKey="command">
       {description && <p className="small muted">{description}</p>}
       {extra}
       {status === 'error' && <Banner kind="error">{t('commandModal.connectError')}</Banner>}
@@ -94,5 +97,5 @@ type CommandModalProps = Parameters<typeof CommandLive>[0] & {
 
 export default function CommandModal({ asJob, ...props }: CommandModalProps) {
   if (!asJob) return <CommandLive {...props} />
-  return <JobFirst path={props.wsPath} title={props.title} onClose={props.onClose} onDone={props.onFinished} live={() => <CommandLive {...props} />} />
+  return <JobFirst path={props.wsPath} title={props.title} titleNode={props.titleNode} onClose={props.onClose} onDone={props.onFinished} live={() => <CommandLive {...props} />} />
 }

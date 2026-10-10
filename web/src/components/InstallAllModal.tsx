@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsIcon } from './OsIcon'
 import { Button, Checkbox, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, LOCAL_HOST_ID, useApi } from '../api'
@@ -89,6 +90,7 @@ export function InstallAllModal({ preselect, onClose }: { preselect?: number[]; 
                     onChange={(e) => setPicked(e.target.checked ? [...picked, h.id] : picked.filter((x) => x !== h.id))}
                   />
                   <strong>
+                    <OsIcon os={h.os_info} />
                     <Sensitive>{h.name}</Sensitive>
                   </strong>
                   {h.group && <Tag>{h.group}</Tag>}

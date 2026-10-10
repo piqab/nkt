@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { OsIcon } from '../components/OsIcon'
 import { Sensitive, blurText } from '../privacy'
 import { Link } from 'react-router-dom'
 import { FindingActions } from '../components/FindingActions'
@@ -127,6 +128,7 @@ export default function OverviewPage({ me }: { me: Me }) {
       <div className="page-head spread">
         <div>
           <h1>
+            <OsIcon os={data.host.os_info} size={22} />
             <Sensitive>{data.host.hostname}</Sensitive>
             <TitleHelp>{t('overview.pageHint')}</TitleHelp>
           </h1>

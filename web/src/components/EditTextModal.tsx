@@ -26,7 +26,7 @@ export function EditTextModal({
   serverDiff,
   blocksEndpoint,
 }: {
-  title: string
+  title: ReactNode
   /** Текст до правки — с ним сравнивается черновик. Для нового — ''. */
   saved: string
   draft: string

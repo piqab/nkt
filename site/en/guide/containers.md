@@ -20,6 +20,27 @@ related ones included: after deleting a machine with its disks, the disk
 file list too.
 :::
 
+::: info OS icon
+Before the name of a container, instance or machine is the icon of its OS
+(Ubuntu, Debian, Alpine, Windows, Fedora, RHEL and relatives…; other Linux —
+a penguin, unknown — “?”); the tooltip gives the full name and where it comes
+from:
+
+- **Docker and Podman container** — `/etc/os-release` of the running
+  container (one `exec` per container, remembered by container ID); with no
+  file or no `cat` inside (scratch, distroless) — the image's Linux;
+- **LXD instance** — `image.os` / `image.release` of its configuration (for a
+  Windows machine installed from an ISO set them yourself:
+  `lxc config set <name> image.os=Windows`);
+- **libvirt machine** — the QEMU guest agent (`guest-get-osinfo`, for a
+  running machine, every 10 minutes), otherwise the libosinfo tag in the XML
+  (set by virt-install and virt-manager), otherwise a guess from Hyper-V
+  flags in the XML — a semi-transparent Windows icon with “?”.
+
+A Windows guest has no text console — only “Screen” (VNC or SPICE). The icon
+is also in window titles: console, logs, “Inspect”, screen, editing.
+:::
+
 ## Docker
 
 ![Docker containers](/screens/en/containers.png)

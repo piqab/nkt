@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { OsIconOf } from './OsIcon'
 import { Input, Select, Space, Tag, Tooltip } from 'antd'
 import { CheckCircleFilled, CloseCircleFilled, ExclamationCircleFilled, MinusCircleFilled, RightOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -169,7 +170,10 @@ export function MonHostsBlock({
     <div key={h.id} className={`mon-host-row${h.has_data ? ' clickable' : ''}`} onClick={() => h.has_data && onOpen(h)}>
       <span className="mon-col-status">{status(h)}</span>
       <span className="mon-col-name">
-        <strong><Sensitive>{h.name}</Sensitive></strong>
+        <strong>
+          <OsIconOf kind="host" hostID={h.id} name={h.name} />
+          <Sensitive>{h.name}</Sensitive>
+        </strong>
         <K8sTags cluster={h.k8s_cluster} role={h.k8s_role} node={h.k8s_node && h.k8s_node !== h.name ? h.k8s_node : undefined} />
       </span>
       <span className="mon-col-bar">

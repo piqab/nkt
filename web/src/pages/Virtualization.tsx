@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { OsIcon, OsTitle } from '../components/OsIcon'
+import { rememberOS } from '../osRegistry'
 import { Button, Checkbox, Form, Input, InputNumber, Segmented, type TableColumnsType } from 'antd'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -78,7 +80,10 @@ function vmColumns(
       key: 'name',
       render: (_, vm) => (
         <>
-          <strong>{vm.name}</strong>
+          <strong>
+            <OsIcon os={vm.os_info} />
+            {vm.name}
+          </strong>
           <div className="small muted">{vm.uuid || '—'}</div>
         </>
       ),
@@ -197,7 +202,8 @@ function vmColumns(
           <RowAction action="backup" label={t('backups.action')} onClick={() => openBackup(vm.name)} />
           {canControl && vmPowerState(vm.state) === 'running' && (
             <>
-              <RowAction action="console" label={t('console.action')} onClick={() => openConsole(vm.name)} />
+              {/* У Windows текстовой консоли нет — только экран. */}
+              {vm.os_info?.id !== 'windows' && <RowAction action="console" label={t('console.action')} onClick={() => openConsole(vm.name)} />}
               <RowAction action="screen" label={t('vnc.action')} onClick={() => openScreen(vm.name)} />
             </>
           )}
@@ -224,6 +230,7 @@ function vmColumns(
 export default function Virtualization({ me }: { me: Me }) {
   const { t } = useTranslation()
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
+  useEffect(() => rememberOS('vm', vms.data?.vms), [vms.data])
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [creating, setCreating] = useState<{ name: string; initialContent?: string } | null>(null)
@@ -669,7 +676,7 @@ function VMEditor({
   // каталогом образов, и после нажатия карандаша казалось, что ничего не
   // открылось.
   return (
-    <Modal title={t(isNew ? 'virt.newVmName' : 'virt.editVmName', { name })} onClose={onClose} width={960} maskClosable={false} sizeKey="edit">
+    <Modal title={isNew ? t('virt.newVmName', { name }) : <OsTitle tKey="virt.editVmName" kind="vm" name={name} />} onClose={onClose} width={960} maskClosable={false} sizeKey="edit">
       <div className="small muted mono" style={{ marginBottom: '0.5rem' }}>
         {path}
       </div>
@@ -733,7 +740,7 @@ function VMEditor({
             </>
           )}
           {preview !== null && (
-            <Modal title={t('virt.reviewChanges', { name })} onClose={() => setPreview(null)} width={900} maskClosable={false}>
+            <Modal title={<OsTitle tKey="virt.reviewChanges" kind="vm" name={name} />} onClose={() => setPreview(null)} width={900} maskClosable={false}>
               <div className="small muted">{apply ? t('virt.reviewChangesApply') : t('virt.reviewChangesNoApply')}</div>
               <DiffView text={preview} />
               <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>

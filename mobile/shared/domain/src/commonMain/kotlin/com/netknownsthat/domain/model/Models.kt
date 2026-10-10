@@ -54,6 +54,8 @@ data class HubHost(
     val installActive: Boolean = false,
     /** The hub's own version — a host behind it is offered «Обновить». */
     val hubVersion: String = "",
+    /** ОС хоста по опросу хаба — значок перед именем. */
+    val osInfo: OsInfo? = null,
 ) {
     /** Version the host actually runs (falls back to what was installed). */
     val shownVersion: String get() = runningVersion?.ifBlank { null } ?: nktVersion

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { osLabel } from './OsIcon'
 import { Button, Checkbox, Input, Select, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -211,7 +212,8 @@ function InstallModal({ edge, onClose, onStarted }: { edge?: EdgeStatus; onClose
             const h = list.find((x) => x.id === id)
             if (h && hostName(h.addr)) setDomain(hostName(h.addr))
           }}
-          options={list.map((h) => ({ value: h.id, label: `${h.name} (${h.addr})` }))}
+          optionFilterProp="search"
+          options={list.map((h) => ({ value: h.id, label: osLabel(h.os_info, `${h.name} (${h.addr})`), search: `${h.name} (${h.addr})` }))}
         />
         <Space.Compact size="small">
           <Input

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Button, Input, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined, EyeOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -86,7 +87,7 @@ export function ContainerInspectModal({ name, admin, onClose }: { name: string; 
     )
 
   return (
-    <Modal title={t('docker.inspectTitle', { name })} onClose={onClose} width={960} sizeKey="container-inspect">
+    <Modal title={<OsTitle tKey="docker.inspectTitle" kind="docker" name={name} />} onClose={onClose} width={960} sizeKey="container-inspect">
       <ErrorNote error={data.error} />
       {!d ? (
         <Loading />

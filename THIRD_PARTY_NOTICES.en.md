@@ -84,3 +84,19 @@ texts sit next to their source in the module cache (`go env GOMODCACHE`).
 | @novnc/novnc | 1.7.0 | MPL-2.0, see above |
 
 The full package list with versions is in `web/package-lock.json`.
+
+## Operating system icons
+
+### Simple Icons — CC0-1.0
+
+- **What it is:** outlines of OS brand icons (Ubuntu, Debian, Alpine,
+  Fedora, Red Hat, CentOS, Rocky, AlmaLinux, openSUSE, Arch, NixOS, Linux,
+  Linux Mint, FreeBSD, Gentoo, Kali, Manjaro, Pop!_OS, Raspberry Pi) — the OS
+  icon before the name of a host, machine and container.
+- **Location:** `web/src/components/osGlyphs.ts` and
+  `mobile/shared/ui/src/commonMain/kotlin/com/netknownsthat/ui/common/OsGlyphs.kt`
+  — only the paths of the icons used, from the `simple-icons@16.34.0` package.
+- **Source:** <https://simpleicons.org>, <https://github.com/simple-icons/simple-icons>.
+- **License:** CC0-1.0 (public domain). The marks themselves are trademarks of
+  their owners; nkt shows them only to name the OS. The Windows icon is not in
+  the set — in nkt it is a plain shape of four squares.

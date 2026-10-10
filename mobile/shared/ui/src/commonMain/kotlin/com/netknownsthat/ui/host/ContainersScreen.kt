@@ -1,5 +1,7 @@
 package com.netknownsthat.ui.host
 
+import com.netknownsthat.domain.model.OsInfo
+import com.netknownsthat.ui.common.OsIcon
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -119,7 +121,7 @@ fun ContainersScreen(
                 1 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     items(data.podman.containers, key = { it.id }) {
                         SimpleRuntimeCard(
-                            it.name, it.image, it.status,
+                            it.name, it.osInfo, it.image, it.status,
                             containerHealth(it.state), enabled,
                             viewModel.pendingKey == it.name,
                             onConsole = { askUser = ConsoleTarget(ConsoleKind.PODMAN, it.name) }.takeIf { _ -> running(it.state) },
@@ -131,11 +133,13 @@ fun ContainersScreen(
                     items(data.lxd.instances, key = { it.name }) {
                         SimpleRuntimeCard(
                             it.name,
+                            it.osInfo,
                             "${it.type} · ${it.architecture}",
                             it.status + it.ipv4.joinToString("") { ip -> " · $ip" },
                             instanceHealth(it.status), enabled,
                             viewModel.pendingKey == it.name,
-                            onConsole = { onOpenConsole(ConsoleTarget(ConsoleKind.LXD, it.name)) }.takeIf { _ -> running(it.status) },
+                            // У Windows текстовой консоли нет — только экран.
+                            onConsole = { onOpenConsole(ConsoleTarget(ConsoleKind.LXD, it.name)) }.takeIf { _ -> running(it.status) && it.osInfo?.id != "windows" },
                             // An LXD virtual machine shows its screen over SPICE.
                             onScreen = { onOpenScreen("lxd", it.name, "spice") }
                                 .takeIf { _ -> running(it.status) && it.type == "virtual-machine" && screenNameOk(it.name) },
@@ -149,11 +153,12 @@ fun ContainersScreen(
                     items(data.vms.vms, key = { it.name }) {
                         SimpleRuntimeCard(
                             it.name,
+                            it.osInfo,
                             t("${it.vcpus} vCPU · ${it.memoryKb / 1024} МБ", "${it.vcpus} vCPU · ${it.memoryKb / 1024} MB"),
                             it.state,
                             instanceHealth(it.state), enabled,
                             viewModel.pendingKey == it.name,
-                            onConsole = { onOpenConsole(ConsoleTarget(ConsoleKind.VM, it.name)) }.takeIf { _ -> running(it.state) },
+                            onConsole = { onOpenConsole(ConsoleTarget(ConsoleKind.VM, it.name)) }.takeIf { _ -> running(it.state) && it.osInfo?.id != "windows" },
                             // VNC when the machine has it (or nothing is known —
                             // an old host), SPICE otherwise.
                             onScreen = screenProto(it.graphics)?.let { proto -> { onOpenScreen("vm", it.name, proto) } }
@@ -182,6 +187,7 @@ private fun DockerCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 StatusDot(containerHealth(container.state), busy = busy)
+                OsIcon(container.osInfo)
                 Text(
                     text = container.name,
                     style = MaterialTheme.typography.titleSmall,
@@ -229,6 +235,7 @@ private fun DockerCard(
 @Composable
 private fun SimpleRuntimeCard(
     name: String,
+    os: OsInfo?,
     subtitle: String,
     status: String,
     health: com.netknownsthat.ui.status.HealthStatus,
@@ -242,6 +249,7 @@ private fun SimpleRuntimeCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusDot(health, busy = busy)
+                OsIcon(os)
                 Text(name, style = MaterialTheme.typography.titleSmall)
             }
             Text(

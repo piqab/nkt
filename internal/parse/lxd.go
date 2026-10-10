@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/osinfo"
 	"sort"
 	"strings"
 	"time"
@@ -100,6 +101,7 @@ func LXD(ctx context.Context, c collect.Collector) LXDResult {
 			// colouring work without a special case per source.
 			Name: e.Name, Type: e.Type, Status: strings.ToLower(e.Status), Architecture: e.Architecture,
 		}
+		inst.OSInfo = osinfo.FromImageKeys(e.ExpandedConfig["image.os"], e.ExpandedConfig["image.release"], e.ExpandedConfig["image.description"])
 		inst.Autostart = e.ExpandedConfig["boot.autostart"] == "true"
 		inst.LimitCPU = e.ExpandedConfig["limits.cpu"]
 		inst.LimitMemory = e.ExpandedConfig["limits.memory"]

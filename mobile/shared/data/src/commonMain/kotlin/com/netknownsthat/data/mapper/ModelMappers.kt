@@ -1,7 +1,9 @@
 package com.netknownsthat.data.mapper
 
 import com.netknownsthat.domain.model.ActiveJob
+import com.netknownsthat.domain.model.OsInfo
 import com.netknownsthat.data.dto.ActiveJobDto
+import com.netknownsthat.data.dto.OsInfoDto
 import com.netknownsthat.data.dto.AddHostResponseDto
 import com.netknownsthat.data.dto.AddedRuleDto
 import com.netknownsthat.data.dto.AuditEntryDto
@@ -1014,6 +1016,7 @@ fun HubHostDto.toDomain(): HubHost = HubHost(
     k8sRole = k8sRole,
     installActive = installActive,
     hubVersion = hubVersion,
+    osInfo = osInfo?.toDomain(),
 )
 
 fun HubVersionInfoDto.toDomain(): HubVersionInfo = HubVersionInfo(
@@ -1184,6 +1187,8 @@ fun ContainersResponseDto.toDomain(): ContainersResponse = ContainersResponse(
     networks = networks.map { it.toDomain() },
 )
 
+fun OsInfoDto.toDomain(): OsInfo? = if (id.isBlank()) null else OsInfo(id = id, name = name, like = like, source = source)
+
 fun ContainerDto.toDomain(): Container = Container(
     id = id,
     name = name,
@@ -1196,6 +1201,7 @@ fun ContainerDto.toDomain(): Container = Container(
     networks = networks.map { it.toDomain() },
     declared = declared,
     running = running,
+    osInfo = osInfo?.toDomain(),
 )
 
 fun ContainerPortDto.toDomain(): ContainerPort = ContainerPort(
@@ -1232,6 +1238,7 @@ fun PodmanContainerDto.toDomain(): PodmanContainer = PodmanContainer(
     image = image,
     state = state,
     status = status,
+    osInfo = osInfo?.toDomain(),
 )
 
 fun LXDResponseDto.toDomain(): LXDResponse = LXDResponse(
@@ -1244,6 +1251,7 @@ fun LXDInstanceDto.toDomain(): LXDInstance = LXDInstance(
     status = status,
     architecture = architecture,
     ipv4 = ipv4,
+    osInfo = osInfo?.toDomain(),
 )
 
 fun VMsResponseDto.toDomain(): VMsResponse = VMsResponse(
@@ -1259,6 +1267,7 @@ fun VirtualMachineDto.toDomain(): VirtualMachine = VirtualMachine(
     vcpus = vcpus,
     memoryKb = memoryKb,
     graphics = graphics,
+    osInfo = osInfo?.toDomain(),
 )
 
 fun MiscResponseDto.toDomain(): MiscResponse = MiscResponse(

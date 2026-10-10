@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Button, Input } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs } from '../api'
@@ -20,7 +21,7 @@ export function ConsoleModal({ kind, name, onClose, canControl = true }: { kind:
   const [session, setSession] = useState<string | null>(kind === 'docker' || kind === 'podman' ? null : '')
   if (session === null) {
     return (
-      <Modal title={t('console.title', { name })} onClose={onClose} width={560}>
+      <Modal title={<OsTitle tKey="console.title" kind={kind} name={name} />} onClose={onClose} width={560}>
         <p className="small muted">{t('console.userHint')}</p>
         <div className="row" style={{ gap: '0.5rem' }}>
           <Input placeholder={t('console.userPlaceholder')} value={user} onChange={(e) => setUser(e.target.value)} style={{ maxWidth: '16rem' }} onPressEnter={() => setSession(user.trim())} />
@@ -35,6 +36,7 @@ export function ConsoleModal({ kind, name, onClose, canControl = true }: { kind:
     <CommandModal
       key={session}
       title={t('console.title', { name })}
+      titleNode={<OsTitle tKey="console.title" kind={kind} name={name} />}
       description={t(`console.hint.${kind}`)}
       wsPath={`/console/ws${qs({ kind, name, user: session || undefined })}`}
       onClose={onClose}

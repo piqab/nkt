@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { OsIcon, OsIconOf } from '../components/OsIcon'
 import { guardUnload } from '../components/uploadJob'
 import { Sensitive } from '../privacy'
 import { Button, Checkbox, Input, InputNumber, Progress, Select, Tooltip } from 'antd'
@@ -502,7 +503,15 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                     value={r.host_id ?? undefined}
                     placeholder={t('clusters.pickHost')}
                     onChange={(v: number) => update(i, { host_id: v, image_id: '', bridge: '' })}
-                    options={online.map((h) => ({ value: h.id, label: <Sensitive>{h.name + (h.parent_id ? ' (VM)' : '') + (h.addr ? ` — ${h.addr}` : '')}</Sensitive> }))}
+                    options={online.map((h) => ({
+                      value: h.id,
+                      label: (
+                        <>
+                          <OsIcon os={h.os_info} size={12} />
+                          <Sensitive>{h.name + (h.parent_id ? ' (VM)' : '') + (h.addr ? ` — ${h.addr}` : '')}</Sensitive>
+                        </>
+                      ),
+                    }))}
                   />
                 </div>
                 <div style={{ ...cell, minWidth: '11rem' }}>
@@ -599,7 +608,10 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           <div className="row" style={{ gap: '0.6rem' }}>
             {hostIDs.map((id) => (
               <label key={id} style={{ minWidth: '16rem' }}>
-                <span className="small"><Sensitive>{hostName(id)}</Sensitive></span>
+                <span className="small">
+                  <OsIconOf kind="host" hostID={id} />
+                  <Sensitive>{hostName(id)}</Sensitive>
+                </span>
                 <Input size="small" className="sensitive" value={endpoints[id] ?? ''} placeholder={hostAddr(id)} onChange={(e) => setEndpoints({ ...endpoints, [id]: e.target.value })} />
               </label>
             ))}

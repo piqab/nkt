@@ -33,6 +33,17 @@ data class ServiceUnit(
     val actions: List<String> = emptyList(),
 )
 
+/** ОС хоста, машины или контейнера — значок перед именем (os_info API). */
+data class OsInfo(
+    /** os-release ID (ubuntu, debian, alpine…), windows; linux — Linux без подробностей. */
+    val id: String = "",
+    val name: String = "",
+    /** Первый из ID_LIKE — значок родственной ОС, если своего нет. */
+    val like: String = "",
+    /** os-release | agent | libosinfo | image | guess */
+    val source: String = "",
+)
+
 data class ContainersResponse(
     val containers: List<Container> = emptyList(),
     val networks: List<DockerNetwork> = emptyList(),
@@ -51,6 +62,7 @@ data class Container(
     /** Declared in a compose file, as opposed to started by hand. */
     val declared: Boolean = false,
     val running: Boolean = false,
+    val osInfo: OsInfo? = null,
 )
 
 data class ContainerPort(
@@ -87,6 +99,7 @@ data class PodmanContainer(
     val image: String = "",
     val state: String = "",
     val status: String = "",
+    val osInfo: OsInfo? = null,
 )
 
 data class LXDResponse(
@@ -99,6 +112,7 @@ data class LXDInstance(
     val status: String = "",
     val architecture: String = "",
     val ipv4: List<String> = emptyList(),
+    val osInfo: OsInfo? = null,
 )
 
 data class VMsResponse(
@@ -115,6 +129,7 @@ data class VirtualMachine(
     val memoryKb: Long = 0,
     /** The machine's screens: "vnc", "spice"; empty — unknown (an old host). */
     val graphics: List<String> = emptyList(),
+    val osInfo: OsInfo? = null,
 )
 
 /** GET /api/misc — listeners no parsed config accounts for. */

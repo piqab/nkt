@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Button, Segmented } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { VNCModal } from './VNCModal'
@@ -38,7 +39,7 @@ export function VMScreenModal({
 
   if (graphics && g.length === 0) {
     return (
-      <Modal title={t('vnc.title', { name })} onClose={onClose}>
+      <Modal title={<OsTitle tKey="vnc.title" kind="vm" name={name} />} onClose={onClose}>
         <p>{t('screen.noGraphics')}</p>
         <Button type="primary" onClick={onAddVNC}>
           {t('screen.addVNC')}
@@ -49,7 +50,7 @@ export function VMScreenModal({
   if (mode === 'spice') {
     return (
       <SpiceModal
-        title={t('vnc.title', { name })}
+        title={<OsTitle tKey="vnc.title" kind="vm" name={name} />}
         wsPath={`/vms/${encodeURIComponent(name)}/spice/ws`}
         onClose={onClose}
         extra={

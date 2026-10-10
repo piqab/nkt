@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { NAME_MARK, NamedTitle, OsIcon, OsIconOf } from './OsIcon'
 import { Sensitive } from '../privacy'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, Tooltip } from 'antd'
 import { ClusterOutlined, CodeOutlined } from '@ant-design/icons'
@@ -140,7 +141,7 @@ export function NewClusterModal({
   )
 
   return (
-    <Modal title={t('clusters.newTitle', { host: host.name })} onClose={onClose} width={760}>
+    <Modal title={<NamedTitle text={t('clusters.newTitle', { host: NAME_MARK })} name={host.name} icon={<OsIcon os={host.os_info} />} />} onClose={onClose} width={760}>
       <Banner kind="warn">{t('clusters.experimental')}</Banner>
       <p className="small muted">{t('clusters.newBody')}</p>
       <ErrorNote error={error} />
@@ -244,7 +245,7 @@ export function NewClusterModal({
           </div>
         )}
       </div>
-      <p className="small muted">{t('clusters.summary', { machines, flavor, host: host.name })}</p>
+      <p className="small muted"><NamedTitle text={t('clusters.summary', { machines, flavor, host: NAME_MARK })} name={host.name} icon={<OsIcon os={host.os_info} size={12} />} /></p>
       <div className="row" style={{ justifyContent: 'flex-end', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
           <Checkbox checked={prepare} onChange={(e) => setPrepare(e.target.checked)} />
@@ -339,7 +340,8 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
               <Tag>{c.flavor}</Tag>
               <Tag>{t(`clusters.topo.${c.topology}`)}</Tag>
               <span className="small muted">
-                {t('clusters.onHost', { host: c.host_name })} · {formatRelative(c.created_at)}
+                <NamedTitle text={t('clusters.onHost', { host: NAME_MARK })} name={c.host_name} icon={<OsIconOf kind="host" name={c.host_name} size={12} />} /> ·{' '}
+                {formatRelative(c.created_at)}
               </span>
               {c.server_addr && (
                 <span className="small mono muted">

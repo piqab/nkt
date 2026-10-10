@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { OsIcon } from './components/OsIcon'
 import { ActiveJobsIndicator } from './components/ActiveJobsIndicator'
 import { StaleUIBanner } from './components/StaleUIBanner'
 import ruRU from 'antd/locale/ru_RU'
@@ -660,6 +661,7 @@ function Shell({
           sub={
             !isHub ? (
               <>
+                <OsIcon os={overview.data?.host.os_info} size={12} />
                 {overview.data?.host.hostname ?? '…'} · {t('app.mode')} {me.mode}
               </>
             ) : undefined
@@ -798,7 +800,10 @@ function Shell({
         </button>
         <span className="hub-topbar-brand">{t('app.hubBrand')}</span>
         <span className="hub-topbar-sep">→</span>
-        <span className="hub-topbar-host"><Sensitive>{selectedHost!.name}</Sensitive></span>
+        <span className="hub-topbar-host">
+          <OsIcon os={overview.data?.host.os_info} />
+          <Sensitive>{selectedHost!.name}</Sensitive>
+        </span>
         <span className="hub-topbar-spacer" />
         <span className="small muted">
           {me.username} · {me.role}

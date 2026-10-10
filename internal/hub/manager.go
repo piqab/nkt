@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/piqab/nkt/internal/aptcache"
 	"github.com/piqab/nkt/internal/hubsudo"
+	"github.com/piqab/nkt/internal/model"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -284,6 +285,9 @@ type Manager struct {
 	// online host's findings/reachability — see overview_poll.go.
 	overviewMu sync.Mutex
 	overview   map[int64]hostOverview
+	// hostOS — ОС хоста по последнему удачному опросу (значок в списке);
+	// неудачный опрос её не стирает.
+	hostOS map[int64]*model.OSInfo
 	// pollFails — неудачные опросы подряд (см. recordUnreachable).
 	pollFails map[int64]int
 	// f2bMu/f2bPushed — когда и какой свой адрес хаб передал хосту для
@@ -367,6 +371,7 @@ func NewManager(cfg *config.Config, db *store.DB, key []byte, version string, lo
 		apiPorts:      map[int64]int{},
 		sessions:      map[int64]sessionCache{},
 		overview:      map[int64]hostOverview{},
+		hostOS:        map[int64]*model.OSInfo{},
 		relaySessions: map[int64]*yamux.Session{},
 		vulnScans:     map[int64]*hubVulnState{},
 	}

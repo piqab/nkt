@@ -291,6 +291,8 @@ type Container struct {
 	DependsOn   []string           `json:"depends_on,omitempty"`
 	Declared    bool               `json:"declared"` // present in a compose file
 	Running     bool               `json:"running"`  // present in the docker daemon
+	// OSInfo — ОС внутри контейнера (os-release запущенного) для значка.
+	OSInfo *OSInfo `json:"os_info,omitempty"`
 }
 
 // DockerNetwork is a docker bridge/overlay network.
@@ -323,6 +325,8 @@ type PodmanContainer struct {
 	Pod      string             `json:"pod,omitempty"`
 	Ports    []PortMapping      `json:"ports,omitempty"`
 	Networks []ContainerNetwork `json:"networks,omitempty"`
+	// OSInfo — ОС внутри контейнера (os-release запущенного) для значка.
+	OSInfo *OSInfo `json:"os_info,omitempty"`
 }
 
 // LXDInstance is a container or virtual machine managed by LXD — unlike
@@ -350,6 +354,8 @@ type LXDInstance struct {
 	Profiles  []string  `json:"profiles,omitempty"`
 	// Networks — сети LXD или мосты хоста, к которым подключены nic.
 	Networks []string `json:"networks,omitempty"`
+	// OSInfo — ОС инстанса (image.os, image.release) для значка.
+	OSInfo *OSInfo `json:"os_info,omitempty"`
 }
 
 // LXDPort — устройство proxy: listen tcp:0.0.0.0:8080 → connect tcp:127.0.0.1:80.
@@ -394,6 +400,9 @@ type VirtualMachine struct {
 	Networks   []VMNetIface `json:"networks,omitempty"`
 	// Graphics — типы экранов машины из XML: vnc, spice (порядок как в XML).
 	Graphics []string `json:"graphics,omitempty"`
+	// OSInfo — ОС гостя для значка: гостевой агент, метка libosinfo или
+	// догадка по Hyper-V-флагам.
+	OSInfo *OSInfo `json:"os_info,omitempty"`
 }
 
 // FirewallPolicy is a chain's default policy plus its counters.
@@ -945,6 +954,20 @@ type VulnScan struct {
 	ScannedAt time.Time `json:"scanned_at"`
 }
 
+// OSInfo — операционная система хоста, машины или контейнера: по ID
+// интерфейс ставит значок перед именем.
+type OSInfo struct {
+	// ID — os-release ID (ubuntu, debian, alpine…) или windows; linux —
+	// какой-то Linux без подробностей.
+	ID string `json:"id"`
+	// Name — полное имя для подсказки (PRETTY_NAME, «Windows 11 Pro»).
+	Name string `json:"name,omitempty"`
+	// Like — первый из ID_LIKE: значок родственной ОС, если своего нет.
+	Like string `json:"like,omitempty"`
+	// Source — откуда известно (osinfo.Source*).
+	Source string `json:"source,omitempty"`
+}
+
 // HostInfo mirrors collect.HostInfo without importing that package.
 type HostInfo struct {
 	Mode     string   `json:"mode"`
@@ -956,6 +979,8 @@ type HostInfo struct {
 	NoteRefs []TextRef `json:"-"`
 	// UptimeS — секунды с загрузки хоста (см. collect.HostInfo).
 	UptimeS int64 `json:"uptime_s,omitempty"`
+	// OSInfo — ОС хоста для значка (из /etc/os-release).
+	OSInfo *OSInfo `json:"os_info,omitempty"`
 }
 
 // FindingCounts summarises findings by severity.

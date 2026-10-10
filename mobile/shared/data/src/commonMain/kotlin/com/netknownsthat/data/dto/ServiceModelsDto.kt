@@ -38,6 +38,14 @@ data class ServiceUnitDto(
 )
 
 @Serializable
+data class OsInfoDto(
+    val id: String = "",
+    val name: String = "",
+    val like: String = "",
+    val source: String = "",
+)
+
+@Serializable
 data class ContainersResponseDto(
     val containers: List<ContainerDto> = emptyList(),
     val networks: List<DockerNetworkDto> = emptyList(),
@@ -57,6 +65,7 @@ data class ContainerDto(
     /** Declared in a compose file, as opposed to started by hand. */
     val declared: Boolean = false,
     val running: Boolean = false,
+    @SerialName("os_info") val osInfo: OsInfoDto? = null,
 )
 
 @Serializable
@@ -98,6 +107,7 @@ data class PodmanContainerDto(
     val image: String = "",
     val state: String = "",
     val status: String = "",
+    @SerialName("os_info") val osInfo: OsInfoDto? = null,
 )
 
 @Serializable
@@ -112,6 +122,7 @@ data class LXDInstanceDto(
     val status: String = "",
     val architecture: String = "",
     val ipv4: List<String> = emptyList(),
+    @SerialName("os_info") val osInfo: OsInfoDto? = null,
 )
 
 @Serializable
@@ -129,6 +140,7 @@ data class VirtualMachineDto(
     val vcpus: Int = 0,
     @SerialName("memory_kb") val memoryKb: Long = 0,
     val graphics: List<String> = emptyList(),
+    @SerialName("os_info") val osInfo: OsInfoDto? = null,
 )
 
 /** GET /api/misc — listeners no parsed config accounts for. */

@@ -46,12 +46,14 @@ export function useJobLauncher(
 export function JobFirst({
   path,
   title,
+  titleNode,
   onClose,
   onDone,
   live,
 }: {
   path: string
   title: string
+  titleNode?: ReactNode
   onClose: () => void
   onDone?: () => void
   live: () => ReactNode
@@ -85,7 +87,7 @@ export function JobFirst({
   if (state.mode === 'live') return <>{live()}</>
   if (state.mode === 'job') return <JobLogModal job={state.job} onClose={onClose} onDone={() => onDone?.()} />
   return (
-    <Modal title={title} onClose={onClose}>
+    <Modal title={titleNode ?? title} onClose={onClose}>
       {state.mode === 'error' ? <Banner kind="error">{state.text}</Banner> : <Loading what={title} />}
     </Modal>
   )

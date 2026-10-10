@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { osLabel } from '../components/OsIcon'
 import { Button, Checkbox, Dropdown, Input, Select, Space, Spin, Switch, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -895,7 +896,8 @@ function ComposeFromLink({
           placeholder={t('deploy.fromLinkHosts')}
           value={picked}
           onChange={pickHosts}
-          options={(hosts.data ?? []).map((h) => ({ value: h.name, label: h.name }))}
+          optionFilterProp="search"
+          options={(hosts.data ?? []).map((h) => ({ value: h.name, label: osLabel(h.os_info, h.name), search: h.name }))}
         />
         <Input size="small" style={{ width: 140 }} value={project} onChange={(e) => changeProject(e.target.value)} placeholder={t('deploy.fromLinkProject')} />
         <Button size="small" loading={scanning} disabled={!link || picked.length === 0} onClick={() => void fill(link, project, pending?.link === link ? pending : undefined)}>
@@ -948,7 +950,7 @@ function ComposeFromLink({
         <div className="row" style={{ gap: '0.9rem', flexWrap: 'wrap' }}>
           {picked.map((n) => {
             const h = (hosts.data ?? []).find((x) => x.name === n)
-            return h ? <ComposeEngineStatus key={n} hostId={h.id} name={n} admin /> : null
+            return h ? <ComposeEngineStatus key={n} hostId={h.id} name={n} os={h.os_info} admin /> : null
           })}
         </div>
       )}

@@ -3,6 +3,76 @@
   "commands": [
     {
       "match": [
+        "docker",
+        "exec",
+        "8f3a1c9e21b4d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+        "cat",
+        "/etc/os-release"
+      ],
+      "stdout": "PRETTY_NAME=\"Debian GNU/Linux 12 (bookworm)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"12\"\nID=debian\n"
+    },
+    {
+      "match": [
+        "docker",
+        "exec",
+        "9e0d1c2b3a4958677889aabbccddeeff00112233445566778899aabbccddeeff",
+        "cat",
+        "/etc/os-release"
+      ],
+      "stdout": "NAME=\"Alpine Linux\"\nID=alpine\nVERSION_ID=3.20.3\nPRETTY_NAME=\"Alpine Linux v3.20\"\n"
+    },
+    {
+      "match": [
+        "docker",
+        "exec",
+        "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "cat",
+        "/etc/os-release"
+      ],
+      "stdout": "NAME=\"Alpine Linux\"\nID=alpine\nVERSION_ID=3.20.3\nPRETTY_NAME=\"Alpine Linux v3.20\"\n"
+    },
+    {
+      "match": [
+        "docker",
+        "exec",
+        "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+        "cat",
+        "/etc/os-release"
+      ],
+      "stdout": "NAME=\"Alpine Linux\"\nID=alpine\nVERSION_ID=3.20.3\nPRETTY_NAME=\"Alpine Linux v3.20\"\n"
+    },
+    {
+      "match": [
+        "docker",
+        "exec",
+        "c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2",
+        "cat",
+        "/etc/os-release"
+      ],
+      "stdout": "PRETTY_NAME=\"Ubuntu 22.04.4 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"22.04\"\nID=ubuntu\nID_LIKE=debian\n"
+    },
+    {
+      "match": [
+        "podman",
+        "exec",
+        "p1a2b3c4d5e6f7081920a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2",
+        "cat",
+        "/etc/os-release"
+      ],
+      "stdout": "PRETTY_NAME=\"Ubuntu 22.04.4 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"22.04\"\nID=ubuntu\nID_LIKE=debian\n"
+    },
+    {
+      "match": [
+        "virsh",
+        "-c",
+        "qemu:///system",
+        "qemu-agent-command",
+        "web-vm"
+      ],
+      "stdout": "{\"return\":{\"name\":\"Ubuntu\",\"kernel-release\":\"6.8.0-45-generic\",\"version\":\"24.04.1 LTS (Noble Numbat)\",\"pretty-name\":\"Ubuntu 24.04.1 LTS\",\"version-id\":\"24.04\",\"id\":\"ubuntu\",\"machine\":\"x86_64\"}}"
+    },
+    {
+      "match": [
         "k3s",
         "kubectl",
         "get",

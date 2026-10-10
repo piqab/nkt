@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/piqab/nkt/internal/model"
 	"io"
 	"net"
 	"net/http"
@@ -507,6 +508,8 @@ type hostWithOverview struct {
 	// since every page keeps working, just without whatever the new
 	// version added.
 	RunningVersion string `json:"running_version,omitempty"`
+	// OSInfo — ОС хоста для значка перед именем (из опроса хоста).
+	OSInfo *model.OSInfo `json:"os_info,omitempty"`
 	// InstallActive — установка или обновление nkt на хосте идёт или ждёт
 	// очереди: «обновить всё» такие хосты не трогает.
 	InstallActive bool `json:"install_active,omitempty"`
@@ -623,6 +626,7 @@ func (s *Server) hostRows(ctx context.Context) ([]hostWithOverview, error) {
 			row.Reachable = &reachable
 			row.RunningVersion = ov.Version
 			row.Channel = ov.Channel
+			row.OSInfo = ov.OS
 			if !ov.LastPolledAt.IsZero() {
 				row.LastPolledAt = store.FormatTime(ov.LastPolledAt)
 			}
@@ -670,6 +674,7 @@ func (s *Server) localHostEntry(ctx context.Context) *hostWithOverview {
 		if snap := s.localScanner.Latest(); snap != nil {
 			row.Findings = snap.FindingCounts()
 			row.LastPolledAt = snap.TS
+			row.OSInfo = snap.Host.OSInfo
 			row.Fail2ban = f2bRow(f2bLocalState(snap))
 		}
 	}

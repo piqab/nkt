@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { osLabel } from './OsIcon'
 import { Button, Checkbox, Input, Select, Space, Tag, Tooltip, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -274,7 +275,7 @@ function TokenModal({
     ? unifiedDiff(draftText(initial, hostName, expiryLabel(-1), t), draftText(d, hostName, expiryLabel(d.days), t), t('tokens.saved'), t('tokens.draft'))
     : ''
   const changed = !token || diff.trim() !== ''
-  const hostOptions = [{ value: LOCAL_ID, label: 'localhost' }, ...hosts.filter((h) => h.id !== LOCAL_ID).map((h) => ({ value: h.id, label: h.name }))]
+  const hostOptions = [{ value: LOCAL_ID, label: osLabel(undefined, 'localhost'), search: 'localhost' }, ...hosts.filter((h) => h.id !== LOCAL_ID).map((h) => ({ value: h.id, label: osLabel(h.os_info, h.name), search: h.name }))]
   return (
     <Modal title={token ? t('tokens.editTitle', { name: token.name }) : t('tokens.newTitle')} onClose={onClose} width={640}>
       <div className="col" style={{ gap: '0.5rem' }}>
@@ -297,7 +298,7 @@ function TokenModal({
         <span className="small muted">{t('tokens.scopeHint')}</span>
         <label className="small">
           {t('tokens.hosts')}
-          <Select mode="multiple" style={{ width: '100%' }} value={d.hosts} placeholder={t('tokens.allHosts')} onChange={(v) => setD({ ...d, hosts: v })} options={hostOptions} optionFilterProp="label" />
+          <Select mode="multiple" style={{ width: '100%' }} value={d.hosts} placeholder={t('tokens.allHosts')} onChange={(v) => setD({ ...d, hosts: v })} options={hostOptions} optionFilterProp="search" />
         </label>
         <label className="small">
           {t('tokens.groups')}

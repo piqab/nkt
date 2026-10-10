@@ -1,5 +1,6 @@
 package com.netknownsthat.ui.hosts
 
+import com.netknownsthat.ui.common.OsIcon
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -233,6 +234,7 @@ private fun HostRow(host: HubHost, onClick: () -> Unit, menu: HostMenu?) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                OsIcon(host.osInfo, size = 18.dp)
                 Text(host.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Text(host.status, style = MaterialTheme.typography.labelMedium)
                 if (menu != null) {

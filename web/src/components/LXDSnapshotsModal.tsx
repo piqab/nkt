@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Button, Checkbox, Input, Table } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -88,7 +89,7 @@ export default function LXDSnapshotsModal({
 
   const snaps = list.data?.snapshots ?? []
   return (
-    <Modal title={t('lxdSnap.title', { name })} onClose={onClose} width={720}>
+    <Modal title={<OsTitle tKey="lxdSnap.title" kind="lxd" name={name} />} onClose={onClose} width={720}>
       <p className="small muted">{t('lxdSnap.hint')}</p>
       {error && (
         <Banner kind="error" onClose={() => setError(null)}>

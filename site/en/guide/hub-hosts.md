@@ -132,6 +132,13 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   polls the host right away instead of waiting for the timer (the icon
   spins while polling); it changes nothing on the host, so read-only users
   can do it too.
+- **OS icon** right before the name — the host's distribution from its
+  `/etc/os-release` (Ubuntu, Debian, Alpine…; the tooltip gives the full
+  name); the hub learns it on polling, an unreachable host keeps the last
+  known one, a host never polled shows “?”. The same icon is in the opened
+  host's header, host pickers, monitoring, alerts, fail2ban and hub jobs,
+  and machines and containers inside a host show their own OS (see
+  [Containers and VMs](/en/guide/containers)).
 - **Address** (before "nkt") — `user@address:port`, with only the first
   two or three characters visible, so neither the user nor the address can
   be read on screen; in full in the tooltip, and the icon next to it

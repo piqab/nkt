@@ -39,6 +39,8 @@ import { ExportPasswordModal, downloadHubExport } from '../components/HubExport'
 import { msg, tx, type Msg } from '../msg'
 import { InstallAllModal } from '../components/InstallAllModal'
 import i18n from '../i18n'
+import { NAME_MARK, NamedTitle, OsIcon } from '../components/OsIcon'
+import { rememberHubHosts } from '../osRegistry'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -386,6 +388,7 @@ export default function Hosts({
 }) {
   const { t } = useTranslation()
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
+  useEffect(() => rememberHubHosts(hosts ?? undefined), [hosts])
   // Версия хаба — из ответа списка, а не из /auth/me: тот загружен при
   // открытии вкладки, и после самообновления хаба в старой вкладке все
   // хосты «отставали», а каждое «открыть» переустанавливало ту же версию.
@@ -1160,7 +1163,10 @@ export default function Hosts({
               >
                 <div className="row spread">
                   <span className="small">
-                    <strong><Sensitive>{vm.name}</Sensitive></strong>{' '}
+                    <strong>
+                      <OsIcon os={vm.os_info} />
+                      <Sensitive>{vm.name}</Sensitive>
+                    </strong>{' '}
                     {isAddrUnknown(vm) ? (
                       <span className="muted">{t('hosts.addrUnknown')}</span>
                     ) : (
@@ -1213,6 +1219,7 @@ export default function Hosts({
       render: (_, h) => (
         <div className="row row-nowrap" style={{ gap: '0.5rem' }}>
           <strong className="host-name" title={h.name}>
+            <OsIcon os={h.os_info} />
             <Sensitive>{h.name}</Sensitive>
           </strong>
           {renderVMToggle(h)}
@@ -1740,7 +1747,7 @@ export default function Hosts({
 
       {editingHost && (
         <Modal
-          title={t('hosts.editHostTitle', { name: editingHost.name })}
+          title={<NamedTitle text={t('hosts.editHostTitle', { name: NAME_MARK })} name={editingHost.name} icon={<OsIcon os={editingHost.os_info} />} />}
           onClose={() => setEditingHost(null)}
           width={860}
         >
@@ -2496,7 +2503,7 @@ function RemoveHostModal({
   )
 
   return (
-    <Modal title={t(isVM ? 'hosts.removeTitleVM' : 'hosts.removeTitle', { name: host.name })} onClose={onCancel} width={620}>
+    <Modal title={<NamedTitle text={t(isVM ? 'hosts.removeTitleVM' : 'hosts.removeTitle', { name: NAME_MARK })} name={host.name} icon={<OsIcon os={host.os_info} />} />} onClose={onCancel} width={620}>
       <p className="small">{t(isVM ? 'hosts.removeIntroVM' : 'hosts.removeIntro')}</p>
       {isVM && item('vm', t('hosts.purgeVM'), t('hosts.purgeVMHint'))}
       {isVM && item('vm_disks', t('hosts.purgeVMDisks'), t('hosts.purgeVMDisksHint'), !purge.vm)}
@@ -2782,7 +2789,7 @@ function ProvisionVMModal({
   )
 
   return (
-    <Modal title={t('hosts.newVMTitle', { host: host.name })} onClose={onClose} width={720}>
+    <Modal title={<NamedTitle text={t('hosts.newVMTitle', { host: NAME_MARK })} name={host.name} icon={<OsIcon os={host.os_info} />} />} onClose={onClose} width={720}>
       <Tabs
         activeKey={tab}
         onChange={(k) => setTab(k as 'create' | 'discover')}
