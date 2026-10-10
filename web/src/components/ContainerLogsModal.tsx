@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Checkbox, Select } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs } from '../api'
@@ -17,6 +18,7 @@ export default function ContainerLogsModal({ name, base, onClose }: { name: stri
     <CommandModal
       key={wsPath}
       title={t('docker.logsTitle', { name })}
+      titleNode={<OsTitle tKey="docker.logsTitle" kind={base === '/containers' ? 'docker' : 'podman'} name={name} />}
       wsPath={wsPath}
       onClose={onClose}
       extra={

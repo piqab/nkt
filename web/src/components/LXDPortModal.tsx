@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Button, Form, Input, InputNumber, Segmented } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Modal } from './ui'
@@ -42,7 +43,7 @@ export default function LXDPortModal({
   }
 
   return (
-    <Modal title={t('lxdPort.title', { name })} onClose={onClose}>
+    <Modal title={<OsTitle tKey="lxdPort.title" kind="lxd" name={name} />} onClose={onClose}>
       <p className="small muted">{t('lxdPort.hint')}</p>
       <Form layout="vertical" onFinish={next}>
         <Form.Item label={t('lxdPort.protocol')}>

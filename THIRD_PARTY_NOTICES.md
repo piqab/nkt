@@ -82,3 +82,19 @@ English version: [THIRD_PARTY_NOTICES.en.md](THIRD_PARTY_NOTICES.en.md).
 | @novnc/novnc | 1.7.0 | MPL-2.0, см. выше |
 
 Полный список пакетов с версиями — в `web/package-lock.json`.
+
+## Значки операционных систем
+
+### Simple Icons — CC0-1.0
+
+- **Что это:** контуры фирменных значков ОС (Ubuntu, Debian, Alpine,
+  Fedora, Red Hat, CentOS, Rocky, AlmaLinux, openSUSE, Arch, NixOS, Linux,
+  Linux Mint, FreeBSD, Gentoo, Kali, Manjaro, Pop!_OS, Raspberry Pi) — значок
+  ОС перед именем хоста, машины и контейнера.
+- **Где лежит:** `web/src/components/osGlyphs.ts` и
+  `mobile/shared/ui/src/commonMain/kotlin/com/netknownsthat/ui/common/OsGlyphs.kt`
+  — только пути нужных значков из пакета `simple-icons@16.34.0`.
+- **Источник:** <https://simpleicons.org>, <https://github.com/simple-icons/simple-icons>.
+- **Лицензия:** CC0-1.0 (общественное достояние). Сами знаки — товарные знаки
+  своих владельцев; nkt показывает их только чтобы назвать ОС. Значок Windows
+  в набор не входит — в nkt это простая фигура из четырёх квадратов.

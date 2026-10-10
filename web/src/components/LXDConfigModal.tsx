@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { OsTitle } from './OsIcon'
 import { Button, Input } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -42,7 +43,7 @@ export default function LXDConfigModal({
 
   if (!cfg.data) {
     return (
-      <Modal title={t('lxdConfig.title', { name })} onClose={onClose}>
+      <Modal title={<OsTitle tKey="lxdConfig.title" kind="lxd" name={name} />} onClose={onClose}>
         {cfg.error ? <Banner kind="error">{cfg.error}</Banner> : <Loading what={t('lxdConfig.loading')} />}
       </Modal>
     )
@@ -71,7 +72,7 @@ export default function LXDConfigModal({
   return (
     <>
       <EditTextModal
-        title={t('lxdConfig.title', { name })}
+        title={<OsTitle tKey="lxdConfig.title" kind="lxd" name={name} />}
         saved={saved}
         draft={text}
         onDraft={setDraft}
@@ -122,7 +123,7 @@ export default function LXDConfigModal({
         </Modal>
       )}
       {view === 'expanded' && (
-        <Modal title={t('lxdConfig.expandedTitle', { name })} onClose={() => setView(null)} width={900}>
+        <Modal title={<OsTitle tKey="lxdConfig.expandedTitle" kind="lxd" name={name} />} onClose={() => setView(null)} width={900}>
           <p className="small muted">{t('lxdConfig.expandedHint')}</p>
           <CodeEditor value={cfg.data.config.expanded ?? ''} readOnly rows={24} />
         </Modal>

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/xml"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/osinfo"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -30,8 +32,13 @@ type LibvirtResult struct {
 // needs — a real domain definition carries far more (boot order, graphics,
 // CPU topology, channels...), none of which the dashboard shows.
 type domainXML struct {
-	Name   string `xml:"name"`
-	UUID   string `xml:"uuid"`
+	Name string `xml:"name"`
+	UUID string `xml:"uuid"`
+	// LibOS — метка ОС от virt-install/virt-manager:
+	// <metadata><libosinfo:libosinfo><libosinfo:os id="…"/>.
+	LibOS struct {
+		ID string `xml:"id,attr"`
+	} `xml:"metadata>libosinfo>os"`
 	Memory struct {
 		Unit  string `xml:"unit,attr"`
 		Value int64  `xml:",chardata"`
@@ -178,7 +185,53 @@ func readDomain(ctx context.Context, c collect.Collector, uri, name string) (mod
 			vm.Graphics = append(vm.Graphics, g.Type)
 		}
 	}
+	vm.OSInfo = guestOS(ctx, c, uri, vm, dom.LibOS.ID, xmlOut.Stdout)
 	return vm, "", model.TextRef{}
+}
+
+// agentOSTTL — сколько помнить ответ гостевого агента об ОС (и его
+// отсутствие: агент без ответа отвечает по таймауту, спрашивать его на
+// каждом скане незачем).
+const agentOSTTL = 10 * time.Minute
+
+type agentOSEntry struct {
+	info  *model.OSInfo
+	state string
+	at    time.Time
+}
+
+var (
+	agentOSMu    sync.Mutex
+	agentOSCache = map[string]agentOSEntry{}
+)
+
+// guestOS — ОС гостя: гостевой агент (только у работающей машины, с
+// кэшем по UUID; смена состояния — спросить заново), иначе метка libosinfo
+// из XML, иначе догадка по Hyper-V-флагам.
+func guestOS(ctx context.Context, c collect.Collector, uri string, vm model.VirtualMachine, libosinfoID, domXML string) *model.OSInfo {
+	key := vm.UUID
+	if key == "" {
+		key = vm.Name
+	}
+	agentOSMu.Lock()
+	e, ok := agentOSCache[key]
+	agentOSMu.Unlock()
+	if vm.State == "running" && (!ok || e.state != vm.State || time.Since(e.at) > agentOSTTL) {
+		e = agentOSEntry{state: vm.State, at: time.Now()}
+		if res, err := c.Run(ctx, "virsh", "-c", uri, "qemu-agent-command", vm.Name, "--timeout", "3", `{"execute":"guest-get-osinfo"}`); err == nil && res.OK() {
+			e.info = osinfo.FromAgent([]byte(res.Stdout))
+		}
+		agentOSMu.Lock()
+		agentOSCache[key] = e
+		agentOSMu.Unlock()
+	}
+	if e.info != nil {
+		return e.info
+	}
+	if o := osinfo.FromLibosinfo(libosinfoID); o != nil {
+		return o
+	}
+	return osinfo.GuessWindows(domXML)
 }
 
 // applyDominfo fills state/CPU/memory/persistent/autostart from `virsh

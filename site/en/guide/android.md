@@ -146,7 +146,11 @@ virtual machine (SPICE). It opens the web interface's own screen page (noVNC
 and spice-html5) full-screen in an embedded browser, already signed in. A tap
 is a click, a moving finger is the mouse, two fingers zoom. At the top are
 Esc, Tab, arrows, ⌫, ⏎ and Ctrl+Alt+Del, and "⌨ Keyboard" opens the on-screen
-keyboard: what you type reaches the machine as typed on a US layout. The
+keyboard: what you type reaches the machine as typed on a US layout. Zoom is
+there too: "−" and "+" from 50% to 150% (100% fits the picture to the
+screen), "⤢" fits it again; remembered per machine. A large Windows screen
+that runs off the edge — zoom out; above 100% "Move" lets you scroll the
+picture with a finger (touches then don't reach the machine). The
 embedded browser opens only the hub's pages; it accepts a self-signed hub
 certificate only if it is the one pinned at sign-in (Android 10 and newer).
 There is no screen on iOS yet.

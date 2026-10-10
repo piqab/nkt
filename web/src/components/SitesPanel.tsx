@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { osLabel } from './OsIcon'
 import { Button, Checkbox, Input, InputNumber, Radio, Segmented, Select, Space, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -377,7 +378,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
                 setHostID(v)
                 setPre(null)
               }}
-              options={(hosts.data ?? []).filter((h) => h.status === 'online').map((h) => ({ value: h.id, label: h.name }))}
+              options={(hosts.data ?? []).filter((h) => h.status === 'online').map((h) => ({ value: h.id, label: osLabel(h.os_info, h.name) }))}
               placeholder={t('sites.hostPlaceholder')}
             />
           </label>
@@ -390,7 +391,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
           </Button>
         </div>
         {hostID !== null && targetKind === 'stack' && (
-          <ComposeEngineStatus hostId={hostID} name={hosts.data?.find((h) => h.id === hostID)?.name ?? ''} admin />
+          <ComposeEngineStatus hostId={hostID} name={hosts.data?.find((h) => h.id === hostID)?.name ?? ''} os={hosts.data?.find((h) => h.id === hostID)?.os_info} admin />
         )}
 
         {pre?.outside && (

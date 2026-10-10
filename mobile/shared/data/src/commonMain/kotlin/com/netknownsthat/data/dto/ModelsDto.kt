@@ -67,6 +67,7 @@ data class HubHostDto(
     @SerialName("install_active") val installActive: Boolean = false,
     /** The hub's own version — a host behind it is offered «Обновить». */
     @SerialName("hub_version") val hubVersion: String = "",
+    @SerialName("os_info") val osInfo: OsInfoDto? = null,
 ) {
     /** Version the host actually runs (falls back to what was installed). */
     val shownVersion: String get() = runningVersion?.ifBlank { null } ?: nktVersion

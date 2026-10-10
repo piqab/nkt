@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Button, Checkbox, Input, Radio } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, qs, useApi } from '../api'
@@ -76,7 +77,7 @@ export function BackupModal({
   }
 
   return (
-    <Modal title={t('backups.title', { name })} onClose={onClose} width={900}>
+    <Modal title={kind === 'compose' ? t('backups.title', { name }) : <OsTitle tKey="backups.title" kind={kind} name={name} />} onClose={onClose} width={900}>
       <p className="small muted" style={{ marginTop: 0 }}>
         {t(`backups.hint.${kind}`)} {list.data?.root && <span className="mono">{list.data.root}</span>}
       </p>

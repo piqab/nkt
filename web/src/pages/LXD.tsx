@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { OsIcon, OsTitle } from '../components/OsIcon'
+import { rememberOS } from '../osRegistry'
 import { Button, Form, Input, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
@@ -34,6 +36,7 @@ export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
   const lxdImages = useApi<{ images: LXDImage[] }>('/lxd/images?remote=local', 60_000)
   const instances = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
+  useEffect(() => rememberOS('lxd', instances.data?.instances), [instances.data])
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [creating, setCreating] = useState(false)
@@ -132,7 +135,16 @@ export default function LXD({ me }: { me: Me }) {
   }
 
   const columns: TableColumnsType<LXDInstance> = [
-    { title: t('lxd.colName'), key: 'name', render: (_, i) => <strong>{i.name}</strong> },
+    {
+      title: t('lxd.colName'),
+      key: 'name',
+      render: (_, i) => (
+        <strong>
+          <OsIcon os={i.os_info} />
+          {i.name}
+        </strong>
+      ),
+    },
     { title: t('lxd.colType'), key: 'type', render: (_, i) => <span className="small">{i.type === 'virtual-machine' ? t('lxd.vm') : t('lxd.container')}</span> },
     { title: t('lxd.colState'), key: 'status', render: (_, i) => <StateBadge state={i.status} /> },
     { title: t('lxd.colArch'), key: 'architecture', render: (_, i) => <span className="small mono">{i.architecture || '—'}</span> },
@@ -231,7 +243,8 @@ export default function LXD({ me }: { me: Me }) {
             onClick={() => setSnapsFor(i)}
           />
           <RowAction action="backup" label={t('backups.action')} onClick={() => setBackupFor(i.name)} />
-          {canControl && containerPowerState(i.status) === 'running' && (
+          {/* У Windows текстовой консоли нет — только экран. */}
+          {canControl && containerPowerState(i.status) === 'running' && i.os_info?.id !== 'windows' && (
             <RowAction action="console" label={t('console.action')} onClick={() => setConsoleFor(i.name)} />
           )}
           {canControl && i.type === 'virtual-machine' && containerPowerState(i.status) === 'running' && (
@@ -299,6 +312,7 @@ export default function LXD({ me }: { me: Me }) {
               items={inactiveInstances}
               getKey={(i) => i.name}
               getLabel={(i) => i.name}
+        getIcon={(i) => <OsIcon os={i.os_info} size={12} />}
               getTooltip={(i) => (
                 <>
                   <div>{i.type === 'virtual-machine' ? t('lxd.vm') : t('lxd.container')}</div>
@@ -362,7 +376,7 @@ export default function LXD({ me }: { me: Me }) {
       )}
       {screenFor && (
         <SpiceModal
-          title={t('vnc.title', { name: screenFor })}
+          title={<OsTitle tKey="vnc.title" kind="lxd" name={screenFor} />}
           wsPath={`/lxd/instances/${encodeURIComponent(screenFor)}/spice/ws`}
           onClose={() => setScreenFor(null)}
           below={<GuestLoginBar kind="lxd" name={screenFor} canControl={canControl} />}

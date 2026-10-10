@@ -122,6 +122,15 @@ func Docker(ctx context.Context, c collect.Collector, composePaths []string) Doc
 		res.Containers = append(res.Containers, *ct)
 	}
 	sort.Slice(res.Containers, func(i, j int) bool { return res.Containers[i].Name < res.Containers[j].Name })
+	if !res.CLIMissing {
+		targets := map[string]**model.OSInfo{}
+		for i := range res.Containers {
+			if ct := &res.Containers[i]; ct.Running && ct.State == "running" && ct.ID != "" {
+				targets[ct.ID] = &ct.OSInfo
+			}
+		}
+		fillContainerOS(ctx, c, "docker", targets)
+	}
 
 	// --- endpoints from published ports -------------------------------------------
 	for _, ct := range res.Containers {

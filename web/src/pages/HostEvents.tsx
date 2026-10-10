@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OsIconOf } from '../components/OsIcon'
 import { AIExplain } from '../components/AIExplain'
 import { Sensitive, blurText } from '../privacy'
 import { Button, Checkbox, Input, InputNumber, Select, Switch, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
@@ -268,7 +269,10 @@ export default function HostEvents({ me, onOpenHost }: { me?: Me; onOpenHost?: (
       key: 'host',
       render: (_, e) => (
         <div>
-          <strong><Sensitive>{e.host_name}</Sensitive></strong>
+          <strong>
+            <OsIconOf kind="host" hostID={e.host_id} name={e.host_name} />
+            <Sensitive>{e.host_name}</Sensitive>
+          </strong>
           <div className="small muted mono"><Sensitive>{e.host_addr}</Sensitive></div>
         </div>
       ),

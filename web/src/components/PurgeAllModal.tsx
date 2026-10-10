@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsIcon } from './OsIcon'
 import { Button, Checkbox, Input, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, LOCAL_HOST_ID, useApi } from '../api'
@@ -133,6 +134,7 @@ function PurgeAllModal({ onClose, onStarted }: { onClose: () => void; onStarted:
                   onChange={(e) => setPicked(e.target.checked ? [...picked, h.id] : picked.filter((x) => x !== h.id))}
                 />
                 <strong>
+                  <OsIcon os={h.os_info} />
                   <Sensitive>{h.name}</Sensitive>
                 </strong>
                 {h.group && <Tag>{h.group}</Tag>}

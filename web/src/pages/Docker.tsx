@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { OsIcon } from '../components/OsIcon'
+import { rememberOS } from '../osRegistry'
 import { Button, Segmented, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useFocusRow } from '../focus'
@@ -28,6 +30,7 @@ import { msg, tx, type Msg } from '../msg'
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
   const docker = useApi<{ containers: Container[]; networks: DockerNetwork[] }>('/containers', 30_000)
+  useEffect(() => rememberOS('docker', docker.data?.containers), [docker.data])
   const focusContainer = useFocusRow(!!docker.data)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
@@ -63,7 +66,10 @@ export default function Docker({ me }: { me: Me }) {
       key: 'name',
       render: (_, c) => (
         <>
-          <strong>{c.name}</strong>
+          <strong>
+            <OsIcon os={c.os_info} />
+            {c.name}
+          </strong>
           <div className="small muted nowrap">
             {c.project ? `${c.project}/${c.service_name}` : t('docker.outsideCompose')}
             {c.restart ? t('docker.restart', { policy: c.restart }) : ''}
@@ -354,6 +360,7 @@ export default function Docker({ me }: { me: Me }) {
               items={inactiveContainers}
               getKey={(c) => c.name}
               getLabel={(c) => c.name}
+        getIcon={(c) => <OsIcon os={c.os_info} size={12} />}
               getTooltip={(c) => (
                 <>
                   <div>{c.image}</div>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { OsIconOf } from '../components/OsIcon'
 import { useJobLauncher } from '../components/useJobLauncher'
 import { Button, Input, InputNumber, Select, Space, Tabs, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
@@ -267,6 +268,7 @@ export default function HubMonitoring({ me, onOpenHost }: { me: Me; onOpenHost: 
                     <div className="row" style={{ flexWrap: 'wrap', gap: '0.4rem' }}>
                       {d.hosts.map((h) => (
                         <Tag key={h.id} color={h.reachable === false ? 'red' : h.reachable ? 'green' : 'default'}>
+                          <OsIconOf kind="host" hostID={h.id} name={h.name} size={12} />
                           <Sensitive>{h.name}</Sensitive>: {h.reachable === false ? t('monitoring.unreachable') : h.reachable ? t('monitoring.reachable') : '—'}
                         </Tag>
                       ))}
@@ -351,7 +353,16 @@ function TargetsTable({ targets, onOpen }: { targets: MonTarget[]; onOpen: (t: M
           rowKey={(r) => `${r.host_id}|${r.key}`}
           onRow={(r) => ({ onClick: () => onOpen(r), style: { cursor: 'pointer' } })}
           columns={[
-            { title: t('monitoring.colHost'), key: 'host', render: (_, r) => <Sensitive>{r.host}</Sensitive> },
+            {
+              title: t('monitoring.colHost'),
+              key: 'host',
+              render: (_, r) => (
+                <>
+                  <OsIconOf kind="host" hostID={r.host_id} name={r.host} size={12} />
+                  <Sensitive>{r.host}</Sensitive>
+                </>
+              ),
+            },
             { title: t('monitoring.colTarget'), key: 'label', render: (_, r) => <span className="small">{r.label}</span> },
             { title: t('monitoring.colService'), key: 'svc', render: (_, r) => <span className="small muted">{r.service || r.kind}</span> },
             {
@@ -425,7 +436,16 @@ function WorkloadsTable({ workloads, onOpen }: { workloads: MonWorkload[]; onOpe
           rowKey={(r) => `${r.host_id}|${r.source}|${r.subject}`}
           onRow={(r) => ({ onClick: () => onOpen(r), style: { cursor: 'pointer' } })}
           columns={[
-            { title: t('monitoring.colHost'), key: 'host', render: (_, r) => <Sensitive>{r.host}</Sensitive> },
+            {
+              title: t('monitoring.colHost'),
+              key: 'host',
+              render: (_, r) => (
+                <>
+                  <OsIconOf kind="host" hostID={r.host_id} name={r.host} size={12} />
+                  <Sensitive>{r.host}</Sensitive>
+                </>
+              ),
+            },
             { title: t('monitoring.colKind'), key: 'src', render: (_, r) => <Tag>{label(r.source)}</Tag> },
             { title: t('monitoring.colName'), key: 'name', render: (_, r) => <span className="mono small">{r.subject}</span> },
             ...(k8s.length > 0
@@ -539,7 +559,17 @@ function HostModal({ host, range, workloads, onClose, onWorkload }: { host: MonH
   const line = (m: string, field: 1 | 2 = 1): Series => ({ name: field === 1 ? t('monitoring.avg') : t('monitoring.peak'), points: (pick(m)?.points ?? []).map((p) => ({ x: p[0], y: p[field] })) })
   const fx = (x: string) => (x.length > 10 ? `${x.slice(5, 10)} ${x.slice(11, 13)}:00` : x.slice(5))
   return (
-    <Modal title={host.name} onClose={onClose} width={1000} sizeKey="mon-host">
+    <Modal
+      title={
+        <>
+          <OsIconOf kind="host" hostID={host.id} name={host.name} />
+          {host.name}
+        </>
+      }
+      onClose={onClose}
+      width={1000}
+      sizeKey="mon-host"
+    >
       {!hostSeries.data ? (
         <Loading />
       ) : (

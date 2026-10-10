@@ -1189,3 +1189,27 @@ span.vm-toggle {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
   max-width: calc(100vw - 2rem);
 }
+
+/* Значок ОС перед именем (OsIcon): фирменный цвет; слишком тёмный на
+   тёмной теме — цвета текста. */
+.os-icon {
+  fill: var(--os-color, currentColor);
+}
+.os-icon-unknown {
+  color: var(--text-secondary);
+  fill: none;
+}
+.os-icon-unknown text {
+  stroke: none;
+}
+.os-icon-guess {
+  color: var(--text-secondary);
+}
+:root[data-theme='dark'] .os-icon-dim {
+  fill: var(--text-primary);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) .os-icon-dim {
+    fill: var(--text-primary);
+  }
+}

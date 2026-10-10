@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.5 — 2026-10-10
+
+- **An OS icon before the name** of a host, virtual machine, LXD instance
+  and container — in lists, window titles, pickers and hub summaries, on the
+  web and in the app. Brand icons (Ubuntu, Debian, Alpine, Windows, Fedora,
+  RHEL…), the tooltip gives the full name and where it comes from: host —
+  `/etc/os-release`, container — os-release of the running container, LXD —
+  `image.os`, libvirt machine — the QEMU guest agent, the libosinfo tag or a
+  guess from Hyper-V flags (a semi-transparent Windows icon with “?”).
+- A Windows guest has no text console — “Screen” instead.
+- **App: VNC/SPICE screen zoom** — “−”/“+” from 50% to 150%, “⤢” fits,
+  “Move” scrolls an enlarged picture with a finger; remembered per machine.
+  A Windows screen no longer runs off the edge.
+
 ## v1.13.4 — 2026-10-10
 
 - **Deployment: `up` does not pull images a second time.** After the pull

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OsIconOf } from './OsIcon'
 import { Button, Popover, Progress } from 'antd'
 import { LoadingOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -72,7 +73,12 @@ export function ActiveJobsIndicator({ isHub }: { isHub: boolean }) {
           }}
         >
           <span className="active-jobs-title">
-            {isHub && <span className="muted">{a.host_name} · </span>}
+            {isHub && (
+              <span className="muted">
+                <OsIconOf kind="host" hostID={a.host_id} name={a.host_name} size={12} />
+                {a.host_name} ·{' '}
+              </span>
+            )}
             {a.job.title}
           </span>
           <span className="small muted">

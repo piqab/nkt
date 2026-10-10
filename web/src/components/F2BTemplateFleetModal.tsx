@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OsIconOf } from './OsIcon'
 import { Button, Checkbox, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -153,7 +154,10 @@ export function F2BTemplateFleetModal({ template, onClose }: { template: Fail2ba
                 checked={picked.includes(h.id)}
                 onChange={(e) => pick(e.target.checked ? [...picked, h.id] : picked.filter((x) => x !== h.id))}
               >
-                <strong>{h.name}</strong>{' '}
+                <strong>
+                  <OsIconOf kind="host" hostID={h.id} name={h.name} />
+                  {h.name}
+                </strong>{' '}
                 <span className="small muted">
                   {!h.known
                     ? t('fail2ban.unknownShort')
@@ -178,7 +182,10 @@ export function F2BTemplateFleetModal({ template, onClose }: { template: Fail2ba
             {check.hosts.map((h) => (
               <div key={h.id}>
                 <Space wrap size={4}>
-                  <strong>{h.name || `#${h.id}`}</strong>
+                  <strong>
+                    <OsIconOf kind="host" hostID={h.id} name={h.name} />
+                    {h.name || `#${h.id}`}
+                  </strong>
                   <Tag color={STATUS_COLOR[h.status]}>{t(`fail2ban.fleetTplStatus.${h.status}`)}</Tag>
                   {h.hub && (
                     <Tag color={h.hub === 'protected' ? 'green' : 'orange'}>

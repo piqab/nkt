@@ -102,7 +102,7 @@ export function useSpice(screen: HTMLDivElement | null, screenId: string, wsPath
 }
 
 /** Экран машины по SPICE: libvirt со SPICE-графикой или VM LXD. */
-export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: string; wsPath: string; onClose: () => void; extra?: ReactNode; below?: ReactNode }) {
+export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: ReactNode; wsPath: string; onClose: () => void; extra?: ReactNode; below?: ReactNode }) {
   const { t } = useTranslation()
   const screenId = 'spice-' + useId().replace(/[^a-zA-Z0-9]/g, '')
   const [screen, setScreen] = useState<HTMLDivElement | null>(null)

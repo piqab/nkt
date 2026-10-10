@@ -8,7 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/osinfo"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,6 +59,20 @@ func (s *Scanner) LatestOrScan(ctx context.Context) (*model.Snapshot, error) {
 	return s.Scan(ctx)
 }
 
+// hostOSInfo — ОС хоста для значка: /etc/os-release, без него — по
+// первому слову PRETTY_NAME («Debian GNU/Linux 12» → debian).
+func hostOSInfo(c collect.Collector, pretty string) *model.OSInfo {
+	if data, err := c.ReadFile("/etc/os-release"); err == nil {
+		if o := osinfo.FromOSRelease(string(data), osinfo.SourceOSRelease); o != nil {
+			return o
+		}
+	}
+	if f := strings.Fields(pretty); len(f) > 0 {
+		return &model.OSInfo{ID: osinfo.NormalizeID(f[0]), Name: pretty, Source: osinfo.SourceOSRelease}
+	}
+	return nil
+}
+
 // Collector exposes the host access layer to other packages.
 func (s *Scanner) Collector() collect.Collector { return s.c }
 
@@ -76,6 +92,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 			Notes:    hostInfo.Notes,
 			NoteRefs: noteRefs(hostInfo.NoteRefs),
 			UptimeS:  hostInfo.UptimeS,
+			OSInfo:   hostOSInfo(s.c, hostInfo.OS),
 		},
 	}
 

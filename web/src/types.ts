@@ -49,7 +49,20 @@ export interface HubVulnDBInfo {
 }
 
 /** A remote VPS registered with the hub (internal/store.Host). */
+/** ОС хоста, машины или контейнера — значок перед именем (OsIcon). */
+export interface OSInfo {
+  /** os-release ID (ubuntu, debian, alpine…), windows; linux — Linux без подробностей. */
+  id: string
+  name?: string
+  /** Первый из ID_LIKE — значок родственной ОС, если своего нет. */
+  like?: string
+  /** os-release | agent | libosinfo | image | guess */
+  source?: string
+}
+
 export interface HubHost {
+  /** ОС хоста по опросу хаба (значок перед именем). */
+  os_info?: OSInfo
   /** Хост, на котором работает эта машина; отсутствует у обычных
    * хостов. Машина показывается внутри своего хоста и переезжает между
    * группами только вместе с ним. */
@@ -140,6 +153,7 @@ export interface HubHost {
 }
 
 export interface HostInfo {
+  os_info?: OSInfo
   mode: string
   hostname: string
   kernel: string
@@ -251,6 +265,7 @@ export interface PortMapping {
 }
 
 export interface Container {
+  os_info?: OSInfo
   id: string
   name: string
   image: string
@@ -268,6 +283,7 @@ export interface Container {
 }
 
 export interface PodmanContainer {
+  os_info?: OSInfo
   id: string
   name: string
   image: string
@@ -280,6 +296,7 @@ export interface PodmanContainer {
 }
 
 export interface LXDInstance {
+  os_info?: OSInfo
   name: string
   type: string
   status: string
@@ -309,6 +326,7 @@ export interface VMNetIface {
 }
 
 export interface VirtualMachine {
+  os_info?: OSInfo
   name: string
   uuid?: string
   state: string

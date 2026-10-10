@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Button, Checkbox, Input } from 'antd'
 import { useTranslation } from 'react-i18next'
 import RFB from '@novnc/novnc'
@@ -93,7 +94,7 @@ export function VNCModal({ name, onClose, extra, below }: { name: string; onClos
   }, [viewOnly])
 
   return (
-    <Modal title={t('vnc.title', { name })} onClose={onClose} width="min(96vw, 1280px)" maskClosable={false} sizeKey="screen">
+    <Modal title={<OsTitle tKey="vnc.title" kind="vm" name={name} />} onClose={onClose} width="min(96vw, 1280px)" maskClosable={false} sizeKey="screen">
       <div className="row" style={{ gap: '0.75rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
         <span className="small muted">{t(`vnc.state.${state}`)}</span>
         <Button size="small" disabled={state !== 'connected'} onClick={() => rfbRef.current?.sendCtrlAltDel()}>

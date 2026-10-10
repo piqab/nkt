@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { OsTitle } from './OsIcon'
 import { Checkbox, Segmented, Select } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs } from '../api'
@@ -16,6 +17,7 @@ export default function LXDLogsModal({ name, onClose }: { name: string; onClose:
     <CommandModal
       key={wsPath}
       title={t('docker.logsTitle', { name })}
+      titleNode={<OsTitle tKey="docker.logsTitle" kind="lxd" name={name} />}
       wsPath={wsPath}
       onClose={onClose}
       extra={

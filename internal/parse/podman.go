@@ -115,5 +115,12 @@ func Podman(ctx context.Context, c collect.Collector) PodmanResult {
 		res.Containers = append(res.Containers, ct)
 	}
 	sort.Slice(res.Containers, func(i, j int) bool { return res.Containers[i].Name < res.Containers[j].Name })
+	targets := map[string]**model.OSInfo{}
+	for i := range res.Containers {
+		if ct := &res.Containers[i]; ct.State == "running" && ct.ID != "" {
+			targets[ct.ID] = &ct.OSInfo
+		}
+	}
+	fillContainerOS(ctx, c, "podman", targets)
 	return res
 }

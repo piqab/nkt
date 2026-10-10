@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { osLabel } from './OsIcon'
 import { Button, Checkbox, Input, Select, Space, Tag, Tooltip, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -274,7 +275,7 @@ function HookModal({
   const [error, setError] = useState<Msg | null>(null)
   const diff = hook ? unifiedDiff(draftText(initial, hostName, kindLabel, t), draftText(d, hostName, kindLabel, t), t('tokens.saved'), t('tokens.draft')) : ''
   const changed = !hook || diff.trim() !== ''
-  const hostOptions = [{ value: LOCAL_ID, label: 'localhost' }, ...hosts.filter((h) => h.id !== LOCAL_ID).map((h) => ({ value: h.id, label: h.name }))]
+  const hostOptions = [{ value: LOCAL_ID, label: osLabel(undefined, 'localhost'), search: 'localhost' }, ...hosts.filter((h) => h.id !== LOCAL_ID).map((h) => ({ value: h.id, label: osLabel(h.os_info, h.name), search: h.name }))]
   return (
     <Modal title={hook ? t('webhooks.editTitle', { name: hook.name }) : t('webhooks.newTitle')} onClose={onClose} width={680}>
       <div className="col" style={{ gap: '0.5rem' }}>
@@ -300,7 +301,7 @@ function HookModal({
         <span className="small muted">{t('webhooks.scopeHint')}</span>
         <label className="small">
           {t('tokens.hosts')}
-          <Select mode="multiple" style={{ width: '100%' }} value={d.hosts} placeholder={t('tokens.allHosts')} onChange={(v) => setD({ ...d, hosts: v })} options={hostOptions} optionFilterProp="label" />
+          <Select mode="multiple" style={{ width: '100%' }} value={d.hosts} placeholder={t('tokens.allHosts')} onChange={(v) => setD({ ...d, hosts: v })} options={hostOptions} optionFilterProp="search" />
         </label>
         <label className="small">
           {t('tokens.groups')}

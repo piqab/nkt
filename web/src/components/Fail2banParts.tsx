@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OsIconOf } from './OsIcon'
 import { Button, Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, hostScope, useApi } from '../api'
@@ -222,6 +223,7 @@ export function FleetBanModal({
                     setPicked(e.target.checked ? [...selected, h.id] : selected.filter((id) => id !== h.id))
                   }
                 >
+                  <OsIconOf kind="host" hostID={h.id} name={h.name} size={12} />
                   {h.name}{' '}
                   {h.known && !h.installed ? (
                     <Tag>{t('fail2ban.notInstalledShort')}</Tag>

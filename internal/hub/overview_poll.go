@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"net/url"
@@ -196,6 +197,9 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 			Title    string `json:"title"`
 		} `json:"top_findings"`
 		Fail2ban *f2bSummary `json:"fail2ban"`
+		Host     struct {
+			OSInfo *model.OSInfo `json:"os_info"`
+		} `json:"host"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		m.recordUnreachable(ctx, hostID, err)
@@ -239,6 +243,9 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	now := time.Now()
 	m.overviewMu.Lock()
 	delete(m.pollFails, hostID)
+	if body.Host.OSInfo != nil {
+		m.hostOS[hostID] = body.Host.OSInfo
+	}
 	m.overview[hostID] = hostOverview{
 		reachable:     true,
 		findings:      body.Findings,
@@ -414,6 +421,7 @@ func (m *Manager) Overview(hostID int64) (HostOverview, bool) {
 		Version:      cur.version,
 		LastPolledAt: cur.lastPolledAt,
 		Channel:      cur.channel,
+		OS:           m.hostOS[hostID],
 	}, true
 }
 
@@ -433,6 +441,8 @@ type HostOverview struct {
 	// successful (or attempted) dial. Surfaced to the UI as the
 	// "работает через резервный канал" badge when it's channelTunnel.
 	Channel string
+	// OS — ОС хоста по последнему удачному опросу (значок перед именем).
+	OS *model.OSInfo
 }
 
 // setVMState правит состояние домена в кэше сразу после действия — до

@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { OsIcon } from '../components/OsIcon'
+import { rememberOS } from '../osRegistry'
 import { Button, Form, Input, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useFocusRow } from '../focus'
@@ -25,6 +27,7 @@ import { msg, tx, type Msg } from '../msg'
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
   const containers = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
+  useEffect(() => rememberOS('podman', containers.data?.containers), [containers.data])
   const focusContainer = useFocusRow(!!containers.data)
   const launcher = useJobLauncher(() => void api('/inventory/refresh', { method: 'POST' }).then(() => containers.reload()))
   const [busy, setBusy] = useState<string | null>(null)
@@ -111,7 +114,16 @@ export default function Podman({ me }: { me: Me }) {
   }
 
   const columns: TableColumnsType<PodmanContainer> = [
-    { title: t('podman.colContainer'), key: 'name', render: (_, c) => <strong>{c.name}</strong> },
+    {
+      title: t('podman.colContainer'),
+      key: 'name',
+      render: (_, c) => (
+        <strong>
+          <OsIcon os={c.os_info} />
+          {c.name}
+        </strong>
+      ),
+    },
     { title: t('podman.colPod'), key: 'pod', render: (_, c) => <span className="small">{c.pod || '—'}</span> },
     {
       title: t('podman.colImage'),
@@ -238,6 +250,7 @@ export default function Podman({ me }: { me: Me }) {
               items={inactiveContainers}
               getKey={(c) => c.id}
               getLabel={(c) => c.name}
+        getIcon={(c) => <OsIcon os={c.os_info} size={12} />}
               getTooltip={(c) => (
                 <>
                   <div>{c.image}</div>

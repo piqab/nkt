@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { OsIcon } from './OsIcon'
+import type { OSInfo } from '../types'
 import { Button, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { ApiError, LOCAL_HOST_ID, api } from '../api'
@@ -23,7 +25,7 @@ export const hostBase = (id: number) => `/hosts/${id === LOCAL_HOST_ID ? 'local'
  * docker или podman и работает ли compose. Нет — кнопка «Установить
  * Docker» (фоновое задание хоста в стандартном окне журнала).
  */
-export function ComposeEngineStatus({ hostId, name, admin }: { hostId: number; name: string; admin: boolean }) {
+export function ComposeEngineStatus({ hostId, name, os, admin }: { hostId: number; name: string; os?: OSInfo; admin: boolean }) {
   const { t } = useTranslation()
   const [state, setState] = useState<{ kind: 'loading' } | { kind: 'ok'; e: ComposeEngine } | { kind: 'old' } | { kind: 'error'; text: string }>({ kind: 'loading' })
   const [job, setJob] = useState<Job | null>(null)
@@ -94,7 +96,10 @@ export function ComposeEngineStatus({ hostId, name, admin }: { hostId: number; n
   }
   return (
     <span className="row" style={{ gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' }}>
-      <span className="small">{name}:</span>
+      <span className="small">
+        <OsIcon os={os} size={12} />
+        {name}:
+      </span>
       {body}
       {installError && <span className="small" style={{ color: 'var(--status-error)' }}>{installError}</span>}
       {job && (
