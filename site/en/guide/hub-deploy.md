@@ -178,6 +178,17 @@ compose:
   won't update and the old one starts. The deployment log names such
   services; to take the image from the registry, use `pull_policy: always`
   (in the compose file or a `.env` variable) or set the image in `images:`.
+- **`up` after the pull.** Images are pulled in a separate step (with the
+  registry keys from "Secrets"), and `up` runs with `--pull never`: it takes
+  what was just pulled and does not go to the registry again (with
+  `pull_policy: always` it would go there without a key). With
+  `compose.pull: false` the flag is not set. If compose on the host has no
+  `up --pull` (a very old docker compose, podman-compose), the flag is not
+  set and the log warns. If `up` still fails while pulling an image, the log
+  names the cause and what is really on the host, by container IDs before
+  and after `up`: "the previous version is running", "the stack was not
+  running before the deployment either", "recreated before the error" or
+  "no containers".
 - **Ports on 127.0.0.1 only.** A publication without an address
   (`8080:80`) listens on all addresses, and docker opens it with its own
   iptables rules, bypassing ufw and firewalld. So the hub gives such

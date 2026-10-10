@@ -644,6 +644,7 @@ func busyPorts(ctx context.Context, c collect.Collector, engine, work, project, 
 
 // composePSEntry — контейнер из «compose ps --format json».
 type composePSEntry struct {
+	ID         string `json:"ID"`
 	Name       string `json:"Name"`
 	Service    string `json:"Service"`
 	State      string `json:"State"`
