@@ -144,13 +144,25 @@ says so.
 machine's card (VNC when the machine has it, SPICE otherwise) and on an LXD
 virtual machine (SPICE). It opens the web interface's own screen page (noVNC
 and spice-html5) full-screen in an embedded browser, already signed in. A tap
-is a click, a moving finger is the mouse, two fingers zoom. At the top are
-Esc, Tab, arrows, ⌫, ⏎ and Ctrl+Alt+Del, and "⌨ Keyboard" opens the on-screen
-keyboard: what you type reaches the machine as typed on a US layout. Zoom is
-there too: "−" and "+" from 50% to 150% (100% fits the picture to the
-screen), "⤢" fits it again; remembered per machine. A large Windows screen
-that runs off the edge — zoom out; above 100% "Move" lets you scroll the
-picture with a finger (touches then don't reach the machine). The
+is a click, a moving finger is the mouse, two fingers zoom. The picture takes
+the whole screen, and all controls are in a floating menu: a round button in
+a corner (the ring colour is the state: green — connected, yellow —
+connecting, red — error) that can be dragged with a finger; its place is
+remembered. The menu holds Esc, Tab, arrows, ⌫, ⏎, Ctrl+Alt+Del and "⌨
+Keyboard" (the on-screen keyboard: what you type reaches the machine as typed
+on a US layout), zoom and a hint; a tap outside folds it. A connection error
+shows as a strip at the top for a few seconds.
+
+Zoom, in steps of 10%: in portrait 50–150%, 100% fits the whole picture; in
+landscape 50–200%, 150% fits the screen width exactly ("↔"), 200% is a third
+wider than the screen. "⤢" fits the whole picture again; remembered per
+machine and orientation. Above 100% "Move" lets you scroll the picture with a
+finger (touches then don't reach the machine).
+
+A machine in the common host list (inside a host, under "+" on the web) has
+a **"Screen"** button that opens through its host. If the machine has no nkt
+(Windows or nkt not installed), instead of empty sections there is "no nkt on
+the machine" and the same "Screen". The
 embedded browser opens only the hub's pages; it accepts a self-signed hub
 certificate only if it is the one pinned at sign-in (Android 10 and newer).
 There is no screen on iOS yet.

@@ -62,6 +62,9 @@ type hostOverview struct {
 	// хостов, под которыми в списке есть машины: по нему в строке машины
 	// видно, работает ли она вообще, а не только отвечает ли nkt внутри.
 	vmStates map[string]string
+	// vmExtra — ОС и экраны доменов по имени (для строк машин, на которых
+	// своего nkt нет — Windows).
+	vmExtra map[string]vmExtra
 	// f2b — сводка fail2ban (баны сейчас); nil — хост старой версии.
 	f2b *f2bSummary
 }
@@ -223,7 +226,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	// Машины внутри хоста: их состояние знает только он. Спрашиваем
 	// вторым запросом и только когда есть кого спрашивать — у хоста без
 	// машин лишний вызов ни к чему.
-	vmStates := m.pollVMStates(ctx, hostID, dial, cookie)
+	vmStates, vmExtras := m.pollVMStates(ctx, hostID, dial, cookie)
 
 	// Обновление, которое хаб посчитал проваленным (например, не дождался
 	// /health на медленном хосте), а служба всё же поднялась новой версией:
@@ -255,46 +258,57 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		lastPolledAt:  now,
 		lastCheckedAt: now,
 		vmStates:      vmStates,
+		vmExtra:       vmExtras,
 		f2b:           body.Fail2ban,
 	}
 	m.overviewMu.Unlock()
 }
 
+// vmExtra — что ещё хост знает о домене: ОС гостя и его экраны.
+type vmExtra struct {
+	os       *model.OSInfo
+	graphics []string
+}
+
 // pollVMStates забирает состояния доменов у хоста, под которым в списке
-// есть машины. Ошибка — nil: строка машины покажет «неизвестно», а не
-// уронит опрос хоста.
-func (m *Manager) pollVMStates(ctx context.Context, hostID int64, dial dialFunc, cookie string) map[string]string {
+// есть машины, а с ними ОС и экраны. Ошибка — nil: строка машины покажет
+// «неизвестно», а не уронит опрос хоста.
+func (m *Manager) pollVMStates(ctx context.Context, hostID int64, dial dialFunc, cookie string) (map[string]string, map[string]vmExtra) {
 	if !m.hasMachines(ctx, hostID) {
-		return nil
+		return nil, nil
 	}
 	addr := m.hostAPIAddr(ctx, hostID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/vms", nil)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
 	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		return nil, nil
 	}
 	var body struct {
 		VMs []struct {
-			Name  string `json:"name"`
-			State string `json:"state"`
+			Name     string        `json:"name"`
+			State    string        `json:"state"`
+			OSInfo   *model.OSInfo `json:"os_info"`
+			Graphics []string      `json:"graphics"`
 		} `json:"vms"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil
+		return nil, nil
 	}
 	out := make(map[string]string, len(body.VMs))
+	extra := make(map[string]vmExtra, len(body.VMs))
 	for _, vm := range body.VMs {
 		out[vm.Name] = vm.State
+		extra[vm.Name] = vmExtra{os: vm.OSInfo, graphics: vm.Graphics}
 	}
-	return out
+	return out, extra
 }
 
 // hasMachines отвечает, есть ли в списке машины с этим хостом-родителем.
@@ -323,6 +337,14 @@ func (m *Manager) VMState(parentID int64, name string) (string, bool) {
 	}
 	state, ok := ov.vmStates[name]
 	return state, ok
+}
+
+// VMExtra — ОС и экраны домена машины по последнему опросу её хоста.
+func (m *Manager) VMExtra(parentID int64, name string) (*model.OSInfo, []string) {
+	m.overviewMu.Lock()
+	defer m.overviewMu.Unlock()
+	e := m.overview[parentID].vmExtra[name]
+	return e.os, e.graphics
 }
 
 // recordChannel updates which path dialerFor most recently resolved for a

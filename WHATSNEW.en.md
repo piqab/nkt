@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.6 — 2026-10-10
+
+- **A machine's screen in the app takes the whole screen.** Keys, zoom and
+  the hint are in a floating menu: a round button in a corner (its colour is
+  the connection state), draggable with a finger. An error shows as a strip
+  at the top.
+- **Zoom by orientation:** in portrait 50–150% (100% — the whole picture);
+  in landscape up to 200%, 150% fits the screen width exactly. Remembered
+  per machine and orientation.
+- **A machine in the common host list** has a "Screen" button through its
+  host, on the web and in the app; for a machine without nkt (Windows) the
+  app says "no nkt on the machine" and offers the screen instead of empty
+  sections.
+- The OS icon of a machine without its own nkt (Windows) under "+" comes
+  from its host's machine list instead of “?”.
+- Host list: the OS icon no longer eats into the name — the name shows its
+  full 10 characters again.
+
 ## v1.13.5 — 2026-10-10
 
 - **An OS icon before the name** of a host, virtual machine, LXD instance

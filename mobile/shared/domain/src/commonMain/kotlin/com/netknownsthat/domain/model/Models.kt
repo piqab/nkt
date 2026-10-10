@@ -56,6 +56,12 @@ data class HubHost(
     val hubVersion: String = "",
     /** ОС хоста по опросу хаба — значок перед именем. */
     val osInfo: OsInfo? = null,
+    /** Машина внутри хоста: id хоста (0 — обычный хост). */
+    val parentId: Long = 0,
+    /** Состояние домена машины по опросу её хоста (running, shut off…). */
+    val vmState: String = "",
+    /** Экраны домена машины (vnc, spice) — «Экран» через её хост. */
+    val vmGraphics: List<String> = emptyList(),
 ) {
     /** Version the host actually runs (falls back to what was installed). */
     val shownVersion: String get() = runningVersion?.ifBlank { null } ?: nktVersion

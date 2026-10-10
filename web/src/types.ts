@@ -145,6 +145,8 @@ export interface HubHost {
    * «running», «shut off»… Пусто у обычных хостов и пока хост не
    * опрошен. */
   vm_state?: string
+  /** Экраны домена машины (vnc, spice) — «Экран» через её хост. */
+  vm_graphics?: string[]
   /** Профиль, по которому хост создан: имя и цвет — им подкрашена строка. */
   profile_name?: string
   profile_color?: string

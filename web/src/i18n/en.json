@@ -3225,12 +3225,14 @@
     "noGraphics": "The machine has no graphics (neither VNC nor SPICE) — there is no screen to show. You can add VNC: the XML editor opens with a diff.",
     "keyboard": "⌨ Keyboard",
     "badName": "Invalid machine name.",
-    "popoutHint": "A tap is a click, moving a finger moves the mouse. \"⌨ Keyboard\" opens the on-screen keyboard; text reaches the machine as typed on a US layout. Zoom with “−”/“+” (100% fits the screen), “Move” scrolls an enlarged picture with a finger.",
+    "popoutHint": "A tap is a click, moving a finger moves the mouse. \"⌨ Keyboard\" opens the on-screen keyboard; text reaches the machine as typed on a US layout. Zoom with “−”/“+”: 100% fits the whole picture, in landscape 150% fits the width (↔), up to 200%; “Move” scrolls an enlarged picture with a finger. The menu button can be dragged.",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "zoomFit": "Fit to screen (100%)",
     "pan": "Move the picture with a finger (touches don't reach the machine)",
-    "panShort": "Move"
+    "panShort": "Move",
+    "menu": "Screen menu",
+    "zoomWidth": "Fit the width (150%)"
   },
   "spice": {
     "noConnect": "Could not connect within 15 seconds. The machine must be running; for libvirt it needs spice graphics with a plain port, for LXD it must be a virtual machine. Details are in the nkt log.",

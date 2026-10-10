@@ -1,5 +1,8 @@
 package com.netknownsthat.ui.hosts
 
+import androidx.compose.material3.OutlinedButton
+import com.netknownsthat.ui.host.screenNameOk
+import com.netknownsthat.ui.host.screenProto
 import com.netknownsthat.ui.common.OsIcon
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,12 +66,48 @@ fun HostListScreen(
     viewModel: HostListViewModel,
     onOpenHost: (HubHost) -> Unit,
     onOpenJob: (Long) -> Unit,
+    /** Экран машины через её хост: машина, имя хоста, протокол. */
+    onOpenScreen: (HubHost, String, String) -> Unit,
 ) {
     val state = viewModel.uiState
     var adding by remember { mutableStateOf(false) }
     var groupsOpen by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<HubHost?>(null) }
     var regrouping by remember { mutableStateOf<HubHost?>(null) }
+    var noNkt by remember { mutableStateOf<HubHost?>(null) }
+    // Экран машины — через её хост (virsh на нём): работает и без nkt
+    // внутри, у Windows-машины это единственный вход.
+    val screenOf: (HubHost) -> (() -> Unit)? = { host ->
+        val parent = state.hosts.firstOrNull { it.id == host.parentId }?.name.orEmpty()
+        if (host.parentId != 0L && host.vmState == "running" && screenNameOk(host.name)) {
+            screenProto(host.vmGraphics)?.let { proto -> { onOpenScreen(host, parent, proto) } }
+        } else {
+            null
+        }
+    }
+    noNkt?.let { host ->
+        val screen = screenOf(host)
+        AlertDialog(
+            onDismissRequest = { noNkt = null },
+            title = { Text(t("На машине нет nkt", "No nkt on the machine")) },
+            text = {
+                Text(
+                    t(
+                        "На ${host.name} nkt не установлен — разделы и терминал недоступны. " +
+                            if (screen != null) "Экран открывается через её хост." else "Экран — когда машина запущена.",
+                        "nkt is not installed on ${host.name} — sections and the terminal are unavailable. " +
+                            if (screen != null) "The screen opens through its host." else "The screen — once the machine is running.",
+                    ),
+                )
+            },
+            confirmButton = {
+                if (screen != null) {
+                    TextButton(onClick = { noNkt = null; screen() }) { Text(t("Экран", "Screen")) }
+                }
+            },
+            dismissButton = { TextButton(onClick = { noNkt = null }) { Text(t("Закрыть", "Close")) } },
+        )
+    }
     val openJob: (Long) -> Unit = { id -> if (id > 0) onOpenJob(id) }
 
     SnackbarMessage(viewModel.message) { viewModel.message = null }
@@ -170,7 +209,13 @@ fun HostListScreen(
                         items(byGroup.getValue(group), key = { it.id }) { host ->
                             HostRow(
                                 host = host,
-                                onClick = { onOpenHost(host) },
+                                // Машина без своего nkt (Windows или не
+                                // поставлен) — разделов нет, только экран.
+                                onClick = {
+                                    if (host.parentId != 0L && (host.status != "online" || host.osInfo?.id == "windows")) noNkt = host
+                                    else onOpenHost(host)
+                                },
+                                onScreen = screenOf(host),
                                 // The hub's own machine has no SSH install to
                                 // manage and cannot be deleted.
                                 menu = if (host.id == HubHost.LOCAL_HOST_ID) null else HostMenu(
@@ -218,7 +263,7 @@ private class HostMenu(
 )
 
 @Composable
-private fun HostRow(host: HubHost, onClick: () -> Unit, menu: HostMenu?) {
+private fun HostRow(host: HubHost, onClick: () -> Unit, onScreen: (() -> Unit)?, menu: HostMenu?) {
     var open by remember { mutableStateOf(false) }
     Card(
         onClick = onClick,
@@ -293,6 +338,9 @@ private fun HostRow(host: HubHost, onClick: () -> Unit, menu: HostMenu?) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+            }
+            if (onScreen != null) {
+                OutlinedButton(onClick = onScreen, modifier = Modifier.padding(top = 4.dp)) { Text(t("Экран", "Screen")) }
             }
         }
     }

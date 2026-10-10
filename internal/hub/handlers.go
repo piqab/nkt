@@ -508,8 +508,11 @@ type hostWithOverview struct {
 	// since every page keeps working, just without whatever the new
 	// version added.
 	RunningVersion string `json:"running_version,omitempty"`
-	// OSInfo — ОС хоста для значка перед именем (из опроса хоста).
+	// OSInfo — ОС хоста для значка перед именем (из опроса хоста; у
+	// машины без своего nkt — из списка доменов её хоста).
 	OSInfo *model.OSInfo `json:"os_info,omitempty"`
+	// VMGraphics — экраны домена машины (vnc, spice): «Экран» через хост.
+	VMGraphics []string `json:"vm_graphics,omitempty"`
 	// InstallActive — установка или обновление nkt на хосте идёт или ждёт
 	// очереди: «обновить всё» такие хосты не трогает.
 	InstallActive bool `json:"install_active,omitempty"`
@@ -641,6 +644,13 @@ func (s *Server) hostRows(ctx context.Context) ([]hostWithOverview, error) {
 			if state, ok := s.hub.VMState(h.ParentID, h.Name); ok {
 				row.VMState = state
 			}
+			// Своего nkt на машине нет (Windows) — ОС из списка доменов
+			// хоста; экраны — для «Экрана» через хост.
+			vmOS, graphics := s.hub.VMExtra(h.ParentID, h.Name)
+			if row.OSInfo == nil {
+				row.OSInfo = vmOS
+			}
+			row.VMGraphics = graphics
 		}
 		out = append(out, row)
 	}
