@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.8 — 2026-10-10
+
+- The tab icon shows in Safari too: besides the SVG — `favicon.ico` (16,
+  32, 48 px), a 32 px PNG and an `apple-touch-icon` for iPhone and iPad
+  bookmarks. Safari, which doesn't show SVG icons, used to get none.
+
 ## v1.13.7 — 2026-10-10
 
 - App: the “No nkt on the machine” dialog is fully translated — the English
