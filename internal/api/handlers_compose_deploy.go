@@ -426,16 +426,47 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 		return err
 	}
+	// Образы только что скачаны (с ключом конвейера) — up берёт их, а не
+	// скачивает снова: при pull_policy: always он пошёл бы в registry уже
+	// без ключа.
+	pullNever := false
+	if p.Pull {
+		if pullNever = upKnowsPull(ctx, c, p.Engine); !pullNever {
+			jc.Log("compose.upNoPullFlag")
+		}
+	}
 	upArgs := func(extra ...string) []string {
 		args := []string{"up", "-d", "--remove-orphans"}
 		if p.ForceRecreate {
 			args = append(args, "--force-recreate")
 		}
+		if pullNever {
+			args = append(args, "--pull", "never")
+		}
 		return append(args, extra...)
+	}
+	// up упал на скачивании образа — контейнеры, скорее всего, не
+	// тронуты: какие и в каком состоянии, сверкой с тем, что было до up.
+	before := stackPS(ctx, c, p.Engine, p.Project, p.File)
+	upPullFailed := func() error {
+		// Только если up сам скачивал образ («Pulling …»): иначе слова
+		// вроде «not found» в выводе — о другом.
+		if !strings.Contains(strings.ToLower(lastOutput), "pull") {
+			return nil
+		}
+		cause := composePullCause(lastOutput, nil)
+		if cause == nil {
+			return nil
+		}
+		logUpPullState(jc, before, stackPS(ctx, c, p.Engine, p.Project, p.File))
+		return msgs.Errorf("compose.upPullFailed", msgs.Localize(jc.Lang(), cause))
 	}
 	if p.Engine == "docker" {
 		// --wait: ждать, пока контейнеры поднимутся и пройдут healthcheck.
 		if err := run(wait+5*time.Minute, upArgs("--wait", "--wait-timeout", strconv.Itoa(p.WaitTimeout))...); err != nil {
+			if perr := upPullFailed(); perr != nil {
+				return upFailed(perr)
+			}
 			// Разовые сервисы (restart: "no" — например, заведение
 			// администратора) завершаются, и --wait считает это провалом.
 			// Если завершились только они и с кодом 0, а остальное работает
@@ -448,6 +479,9 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	} else {
 		if err := run(10*time.Minute, upArgs()...); err != nil {
+			if perr := upPullFailed(); perr != nil {
+				return upFailed(perr)
+			}
 			return upFailed(diagnose(err))
 		}
 		if err := waitPodmanStack(ctx, jc, c, p.Project, wait); err != nil {
@@ -555,6 +589,79 @@ func composePullCause(out string, pullErr error) error {
 		return msgs.Errorf("compose.pullNotFound")
 	}
 	return pullErr
+}
+
+// upKnowsPull — compose на хосте понимает «up --pull» (Docker Compose с
+// 2.x; у старого compose и podman-compose его может не быть).
+func upKnowsPull(ctx context.Context, c collect.Collector, engine string) bool {
+	res, err := c.RunTimeout(ctx, 30*time.Second, engine, "compose", "up", "--help")
+	return err == nil && res.OK() && strings.Contains(res.Output(), "--pull")
+}
+
+// stackPS — контейнеры стека (compose ps -a).
+func stackPS(ctx context.Context, c collect.Collector, engine, project, file string) []composePSEntry {
+	res, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgs(c, project, file), "ps", "-a", "--format", "json")...)
+	if err != nil || !res.OK() {
+		return nil
+	}
+	return composePS(res.Stdout)
+}
+
+// logUpPullState — что на хосте после up, упавшего на скачивании образа.
+func logUpPullState(jc *jobs.Context, before, after []composePSEntry) {
+	for _, l := range upPullState(before, after) {
+		if l[1] == "" {
+			jc.Log(l[0])
+		} else {
+			jc.Log(l[0], l[1])
+		}
+	}
+}
+
+// upPullState — строки журнала (ключ, список): контейнер с тем же ID, что
+// до up, не пересоздавался — работает он или нет, решает его состояние, а
+// не догадка.
+func upPullState(before, after []composePSEntry) [][2]string {
+	if len(after) == 0 {
+		return [][2]string{{"compose.upPullNoContainers"}}
+	}
+	prev := map[string]string{}
+	for _, e := range before {
+		prev[e.Name] = e.ID
+	}
+	describe := func(e composePSEntry) string {
+		st := e.State
+		if e.Health != "" {
+			st += " " + e.Health
+		}
+		if e.State == "exited" || e.State == "dead" {
+			st += " (" + strconv.Itoa(e.ExitCode) + ")"
+		}
+		return e.Name + " — " + st
+	}
+	var running, down, recreated, unknown []string
+	for _, e := range after {
+		switch {
+		case e.ID == "" || prev[e.Name] == "":
+			unknown = append(unknown, describe(e))
+		case prev[e.Name] != e.ID:
+			recreated = append(recreated, describe(e))
+		case e.State == "running" && e.Health != "unhealthy":
+			running = append(running, e.Name)
+		default:
+			down = append(down, describe(e))
+		}
+	}
+	var out [][2]string
+	for _, g := range []struct {
+		key  string
+		list []string
+	}{{"compose.upPullKeptRunning", running}, {"compose.upPullKeptDown", down}, {"compose.upPullRecreated", recreated}, {"compose.upPullState", unknown}} {
+		if len(g.list) > 0 {
+			out = append(out, [2]string{g.key, strings.Join(g.list, ", ")})
+		}
+	}
+	return out
 }
 
 // logPullSkipped — compose pull что-то пропустил («Skipped»): почему,

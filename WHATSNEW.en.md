@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.4 — 2026-10-10
+
+- **Deployment: `up` does not pull images a second time.** After the pull
+  step with the registry keys, `up` runs with `--pull never`. Before, with
+  `pull_policy: always` (including from `compose.images`), `up` went to the
+  private registry again without a key and failed with `unauthorized`. If
+  compose has no `up --pull`, the flag is not set and the log warns.
+- **`up` failed while pulling an image** — the log names the cause and the
+  real state of the stack by container IDs before and after: "the previous
+  version is running", "the stack was not running before the deployment
+  either", "recreated before the error" or "no containers" — instead of a
+  generic "the stack did not start".
+
 ## v1.13.3 — 2026-10-09
 
 - **Deployment: an image from `compose.images` is always pulled.** Besides
