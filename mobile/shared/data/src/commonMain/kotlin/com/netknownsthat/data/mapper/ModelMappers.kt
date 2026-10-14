@@ -2,8 +2,10 @@ package com.netknownsthat.data.mapper
 
 import com.netknownsthat.domain.model.ActiveJob
 import com.netknownsthat.domain.model.OsInfo
+import com.netknownsthat.domain.model.Ups
 import com.netknownsthat.data.dto.ActiveJobDto
 import com.netknownsthat.data.dto.OsInfoDto
+import com.netknownsthat.data.dto.UpsDto
 import com.netknownsthat.data.dto.AddHostResponseDto
 import com.netknownsthat.data.dto.AddedRuleDto
 import com.netknownsthat.data.dto.AuditEntryDto
@@ -554,6 +556,15 @@ fun OverviewDto.toDomain(): Overview = Overview(
     findings = findings,
     certificates = certificates?.toDomain(),
     availability = availability?.toDomain(),
+    ups = ups.orEmpty().map { it.toDomain() },
+    upsLow = upsLow.orEmpty(),
+)
+
+fun UpsDto.toDomain(): Ups = Ups(
+    name = name, model = model, manufacturer = manufacturer, status = status,
+    onBattery = onBattery, lowBattery = lowBattery, replaceBattery = replaceBattery, overload = overload,
+    chargePct = chargePct, hasCharge = hasCharge, loadPct = loadPct, runtimeS = runtimeS, hasRuntime = hasRuntime,
+    inputV = inputV, error = error,
 )
 
 fun HostInfoDto.toDomain(): HostInfo = HostInfo(

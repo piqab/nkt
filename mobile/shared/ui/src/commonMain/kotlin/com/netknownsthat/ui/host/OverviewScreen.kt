@@ -48,6 +48,7 @@ fun OverviewScreen(viewModel: OverviewViewModel) {
     SectionContent(state = viewModel.state, emptyText = t("Нет данных обзора", "No overview data")) { overview ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             item { HostCard(overview) }
+            if (overview.ups.isNotEmpty()) item { UpsCard(overview) }
             item { FindingsCard(overview) }
             overview.certificates?.let { certs ->
                 if (certs.total > 0) item { CertificatesCard(certs.total, certs.expired, certs.expiring, certs.soonestDays, certs.soonestName) }
@@ -94,6 +95,39 @@ private fun HostCard(overview: Overview) {
                 color = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.padding(top = 8.dp),
             )
+        }
+    }
+}
+
+/** ИБП хоста (NUT): состояние, заряд, нагрузка, время на батарее. */
+@Composable
+private fun UpsCard(overview: Overview) {
+    SectionCard(t("ИБП", "UPS")) {
+        overview.ups.forEach { u ->
+            val low = u.name in overview.upsLow || (u.onBattery && u.lowBattery)
+            val (state, color) = when {
+                u.error.isNotBlank() -> t("нет связи", "no link") to MaterialTheme.colorScheme.error
+                low -> t("батарея садится", "battery low") to MaterialTheme.colorScheme.error
+                u.onBattery -> t("от батареи — пропало питание", "on battery — power lost") to MaterialTheme.colorScheme.tertiary
+                else -> t("от сети", "on mains") to MaterialTheme.colorScheme.primary
+            }
+            Text(
+                text = "${u.name} — $state",
+                style = MaterialTheme.typography.titleSmall,
+                color = color,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            if (u.error.isBlank()) {
+                val model = listOf(u.manufacturer, u.model).filter { it.isNotBlank() }.joinToString(" ")
+                if (model.isNotBlank()) LabeledValue(t("Модель", "Model"), model)
+                if (u.hasCharge) LabeledValue(t("Заряд", "Charge"), "${u.chargePct.toInt()}%")
+                LabeledValue(t("Нагрузка", "Load"), "${u.loadPct.toInt()}%")
+                if (u.hasRuntime) LabeledValue(t("На батарее хватит", "Runtime on battery"), t("~${u.runtimeS / 60} мин", "~${u.runtimeS / 60} min"))
+                if (u.inputV > 0) LabeledValue(t("Вход", "Input"), "${u.inputV.toInt()} V")
+                if (u.replaceBattery) LabeledValue(t("Батарея", "Battery"), t("заменить", "replace"))
+            } else {
+                Text(u.error, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }

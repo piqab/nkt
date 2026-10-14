@@ -35,6 +35,14 @@ const (
 	// EventForecast — прогноз «Мониторинга»: диск скоро заполнится,
 	// память на пределе, похоже на утечку, упала доступность.
 	EventForecast = "forecast"
+	// EventPowerLost — ИБП хоста перешёл на батарею: пропало питание.
+	EventPowerLost = "power-lost"
+	// EventPowerRestored — ИБП снова от сети.
+	EventPowerRestored = "power-restored"
+	// EventBatteryLow — ИБП на батарее, и она вот-вот сядет (пороги хоста).
+	EventBatteryLow = "battery-low"
+	// EventUPSLost — NUT на хосте перестал получать ответ от ИБП.
+	EventUPSLost = "ups-lost"
 )
 
 // HostEvent — одно оповещение.

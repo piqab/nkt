@@ -63,6 +63,50 @@ title: Packages, disks, files, system
 Machine, CPU, memory, batteries, temperatures (lm-sensors), PCI and USB
 devices.
 
+### UPS
+
+An uninterruptible power supply — via **NUT** (Network UPS Tools): nkt
+installs and configures it itself and reads the state through `upsc`. The
+NUT server (`upsd`) listens on `127.0.0.1` only — no port is opened to the
+outside; the hub learns about the UPS from the regular host poll.
+
+The **"UPS"** card at the top of the section: state (on mains / on battery /
+battery low / no link), charge, load, runtime on battery, model, driver,
+input and output voltage, NUT flags and a 24-hour chart (charge, load,
+input voltage).
+
+**"Find UPS"** — a check without changes:
+
+- a UPS on USB by vendor and product codes (Megatec/Cypress `0665:5161` —
+  Ippon, SVEN, Powercom and other UPSes UPSilon 2000 works with; APC, Eaton,
+  CyberPower and others — the `usbhid-ups` driver), COM ports;
+- **UPSilon 2000**: whether it runs, its services and directories — it holds
+  the UPS port, and the NUT driver won't work next to it;
+- whether NUT is installed and has a UPS described.
+
+**"Connect UPS"** (admin) — as a background job with a log: stops and
+disables UPSilon (its files stay), installs the `nut` package, writes
+`/etc/nut/ups.conf` (driver `nutdrv_qx`, `usbhid-ups`, `blazer_usb` or
+`blazer_ser`; port — USB found automatically or a COM port), `upsd` on
+`127.0.0.1` only, starts the services and waits for the UPS to answer. No
+answer within 40 s — everything is put back: the previous `/etc/nut` from
+the backup (`/var/lib/netknownsthat/nut-backup-…`), UPSilon enabled again.
+The **"Shut this host down when the battery runs low"** box enables
+`upsmon`; without it — monitoring and alerts only.
+
+NUT files (`ups.conf`, `upsd.conf`, `upsmon.conf`, `nut.conf`) are edited in
+"Configs" — with a diff and history; `upsd.users` (it holds a password) is
+not.
+
+**Findings and alerts.** A UPS on battery is a "power lost" finding; on
+battery with the charge below the threshold or less time left — a critical
+"battery low"; no link to the UPS, overload, "replace battery" are findings
+too. **"Alert thresholds"** — charge (30% by default) and runtime (5 min),
+edited with a diff and history. The hub records "power lost", "power
+restored", "UPS battery low", "no link to UPS" events and sends them to
+Telegram, Slack and webhooks; in the hub host list a host with a UPS has a
+lightning icon: green — on mains, orange — on battery, red — low or no link.
+
 ## System settings
 
 - Hostname, time zone (with search), NTP, the state of automatic security

@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.10 — 2026-10-14
+
+- **UPS via NUT** — “Hardware” → “UPS”.
+  - **“Find UPS”** looks for a UPS on USB and COM ports (Megatec/Cypress —
+    Ippon, SVEN, Powercom and others UPSilon 2000 works with; APC, Eaton,
+    CyberPower) and for UPSilon traces, changing nothing.
+  - **“Connect UPS”** — as a background job: stops UPSilon, installs `nut`,
+    describes the UPS, `upsd` on 127.0.0.1 only; if the UPS doesn't answer,
+    everything is put back. Optionally the host shuts down on low battery.
+  - State, charge, load, runtime on battery, a 24-hour chart; findings
+    “power lost”, “battery low”, “no link”, “replace battery”; alert
+    thresholds — with a diff and history.
+  - Hub: “power lost”, “power restored”, “UPS battery low”, “no link to UPS”
+    events — to the journal, Telegram, Slack and webhooks; a UPS icon in the
+    host row. In the app — the UPS on the host overview.
+
 ## v1.13.9 — 2026-10-10
 
 - Host list: the status icon in the first column is centred with equal

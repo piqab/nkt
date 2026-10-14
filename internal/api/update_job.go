@@ -103,6 +103,8 @@ func updateJobTitle(action, target string) (string, []any) {
 		return "cmdjob.titleSandbox", []any{strings.TrimPrefix(action, "sandbox_pkg."), strings.TrimSpace(target)}
 	case strings.HasPrefix(action, "container."):
 		return "cmdjob.titleContainer", []any{strings.TrimPrefix(action, "container."), target}
+	case action == "ups.connect":
+		return "cmdjob.titleUPSConnect", []any{target}
 	case action == "lxd.imageCopy":
 		return "cmdjob.titleLXDImage", []any{target}
 	}

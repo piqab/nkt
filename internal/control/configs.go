@@ -115,6 +115,9 @@ func (m *ConfigManager) serviceForPath(path string) string {
 		return model.ServiceSysctl
 	case path == "/etc/crontab":
 		return model.ServiceCron
+	// NUT (ИБП): кроме upsd.users — в нём пароль upsmon.
+	case path == "/etc/nut/ups.conf" || path == "/etc/nut/upsd.conf" || path == "/etc/nut/upsmon.conf" || path == "/etc/nut/nut.conf":
+		return model.ServiceHost
 	case underRoot(path, parse.LibvirtQEMUDir):
 		// libvirt itself stores a defined domain's persistent XML here — this
 		// is not a config file some other service merely reads, it IS
@@ -359,6 +362,12 @@ func (m *ConfigManager) knownExtraPaths(ctx context.Context) []string {
 	}
 	// Одиночные файлы вне каталогов — их обход не найдёт по определению.
 	paths = append(paths, "/etc/hosts", "/etc/resolv.conf", "/etc/sysctl.conf", "/etc/crontab")
+	// Файлы NUT — только если NUT настроен (иначе пустые строки в списке).
+	for _, p := range []string{"/etc/nut/ups.conf", "/etc/nut/upsd.conf", "/etc/nut/upsmon.conf", "/etc/nut/nut.conf"} {
+		if m.c.Exists(p) {
+			paths = append(paths, p)
+		}
+	}
 	return paths
 }
 

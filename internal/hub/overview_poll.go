@@ -65,6 +65,10 @@ type hostOverview struct {
 	// vmExtra — ОС и экраны доменов по имени (для строк машин, на которых
 	// своего nkt нет — Windows).
 	vmExtra map[string]vmExtra
+	// ups — состояние ИБП хоста на этом опросе (для событий); upsList —
+	// как есть, для мониторинга хаба.
+	ups     map[string]upsSeen
+	upsList []model.UPS
 	// f2b — сводка fail2ban (баны сейчас); nil — хост старой версии.
 	f2b *f2bSummary
 }
@@ -203,6 +207,10 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		Host     struct {
 			OSInfo *model.OSInfo `json:"os_info"`
 		} `json:"host"`
+		// UPS — ИБП хоста (nil — старый хост без NUT-поддержки); UPSLow —
+		// какие ниже порогов хоста.
+		UPS    []model.UPS `json:"ups"`
+		UPSLow []string    `json:"ups_low"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		m.recordUnreachable(ctx, hostID, err)
@@ -221,6 +229,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	m.noteFindings(ctx, hostID, body.Findings, severeNow)
 	m.noteUptime(ctx, hostID, body.UptimeS)
 	m.noteBans(ctx, hostID, body.Fail2ban)
+	m.noteUPS(ctx, hostID, body.UPS, body.UPSLow)
 	m.maybePushHubAddr(hostID, channel, body.Fail2ban)
 
 	// Машины внутри хоста: их состояние знает только он. Спрашиваем
@@ -259,6 +268,8 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		lastCheckedAt: now,
 		vmStates:      vmStates,
 		vmExtra:       vmExtras,
+		ups:           upsSnapshot(body.UPS, body.UPSLow),
+		upsList:       body.UPS,
 		f2b:           body.Fail2ban,
 	}
 	m.overviewMu.Unlock()
@@ -337,6 +348,13 @@ func (m *Manager) VMState(parentID int64, name string) (string, bool) {
 	}
 	state, ok := ov.vmStates[name]
 	return state, ok
+}
+
+// HostUPS — ИБП хоста по последнему опросу.
+func (m *Manager) HostUPS(hostID int64) []model.UPS {
+	m.overviewMu.Lock()
+	defer m.overviewMu.Unlock()
+	return m.overview[hostID].upsList
 }
 
 // VMExtra — ОС и экраны домена машины по последнему опросу её хоста.

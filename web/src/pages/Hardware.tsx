@@ -5,6 +5,8 @@ import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
 import { TitleHelp } from '../components/Docs'
+import { UPSCard } from '../components/UPSCard'
+import type { Me } from '../types'
 
 interface Battery {
   name: string
@@ -69,7 +71,7 @@ function tempColor(v: SensorValue): string {
   return 'var(--status-good)'
 }
 
-export default function HardwarePage() {
+export default function HardwarePage({ me }: { me: Me }) {
   const { t } = useTranslation()
   const hw = useApi<Hardware>('/hardware', 60_000)
 
@@ -134,6 +136,8 @@ export default function HardwarePage() {
       </div>
 
       <ErrorNote error={hw.error} />
+
+      <UPSCard admin={me.is_admin} />
 
       <Card title={t('hardware.summary')}>
         <div className="table-wrap">

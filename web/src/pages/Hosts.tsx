@@ -14,6 +14,7 @@ import {
   WarningFilled,
   SafetyCertificateFilled,
   DisconnectOutlined,
+  ThunderboltFilled,
   CloudDownloadOutlined,
   ClusterOutlined,
   PauseCircleOutlined,
@@ -349,6 +350,7 @@ function ProblemsCell({ host }: { host: HubHost }) {
   return (
     <div className="row row-nowrap" style={{ gap: '0.35rem' }}>
       {unreachable}
+      <UPSBadge ups={host.ups} />
       <div className="row row-nowrap" style={{ gap: '0.35rem', opacity: stale ? 0.55 : 1 }}>
         {present.length === 0 ? (
           <span className="row small" style={{ gap: '0.3rem', color: 'var(--status-good)', flexWrap: 'nowrap' }}>
@@ -365,6 +367,29 @@ function ProblemsCell({ host }: { host: HubHost }) {
         )}
       </div>
     </div>
+  )
+}
+
+/** ИБП хоста значком: зелёный — от сети, оранжевый — от батареи,
+ * красный — садится или нет связи; подробности — в подсказке. */
+function UPSBadge({ ups }: { ups?: HubHost['ups'] }) {
+  const { t } = useTranslation()
+  if (!ups?.length) return null
+  const bad = ups.some((u) => u.error || (u.on_battery && u.low_battery))
+  const battery = ups.some((u) => u.on_battery)
+  const color = bad ? 'var(--status-critical)' : battery ? 'var(--status-warning)' : 'var(--status-good)'
+  const tip = ups
+    .map((u) => {
+      const state = u.error ? t('ups.state.lost') : u.on_battery && u.low_battery ? t('ups.state.low') : u.on_battery ? t('ups.state.battery') : t('ups.state.online')
+      const charge = u.has_charge ? ` · ${Math.round(u.charge_pct ?? 0)}%` : ''
+      const runtime = u.has_runtime ? ` · ${t('ups.minutes', { n: Math.round((u.runtime_s ?? 0) / 60) })}` : ''
+      return `${t('ups.title')} ${u.name}: ${state}${charge}${runtime}`
+    })
+    .join('\n')
+  return (
+    <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{tip}</span>}>
+      <ThunderboltFilled style={{ color }} aria-label={tip} />
+    </Tooltip>
   )
 }
 

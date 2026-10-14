@@ -149,7 +149,11 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		// Аптайм отдельным полем, а не только внутри host: опрос хаба
 		// читает именно его (overview_poll), и сжимать разбор до одного
 		// поля надёжнее, чем зависеть от структуры host.
-		"uptime_s":  snap.Host.UptimeS,
+		"uptime_s": snap.Host.UptimeS,
+		// ИБП — для событий хаба «питание пропало / вернулось»; ups_low —
+		// какие на батарее и ниже порогов хоста (порогов хаб не знает).
+		"ups":       s.upsStatus(r.Context()),
+		"ups_low":   s.upsLow(r.Context()),
 		"mode":      snap.Mode,
 		"scanned":   snap.TS,
 		"scan_ms":   snap.ScanMS,
@@ -624,5 +628,6 @@ func (s *Server) hostFindings(r *http.Request) []model.Finding {
 		return nil
 	}
 	list := append(s.configs.FileHistoryFindings(r.Context()), s.f2bFindings(r.Context())...)
+	list = append(list, s.upsFindings(r.Context())...)
 	return model.LocalizeFindings(msgs.LangFromRequest(r), list)
 }

@@ -954,6 +954,40 @@ type VulnScan struct {
 	ScannedAt time.Time `json:"scanned_at"`
 }
 
+// UPS — источник бесперебойного питания по данным NUT (upsc).
+type UPS struct {
+	// Name — имя ИБП в NUT (секция ups.conf).
+	Name         string `json:"name"`
+	Model        string `json:"model,omitempty"`
+	Manufacturer string `json:"manufacturer,omitempty"`
+	Driver       string `json:"driver,omitempty"`
+	// Status — ups.status как есть: OL, OB, LB, RB, CHRG, OVER… через пробел.
+	Status         string  `json:"status,omitempty"`
+	OnBattery      bool    `json:"on_battery"`
+	LowBattery     bool    `json:"low_battery"`
+	ReplaceBattery bool    `json:"replace_battery,omitempty"`
+	Overload       bool    `json:"overload,omitempty"`
+	ChargePct      float64 `json:"charge_pct,omitempty"`
+	HasCharge      bool    `json:"has_charge,omitempty"`
+	LoadPct        float64 `json:"load_pct,omitempty"`
+	// RuntimeS — сколько продержится на батарее при текущей нагрузке.
+	RuntimeS   int64   `json:"runtime_s,omitempty"`
+	HasRuntime bool    `json:"has_runtime,omitempty"`
+	InputV     float64 `json:"input_v,omitempty"`
+	OutputV    float64 `json:"output_v,omitempty"`
+	BatteryV   float64 `json:"battery_v,omitempty"`
+	Firmware   string  `json:"firmware,omitempty"`
+	Serial     string  `json:"serial,omitempty"`
+	Beeper     string  `json:"beeper,omitempty"`
+	// Пороги самого ИБП (battery.charge.low, battery.runtime.low), если
+	// он их сообщает.
+	LowChargePct  float64 `json:"low_charge_pct,omitempty"`
+	LowRuntimeS   int64   `json:"low_runtime_s,omitempty"`
+	NominalPowerW float64 `json:"nominal_power_w,omitempty"`
+	// Error — NUT описывает ИБП, а драйвер не отвечает (нет связи).
+	Error string `json:"error,omitempty"`
+}
+
 // OSInfo — операционная система хоста, машины или контейнера: по ID
 // интерфейс ставит значок перед именем.
 type OSInfo struct {
