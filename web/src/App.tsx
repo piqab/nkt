@@ -767,7 +767,7 @@ function Shell({
                 <Route path="/certificates" element={<Certificates me={me} />} />
                 <Route path="/audit" element={<Audit />} />
                 <Route path="/disks" element={<Disks />} />
-                <Route path="/hardware" element={<HardwarePage />} />
+                <Route path="/hardware" element={<HardwarePage me={me} />} />
                 {me.is_admin && <Route path="/system" element={<SystemSettingsPage me={me} />} />}
                 {me.is_admin && <Route path="/users" element={<Users me={me} />} />}
                 {me.is_admin && <Route path="/os-users" element={<OSUsers me={me} />} />}

@@ -54,6 +54,7 @@ ReadWritePaths=/var/lib/netknownsthat-hub
 ReadWritePaths=-/etc/nginx
 ReadWritePaths=-/etc/haproxy
 ReadWritePaths=-/etc/caddy
+ReadWritePaths=-/etc/nut
 ReadWritePaths=-/etc/letsencrypt
 ReadWritePaths=-/var/log/nginx
 ReadWritePaths=-/var/log/haproxy

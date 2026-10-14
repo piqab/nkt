@@ -513,6 +513,8 @@ type hostWithOverview struct {
 	OSInfo *model.OSInfo `json:"os_info,omitempty"`
 	// VMGraphics — экраны домена машины (vnc, spice): «Экран» через хост.
 	VMGraphics []string `json:"vm_graphics,omitempty"`
+	// UPS — ИБП хоста по последнему опросу.
+	UPS []model.UPS `json:"ups,omitempty"`
 	// InstallActive — установка или обновление nkt на хосте идёт или ждёт
 	// очереди: «обновить всё» такие хосты не трогает.
 	InstallActive bool `json:"install_active,omitempty"`
@@ -630,6 +632,7 @@ func (s *Server) hostRows(ctx context.Context) ([]hostWithOverview, error) {
 			row.RunningVersion = ov.Version
 			row.Channel = ov.Channel
 			row.OSInfo = ov.OS
+			row.UPS = s.hub.HostUPS(h.ID)
 			if !ov.LastPolledAt.IsZero() {
 				row.LastPolledAt = store.FormatTime(ov.LastPolledAt)
 			}

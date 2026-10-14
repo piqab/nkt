@@ -177,6 +177,10 @@ const KIND_COLOR: Record<string, string> = {
   bans: 'volcano',
   rebooted: 'processing',
   forecast: 'purple',
+  'power-lost': 'error',
+  'power-restored': 'success',
+  'battery-low': 'error',
+  'ups-lost': 'warning',
 }
 
 /**

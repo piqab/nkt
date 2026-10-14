@@ -27,6 +27,27 @@ data class OverviewDto(
     val findings: Map<String, Int> = emptyMap(),
     val certificates: CertSummaryDto? = null,
     val availability: AvailabilitySummaryDto? = null,
+    val ups: List<UpsDto>? = null,
+    @SerialName("ups_low") val upsLow: List<String>? = null,
+)
+
+@Serializable
+data class UpsDto(
+    val name: String = "",
+    val model: String = "",
+    val manufacturer: String = "",
+    val status: String = "",
+    @SerialName("on_battery") val onBattery: Boolean = false,
+    @SerialName("low_battery") val lowBattery: Boolean = false,
+    @SerialName("replace_battery") val replaceBattery: Boolean = false,
+    val overload: Boolean = false,
+    @SerialName("charge_pct") val chargePct: Double = 0.0,
+    @SerialName("has_charge") val hasCharge: Boolean = false,
+    @SerialName("load_pct") val loadPct: Double = 0.0,
+    @SerialName("runtime_s") val runtimeS: Long = 0,
+    @SerialName("has_runtime") val hasRuntime: Boolean = false,
+    @SerialName("input_v") val inputV: Double = 0.0,
+    val error: String = "",
 )
 
 @Serializable

@@ -49,6 +49,30 @@ export interface HubVulnDBInfo {
 }
 
 /** A remote VPS registered with the hub (internal/store.Host). */
+/** ИБП по данным NUT (upsc). */
+export interface UPS {
+  name: string
+  model?: string
+  manufacturer?: string
+  driver?: string
+  status?: string
+  on_battery: boolean
+  low_battery: boolean
+  replace_battery?: boolean
+  overload?: boolean
+  charge_pct?: number
+  has_charge?: boolean
+  load_pct?: number
+  runtime_s?: number
+  has_runtime?: boolean
+  input_v?: number
+  output_v?: number
+  battery_v?: number
+  firmware?: string
+  serial?: string
+  error?: string
+}
+
 /** ОС хоста, машины или контейнера — значок перед именем (OsIcon). */
 export interface OSInfo {
   /** os-release ID (ubuntu, debian, alpine…), windows; linux — Linux без подробностей. */
@@ -63,6 +87,8 @@ export interface OSInfo {
 export interface HubHost {
   /** ОС хоста по опросу хаба (значок перед именем). */
   os_info?: OSInfo
+  /** ИБП хоста по последнему опросу хаба. */
+  ups?: UPS[]
   /** Хост, на котором работает эта машина; отсутствует у обычных
    * хостов. Машина показывается внутри своего хоста и переезжает между
    * группами только вместе с ним. */
@@ -919,7 +945,7 @@ export interface HostEvent {
   /** Имя и адрес на момент события: хост могли переименовать или удалить. */
   host_name: string
   host_addr: string
-  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed' | 'rebooted' | 'bans' | 'forecast'
+  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed' | 'rebooted' | 'bans' | 'forecast' | 'power-lost' | 'power-restored' | 'battery-low' | 'ups-lost'
   severity?: string
   detail?: string
   /** Раздел хоста с подсветкой (?focus=…); у старых событий нет. */

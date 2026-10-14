@@ -38,12 +38,16 @@ val EVENT_KIND get() = mapOf(
     "bans" to t("новые баны", "new bans"),
     "rebooted" to t("перезагрузился", "rebooted"),
     "forecast" to t("прогноз", "forecast"),
+    "power-lost" to t("пропало питание", "power lost"),
+    "power-restored" to t("питание вернулось", "power restored"),
+    "battery-low" to t("батарея ИБП садится", "UPS battery low"),
+    "ups-lost" to t("нет связи с ИБП", "no link to UPS"),
 )
 
 fun eventHealth(kind: String): HealthStatus = when (kind) {
-    "unreachable", "problems", "job-failed" -> HealthStatus.BAD
-    "bans", "forecast", "rebooted" -> HealthStatus.WARN
-    "recovered", "resolved" -> HealthStatus.OK
+    "unreachable", "problems", "job-failed", "power-lost", "battery-low" -> HealthStatus.BAD
+    "bans", "forecast", "rebooted", "ups-lost" -> HealthStatus.WARN
+    "recovered", "resolved", "power-restored" -> HealthStatus.OK
     else -> HealthStatus.UNKNOWN
 }
 

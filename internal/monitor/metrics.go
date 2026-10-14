@@ -67,7 +67,7 @@ func (m *MetricsCollector) RunOnce(ctx context.Context) (int, error) {
 	// net_rx/tx_bytes) под своими источниками; отсутствие движка — не
 	// ошибка, его и так показывает скан.
 	for _, fn := range []func(context.Context, string, time.Time) ([]store.MetricSample, error){
-		m.podmanSamples, m.lxdSamples, m.libvirtSamples, m.k8sSamples,
+		m.podmanSamples, m.lxdSamples, m.libvirtSamples, m.k8sSamples, m.upsSamples,
 	} {
 		more, err := fn(ctx, ts, now)
 		if err != nil {

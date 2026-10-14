@@ -24,6 +24,29 @@ data class Overview(
     val findings: Map<String, Int> = emptyMap(),
     val certificates: CertSummary? = null,
     val availability: AvailabilitySummary? = null,
+    /** ИБП хоста через NUT (пусто — не подключён или старый хост). */
+    val ups: List<Ups> = emptyList(),
+    /** Какие ИБП на батарее ниже порогов хоста. */
+    val upsLow: List<String> = emptyList(),
+)
+
+/** ИБП по данным NUT. */
+data class Ups(
+    val name: String = "",
+    val model: String = "",
+    val manufacturer: String = "",
+    val status: String = "",
+    val onBattery: Boolean = false,
+    val lowBattery: Boolean = false,
+    val replaceBattery: Boolean = false,
+    val overload: Boolean = false,
+    val chargePct: Double = 0.0,
+    val hasCharge: Boolean = false,
+    val loadPct: Double = 0.0,
+    val runtimeS: Long = 0,
+    val hasRuntime: Boolean = false,
+    val inputV: Double = 0.0,
+    val error: String = "",
 )
 
 data class HostInfo(
