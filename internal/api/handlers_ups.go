@@ -159,7 +159,9 @@ var (
 	upsDriverRe = regexp.MustCompile(`^(nutdrv_qx|usbhid-ups|blazer_usb|blazer_ser)$`)
 	upsPortRe   = regexp.MustCompile(`^(auto|/dev/tty(S|USB|ACM)[0-9]{1,3})$`)
 	upsHexRe    = regexp.MustCompile(`^([0-9a-f]{4})?$`)
-	upsUnitRe   = regexp.MustCompile(`^(/etc/systemd/system|/lib/systemd/system|/usr/lib/systemd/system|/etc/init\.d)/[A-Za-z0-9_.@-]{1,80}$`)
+	// upsAutostartRe — где UPSilon запускается: служба, init.d, rc.local, cron.
+	upsAutostartRe = regexp.MustCompile(`^((/etc/systemd/system|/lib/systemd/system|/usr/lib/systemd/system)/[A-Za-z0-9_.@-]{1,80}\.service|/etc/init\.d/[A-Za-z0-9_.-]{1,80}|/etc/rc\.local|/etc/rc\.d/rc\.local|/etc/crontab|/etc/cron\.d/[A-Za-z0-9_.-]{1,80})$`)
+	upsPIDRe       = regexp.MustCompile(`^[1-9][0-9]{1,8}$`)
 )
 
 // handleUPSConnectWS — GET/POST /ups/connect/ws?driver=&port=&vendor=&product=&shutdown=1&upsilon=…:
@@ -187,16 +189,19 @@ func (s *Server) handleUPSConnectWS(w http.ResponseWriter, r *http.Request) {
 func upsConnectEnv(q url.Values) (map[string]string, bool) {
 	driver, port := q.Get("driver"), q.Get("port")
 	vendor, product := q.Get("vendor"), q.Get("product")
-	units := q["upsilon"]
+	autostart, pids := q["autostart"], q["pid"]
 	if port == "" {
 		port = "auto"
 	}
-	ok := upsDriverRe.MatchString(driver) && upsPortRe.MatchString(port) && upsHexRe.MatchString(vendor) && upsHexRe.MatchString(product) && len(units) <= 4
-	for _, u := range units {
-		ok = ok && upsUnitRe.MatchString(u)
+	ok := upsDriverRe.MatchString(driver) && upsPortRe.MatchString(port) && upsHexRe.MatchString(vendor) && upsHexRe.MatchString(product) &&
+		len(autostart) <= 8 && len(pids) <= 16
+	for _, a := range autostart {
+		ok = ok && upsAutostartRe.MatchString(a)
 	}
-	// USB-драйвер — порт auto, драйвер COM — путь к порту; nutdrv_qx — любой.
-	if driver == "blazer_ser" && port == "auto" || driver != "blazer_ser" && driver != "nutdrv_qx" && port != "auto" {
+	for _, p := range pids {
+		ok = ok && upsPIDRe.MatchString(p)
+	}
+	if !upsDriverPortOK(driver, port) {
 		ok = false
 	}
 	if !ok {
@@ -208,51 +213,121 @@ func upsConnectEnv(q url.Values) (map[string]string, bool) {
 	}
 	return map[string]string{
 		"TERM": "xterm-256color", "DEBIAN_FRONTEND": "noninteractive",
-		"NKT_UPS_DRIVER": driver, "NKT_UPS_PORT": port, "NKT_UPS_VENDOR": vendor, "NKT_UPS_PRODUCT": product,
-		"NKT_UPS_SHUTDOWN": shutdown, "NKT_UPS_UPSILON": strings.Join(units, " "),
+		"NKT_UPS_DRIVER": driver, "NKT_UPS_PORT": port,
+		"NKT_UPS_CANDIDATES": strings.Join(upsCandidates(driver, port, vendor, product), " "),
+		"NKT_UPS_SHUTDOWN":   shutdown, "NKT_UPS_AUTOSTART": strings.Join(autostart, " "), "NKT_UPS_PIDS": strings.Join(pids, " "),
 	}, true
 }
 
+// upsDriverPortOK — драйвер COM — путь к порту, USB-драйвер — auto,
+// nutdrv_qx — любой.
+func upsDriverPortOK(driver, port string) bool {
+	switch driver {
+	case "nutdrv_qx":
+		return true
+	case "blazer_ser":
+		return port != "auto"
+	default:
+		return port == "auto"
+	}
+}
+
+// upsCandidates — варианты по очереди: выбранный, затем тот же порт
+// другим драйвером Megatec, затем nutdrv_qx по USB. Каждый —
+// «драйвер|порт|vendorid|productid».
+func upsCandidates(driver, port, vendor, product string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(d, p, v, pr string) {
+		if !upsDriverPortOK(d, p) {
+			return
+		}
+		if p != "auto" {
+			v, pr = "", ""
+		}
+		k := d + "|" + p + "|" + v + "|" + pr
+		if !seen[d+"|"+p] {
+			seen[d+"|"+p] = true
+			out = append(out, k)
+		}
+	}
+	add(driver, port, vendor, product)
+	if port != "auto" {
+		add("nutdrv_qx", port, "", "")
+		add("blazer_ser", port, "", "")
+		add("nutdrv_qx", "auto", vendor, product)
+	} else if driver == "nutdrv_qx" {
+		add("blazer_usb", "auto", vendor, product)
+	} else if driver == "blazer_usb" {
+		add("nutdrv_qx", "auto", vendor, product)
+	}
+	return out
+}
+
 // upsConnectScript — подключение ИБП к NUT. Прежний /etc/nut — в
-// резервную копию; UPSilon останавливается и выключается (файлы на
-// месте); ИБП не ответил за 40 с — всё возвращается как было.
-const upsConnectScript = `set -e
+// резервную копию; UPSilon останавливается, его автозапуск выключается
+// (строки rc.local и cron комментируются, копии — в резервной копии).
+// Варианты драйвера и порта пробуются по очереди (NKT_UPS_CANDIDATES:
+// «драйвер|порт|vendorid|productid» через пробел), на каждый — до 40 с;
+// не ответил — в журнал ответ драйвера. Ни один не подошёл — всё
+// возвращается как было, UPSilon запускается снова.
+const upsConnectScript = `# nkt:quiet
+set -e
 export DEBIAN_FRONTEND=noninteractive
 NAME=ups
 BACKUP=/var/lib/netknownsthat/nut-backup-$(date +%Y%m%d-%H%M%S)
-STOPPED=""
+DISABLED="" INITD="" EDITED=""
+T() { timeout 60 "$@"; }
 rollback() {
-  echo "ИБП не ответил — возвращаю как было / the UPS did not answer — rolling back"
-  systemctl disable --now nut-monitor nut-server >/dev/null 2>&1 || true
-  upsdrvctl stop >/dev/null 2>&1 || true
+  echo "ИБП не ответил ни с одним вариантом — возвращаю как было / no variant answered — rolling back"
+  T systemctl disable --now nut-monitor nut-server >/dev/null 2>&1 || true
+  T systemctl stop nut-driver.target >/dev/null 2>&1 || true
+  T upsdrvctl stop >/dev/null 2>&1 || true
   if [ -d "$BACKUP/nut" ]; then rm -rf /etc/nut && cp -a "$BACKUP/nut" /etc/nut; else rm -f /etc/nut/ups.conf; fi
-  for u in $STOPPED; do
-    case "$u" in
-      /etc/init.d/*) "$u" start || true; command -v update-rc.d >/dev/null && update-rc.d "$(basename "$u")" enable || true ;;
-      *) systemctl enable --now "$(basename "$u")" || true ;;
-    esac
-  done
+  for f in $EDITED; do cp -a "$BACKUP/autostart/$(echo "$f" | tr / _)" "$f" && echo "Возвращён / restored: $f"; done
+  for u in $DISABLED; do T systemctl enable --now "$u" || true; done
+  for u in $INITD; do "$u" start || true; command -v update-rc.d >/dev/null && update-rc.d "$(basename "$u")" enable || true; done
+  if ! pgrep -x -i 'rupsd|upsilon|upsilond' >/dev/null 2>&1 && [ -s "$BACKUP/upsilon.ps" ]; then
+    while read -r pid cmd; do
+      [ -n "$cmd" ] || continue
+      echo "Запускаю UPSilon снова / starting UPSilon again: $cmd"
+      setsid nohup sh -c "$cmd" >/dev/null 2>&1 < /dev/null &
+    done < "$BACKUP/upsilon.ps"
+  fi
 }
 trap 'rc=$?; if [ $rc -ne 0 ]; then rollback; fi; exit $rc' EXIT
 
-mkdir -p "$BACKUP"
-if [ -d /etc/nut ]; then cp -a /etc/nut "$BACKUP/nut"; echo "Резервная копия /etc/nut / backup: $BACKUP"; fi
+mkdir -p "$BACKUP/autostart"
+if [ -d /etc/nut ]; then cp -a /etc/nut "$BACKUP/nut"; fi
+echo "Резервная копия / backup: $BACKUP"
 
-for u in $NKT_UPS_UPSILON; do
-  echo "Останавливаю UPSilon / stopping UPSilon: $u"
-  case "$u" in
-    /etc/init.d/*) "$u" stop || true; command -v update-rc.d >/dev/null && update-rc.d "$(basename "$u")" disable || true ;;
-    *) systemctl disable --now "$(basename "$u")" || true ;;
+# UPSilon: что работало — запомнить (для отката), автозапуск — выключить.
+pgrep -a -f -i 'upsilon|rupsd' 2>/dev/null | grep -v -e pgrep -e 'nkt:quiet' > "$BACKUP/upsilon.ps" || true
+for a in $NKT_UPS_AUTOSTART; do
+  case "$a" in
+    /etc/init.d/*)
+      echo "Выключаю автозапуск UPSilon / disabling UPSilon autostart: $a"
+      "$a" stop || true
+      command -v update-rc.d >/dev/null && update-rc.d "$(basename "$a")" disable || true
+      INITD="$INITD $a" ;;
+    *.service)
+      echo "Выключаю службу UPSilon / disabling the UPSilon service: $(basename "$a")"
+      T systemctl disable --now "$(basename "$a")" || true
+      DISABLED="$DISABLED $(basename "$a")" ;;
+    *)
+      echo "Комментирую запуск UPSilon / commenting out UPSilon start: $a"
+      cp -a "$a" "$BACKUP/autostart/$(echo "$a" | tr / _)"
+      sed -i -E '/^[[:space:]]*#/!{/(upsilon|rupsd)/I s/^/# nkt: UPSilon disabled — /}' "$a"
+      EDITED="$EDITED $a" ;;
   esac
-  STOPPED="$STOPPED $u"
 done
-if pgrep -i upsilon >/dev/null 2>&1; then
-  echo "UPSilon ещё работает — останавливаю процесс / UPSilon still running — stopping it"
-  pkill -i upsilon || true
-  sleep 2
-fi
+for pid in $NKT_UPS_PIDS; do kill "$pid" 2>/dev/null && echo "Останавливаю UPSilon / stopping UPSilon: PID $pid" || true; done
+pkill -x -i 'rupsd|upsilon|upsilond' 2>/dev/null || true
+sleep 2
+for pid in $NKT_UPS_PIDS; do kill -9 "$pid" 2>/dev/null || true; done
 
 if ! command -v upsc >/dev/null 2>&1 || ! command -v upsdrvctl >/dev/null 2>&1; then
+  echo "Ставлю пакет nut / installing the nut package"
   apt-get update
   apt-get install -y nut
 fi
@@ -260,15 +335,6 @@ mkdir -p /etc/nut
 
 PASS=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)
 echo 'MODE=standalone' > /etc/nut/nut.conf
-{
-  echo "# nkt: ИБП, найденный мастером «Подключить ИБП»"
-  echo "[$NAME]"
-  echo "  driver = $NKT_UPS_DRIVER"
-  echo "  port = $NKT_UPS_PORT"
-  [ -n "$NKT_UPS_VENDOR" ] && echo "  vendorid = $NKT_UPS_VENDOR"
-  [ -n "$NKT_UPS_PRODUCT" ] && echo "  productid = $NKT_UPS_PRODUCT"
-  echo '  desc = "nkt"'
-} > /etc/nut/ups.conf
 printf 'LISTEN 127.0.0.1 3493\nLISTEN ::1 3493\n' > /etc/nut/upsd.conf
 printf '[nkt-monitor]\n  password = %s\n  upsmon primary\n' "$PASS" > /etc/nut/upsd.users
 {
@@ -276,30 +342,58 @@ printf '[nkt-monitor]\n  password = %s\n  upsmon primary\n' "$PASS" > /etc/nut/u
   echo 'SHUTDOWNCMD "/sbin/shutdown -h +0"'
   echo 'MINSUPPLIES 1'
 } > /etc/nut/upsmon.conf
-chown root:nut /etc/nut/*.conf /etc/nut/upsd.users 2>/dev/null || true
-chmod 640 /etc/nut/*.conf /etc/nut/upsd.users
 
-echo "Запускаю драйвер / starting the driver: $NKT_UPS_DRIVER ($NKT_UPS_PORT)"
-systemctl daemon-reload || true
-upsdrvctl stop >/dev/null 2>&1 || true
-systemctl restart nut-driver.target 2>/dev/null || systemctl restart "nut-driver@$NAME" 2>/dev/null || upsdrvctl start
-systemctl enable --now nut-server
-systemctl restart nut-server
-if [ "$NKT_UPS_SHUTDOWN" = "1" ]; then
-  systemctl enable --now nut-monitor
-  echo "Выключение хоста при садящейся батарее включено / host shutdown on low battery enabled"
-else
-  systemctl disable --now nut-monitor >/dev/null 2>&1 || true
-  sed -i 's/^MONITOR /# MONITOR /' /etc/nut/upsmon.conf
-fi
+try() {
+  drv=$1 port=$2 vid=$3 pid=$4
+  {
+    echo "# nkt: ИБП, найденный мастером «Подключить ИБП»"
+    echo "[$NAME]"
+    echo "  driver = $drv"
+    echo "  port = $port"
+    if [ -n "$vid" ]; then echo "  vendorid = $vid"; fi
+    if [ -n "$pid" ]; then echo "  productid = $pid"; fi
+    echo '  desc = "nkt"'
+  } > /etc/nut/ups.conf
+  chown root:nut /etc/nut/*.conf /etc/nut/upsd.users 2>/dev/null || true
+  chmod 640 /etc/nut/*.conf /etc/nut/upsd.users
+  echo "Пробую / trying: драйвер $drv, порт $port"
+  T systemctl stop nut-server >/dev/null 2>&1 || true
+  T systemctl stop nut-driver.target >/dev/null 2>&1 || true
+  T upsdrvctl stop >/dev/null 2>&1 || true
+  T systemctl daemon-reload || true
+  T systemctl restart nut-driver.target 2>/dev/null || T systemctl restart "nut-driver@$NAME" 2>/dev/null || T upsdrvctl start || true
+  T systemctl restart nut-server || true
+  for i in $(seq 1 20); do
+    if upsc "$NAME@localhost" ups.status >/dev/null 2>&1; then return 0; fi
+    sleep 2
+  done
+  echo "— $drv на $port не ответил; что сказал драйвер / what the driver said:"
+  journalctl -u "nut-driver@$NAME" -n 12 --no-pager -o cat 2>/dev/null | sed 's/^/    /' || true
+  T systemctl stop nut-driver.target >/dev/null 2>&1 || true
+  T upsdrvctl stop >/dev/null 2>&1 || true
+  timeout 15 upsdrvctl -D start "$NAME" 2>&1 | tail -n 12 | sed 's/^/    /' || true
+  T upsdrvctl stop >/dev/null 2>&1 || true
+  return 1
+}
 
 ok=""
-for i in $(seq 1 20); do
-  if upsc "$NAME@localhost" ups.status >/dev/null 2>&1; then ok=1; break; fi
-  sleep 2
+for c in $NKT_UPS_CANDIDATES; do
+  IFS='|' read -r d p v q <<EOT
+$c
+EOT
+  if try "$d" "$p" "$v" "$q"; then ok="$d $p"; break; fi
 done
 [ -n "$ok" ] || exit 1
-echo "ИБП отвечает / the UPS answers:"
+
+T systemctl enable nut-server >/dev/null 2>&1 || true
+if [ "$NKT_UPS_SHUTDOWN" = "1" ]; then
+  T systemctl enable --now nut-monitor
+  echo "Выключение хоста при садящейся батарее включено / host shutdown on low battery enabled"
+else
+  T systemctl disable --now nut-monitor >/dev/null 2>&1 || true
+  sed -i 's/^MONITOR /# MONITOR /' /etc/nut/upsmon.conf
+fi
+echo "ИБП отвечает / the UPS answers ($ok):"
 upsc "$NAME@localhost" 2>/dev/null | grep -E '^(device\.(mfr|model)|ups\.status|battery\.charge|ups\.load|input\.voltage):' || true
 `
 

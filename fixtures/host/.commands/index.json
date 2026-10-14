@@ -3,6 +3,16 @@
   "commands": [
     {
       "match": [
+        "pgrep",
+        "-a",
+        "-f",
+        "-i",
+        "upsilon|rupsd"
+      ],
+      "stdout": "812 /etc/upsilon/rupsd\n"
+    },
+    {
+      "match": [
         "sh",
         "-c",
         "command -v upsc"
@@ -23,14 +33,6 @@
         "ups@localhost"
       ],
       "stdout": "battery.charge: 100\nbattery.charge.low: 20\nbattery.runtime: 1860\nbattery.voltage: 27.40\nbattery.voltage.high: 26.00\nbattery.voltage.low: 20.80\ndevice.mfr: Ippon\ndevice.model: Back Power Pro 800\ndevice.type: ups\ndriver.name: nutdrv_qx\ndriver.parameter.port: auto\ndriver.parameter.productid: 5161\ndriver.parameter.vendorid: 0665\ndriver.version: 2.8.0\ninput.frequency: 50.0\ninput.voltage: 228.4\noutput.voltage: 228.4\nups.beeper.status: enabled\nups.load: 37\nups.status: OL\nups.type: offline / line interactive\n"
-    },
-    {
-      "match": [
-        "pgrep",
-        "-i",
-        "upsilon"
-      ],
-      "exit_code": 1
     },
     {
       "match": [
