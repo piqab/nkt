@@ -1,0 +1,4 @@
+#!/bin/sh -e
+# fixture: UPSilon 2000 starts here
+/etc/upsilon/rupsd &
+exit 0

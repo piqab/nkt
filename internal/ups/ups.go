@@ -161,19 +161,16 @@ type USBDevice struct {
 	Label        string `json:"label"`
 }
 
-// UPSilon — следы UPSilon 2000 на хосте.
-type UPSilon struct {
-	Present bool     `json:"present"`
-	Running bool     `json:"running"`
-	Units   []string `json:"units,omitempty"`
-	Paths   []string `json:"paths,omitempty"`
-}
-
 // Detection — что нашлось на хосте (без изменений).
 type Detection struct {
-	USB     []USBDevice `json:"usb"`
-	Serial  []string    `json:"serial"`
-	UPSilon UPSilon     `json:"upsilon"`
+	USB []USBDevice `json:"usb"`
+	// Adapters — переходники USB-COM: ИБП с COM-портом через них.
+	Adapters []Adapter `json:"adapters"`
+	Serial   []string  `json:"serial"`
+	UPSilon  UPSilon   `json:"upsilon"`
+	// Recommended — с чем подключать: порт из настроек UPSilon, иначе
+	// переходник, иначе ИБП на USB, иначе первый COM-порт.
+	Recommended Recommendation `json:"recommended"`
 	// NUTInstalled — стоит пакет NUT (есть upsc и upsdrvctl/драйверы);
 	// NUTConfigured — в ups.conf уже описан ИБП.
 	NUTInstalled  bool        `json:"nut_installed"`
@@ -211,6 +208,7 @@ func Detect(ctx context.Context, c collect.Collector) Detection {
 		}
 	}
 	sort.Strings(d.Serial)
+	d.Adapters = detectAdapters(c)
 	d.UPSilon = detectUPSilon(ctx, c)
 	d.NUTInstalled = collect.Which(ctx, c, "upsc") && (c.Exists("/lib/nut") || c.Exists("/usr/lib/nut") || c.Exists("/etc/nut"))
 	if raw, err := c.ReadFile("/etc/nut/ups.conf"); err == nil {
@@ -220,6 +218,7 @@ func Detect(ctx context.Context, c collect.Collector) Detection {
 		d.UPS = Status(ctx, c)
 	}
 	d.AptGet = collect.Which(ctx, c, "apt-get")
+	d.Recommended = recommend(d)
 	return d
 }
 
@@ -242,28 +241,6 @@ func upsConfSections(text string) int {
 		}
 	}
 	return n
-}
-
-// detectUPSilon — UPSilon 2000: процесс, службы systemd и init.d,
-// каталоги установки.
-func detectUPSilon(ctx context.Context, c collect.Collector) UPSilon {
-	var u UPSilon
-	if res, err := c.Run(ctx, "pgrep", "-i", "upsilon"); err == nil && res.OK() && strings.TrimSpace(res.Stdout) != "" {
-		u.Running = true
-	}
-	for _, pat := range []string{"/etc/systemd/system/*upsilon*.service", "/lib/systemd/system/*upsilon*.service", "/usr/lib/systemd/system/*upsilon*.service", "/etc/init.d/*upsilon*"} {
-		m, _ := c.Glob(pat)
-		for _, p := range m {
-			u.Units = append(u.Units, p)
-		}
-	}
-	for _, p := range []string{"/usr/local/upsilon", "/opt/upsilon", "/etc/upsilon", "/usr/upsilon"} {
-		if c.Exists(p) {
-			u.Paths = append(u.Paths, p)
-		}
-	}
-	u.Present = u.Running || len(u.Units) > 0 || len(u.Paths) > 0
-	return u
 }
 
 // DriverFor — драйвер NUT для USB-кода; "" — неизвестен.

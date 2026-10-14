@@ -129,7 +129,9 @@ func (r *Runner) Run(ctx context.Context, jc *jobs.Context) error {
 			}
 			cleanup = func() { _ = os.Remove(path) }
 			argv = []string{"bash", path}
-			if c.SecretRef == "" {
+			// «# nkt:quiet» в сценарии — свои сообщения он пишет сам, текст
+			// сценария в журнал не идёт.
+			if c.SecretRef == "" && !strings.Contains(c.Script, "\n# nkt:quiet\n") && !strings.HasPrefix(c.Script, "# nkt:quiet\n") {
 				for _, l := range strings.Split(strings.TrimSpace(c.Script), "\n") {
 					if !strings.HasPrefix(l, "export ") {
 						jc.Logf("$ %s", l)

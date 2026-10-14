@@ -18,8 +18,18 @@ interface UPSThresholds {
 
 interface UPSDetection {
   usb: { vendor: string; product: string; manufacturer?: string; name?: string; driver: string; label: string }[]
+  adapters: { vendor: string; product: string; chip: string; port?: string }[]
   serial: string[]
-  upsilon: { present: boolean; running: boolean; units?: string[]; paths?: string[] }
+  upsilon: {
+    present: boolean
+    running: boolean
+    procs?: { pid: number; cmd: string }[]
+    autostart?: { path: string; kind: string; line?: string }[]
+    paths?: string[]
+    port?: string
+    port_from?: string
+  }
+  recommended: { driver: string; port: string; reason: string }
   nut_installed: boolean
   nut_configured: boolean
   ups?: UPS[]
@@ -163,7 +173,7 @@ function DetectModal({ admin, onClose, onConnected }: { admin: boolean; onClose:
         <div className="col" style={{ gap: '0.6rem' }}>
           <div>
             <strong className="small">{t('ups.foundUSB')}</strong>
-            {data.usb.length === 0 ? (
+            {data.usb.length === 0 && data.adapters.length === 0 ? (
               <p className="small muted">{t('ups.noUSB')}</p>
             ) : (
               <ul className="small">
@@ -175,6 +185,14 @@ function DetectModal({ admin, onClose, onConnected }: { admin: boolean; onClose:
                     {[u.manufacturer, u.name].filter(Boolean).join(' ')} — {u.label}; {t('ups.driverIs', { driver: u.driver })}
                   </li>
                 ))}
+                {data.adapters.map((a) => (
+                  <li key={a.vendor + a.product + (a.port ?? '')}>
+                    <span className="mono">
+                      {a.vendor}:{a.product}
+                    </span>{' '}
+                    {t('ups.adapter', { chip: a.chip, port: a.port ?? '?' })}
+                  </li>
+                ))}
               </ul>
             )}
           </div>
@@ -183,12 +201,32 @@ function DetectModal({ admin, onClose, onConnected }: { admin: boolean; onClose:
           </div>
           <div className="small">
             <strong>UPSilon:</strong>{' '}
-            {!data.upsilon.present
-              ? t('ups.upsilonNone')
-              : data.upsilon.running
-                ? t('ups.upsilonRunning', { where: [...(data.upsilon.units ?? []), ...(data.upsilon.paths ?? [])].join(', ') })
-                : t('ups.upsilonStopped', { where: [...(data.upsilon.units ?? []), ...(data.upsilon.paths ?? [])].join(', ') })}
+            {!data.upsilon.present ? (
+              t('ups.upsilonNone')
+            ) : (
+              <>
+                {data.upsilon.running
+                  ? t('ups.upsilonRunningProcs', { procs: (data.upsilon.procs ?? []).map((p) => `${p.cmd} (PID ${p.pid})`).join(', ') })
+                  : t('ups.upsilonNotRunning')}
+                {(data.upsilon.paths?.length ?? 0) > 0 && <> · {t('ups.upsilonPaths', { paths: data.upsilon.paths!.join(', ') })}</>}
+                {data.upsilon.port && <> · {t('ups.upsilonPort', { port: data.upsilon.port, from: data.upsilon.port_from ?? '' })}</>}
+                <div>
+                  {(data.upsilon.autostart?.length ?? 0) > 0
+                    ? t('ups.upsilonAutostart', { list: data.upsilon.autostart!.map((a) => a.path + (a.line ? ` («${a.line}»)` : '')).join('; ') })
+                    : data.upsilon.running
+                      ? t('ups.upsilonNoAutostart')
+                      : null}
+                </div>
+              </>
+            )}
           </div>
+          {data.recommended.reason && (
+            <div className="small">
+              <strong>{t('ups.recommended')}</strong>{' '}
+              {t('ups.recommendedValue', { driver: data.recommended.driver, port: data.recommended.port === 'auto' ? 'USB' : data.recommended.port })} —{' '}
+              {t(`ups.reason.${data.recommended.reason}`)}
+            </div>
+          )}
           <div className="small">
             <strong>NUT:</strong> {data.nut_configured ? t('ups.nutConfigured', { n: data.ups?.length ?? 0 }) : data.nut_installed ? t('ups.nutInstalled') : t('ups.nutNone')}
           </div>
@@ -224,11 +262,12 @@ const DRIVERS = ['nutdrv_qx', 'usbhid-ups', 'blazer_usb', 'blazer_ser']
 function ConnectModal({ data, onClose, onDone }: { data: UPSDetection; onClose: () => void; onDone: () => void }) {
   const { t } = useTranslation()
   const usb = data.usb[0]
-  const [driver, setDriver] = useState(usb?.driver ?? 'nutdrv_qx')
-  const [port, setPort] = useState(usb ? 'auto' : (data.serial[0] ?? 'auto'))
+  const [driver, setDriver] = useState(data.recommended.driver || 'nutdrv_qx')
+  const [port, setPort] = useState(data.recommended.port || 'auto')
   const [shutdown, setShutdown] = useState(false)
   const job = useJobLauncher(() => onDone())
-  const units = data.upsilon.units ?? []
+  const autostart = (data.upsilon.autostart ?? []).map((a) => a.path)
+  const pids = (data.upsilon.procs ?? []).map((p) => p.pid)
   const serialDriver = driver === 'blazer_ser'
   // Порт: у nutdrv_qx — USB (auto) или COM, у blazer_ser — только COM,
   // у USB-драйверов — auto.
@@ -241,7 +280,8 @@ function ConnectModal({ data, onClose, onDone }: { data: UPSDetection; onClose: 
       p.set('product', usb.product)
     }
     if (shutdown) p.set('shutdown', '1')
-    for (const u of units) p.append('upsilon', u)
+    for (const a of autostart) p.append('autostart', a)
+    for (const pid of pids) p.append('pid', String(pid))
     await job.start(`/ups/connect/ws?${p}`)
   }
   return (
@@ -258,25 +298,30 @@ function ConnectModal({ data, onClose, onDone }: { data: UPSDetection; onClose: 
             options={DRIVERS.map((d) => ({ value: d, label: d }))}
           />
         </label>
-        {(serialDriver || driver === 'nutdrv_qx') && (
-          <label>
-            {t('ups.port')}
-            <Select
-              value={port}
-              onChange={setPort}
-              options={[...(serialDriver ? [] : [{ value: 'auto', label: t('ups.portUSB') }]), ...data.serial.map((s) => ({ value: s, label: s }))]}
-            />
-          </label>
-        )}
+        <label>
+          {t('ups.port')}
+          <Select
+            value={effPort}
+            disabled={!serialDriver && driver !== 'nutdrv_qx'}
+            onChange={setPort}
+            options={[...(serialDriver ? [] : [{ value: 'auto', label: t('ups.portUSB') }]), ...data.serial.map((s) => ({ value: s, label: s }))]}
+          />
+          {!serialDriver && driver !== 'nutdrv_qx' && <span className="small muted">{t('ups.portUSBOnly', { driver })}</span>}
+        </label>
         <Checkbox checked={shutdown} onChange={(e) => setShutdown(e.target.checked)}>
           {t('ups.shutdownCheck')}
         </Checkbox>
         <Banner kind="info">
           <div className="small">{t('ups.connectWill')}</div>
           <ul className="small" style={{ margin: '0.3rem 0 0' }}>
-            {(data.upsilon.running || units.length > 0) && <li>{t('ups.willStopUpsilon')}</li>}
+            {data.upsilon.running && <li>{t('ups.willStopProcs', { procs: (data.upsilon.procs ?? []).map((p) => p.cmd).join(', ') })}</li>}
+            {(data.upsilon.autostart ?? []).map((a) => (
+              <li key={a.path}>{a.kind === 'rclocal' || a.kind === 'cron' ? t('ups.willCommentOut', { path: a.path }) : t('ups.willDisableUnit', { path: a.path })}</li>
+            ))}
+            {data.upsilon.running && !(data.upsilon.autostart?.length ?? 0) && <li>{t('ups.willNoAutostart')}</li>}
             {!data.nut_installed && <li>{t('ups.willInstall')}</li>}
             <li>{t('ups.willConfigure', { driver, port: effPort === 'auto' ? 'USB' : effPort })}</li>
+            <li>{t('ups.willTryOthers')}</li>
             <li>{shutdown ? t('ups.willShutdown') : t('ups.willNotShutdown')}</li>
             <li>{t('ups.willRollback')}</li>
           </ul>

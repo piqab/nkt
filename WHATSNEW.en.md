@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.11 — 2026-10-14
+
+- **UPS: connecting instead of UPSilon now works end to end.**
+  - “Find UPS” sees the UPSilon `rupsd` process (only `upsilon` was looked
+    for — a running UPSilon showed as stopped), its autostart (service,
+    `init.d`, `rc.local`, cron), the port from its settings and USB-COM
+    adapters (PL2303, CH340, FTDI, CP210x) with their port.
+  - “Connect UPS” preselects the driver and port from what was found
+    (`nutdrv_qx` + `/dev/ttyUSB0`); the port field no longer disappears
+    silently — for `usbhid-ups` it is disabled with an explanation.
+  - The job stops `rupsd`, disables the UPSilon autostart, tries driver and
+    port variants, logs the driver's answer, doesn't hang on starting
+    services; if none works, it puts everything back, the autostart and
+    UPSilon itself included. The log no longer prints the script.
+
 ## v1.13.10 — 2026-10-14
 
 - **UPS via NUT** — “Hardware” → “UPS”.

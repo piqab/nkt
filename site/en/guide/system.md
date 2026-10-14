@@ -80,17 +80,30 @@ input voltage).
 - a UPS on USB by vendor and product codes (Megatec/Cypress `0665:5161` —
   Ippon, SVEN, Powercom and other UPSes UPSilon 2000 works with; APC, Eaton,
   CyberPower and others — the `usbhid-ups` driver), COM ports;
-- **UPSilon 2000**: whether it runs, its services and directories — it holds
-  the UPS port, and the NUT driver won't work next to it;
+- USB-COM adapters (Prolific PL2303, CH340, FTDI, CP210x) and the port the
+  kernel gave them (`/dev/ttyUSB0`): a UPS with a COM port is often connected
+  through one;
+- **UPSilon 2000**: running processes (`rupsd`, `upsilon`) with PIDs, its
+  directory (`/etc/upsilon`), **the port from its settings**, autostart — a
+  systemd service, `init.d`, a line in `rc.local` or cron. It holds the UPS
+  port, and the NUT driver won't work next to it;
+- **what to connect with**: the port from UPSilon's settings, otherwise the
+  adapter's port, otherwise a UPS on USB, otherwise a COM port;
 - whether NUT is installed and has a UPS described.
 
-**"Connect UPS"** (admin) — as a background job with a log: stops and
-disables UPSilon (its files stay), installs the `nut` package, writes
-`/etc/nut/ups.conf` (driver `nutdrv_qx`, `usbhid-ups`, `blazer_usb` or
-`blazer_ser`; port — USB found automatically or a COM port), `upsd` on
-`127.0.0.1` only, starts the services and waits for the UPS to answer. No
-answer within 40 s — everything is put back: the previous `/etc/nut` from
-the backup (`/var/lib/netknownsthat/nut-backup-…`), UPSilon enabled again.
+**"Connect UPS"** (admin) — the driver and port are preselected from what was
+found; for `usbhid-ups` the port field is disabled — that driver is only for
+UPSes seen as USB HID, while a UPS on COM or through an adapter needs
+`nutdrv_qx` or `blazer_ser`. As a background job with a log: stops the
+UPSilon processes and disables its autostart (a service — `systemctl
+disable`, a line in `rc.local` or cron — commented out, the file copied to
+the backup), installs the `nut` package, `upsd` on `127.0.0.1` only, and
+tries in turn: the chosen driver on the chosen port → the same port with the
+other Megatec driver (`nutdrv_qx` / `blazer_ser`) → `nutdrv_qx` over USB, up
+to 40 s each. A variant that doesn't answer logs what the driver said. If
+none works, everything is put back: the previous `/etc/nut` from the backup
+(`/var/lib/netknownsthat/nut-backup-…`), the UPSilon autostart, and UPSilon
+itself is started with the same command it ran with.
 The **"Shut this host down when the battery runs low"** box enables
 `upsmon`; without it — monitoring and alerts only.
 
