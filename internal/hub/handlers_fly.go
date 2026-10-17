@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -234,30 +235,101 @@ func (s *Server) handleFlyStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"gateways": list, "hosts": names, "now": time.Now().Unix()})
 }
 
-// handleFlyTargets — GET /hub/fly/targets?host_id=: что на хосте можно
-// сделать целью — контейнеры, машины, инстансы LXD.
+// flyTargetItem — что на хосте можно сделать целью.
+type flyTargetItem struct {
+	Kind  string `json:"kind"`
+	Name  string `json:"name"`
+	IP    string `json:"ip,omitempty"`
+	State string `json:"state,omitempty"`
+	Ports []int  `json:"ports,omitempty"`
+}
+
+// flyTargetsCache — списки целей по хосту и виду на flyTargetsTTL:
+// редактор маршрута открывают и закрывают, а хост каждый раз заново
+// перечислять контейнеры и машины не обязан.
+var flyTargetsCache = struct {
+	sync.Mutex
+	m map[string]flyTargetsEntry
+}{m: map[string]flyTargetsEntry{}}
+
+type flyTargetsEntry struct {
+	at    time.Time
+	items []flyTargetItem
+}
+
+const (
+	flyTargetsTTL = 30 * time.Second
+	// flyTargetsTimeout — на один вид: нет libvirt или LXD — отказ не
+	// должен держать список контейнеров.
+	flyTargetsTimeout = 8 * time.Second
+)
+
+// handleFlyTargets — GET /hub/fly/targets?host_id=&kind=container|vm|lxd
+// [&refresh=1]: что на хосте можно сделать целью. Без kind — все виды,
+// параллельно.
 func (s *Server) handleFlyTargets(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.URL.Query().Get("host_id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "fly.badHost"))
 		return
 	}
+	kinds := []string{"container", "vm", "lxd"}
+	if k := r.URL.Query().Get("kind"); k != "" {
+		if !slices.Contains(kinds, k) {
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "fly.badHost"))
+			return
+		}
+		kinds = []string{k}
+	}
+	refresh := r.URL.Query().Get("refresh") == "1"
 	ctx := r.Context()
 	user := auth.Username(ctx)
-	type item struct {
-		Kind  string `json:"kind"`
-		Name  string `json:"name"`
-		IP    string `json:"ip,omitempty"`
-		State string `json:"state,omitempty"`
-		Ports []int  `json:"ports,omitempty"`
+	lists := make([][]flyTargetItem, len(kinds))
+	var wg sync.WaitGroup
+	for i, k := range kinds {
+		key := fmt.Sprintf("%d/%s", id, k)
+		flyTargetsCache.Lock()
+		e, ok := flyTargetsCache.m[key]
+		flyTargetsCache.Unlock()
+		if ok && !refresh && time.Since(e.at) < flyTargetsTTL {
+			lists[i] = e.items
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cctx, cancel := context.WithTimeout(ctx, flyTargetsTimeout)
+			defer cancel()
+			items, err := s.flyTargetsOf(cctx, user, id, k)
+			lists[i] = items
+			if err == nil {
+				flyTargetsCache.Lock()
+				flyTargetsCache.m[key] = flyTargetsEntry{at: time.Now(), items: items}
+				flyTargetsCache.Unlock()
+			}
+		}()
 	}
-	out := []item{}
-	var cs struct {
-		Containers []model.Container `json:"containers"`
+	wg.Wait()
+	out := []flyTargetItem{}
+	for _, l := range lists {
+		out = append(out, l...)
 	}
-	if _, err := s.hostCall(ctx, user, id, "GET", "/api/containers", nil, &cs); err == nil {
+	writeJSON(w, http.StatusOK, map[string]any{"targets": out})
+}
+
+// flyTargetsOf — один вид целей хоста.
+func (s *Server) flyTargetsOf(ctx context.Context, user string, id int64, kind string) ([]flyTargetItem, error) {
+	out := []flyTargetItem{}
+	switch kind {
+	case "container":
+		var cs struct {
+			Containers []model.Container `json:"containers"`
+		}
+		if _, err := s.hostCall(ctx, user, id, "GET", "/api/containers", nil, &cs); err != nil {
+			return out, err
+		}
 		for _, c := range cs.Containers {
-			it := item{Kind: "container", Name: c.Name, State: c.State}
+			it := flyTargetItem{Kind: "container", Name: c.Name, State: c.State}
 			for _, n := range c.Networks {
 				if n.IPAddress != "" {
 					it.IP = n.IPAddress
@@ -269,13 +341,15 @@ func (s *Server) handleFlyTargets(w http.ResponseWriter, r *http.Request) {
 			}
 			out = append(out, it)
 		}
-	}
-	var vms struct {
-		VMs []model.VirtualMachine `json:"vms"`
-	}
-	if _, err := s.hostCall(ctx, user, id, "GET", "/api/vms", nil, &vms); err == nil {
+	case "vm":
+		var vms struct {
+			VMs []model.VirtualMachine `json:"vms"`
+		}
+		if _, err := s.hostCall(ctx, user, id, "GET", "/api/vms", nil, &vms); err != nil {
+			return out, err
+		}
 		for _, v := range vms.VMs {
-			it := item{Kind: "vm", Name: v.Name, State: v.State}
+			it := flyTargetItem{Kind: "vm", Name: v.Name, State: v.State}
 			for _, n := range v.Networks {
 				if n.IP != "" {
 					it.IP = n.IP
@@ -284,18 +358,20 @@ func (s *Server) handleFlyTargets(w http.ResponseWriter, r *http.Request) {
 			}
 			out = append(out, it)
 		}
-	}
-	var lxd struct {
-		Instances []model.LXDInstance `json:"instances"`
-	}
-	if _, err := s.hostCall(ctx, user, id, "GET", "/api/lxd/instances", nil, &lxd); err == nil {
-		for _, i := range lxd.Instances {
-			it := item{Kind: "lxd", Name: i.Name, State: i.Status}
-			if len(i.IPv4) > 0 {
-				it.IP = i.IPv4[0]
+	case "lxd":
+		var lxd struct {
+			Instances []model.LXDInstance `json:"instances"`
+		}
+		if _, err := s.hostCall(ctx, user, id, "GET", "/api/lxd/instances", nil, &lxd); err != nil {
+			return out, err
+		}
+		for _, in := range lxd.Instances {
+			it := flyTargetItem{Kind: "lxd", Name: in.Name, State: in.Status}
+			if len(in.IPv4) > 0 {
+				it.IP = in.IPv4[0]
 			}
 			out = append(out, it)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"targets": out})
+	return out, nil
 }

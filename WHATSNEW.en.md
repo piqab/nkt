@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.20 — 2026-10-17
+
+- **Traffic Fly: the container and VM list in the route editor is fast.**
+  For every target row the hub used to ask the host for containers, VMs
+  and LXD one after another, so on a host without libvirt or LXD waiting
+  for a refusal held up the whole list. Now only the chosen kind is
+  fetched, in parallel with an 8-second limit, once per host for all rows,
+  and the hub keeps the list for 30 seconds; while loading the field says
+  “loading…”, with a refresh button (↻) next to it.
+
 ## v1.13.19 — 2026-10-17
 
 - **Traffic Fly: “0 of N alive” when there is simply no data.** Until the

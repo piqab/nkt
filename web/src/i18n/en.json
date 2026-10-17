@@ -4673,6 +4673,9 @@
       "addr": "address on host network"
     },
     "poolUnknown": "no data ({{total}} targets)",
-    "checking": "checking"
+    "checking": "checking",
+    "loadingTargets": "loading…",
+    "noTargets": "nothing of this kind on the host",
+    "refreshTargets": "Reload the list from the host"
   }
 }
