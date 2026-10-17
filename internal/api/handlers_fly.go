@@ -82,10 +82,13 @@ func (s *Server) handleFlyConfig(w http.ResponseWriter, r *http.Request) {
 
 // flyHostRefresh — интерфейс уже есть: обновить без разрыва; нет —
 // включить wg-quick@. $1 iface, $2 адрес, $3 nft-файл, $4 метка, $5
-// таблица, $6 адрес шлюза в туннеле.
+// таблица, $6 адрес шлюза в туннеле, $7 файл закрытого ключа. Ключа в
+// конфигурации нет (его ставит PostUp), а syncconf приводит интерфейс
+// точно к файлу и ключ стирает — поэтому сразу за ним wg set private-key.
 const flyHostRefresh = `set -e
 if ip link show "$1" >/dev/null 2>&1; then
   wg syncconf "$1" <(wg-quick strip "$1")
+  wg set "$1" private-key "$7"
   ip address replace "$2" dev "$1"
   nft -f "$3"
   ip rule del fwmark "$4" table "$5" 2>/dev/null || true
@@ -137,7 +140,7 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 		}
 		gw := netip.MustParseAddr(i.Gateway.Address).String()
 		res, err = RunUnrestricted(ctx, "bash", "-c", flyHostRefresh, "fly", i.Name, i.Address, nftFile,
-			"0x"+strconv.FormatUint(uint64(i.Mark), 16), strconv.Itoa(i.Table), gw)
+			"0x"+strconv.FormatUint(uint64(i.Mark), 16), strconv.Itoa(i.Table), gw, key)
 		if err != nil || !res.OK() {
 			return log, fmt.Errorf("%s: %s", i.Name, strings.TrimSpace(res.Output()+" "+errText(err)))
 		}
@@ -183,6 +186,7 @@ func (s *Server) handleFlyStatus(w http.ResponseWriter, r *http.Request) {
 	st := fly.HostStatus{Revision: cfg.Revision, Now: time.Now().Unix(), Ifaces: []fly.HostIfaceStatus{}}
 	for _, i := range cfg.Ifaces {
 		is := fly.HostIfaceStatus{Name: i.Name}
+		s.flyHealKey(r.Context(), i.Name)
 		res, err := RunUnrestricted(r.Context(), "wg", "show", i.Name, "dump")
 		switch {
 		case err != nil:
@@ -199,4 +203,22 @@ func (s *Server) handleFlyStatus(w http.ResponseWriter, r *http.Request) {
 		st.Ifaces = append(st.Ifaces, is)
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+// flyHealKey — ключ на интерфейсе туннеля не тот или пропал (стёр
+// syncconf прежних версий) — поставить из файла.
+func (s *Server) flyHealKey(ctx context.Context, iface string) {
+	key, err := fly.FilePath(s.flyDir(), iface, ".key")
+	if err != nil {
+		return
+	}
+	pub, err := fly.LoadOrCreateKey(key)
+	if err != nil {
+		return
+	}
+	res, err := RunUnrestricted(ctx, "wg", "show", iface, "public-key")
+	if err != nil || !res.OK() || strings.TrimSpace(res.Stdout) == pub {
+		return
+	}
+	_, _ = RunUnrestricted(ctx, "wg", "set", iface, "private-key", key)
 }

@@ -163,7 +163,7 @@ func (d *flyDaemon) apply(cfg fly.GatewayConfig, save bool) error {
 	if err := writeFileAtomic(d.wgConf, []byte(fly.GatewayWG(cfg, filepath.Join(d.dir, "wg.key"))), 0o600); err != nil {
 		return fmt.Errorf("wireguard config: %w", err)
 	}
-	if err := wgUp(cfg); err != nil {
+	if err := wgUp(cfg, filepath.Join(d.dir, "wg.key")); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if err := d.rt.Apply(cfg); err != nil {
@@ -192,9 +192,14 @@ func (d *flyDaemon) apply(cfg fly.GatewayConfig, save bool) error {
 
 // wgUp — интерфейс поднят: есть — обновить без разрыва (wg syncconf),
 // нет — включить wg-quick@nkt-fly.
-func wgUp(cfg fly.GatewayConfig) error {
+//
+// Закрытого ключа в файле конфигурации нет (его ставит PostUp из
+// keyFile), а syncconf приводит интерфейс точно к файлу — и ключ стирает.
+// Поэтому сразу за ним — wg set private-key: без ключа шлюз молча
+// отбрасывает рукопожатия хостов.
+func wgUp(cfg fly.GatewayConfig, keyFile string) error {
 	if exec.Command("ip", "link", "show", flyIface).Run() == nil {
-		if out, err := exec.Command("bash", "-c", "wg syncconf "+flyIface+" <(wg-quick strip "+flyIface+")").CombinedOutput(); err != nil {
+		if out, err := exec.Command("bash", "-c", "wg syncconf "+flyIface+" <(wg-quick strip "+flyIface+") && wg set "+flyIface+" private-key "+keyFile).CombinedOutput(); err != nil {
 			return fmt.Errorf("wg syncconf: %v: %s", err, strings.TrimSpace(string(out)))
 		}
 		_ = exec.Command("ip", "address", "replace", cfg.Address, "dev", flyIface).Run()
@@ -306,6 +311,14 @@ func (d *flyDaemon) status(ctx context.Context) fly.GatewayStatus {
 		rs.BytesIn = cs.Bytes
 		rs.Clients = len(cs.Clients)
 		rs.Top = topOf(cs.Clients)
+	}
+	// Ключ на интерфейсе пропал (стёр syncconf прежних версий, кто-то
+	// поправил руками) — вернуть из файла: без него рукопожатия хостов
+	// молча отбрасываются.
+	if out, err := exec.CommandContext(ctx, "wg", "show", flyIface, "public-key").Output(); err == nil && strings.TrimSpace(string(out)) != d.pub {
+		if exec.CommandContext(ctx, "wg", "set", flyIface, "private-key", filepath.Join(d.dir, "wg.key")).Run() == nil {
+			log.Printf("nkt-fly: private key of %s was missing, restored", flyIface)
+		}
 	}
 	if out, err := exec.CommandContext(ctx, "wg", "show", flyIface, "dump").Output(); err == nil {
 		st.Peers = fly.ParseWGDump(string(out))

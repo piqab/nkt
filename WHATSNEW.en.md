@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.22 — 2026-10-17
+
+- **Traffic Fly: the tunnel did not come up after a second Apply.** The
+  WireGuard private key is set when the interface comes up rather than
+  kept in its config file; a repeated Apply updated the interface with
+  `wg syncconf`, which makes it match the file exactly — and wiped the
+  key. The gateway (`wg show nkt-fly public-key` → `(none)`) silently
+  dropped host handshakes. Now the key is set again right after
+  `syncconf` on the gateway and on hosts, and on every summary the
+  gateway and hosts compare the interface key with the file and restore
+  a missing one themselves — just update the gateway (Reinstall) and the
+  hosts.
+- The “UDP blocked” hint is now “gateway rejects”: a firewall on the way,
+  the gateway's own firewall, or a missing key, with a command to check.
+
 ## v1.13.21 — 2026-10-17
 
 - **Traffic Fly: you can see why a tunnel is down and where packets get
