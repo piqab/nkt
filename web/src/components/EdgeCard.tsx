@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { osLabel } from './OsIcon'
 import { Button, Checkbox, Input, Select, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { ApiError, api, useApi } from '../api'
+import { CopyButton } from './CopyButton'
 import type { HubHost } from '../types'
 import { Banner, Card, Modal, formatRelative } from './ui'
 import { confirmAction } from './confirm'
@@ -210,10 +211,14 @@ export function InstallModal({
   const [checking, setChecking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Полного sudo нет: хаб ответил 409 с пользователем и командой. Пароль
+  // sudo уходит хабу один раз и нигде не сохраняется.
+  const [sudoNeed, setSudoNeed] = useState<{ user: string; command: string } | null>(null)
+  const [sudoPassword, setSudoPassword] = useState('')
   const list = (hosts.data ?? []).filter((h) => h.id > 0)
   return (
     <Modal title={edge ? t('edge.reinstallTitle', { name: edge.domain || edge.address }) : t('edge.installTitle')} onClose={onClose} width={640}>
-      <p className="small muted">{edge ? t('edge.reinstallHint') : t('edge.installHint')}</p>
+      {(edge || needDomain) && <p className="small muted">{edge ? t('edge.reinstallHint') : t('edge.installHint')}</p>}
       {error && <Banner kind="error">{error}</Banner>}
       <div className="col" style={{ gap: '0.5rem' }}>
         <Select
@@ -225,6 +230,8 @@ export function InstallModal({
           onChange={(id: number) => {
             setHostID(id)
             setCheck(null)
+            setSudoNeed(null)
+            setSudoPassword('')
             const h = list.find((x) => x.id === id)
             if (h && hostName(h.addr)) setDomain(hostName(h.addr))
           }}
@@ -284,6 +291,32 @@ export function InstallModal({
           </>
         )}
         {roles.includes('fly') && !needDomain && <p className="small muted">{t('edge.flyInstallHint')}</p>}
+        {sudoNeed && (
+          <div className="col" style={{ gap: '0.35rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.75rem' }}>
+            <label className="small">
+              {t('edge.sudoPassword', { user: sudoNeed.user })}
+              <Input.Password
+                size="small"
+                autoComplete="off"
+                value={sudoPassword}
+                onChange={(ev) => setSudoPassword(ev.target.value)}
+              />
+            </label>
+            <span className="small muted">{t('edge.sudoPasswordHint')}</span>
+            {sudoNeed.command && (
+              <>
+                <span className="small">{t('edge.sudoCommand')}</span>
+                <div className="row" style={{ gap: '0.4rem', alignItems: 'flex-start' }}>
+                  <pre className="mono small" style={{ margin: 0, flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                    {sudoNeed.command}
+                  </pre>
+                  <CopyButton text={sudoNeed.command} />
+                </div>
+                <span className="small muted">{t('edge.sudoCommandHint')}</span>
+              </>
+            )}
+          </div>
+        )}
         <div>
           <Button
             type="primary"
@@ -293,14 +326,18 @@ export function InstallModal({
               setBusy(true)
               setError(null)
               try {
+                const base = needDomain
+                  ? { host_id: hostID, domain, email, github_only: github, proxy_port: proxyPort ? Number(proxyPort) : 0, roles }
+                  : { host_id: hostID, domain: '', roles }
                 const res = await api<{ job_id: number }>('/hub/edges/install', {
                   method: 'POST',
-                  body: needDomain
-                    ? { host_id: hostID, domain, email, github_only: github, proxy_port: proxyPort ? Number(proxyPort) : 0, roles }
-                    : { host_id: hostID, domain: '', roles },
+                  body: sudoPassword ? { ...base, sudo_password: sudoPassword } : base,
                 })
+                setSudoPassword('')
                 onStarted(res.job_id)
               } catch (err) {
+                const p = err instanceof ApiError ? (err.payload as { sudo_needed?: boolean; sudo_user?: string; sudo_command?: string } | null) : null
+                if (p?.sudo_needed) setSudoNeed({ user: p.sudo_user ?? '', command: p.sudo_command ?? '' })
                 setError(errText(err))
               } finally {
                 setBusy(false)

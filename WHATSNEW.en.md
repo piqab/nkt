@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.14 — 2026-10-17
+
+- **Installing nkt-edge with narrow sudo.** The hub no longer refuses on a
+  stale state: before refusing it checks the host's sudo again, so if full
+  sudo was given back by hand, the installation goes ahead.
+- Without full sudo, the install window lets you **enter the user's sudo
+  password once**: the hub grants full sudo only for the installation and
+  then puts the previous rule back, on success and on failure alike. The
+  password lives only in the hub's memory until the job starts and reaches
+  the host through stdin, never the command line.
+- The same window shows a **ready command** with a Copy button to grant
+  full sudo yourself; its temporary file comes from `mktemp`.
+
 ## v1.13.13 — 2026-10-17
 
 - **Traffic Fly: stricter about file names and numbers.** WireGuard keys

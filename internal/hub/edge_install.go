@@ -111,6 +111,32 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	defer link.Close()
 	client := link.client
+	if p.SudoToken != "" {
+		pw, ok := oneTime.Take(p.SudoToken)
+		if !ok {
+			// Хаб перезапустился (или задание повторено): пароля уже нет.
+			// Если прежний запуск успел дать полный sudo — вернуть правило.
+			if restoreTempSudo(client) == nil {
+				s.hub.refreshSudoStatus(context.WithoutCancel(ctx), host.ID, client, host.SSHUser, host.SudoStatus)
+			}
+			return msgs.Errorf("edge.sudoPasswordLost")
+		}
+		err := grantTempFullSudo(client, host.SSHUser, pw)
+		wipe(pw)
+		if err != nil {
+			return err
+		}
+		jc.Log("edge.sudoTempGranted", host.SSHUser)
+		// И при успехе, и при ошибке установки — вернуть прежнее правило.
+		defer func() {
+			if err := restoreTempSudo(client); err != nil {
+				jc.Log("edge.sudoRestoreFailedLog", err, fullSudoRestoreHint())
+			} else {
+				jc.Log("edge.sudoRestored", host.SSHUser)
+			}
+			s.hub.refreshSudoStatus(context.WithoutCancel(ctx), host.ID, client, host.SSHUser, host.SudoStatus)
+		}()
+	}
 	sudo := sudoPrefix(host.SSHUser)
 	goos, goarch, err := detectTarget(client)
 	if err != nil {

@@ -164,6 +164,24 @@ deploy hook updates the copy, and edge re-reads the certificate itself,
 without a restart or a tunnel drop. If nkt runs on the host, the
 certificate is also visible on that host's "Certificates" page.
 
+### Narrow sudo on the VPS
+
+Installing the edge needs **full passwordless sudo**: it installs packages,
+a service and firewall rules, which are not narrow-sudo operations of the
+hub. Before refusing, the hub checks the host's sudo again, since the rule
+may have been changed by hand. If there is no full sudo (narrow, or
+password only), the install window shows:
+
+- a **sudo password field** for that user, used once: the hub keeps it in
+  memory until the job starts (not in job parameters, the database or the
+  log) and passes it to the host only through `sudo -S` stdin. The job
+  puts a `NOPASSWD: ALL` rule into `/etc/sudoers.d/nkt-hub`, installs the
+  edge and **puts the previous file back**, on success and on failure
+  alike. A wrong password is refused before anything changes;
+- the **command** to grant full sudo yourself (as root or with the sudo
+  password), with a Copy button. After the installation press “Narrow
+  sudo” for the host.
+
 ## If 443 on the VPS is taken
 
 The VPS already runs nginx, Caddy or another web server on 443 — then

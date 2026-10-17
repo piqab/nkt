@@ -611,17 +611,29 @@ type EdgeInstallParams struct {
 	ProxyPort int `json:"proxy_port,omitempty"`
 	// Roles — роли edge (пусто — вебхуки).
 	Roles []string `json:"roles,omitempty"`
+	// SudoToken — жетон одноразового пароля sudo (oneTime): сам пароль в
+	// параметры задания не попадает.
+	SudoToken string `json:"sudo_token,omitempty"`
+}
+
+// edgeInstallRequest — запрос установки: параметры и, если у пользователя
+// хоста нет полного sudo, его пароль sudo на один раз.
+type edgeInstallRequest struct {
+	EdgeInstallParams
+	SudoPassword string `json:"sudo_password,omitempty"`
 }
 
 // handleEdgeInstall — POST /hub/edges/install {host_id, domain, email,
 // github_only, proxy_port, roles}. На хост, где edge уже стоит, —
 // переустановка с новыми настройками (тот же edge в списке).
 func (s *Server) handleEdgeInstall(w http.ResponseWriter, r *http.Request) {
-	var req EdgeInstallParams
-	if err := decodeJSON(r, &req); err != nil {
+	var full edgeInstallRequest
+	if err := decodeJSON(r, &full); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	req := full.EdgeInstallParams
+	req.SudoToken = ""
 	ctx := r.Context()
 	req.Domain = strings.ToLower(strings.TrimSpace(req.Domain))
 	roles0, _ := validRoles(req.Roles)
@@ -653,18 +665,40 @@ func (s *Server) handleEdgeInstall(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	// Узкий sudo: установка edge ставит certbot, свою службу и открывает
-	// порты — это не операции hub-sudo. Отказ сразу, а не посреди задания.
-	if host.SudoStatus == store.SudoStatusNarrow {
-		writeErr(w, r, http.StatusConflict, msgs.Errorf("edge.narrowSudo", host.Name, host.SSHUser))
-		return
+	// Установка edge ставит certbot, свою службу и открывает порты — это
+	// не операции hub-sudo: нужен полный sudo без пароля. Записанное
+	// состояние может устареть (правило поменяли руками), поэтому прежде
+	// отказа — живая проверка. Полного нет — пароль sudo на один раз
+	// (задание даст полный sudo на время установки и вернёт прежнее
+	// правило) или команда, чтобы дать его самому.
+	if host.SudoStatus == store.SudoStatusNarrow || host.SudoStatus == store.SudoStatusPasswordRequired {
+		if st, err := s.hub.CheckSudo(ctx, host.ID); err == nil {
+			host.SudoStatus = st.Status
+		}
+	}
+	if host.SudoStatus == store.SudoStatusNarrow || host.SudoStatus == store.SudoStatusPasswordRequired {
+		if full.SudoPassword == "" {
+			key := "edge.needFullSudoNarrow"
+			if host.SudoStatus == store.SudoStatusPasswordRequired {
+				key = "edge.needFullSudoPassword"
+			}
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":        msgs.Tc(ctx, key, host.Name, host.SSHUser),
+				"sudo_needed":  true,
+				"sudo_user":    host.SSHUser,
+				"sudo_command": fullSudoCommand(host.SSHUser),
+			})
+			return
+		}
+		req.SudoToken = oneTime.Put([]byte(full.SudoPassword))
+		full.SudoPassword = ""
 	}
 	user := auth.Username(ctx)
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindEdgeInstall, TitleKey: "edge.jobTitle", TitleArgs: []any{host.Name, req.Domain},
 		Queue: fmt.Sprintf("host:%d", host.ID), Author: user, Steps: 5, Params: req,
 	})
-	s.db.Audit(ctx, user, "edge.install", host.Name, auditOutcome(err), map[string]any{"domain": req.Domain, "roles": req.Roles})
+	s.db.Audit(ctx, user, "edge.install", host.Name, auditOutcome(err), map[string]any{"domain": req.Domain, "roles": req.Roles, "temp_sudo": req.SudoToken != ""})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
