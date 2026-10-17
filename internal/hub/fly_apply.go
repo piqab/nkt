@@ -3,9 +3,12 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/jobs"
@@ -106,8 +109,15 @@ func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 				hk := flyHostKey(g.EdgeID, t.HostID)
 				iface := flyIface(g.Index)
 				if _, ok := hostKeys[hk]; !ok {
+					if err := s.flyHostReady(ctx, t.HostID, names[t.HostID]); err != nil {
+						return err
+					}
 					var key fly.KeyResponse
-					if _, err := s.hostCall(ctx, user, t.HostID, "POST", "/api/fly/key?iface="+iface, nil, &key); err != nil {
+					if err := s.flyHostCall(ctx, user, t.HostID, names[t.HostID], "POST", "/api/fly/key?iface="+iface, nil, &key); err != nil {
+						var me *msgs.Err
+						if errors.As(err, &me) && me.Key == "fly.hostTimeout" {
+							return err
+						}
 						return msgs.Errorf("fly.hostKey", names[t.HostID], err)
 					}
 					hostKeys[hk] = key.PublicKey
@@ -239,4 +249,72 @@ func flyRouteSummary(r FlyRoute) string {
 		return fmt.Sprintf("%s %s:%d", r.Kind, strings.Join(r.Names, ","), r.Port)
 	}
 	return fmt.Sprintf("%s :%d", r.Kind, r.Port)
+}
+
+// flyMinHostVersion — с какой версии nkt на хосте умеет Traffic Fly.
+var flyMinHostVersion = [3]int{1, 13, 12}
+
+// flyHostReady — хост-цель годится до первого запроса: nkt на нём есть и
+// не старше flyMinHostVersion (dev-сборки и непонятные версии — годятся).
+func (s *Server) flyHostReady(ctx context.Context, hostID int64, name string) error {
+	if hostID == localHostID {
+		return nil
+	}
+	h, err := s.db.HostByID(ctx, hostID)
+	if err != nil {
+		return err
+	}
+	if h.NktVersion == "" {
+		return msgs.Errorf("fly.hostNoNkt", name)
+	}
+	if v, ok := parseSemver(h.NktVersion); ok {
+		for i := range v {
+			if v[i] != flyMinHostVersion[i] {
+				if v[i] < flyMinHostVersion[i] {
+					return msgs.Errorf("fly.hostTooOld", name, h.NktVersion)
+				}
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// flyHostCallTimeout — на один запрос Traffic Fly к хосту (ключ, сводка).
+// Настройка хоста (PUT /api/fly/config) ставит пакеты — ей предел свой.
+const flyHostCallTimeout = 20 * time.Second
+
+// flyHostCall — короткий запрос к хосту с одной повторной попыткой: канал
+// к хосту бывает занят или только что переподключился. Не ответил —
+// ошибка словами, а не «context deadline exceeded».
+func (s *Server) flyHostCall(ctx context.Context, user string, hostID int64, name, method, path string, in, out any) error {
+	var err error
+	for attempt := 0; attempt < 2; attempt++ {
+		cctx, cancel := context.WithTimeout(ctx, flyHostCallTimeout)
+		_, err = s.hostCall(cctx, user, hostID, method, path, in, out)
+		timedOut := cctx.Err() != nil || isTimeout(err)
+		cancel()
+		if err == nil || ctx.Err() != nil {
+			return err
+		}
+		if !timedOut {
+			return err
+		}
+	}
+	return msgs.Errorf("fly.hostTimeout", name, int(flyHostCallTimeout.Seconds()))
+}
+
+// isTimeout — ошибка — истёкшее время (клиента HTTP, контекста, сети).
+func isTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	return strings.Contains(err.Error(), "Client.Timeout exceeded")
 }

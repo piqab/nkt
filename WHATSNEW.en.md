@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.21 — 2026-10-17
+
+- **Traffic Fly: you can see why a tunnel is down and where packets get
+  lost.** Under the gateway and at the host on the map, the reason comes
+  from WireGuard counters on both sides: “not configured yet” (Apply did
+  not reach it), “not on gateway”, “tunnel down on the host”, “UDP 51820
+  blocked” (the host sends, the gateway gets nothing: provider firewall or
+  outbound UDP), “key mismatch”, “link lost”, with “host sent / gateway
+  got” bytes.
+- **Apply checks target hosts first**: nkt is installed and at least
+  1.13.12, otherwise a clear refusal before any change. Requests to a host
+  have a 20-second limit and one retry; instead of “context deadline
+  exceeded” you get “host … did not answer within 20 s” with what to
+  check. Dry run does the same.
+
 ## v1.13.20 — 2026-10-17
 
 - **Traffic Fly: the container and VM list in the route editor is fast.**

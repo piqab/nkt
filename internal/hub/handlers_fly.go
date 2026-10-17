@@ -232,7 +232,157 @@ func (s *Server) handleFlyStatus(w http.ResponseWriter, r *http.Request) {
 			names[fmt.Sprint(h.ID)] = h.Name
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"gateways": list, "hosts": names, "now": time.Now().Unix()})
+	writeJSON(w, http.StatusOK, map[string]any{"gateways": list, "hosts": names, "tunnels": s.flyTunnels(ctx, auth.Username(ctx), list), "now": time.Now().Unix()})
+}
+
+// flyTunnelJSON — туннель «шлюз — хост» и почему он не жив.
+type flyTunnelJSON struct {
+	EdgeID int64 `json:"edge_id"`
+	HostID int64 `json:"host_id"`
+	// State:
+	//   up — рукопожатие свежее;
+	//   not_applied — хост ещё не получил конфигурацию;
+	//   gateway_missing — на шлюзе нет такого пира (применение не дошло
+	//     до шлюза);
+	//   host_down — туннель на хосте не поднят или хост ничего не шлёт;
+	//   blocked — хост шлёт, шлюз ничего не получил: UDP к шлюзу
+	//     блокируется по дороге (файрвол провайдера, исходящий UDP хоста);
+	//   keys — пакеты доходят, рукопожатия нет: ключи не сошлись;
+	//   stale — рукопожатие было, но давно;
+	//   no_handshake — рукопожатия нет, а сводки хоста не получить;
+	//   unknown — шлюз не прислал сводку.
+	State string `json:"state"`
+	// Счётчики байт: шлюз от хоста, хост отправил и получил.
+	GatewayRx int64 `json:"gateway_rx"`
+	HostTx    int64 `json:"host_tx"`
+	HostRx    int64 `json:"host_rx"`
+}
+
+// flyHostStatusCache — сводки хостов для разбора неживых туннелей: на
+// каждый опрос карты хост не дёргается.
+var flyHostStatusCache = struct {
+	sync.Mutex
+	m map[int64]flyHostStatusEntry
+}{m: map[int64]flyHostStatusEntry{}}
+
+type flyHostStatusEntry struct {
+	at time.Time
+	st *fly.HostStatus
+}
+
+func (s *Server) flyHostStatus(ctx context.Context, user string, hostID int64) *fly.HostStatus {
+	flyHostStatusCache.Lock()
+	e, ok := flyHostStatusCache.m[hostID]
+	flyHostStatusCache.Unlock()
+	if ok && time.Since(e.at) < 15*time.Second {
+		return e.st
+	}
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var st fly.HostStatus
+	var res *fly.HostStatus
+	if _, err := s.hostCall(cctx, user, hostID, "GET", "/api/fly/status", nil, &st); err == nil {
+		res = &st
+	}
+	flyHostStatusCache.Lock()
+	flyHostStatusCache.m[hostID] = flyHostStatusEntry{at: time.Now(), st: res}
+	flyHostStatusCache.Unlock()
+	return res
+}
+
+// flyTunnels — состояние каждого туннеля документа: сводки шлюзов, что
+// разложило последнее применение, а для неживых — ещё и счётчики самого
+// хоста, чтобы сказать, где теряются пакеты.
+func (s *Server) flyTunnels(ctx context.Context, user string, list []flyGatewayStatusJSON) []flyTunnelJSON {
+	d := s.flyDoc(ctx)
+	applied := s.flyAppliedState(ctx)
+	appliedHost := map[int64]bool{}
+	for _, id := range applied.Hosts {
+		appliedHost[id] = true
+	}
+	out := []flyTunnelJSON{}
+	type pending struct {
+		i     int
+		iface string
+	}
+	var ask []pending
+	for _, g := range d.Gateways {
+		var st *fly.GatewayStatus
+		for _, x := range list {
+			if x.EdgeID == g.EdgeID {
+				st = x.Status
+			}
+		}
+		seen := map[int64]bool{}
+		for _, r := range d.Routes {
+			if r.Gateway != g.EdgeID {
+				continue
+			}
+			for _, t := range r.Targets {
+				if seen[t.HostID] {
+					continue
+				}
+				seen[t.HostID] = true
+				tj := flyTunnelJSON{EdgeID: g.EdgeID, HostID: t.HostID, State: "unknown"}
+				switch {
+				case !appliedHost[t.HostID] || applied.Revision == 0:
+					tj.State = "not_applied"
+				case st == nil:
+				default:
+					tj.State = "gateway_missing"
+					addr := d.hostAddr(g, t.HostID)
+					for _, p := range st.Peers {
+						if p.Address != addr {
+							continue
+						}
+						tj.GatewayRx = p.RxBytes
+						switch {
+						case fly.TunnelUp(p.Handshake, st.Now):
+							tj.State = "up"
+						case p.Handshake > 0:
+							tj.State = "stale"
+						default:
+							tj.State = "no_handshake"
+						}
+					}
+				}
+				out = append(out, tj)
+				if tj.State == "no_handshake" || tj.State == "stale" {
+					ask = append(ask, pending{len(out) - 1, flyIface(g.Index)})
+				}
+			}
+		}
+	}
+	var wg sync.WaitGroup
+	for _, a := range ask {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tj := &out[a.i]
+			hs := s.flyHostStatus(ctx, user, tj.HostID)
+			if hs == nil {
+				return
+			}
+			for _, is := range hs.Ifaces {
+				if is.Name != a.iface {
+					continue
+				}
+				tj.HostTx, tj.HostRx = is.TxBytes, is.RxBytes
+				switch {
+				case is.Error != "" || is.TxBytes == 0:
+					tj.State = "host_down"
+				case tj.GatewayRx == 0:
+					tj.State = "blocked"
+				case tj.State == "no_handshake":
+					tj.State = "keys"
+				}
+				return
+			}
+			tj.State = "host_down"
+		}()
+	}
+	wg.Wait()
+	return out
 }
 
 // flyTargetItem — что на хосте можно сделать целью.

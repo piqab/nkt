@@ -2,11 +2,13 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/store"
@@ -135,5 +137,46 @@ func TestFlyTargetsKindAndCache(t *testing.T) {
 	flyTargetsCache.Unlock()
 	if cached {
 		t.Fatal("failure cached")
+	}
+}
+
+func TestFlyTunnelStates(t *testing.T) {
+	s, gw, host := flyTestServer(t)
+	ctx := context.Background()
+	d, err := s.flySave(ctx, FlyDoc{Routes: []FlyRoute{{ID: "mc", Gateway: gw, Kind: fly.KindTCP, Port: 25565, Algorithm: fly.AlgoSourceHash,
+		Check: fly.Check{Kind: fly.CheckTCP}, Targets: []FlyTarget{{ID: "m", HostID: host, Kind: "host", Port: 25565}}}}}, "admin", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := func(list []flyGatewayStatusJSON) string {
+		ts := s.flyTunnels(ctx, "admin", list)
+		if len(ts) != 1 {
+			t.Fatalf("tunnels: %+v", ts)
+		}
+		return ts[0].State
+	}
+	if got := state(nil); got != "not_applied" {
+		t.Fatalf("before apply: %s", got)
+	}
+	raw, _ := json.Marshal(flyApplied{Revision: d.Revision, Hosts: []int64{host}, Gateways: []int64{gw}})
+	_ = s.db.KVSet(ctx, flyAppliedKey, string(raw))
+	if got := state([]flyGatewayStatusJSON{{EdgeID: gw}}); got != "unknown" {
+		t.Fatalf("no gateway summary: %s", got)
+	}
+	now := time.Now().Unix()
+	st := &fly.GatewayStatus{Now: now}
+	if got := state([]flyGatewayStatusJSON{{EdgeID: gw, Status: st}}); got != "gateway_missing" {
+		t.Fatalf("no peer: %s", got)
+	}
+	addr := d.hostAddr(d.Gateways[0], host)
+	st.Peers = []fly.PeerStats{{Address: addr, Handshake: now - 10}}
+	if got := state([]flyGatewayStatusJSON{{EdgeID: gw, Status: st}}); got != "up" {
+		t.Fatalf("fresh handshake: %s", got)
+	}
+	// Рукопожатия нет, а хост не отвечает — сводки хоста нет, остаётся
+	// no_handshake.
+	st.Peers = []fly.PeerStats{{Address: addr}}
+	if got := state([]flyGatewayStatusJSON{{EdgeID: gw, Status: st}}); got != "no_handshake" {
+		t.Fatalf("no handshake: %s", got)
 	}
 }

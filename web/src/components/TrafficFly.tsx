@@ -108,6 +108,16 @@ interface GatewayStatus {
   error?: string
 }
 
+/** Туннель «шлюз — хост» и почему он не жив (считает хаб). */
+interface FlyTunnel {
+  edge_id: number
+  host_id: number
+  state: 'up' | 'not_applied' | 'gateway_missing' | 'host_down' | 'blocked' | 'keys' | 'stale' | 'no_handshake' | 'unknown'
+  gateway_rx: number
+  host_tx: number
+  host_rx: number
+}
+
 const KINDS: Kind[] = ['https', 'http', 'tcp', 'udp', 'tcpudp']
 const TARGET_KINDS: TargetKind[] = ['container', 'vm', 'lxd', 'host', 'addr']
 // Список IP клиентов маршрута — до стольких; больше — только число.
@@ -148,7 +158,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   const { t } = useTranslation()
   const admin = me.is_admin
   const fly = useApi<{ doc: FlyDoc; text: string; gateways: FlyGatewayInfo[]; applied: number }>('/hub/fly')
-  const status = useApi<{ gateways: GatewayStatus[]; hosts: Record<string, string>; now: number }>('/hub/fly/status', 5_000)
+  const status = useApi<{ gateways: GatewayStatus[]; hosts: Record<string, string>; tunnels?: FlyTunnel[]; now: number }>('/hub/fly/status', 5_000)
   const [edit, setEdit] = useState<FlyRoute | 'new' | null>(null)
   const [openRoute, setOpenRoute] = useState<string | null>(null)
   const [history, setHistory] = useState(false)
@@ -233,7 +243,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
         ) : doc.routes.length === 0 ? (
           <p className="small muted">{gateways.length === 0 ? t('fly.emptyNoGateway') : t('fly.empty')}</p>
         ) : (
-          <FlyMap doc={doc} gateways={gateways} statuses={status.data?.gateways ?? []} hostNames={hostNames} onRoute={setOpenRoute} />
+          <FlyMap doc={doc} gateways={gateways} statuses={status.data?.gateways ?? []} tunnels={status.data?.tunnels ?? []} hostNames={hostNames} onRoute={setOpenRoute} />
         )}
       </Card>
 
@@ -330,19 +340,39 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
           <div className="col" style={{ gap: '0.4rem' }}>
             {gateways.map((g) => {
               const st = status.data?.gateways.find((x) => x.edge_id === g.edge_id)
-              const peers = st?.status?.peers ?? []
-              const up = peers.filter((p) => p.handshake > 0 && (st?.status?.now ?? 0) - p.handshake < 180).length
+              const tunnels = (status.data?.tunnels ?? []).filter((x) => x.edge_id === g.edge_id)
+              const up = tunnels.filter((x) => x.state === 'up').length
               return (
-                <div key={g.edge_id} className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <strong className="mono">{g.name}</strong>
-                  {g.connected ? <Tag color="success">{t('fly.gwConnected')}</Tag> : <Tag color="error">{t('fly.gwOffline')}</Tag>}
-                  {st?.status && <span className="small muted">{t('fly.tunnelsUp', { up, total: peers.length })}</span>}
-                  {(st?.status?.errors ?? []).map((e) => (
-                    <Tag key={e} color="error">
-                      {e}
-                    </Tag>
-                  ))}
-                  {st?.error && <Tag color="error">{st.error}</Tag>}
+                <div key={g.edge_id} className="col" style={{ gap: '0.2rem' }}>
+                  <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong className="mono">{g.name}</strong>
+                    {g.connected ? <Tag color="success">{t('fly.gwConnected')}</Tag> : <Tag color="error">{t('fly.gwOffline')}</Tag>}
+                    {tunnels.length > 0 && <span className="small muted">{t('fly.tunnelsUp', { up, total: tunnels.length })}</span>}
+                    {(st?.status?.errors ?? []).map((e) => (
+                      <Tag key={e} color="error">
+                        {e}
+                      </Tag>
+                    ))}
+                    {st?.error && <Tag color="error">{st.error}</Tag>}
+                  </div>
+                  {/* Неживые туннели — с причиной: где теряются пакеты. */}
+                  {tunnels
+                    .filter((x) => x.state !== 'up')
+                    .map((x) => (
+                      <div key={x.host_id} className="small" style={{ paddingLeft: '1rem' }}>
+                        <span className="mono">{hostNames[String(x.host_id)] ?? `#${x.host_id}`}</span>
+                        {': '}
+                        <span style={{ color: x.state === 'not_applied' || x.state === 'unknown' ? 'var(--text-secondary)' : 'var(--status-critical)' }}>
+                          {t(`fly.tunnel.${x.state}`, { port: doc?.gateways.find((d) => d.edge_id === g.edge_id)?.listen_port ?? 51820 })}
+                        </span>
+                        {(x.host_tx > 0 || x.gateway_rx > 0) && (
+                          <span className="muted">
+                            {' '}
+                            ({t('fly.tunnelBytes', { tx: formatBytes(x.host_tx), rx: formatBytes(x.gateway_rx) })})
+                          </span>
+                        )}
+                      </div>
+                    ))}
                 </div>
               )
             })}
@@ -401,12 +431,14 @@ function FlyMap({
   doc,
   gateways,
   statuses,
+  tunnels,
   hostNames,
   onRoute,
 }: {
   doc: FlyDoc
   gateways: FlyGatewayInfo[]
   statuses: GatewayStatus[]
+  tunnels: FlyTunnel[]
   hostNames: Record<string, string>
   onRoute: (id: string) => void
 }) {
@@ -428,17 +460,7 @@ function FlyMap({
   const rows = Math.max(gwIDs.length, doc.routes.length, hostIDs.length, targets.length, 1)
   const H = rows * ROW + 10
   const y = (i: number, n: number) => 5 + ((rows - n) * ROW) / 2 + i * ROW + ROW / 2
-  const tunnelUp = (gw: number, host: number): boolean | undefined => {
-    const st = statuses.find((s) => s.edge_id === gw)?.status
-    const g = doc.gateways.find((x) => x.edge_id === gw)
-    if (!st || !g) return undefined
-    // Адрес хоста в туннеле знает хаб; здесь — по любому пиру с этим
-    // хостом: достаточно, что хоть один туннель шлюза жив к нему.
-    const peers = st.peers ?? []
-    if (peers.length === 0) return false
-    const addrs = new Set(peers.filter((p) => p.handshake > 0 && st.now - p.handshake < 180).map((p) => p.address))
-    return addrs.size > 0 && host >= 0 ? true : addrs.size > 0
-  }
+
   const node = (col: number, i: number, n: number, label: string, sub: string, color: string, onClick?: () => void, key?: string) => {
     const cy = y(i, n)
     return (
@@ -467,8 +489,9 @@ function FlyMap({
     const hostsOfRoute = [...new Set(r.targets.map((x) => x.host_id))]
     for (const h of hostsOfRoute) {
       const hi = hostIDs.indexOf(h)
-      const up = tunnelUp(r.gateway, h)
-      lines.push(link(X[1] + BW[1], y(ri, doc.routes.length), X[2], y(hi, hostIDs.length), up === false ? 'var(--status-critical)' : ps.color, w, `r-h-${r.id}-${h}`))
+      const tn = tunnels.find((x) => x.edge_id === r.gateway && x.host_id === h)
+      const down = tn && tn.state !== 'up' && tn.state !== 'not_applied' && tn.state !== 'unknown'
+      lines.push(link(X[1] + BW[1], y(ri, doc.routes.length), X[2], y(hi, hostIDs.length), down ? 'var(--status-critical)' : ps.color, w, `r-h-${r.id}-${h}`))
     }
   })
   targets.forEach((x, ti) => {
@@ -492,7 +515,14 @@ function FlyMap({
           const ps = poolState(r, st)
           return node(1, i, doc.routes.length, routeTitle(r), `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, () => onRoute(r.id), `r-${r.id}`)
         })}
-        {hostIDs.map((h, i) => node(2, i, hostIDs.length, hostNames[String(h)] ?? `#${h}`, t('fly.host'), 'var(--seq-300, #4c8bf5)', undefined, `h-${h}`))}
+        {hostIDs.map((h, i) => {
+          // Хост на карте — по его туннелям: все живы — синий, есть
+          // неживой — красный и причина первого из них.
+          const ts = tunnels.filter((x) => x.host_id === h)
+          const bad = ts.find((x) => x.state !== 'up')
+          const color = !bad ? 'var(--seq-300, #4c8bf5)' : bad.state === 'not_applied' || bad.state === 'unknown' ? 'var(--text-muted)' : 'var(--status-critical)'
+          return node(2, i, hostIDs.length, hostNames[String(h)] ?? `#${h}`, bad ? t(`fly.tunnelShort.${bad.state}`) : t('fly.host'), color, undefined, `h-${h}`)
+        })}
         {targets.map((x, i) => {
           const ts = stats.get(x.route.id)?.targets?.find((s) => s.id === x.t.id)
           const color = x.t.drain ? 'var(--status-warning)' : !ts || !ts.checked ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
