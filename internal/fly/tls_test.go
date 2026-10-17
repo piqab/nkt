@@ -96,3 +96,39 @@ func TestGatewayTLSValidate(t *testing.T) {
 		}
 	}
 }
+
+// Проверка Let's Encrypt по порту 443 (tls-alpn-01): рукопожатие с
+// acme-tls/1 проходит, а до цели соединение не доходит.
+func TestRouterGatewayTLSALPN(t *testing.T) {
+	hits := 0
+	echo := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ })}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go echo.Serve(ln)
+	t.Cleanup(func() { echo.Close() })
+	n := &testNet{public: map[int]string{}, backends: map[string]string{"10.77.1.2:40001": ln.Addr().String()}}
+	rt := newRuntime(t, n)
+	cert := selfSigned(t)
+	rt.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return &cert, nil }
+	if err := rt.Apply(cfgFor(Route{ID: "app", Kind: KindHTTPS, Names: []string{"app.example.com"}, Port: 443, TLS: true, Algorithm: AlgoLeastConn,
+		Check: Check{Kind: CheckNone}, Targets: []Target{{ID: "t", Host: "10.77.1.2", Port: 40001}}})); err != nil {
+		t.Fatal(err)
+	}
+	c, err := tls.Dial("tcp", n.public[443], &tls.Config{InsecureSkipVerify: true, ServerName: "app.example.com", NextProtos: []string{"acme-tls/1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := c.ConnectionState().NegotiatedProtocol; p != "acme-tls/1" {
+		t.Fatalf("alpn: %q", p)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, err := c.Read(make([]byte, 1)); err == nil {
+		t.Fatal("connection stayed open")
+	}
+	c.Close()
+	if hits != 0 {
+		t.Fatal("challenge reached the target")
+	}
+}
