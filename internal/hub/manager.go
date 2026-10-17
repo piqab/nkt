@@ -86,6 +86,8 @@ type installJob struct {
 	// пользователь, ключ вместо пароля). nil для обычной установки и для
 	// любой переустановки: готовить уже подготовленный хост незачем.
 	bootstrap *BootstrapOptions
+	// sudoMode — sudo после первой установки: узкий (пусто) или полный.
+	sudoMode string
 	// cancel stops every ctx-aware step still to come (exec.CommandContext
 	// cross-compiles, HTTP calls through the tunnel). It cannot by itself
 	// interrupt a step already blocked inside an SSH session — the
@@ -691,6 +693,17 @@ func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr strin
 		return err
 	}
 
+	if secret != "" && authKind == store.HostAuthPassword {
+		// Хост ещё не установлен — пароль нужен только установке, в базу
+		// не пишется. Установленный по паролю (давно, до перехода на
+		// ключ) — по-прежнему хранится: без него хаб не подключится.
+		if h, err := m.db.HostByID(ctx, hostID); err == nil && h.NktVersion == "" {
+			if err := m.keepPasswordInMemory(ctx, hostID, secret); err != nil {
+				return err
+			}
+			secret = ""
+		}
+	}
 	if secret != "" {
 		if authKind == store.HostAuthKey {
 			if err := validatePrivateKey(secret); err != nil {
@@ -839,6 +852,20 @@ func orUnknown(ctx context.Context, s string) string {
 // этот хост уже идёт, возвращается номер идущего задания: второй запуск
 // (двойной клик, «открыть» вдогонку «обновить») ничего не начинает.
 func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, boot *BootstrapOptions) (int64, error) {
+	return m.StartInstallWith(ctx, hostID, force, boot, "")
+}
+
+// Режим sudo после первой установки под пользователем не root.
+const (
+	SudoModeNarrow = "narrow"
+	SudoModeFull   = "full"
+)
+
+// StartInstallWith — StartInstall с выбором sudo для первой установки.
+func (m *Manager) StartInstallWith(ctx context.Context, hostID int64, force bool, boot *BootstrapOptions, sudoMode string) (int64, error) {
+	if sudoMode != SudoModeFull {
+		sudoMode = ""
+	}
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
 		return 0, msgs.Errorf("hub.hostFound", err)
@@ -887,7 +914,7 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, bo
 	id, err := m.jobs.Start(ctx, jobs.Spec{
 		Kind: KindHostInstall, TitleKey: titleKey, TitleArgs: []any{host.Name},
 		Queue:  fmt.Sprintf("host-install:%d", hostID),
-		Params: HostInstallParams{HostID: hostID, Force: force, Bootstrap: boot},
+		Params: HostInstallParams{HostID: hostID, Force: force, Bootstrap: boot, SudoMode: sudoMode},
 	})
 	if err != nil {
 		return 0, err
@@ -896,7 +923,7 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, bo
 	// проверка «уже идёт» видят задание с первой секунды.
 	m.jobsMu.Lock()
 	if prev, ok := m.jobByHost[hostID]; !ok || prev.isDone() || prev.jobID != id {
-		m.jobByHost[hostID] = &installJob{jobID: id, created: time.Now(), hostID: hostID, bootstrap: boot}
+		m.jobByHost[hostID] = &installJob{jobID: id, created: time.Now(), hostID: hostID, bootstrap: boot, sudoMode: sudoMode}
 	}
 	m.jobsMu.Unlock()
 	return id, nil
@@ -966,9 +993,9 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		}
 	}
 
-	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
+	secret, err := m.hostSecret(host)
 	if err != nil {
-		return fail(msgs.Errorf("hub.decryptingSSHSecret", err))
+		return fail(err)
 	}
 
 	report("hub.connectingSSH", host.Addr)
@@ -985,12 +1012,57 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	client := link.client
 	job.setClient(client)
 
+	firstInstall := host.NktVersion == ""
+	// Sudo по паролю: пароль sudo (или, при входе по паролю, тот же
+	// пароль SSH) — один раз через stdin sudo -S. Хаб кладёт временное
+	// правило «полный sudo без пароля» и до конца установки решает, что с
+	// ним станет: узкое правило, полное (по выбору при добавлении) или —
+	// если установка сорвалась — прежнее состояние файла.
+	tempSudo, sudoSettled := false, false
+	if host.SSHUser != "root" {
+		if _, err := runRemote(client, "sudo -n true"); err != nil && !m.hasHubKey(client) {
+			pw, ok := oneTime.Get(sudoPasswordKey(hostID))
+			if !ok && host.SSHAuthKind == store.HostAuthPassword {
+				pw, ok = append([]byte(nil), secret...), true
+			}
+			if ok {
+				err := grantTempFullSudo(client, host.SSHUser, pw)
+				wipe(pw)
+				if err != nil {
+					return fail(err)
+				}
+				tempSudo = true
+				report("hub.sudoTempGranted", host.SSHUser)
+			}
+		}
+	}
+	defer func() {
+		if tempSudo && !sudoSettled {
+			if err := restoreTempSudo(client); err != nil {
+				report("edge.sudoRestoreFailedLog", err, fullSudoRestoreHint())
+			} else {
+				report("hub.sudoTempRestored")
+			}
+		}
+	}()
+
 	// Подготовка идёт до всего остального: она меняет способ входа, и
 	// дальнейшие шаги должны работать уже по новому. Соединение
 	// пересоздаётся её же проверенными реквизитами — то, что ключ принят,
 	// доказано отдельным подключением внутри bootstrapHost.
-	if job.bootstrap != nil && job.bootstrap.Enabled {
-		res, err := m.bootstrapHost(ctx, client, host, *job.bootstrap, secret, report)
+	//
+	// Вход по паролю при первой установке не остаётся никогда: хост
+	// переводится на ключ хаба (без подготовки — только это), а парольный
+	// вход в sshd выключается.
+	boot := job.bootstrap
+	if (boot == nil || !boot.Enabled) && firstInstall && host.SSHAuthKind == store.HostAuthPassword {
+		boot = &BootstrapOptions{Enabled: true, KeyOnly: true}
+	}
+	bootstrapped := boot != nil && boot.Enabled
+	if bootstrapped {
+		b := *boot
+		b.DisablePasswordAuth = true
+		res, err := m.bootstrapHost(ctx, client, host, b, secret, report)
 		if err != nil {
 			return fail(err)
 		}
@@ -1011,6 +1083,15 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 			job.setClient(client)
 			host.SSHUser, host.SSHAuthKind = res.SSHUser, store.HostAuthKey
 			report("hub.bootstrapDone", res.SSHUser)
+		}
+	}
+
+	// Без подготовки (вход ключом с самого начала) — выключить вход по
+	// паролю здесь; подготовка делает это сама, проверенным ключом.
+	if firstInstall && !bootstrapped && host.SSHAuthKind == store.HostAuthKey {
+		report("hub.bootstrapDisablePassword")
+		if err := m.disablePasswordAuth(ctx, client, host, host.SSHUser, string(secret)); err != nil {
+			report("hub.bootstrapDisablePasswordFailed", msgs.Localize(msgs.DefaultLang, err))
 		}
 	}
 
@@ -1101,7 +1182,18 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// Значок sudo — по живой проверке хоста после установки, а не по
 	// догадке: на хосте с ключом хаба может оставаться чужое правило с
 	// полным sudo.
+	// Временное правило отслужило: дальше его судьбу решает выбор ниже
+	// (узкое правило его перепишет, полное — оставит), а прежнее больше
+	// не нужно.
+	if tempSudo {
+		_, _ = runRemote(client, "sudo -n rm -f "+sudoTempBackup+" "+sudoTempNone)
+		sudoSettled = true
+	}
 	switch {
+	case host.SSHUser != "root" && firstInstall && !narrow && job.sudoMode == SudoModeFull:
+		// Выбран полный sudo: хаб его не сужает, «Сузить sudo» — потом.
+		report("hub.sudoKeptFull", host.SSHUser)
+		m.refreshSudoStatus(ctx, hostID, client, host.SSHUser, store.SudoStatusNopasswd)
 	case narrow:
 		// Хост доверяет прежнему хабу (переезд): теперь, с новым nkt, он
 		// умеет сменить ключ на ключ этого хаба.
@@ -1179,6 +1271,8 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// хост «недоступен», и без этого метка висела бы до следующего тика.
 	go m.pollHost(context.WithoutCancel(ctx), hostID)
 
+	oneTime.Delete(sudoPasswordKey(hostID))
+	oneTime.Delete(userPasswordKey(hostID))
 	report("hub.done")
 	return nil
 }

@@ -8,10 +8,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -122,5 +124,65 @@ func TestEdgeInstallNeedsFullSudo(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &res)
 	if !res.SudoNeeded || res.SudoUser != "antex" || !strings.Contains(res.SudoCommand, "antex ALL=(ALL) NOPASSWD: ALL") {
 		t.Fatalf("response: %s", rec.Body)
+	}
+}
+
+// Пароль SSH нового хоста — только в памяти: в базе пустой секрет,
+// подключение берёт его из памяти, а без него — понятная ошибка.
+func TestHostPasswordInMemory(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+	id, err := m.AddHostPasswordInMemory(ctx, "new-vps", "192.0.2.10", 22, "antex", "ssh-pass", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, _ := db.HostByID(ctx, id)
+	if raw, err := secretbox.Decrypt(m.key, h.SecretEnc); err != nil || len(raw) != 0 {
+		t.Fatalf("stored secret: %q %v", raw, err)
+	}
+	if got, err := m.hostSecret(h); err != nil || string(got) != "ssh-pass" {
+		t.Fatalf("hostSecret: %q %v", got, err)
+	}
+	// Новый пароль ещё не установленного хоста — тоже в память.
+	if err := m.UpdateHost(ctx, id, "new-vps", "192.0.2.10", 22, "antex", store.HostAuthPassword, "other-pass", false); err != nil {
+		t.Fatal(err)
+	}
+	h, _ = db.HostByID(ctx, id)
+	if raw, _ := secretbox.Decrypt(m.key, h.SecretEnc); len(raw) != 0 {
+		t.Fatalf("update stored the password: %q", raw)
+	}
+	if got, _ := m.hostSecret(h); string(got) != "other-pass" {
+		t.Fatalf("after update: %q", got)
+	}
+	oneTime.Delete(sshPasswordKey(id))
+	if _, err := m.hostSecret(h); err == nil || !strings.Contains(err.Error(), "new-vps") {
+		t.Fatalf("missing password: %v", err)
+	}
+}
+
+// Перед первой установкой: sudo просит пароль, а его нет — ответ для окна
+// с пользователем и командой (реальные sshd и sudo этой машины; пароль
+// sudo не перебирается).
+func TestInstallSudoCheckAgainstRealSSHD(t *testing.T) {
+	if out, err := exec.Command("sudo", "-n", "true").CombinedOutput(); err == nil || !strings.Contains(string(out), "password is required") {
+		t.Skip("needs sudo that asks for a password")
+	}
+	addr, port, keyPEM := startTestSSHD(t)
+	m, db := newTestManager(t)
+	ctx := context.Background()
+	me, _ := user.Current()
+	enc, _ := secretbox.Encrypt(m.key, keyPEM)
+	id, err := db.CreateHost(ctx, "pw-sudo", addr, port, me.Username, store.HostAuthKey, enc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ok := m.installSudoCheck(ctx, id, "")
+	if ok || st["sudo_needed"] != true || st["sudo_user"] != me.Username {
+		t.Fatalf("check: %v %v", ok, st)
+	}
+	// Уже установленный хост не проверяется — это не первая установка.
+	_ = db.SetHostVersion(ctx, id, "1.0.0")
+	if _, ok := m.installSudoCheck(ctx, id, ""); !ok {
+		t.Fatal("installed host checked")
 	}
 }

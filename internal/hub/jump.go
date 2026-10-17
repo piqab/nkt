@@ -60,9 +60,9 @@ func (l *sshLink) Close() error {
 // dialHost подключается к хосту его собственными реквизитами — напрямую
 // или через хост, на котором он работает.
 func (m *Manager) dialHost(ctx context.Context, host store.Host) (*sshLink, error) {
-	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
+	secret, err := m.hostSecret(host)
 	if err != nil {
-		return nil, msgs.Errorf("hub.decryptingSSHSecret", err)
+		return nil, err
 	}
 	return m.dialHostAs(ctx, host, host.SSHUser, host.SSHAuthKind, secret)
 }

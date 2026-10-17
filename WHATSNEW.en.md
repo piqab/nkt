@@ -8,6 +8,28 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.15 — 2026-10-17
+
+- **New hosts: passwords are not stored, password login is turned off.**
+  - The hub no longer writes the SSH password to its database: only the
+    first installation needs it, and until then it lives in the hub's
+    memory. The installation switches the host to the hub key and
+    **always** turns sshd password login off (checking key login and
+    rolling back if the key does not get in), in both Automatic and Manual
+    modes.
+  - **A sudo choice** in the New host window: narrow (default) or full,
+    passwordless.
+  - **Password sudo**: the hub checks the sudo password before installing
+    (the SSH one by default; a different one goes in its own field), uses
+    it once and does not store it. If it does not work, a window asks for
+    it or shows a command to grant sudo yourself. If the installation
+    fails, the sudo rule goes back to what it was.
+  - **A sudo password for the preparation's new user** (optional), so you
+    can run sudo with a password yourself after narrowing.
+  - **Manual mode**: instead of the commands you can enter the SSH
+    password once — the hub places the key, checks login and starts the
+    installation.
+
 ## v1.13.14 — 2026-10-17
 
 - **Installing nkt-edge with narrow sudo.** The hub no longer refuses on a

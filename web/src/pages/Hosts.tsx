@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import { Sensitive, blurText, setKnownNames } from '../privacy'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Select, Space, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Radio, Select, Space, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
   InfoCircleOutlined,
   CheckCircleFilled,
@@ -436,7 +436,9 @@ export default function Hosts({
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
   const [creatingHost, setCreatingHost] = useState(false)
-  const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string } | null>(null)
+  const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string; id?: number } | null>(null)
+  // Установке нужен пароль sudo: хаб ответил 409 с пользователем и командой.
+  const [sudoAsk, setSudoAsk] = useState<{ id: number; name: string; user: string; command: string; error: string } | null>(null)
   const [busyServiceIds, setBusyServiceIds] = useState<Set<number>>(new Set())
   const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
   // «Обновить всё»: пока запускаются задания по хостам.
@@ -496,7 +498,7 @@ export default function Hosts({
    * whether autoOpenHost has anything left to wait for. */
   // Ключ — id хоста: форма добавления уже знает его из ответа, а установка
   // запускается отдельным вызовом чуть позже.
-  const pendingBootstrap = useRef(new Map<number, BootstrapOptions>())
+  const pendingBootstrap = useRef(new Map<number, InstallExtras>())
   const [removingHost, setRemovingHost] = useState<HubHost | null>(null)
   // Группы приходят с сервера, а не выводятся из хостов: пустую группу
   // иначе неоткуда взять, а её и создают первой — чтобы потом перетащить
@@ -723,16 +725,25 @@ export default function Hosts({
   // Принимает не весь хост, а только его идентификатор: сразу после
   // добавления полной записи ещё нет, а установке кроме id ничего и не
   // нужно.
-  async function startInstall(host: Pick<HubHost, 'id'>, force = false, showLog = true): Promise<boolean> {
+  async function startInstall(host: Pick<HubHost, 'id'>, force = false, showLog = true, sudoPassword?: string): Promise<boolean> {
     setNotice(null)
     try {
       // Подготовка относится к одной конкретной установке — к той, что
       // идёт сразу после добавления хоста. Повторная установка и
-      // обновление её не повторяют: хост уже подготовлен.
-      const bootstrap = pendingBootstrap.current.get(host.id)
+      // обновление её не повторяют: хост уже подготовлен. Пароли —
+      // только в памяти страницы до запуска установки.
+      const extras = pendingBootstrap.current.get(host.id)
       const res = await api<{ job: number }>(
         `/hub/hosts/${host.id}/install${force ? '?force=true' : ''}`,
-        { method: 'POST', body: bootstrap ?? {} },
+        {
+          method: 'POST',
+          body: {
+            ...(extras?.bootstrap ?? {}),
+            sudo_mode: extras?.sudo_mode ?? 'narrow',
+            sudo_password: sudoPassword || extras?.sudo_password || '',
+            user_password: extras?.user_password ?? '',
+          },
+        },
       )
       pendingBootstrap.current.delete(host.id)
       // Установка — задание хаба: журнал в том же окне, что у остальных
@@ -750,8 +761,14 @@ export default function Hosts({
       ) {
         const detail = (err.payload as { detail?: string }).detail ?? ''
         if (await confirmAction(t('hosts.confirmForeignInstall', { detail }))) {
-          return startInstall(host, true, showLog)
+          return startInstall(host, true, showLog, sudoPassword)
         }
+        return false
+      }
+      const p = err instanceof ApiError ? (err.payload as { sudo_needed?: boolean; sudo_user?: string; sudo_command?: string } | null) : null
+      if (err instanceof ApiError && err.status === 428 && p?.sudo_needed) {
+        const name = (hosts ?? []).find((h) => h.id === host.id)?.name ?? `#${host.id}`
+        setSudoAsk({ id: host.id, name, user: p.sudo_user ?? '', command: p.sudo_command ?? '', error: err.message })
         return false
       }
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -824,7 +841,7 @@ export default function Hosts({
     setNotice(null)
     try {
       const res = await api<{ authorized_key: string }>(`/hub/hosts/${host.id}/pubkey`)
-      setPubKeyInfo({ hostName: host.name, key: res.authorized_key })
+      setPubKeyInfo({ hostName: host.name, key: res.authorized_key, id: host.id })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
@@ -1772,12 +1789,13 @@ export default function Hosts({
             onDone={(name, authorizedKey, _t, _tu, created) => {
               setCreatingHost(false)
               reload()
-              if (created?.bootstrap) pendingBootstrap.current.set(created.id, created.bootstrap)
+              if (created?.extras) pendingBootstrap.current.set(created.id, created.extras)
               if (authorizedKey) {
                 // Ручной режим: пока ключ не окажется в authorized_keys на
                 // хосте, установке подключаться нечем — сначала показываем
-                // ключ, установку оператор запускает сам, скопировав его.
-                setPubKeyInfo({ hostName: name, key: authorizedKey })
+                // ключ, установку оператор запускает сам, скопировав его,
+                // или хаб кладёт ключ сам по одноразовому паролю SSH.
+                setPubKeyInfo({ hostName: name, key: authorizedKey, id: created?.id })
                 return
               }
               // Автонастройка: реквизиты для подключения уже есть, ждать
@@ -1802,7 +1820,7 @@ export default function Hosts({
               const host = editingHost
               setEditingHost(null)
               reload()
-              if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
+              if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey, id: host?.id })
               // Saving either checkbox alone only updates the hub's own
               // record — nothing changes on the host itself until
               // nkt.env is rewritten and the service restarted, which is
@@ -1841,7 +1859,24 @@ export default function Hosts({
           addr={(hosts ?? []).find((h) => h.name === pubKeyInfo.hostName)?.addr}
           sshPort={(hosts ?? []).find((h) => h.name === pubKeyInfo.hostName)?.ssh_port}
           sshUser={(hosts ?? []).find((h) => h.name === pubKeyInfo.hostName)?.ssh_user}
+          hostId={pubKeyInfo.id}
+          onPlaced={() => {
+            const id = pubKeyInfo.id
+            setPubKeyInfo(null)
+            if (id !== undefined) void startInstall({ id })
+          }}
           onClose={() => setPubKeyInfo(null)}
+        />
+      )}
+      {sudoAsk && (
+        <SudoPasswordModal
+          ask={sudoAsk}
+          onClose={() => setSudoAsk(null)}
+          onSubmit={async (pw) => {
+            const ask = sudoAsk
+            setSudoAsk(null)
+            await startInstall({ id: ask.id }, false, true, pw)
+          }}
         />
       )}
 
@@ -1879,10 +1914,15 @@ function PublicKeyModal({
   addr,
   sshPort,
   sshUser,
+  hostId,
+  onPlaced,
   onClose,
 }: {
   hostName: string
   authorizedKey: string
+  /** Хост в хабе: можно положить ключ по одноразовому паролю SSH. */
+  hostId?: number
+  onPlaced?: () => void
   /** Адрес, порт и пользователь SSH из записи хоста — для готовой
    * команды «с вашей машины»; без них показывается только команда для
    * выполнения на самом хосте. */
@@ -1939,6 +1979,102 @@ function PublicKeyModal({
         </>
       )}
       <div className="small muted">{t('hosts.keyCmdAfter')}</div>
+      {hostId !== undefined && onPlaced && <PlaceKeyByPassword hostId={hostId} user={sshUser || 'root'} onPlaced={onPlaced} />}
+    </Modal>
+  )
+}
+
+/** «Ручная» без команд: хаб входит один раз по паролю SSH, кладёт свой
+ * ключ и проверяет вход им. Пароль никуда не записывается. */
+function PlaceKeyByPassword({ hostId, user, onPlaced }: { hostId: number; user: string; onPlaced: () => void }) {
+  const { t } = useTranslation()
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.75rem', marginTop: '0.75rem' }}>
+      <div className="small">{t('hosts.placeKeyTitle', { user })}</div>
+      {error && <Banner kind="error">{error}</Banner>}
+      <Space.Compact style={{ width: '100%', marginTop: '0.3rem' }}>
+        <Input.Password autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Button
+          type="primary"
+          loading={busy}
+          disabled={!password}
+          onClick={async () => {
+            setBusy(true)
+            setError(null)
+            try {
+              await api(`/hub/hosts/${hostId}/place-key`, { method: 'POST', body: { password } })
+              setPassword('')
+              onPlaced()
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err))
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {t('hosts.placeKeyBtn')}
+        </Button>
+      </Space.Compact>
+      <div className="small muted" style={{ marginTop: '0.25rem' }}>{t('hosts.placeKeyHint')}</div>
+    </div>
+  )
+}
+
+/** Установке нужен пароль sudo: ввести его один раз или выполнить команду
+ * на хосте самому и повторить без пароля. */
+function SudoPasswordModal({
+  ask,
+  onClose,
+  onSubmit,
+}: {
+  ask: { name: string; user: string; command: string; error: string }
+  onClose: () => void
+  onSubmit: (password: string) => Promise<void>
+}) {
+  const { t } = useTranslation()
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <Modal title={t('hosts.sudoAskTitle', { name: ask.name })} onClose={onClose} width={720}>
+      <div className="col" style={{ gap: '0.5rem' }}>
+        <Banner kind="warn">{ask.error}</Banner>
+        <label className="small">
+          {t('hosts.sudoAskPassword', { user: ask.user })}
+          <Input.Password autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        <span className="small muted">{t('hosts.sudoAskHint')}</span>
+        {ask.command && (
+          <>
+            <span className="small">{t('hosts.sudoAskCommand')}</span>
+            <div className="row" style={{ gap: '0.4rem', alignItems: 'flex-start' }}>
+              <pre className="mono small" style={{ margin: 0, flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {ask.command}
+              </pre>
+              <CopyButton text={ask.command} />
+            </div>
+          </>
+        )}
+        <Space>
+          <Button
+            type="primary"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true)
+              try {
+                await onSubmit(password)
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            {t('hosts.sudoAskInstall')}
+          </Button>
+          <Button onClick={onClose}>{t('hosts.sudoAskCancel')}</Button>
+        </Space>
+      </div>
     </Modal>
   )
 }
@@ -2037,6 +2173,16 @@ export interface BootstrapOptions {
   disable_password_auth: boolean
 }
 
+/** К первой установке нового хоста: подготовка, выбор sudo и пароли на
+ * один раз (живут в памяти страницы до запуска установки, хаб их не
+ * хранит). */
+export interface InstallExtras {
+  bootstrap?: BootstrapOptions
+  sudo_mode: 'narrow' | 'full'
+  sudo_password?: string
+  user_password?: string
+}
+
 /** Набор по умолчанию повторяет BootstrapPackagesDefault на стороне хаба:
  * первые шесть нужны самому nkt, tmux и btop включают режим tmux в
  * терминале и живой просмотр нагрузки. */
@@ -2095,7 +2241,7 @@ function HostForm({
     generatedAuthorizedKey?: string,
     terminalEnabledChanged?: boolean,
     tunnelEnabledChanged?: boolean,
-    created?: { id: number; bootstrap?: BootstrapOptions },
+    created?: { id: number; extras?: InstallExtras },
   ) => void
 }) {
   const { t } = useTranslation()
@@ -2137,7 +2283,13 @@ function HostForm({
   const [bootstrapUser, setBootstrapUser] = useState('')
   const [bootstrapUserKey, setBootstrapUserKey] = useState('')
   const [bootstrapPackages, setBootstrapPackages] = useState(BOOTSTRAP_PACKAGES_DEFAULT)
-  const [bootstrapDisablePassword, setBootstrapDisablePassword] = useState(false)
+  // Sudo после первой установки и пароли на один раз (не сохраняются).
+  // Под root sudo не нужен — если подготовка не заводит пользователя.
+  const watchedUser = Form.useWatch('ssh_user', form) as string | undefined
+  const needsSudo = (watchedUser ?? '').trim() !== 'root' || (bootstrapEnabled && bootstrapUser.trim() !== '')
+  const [sudoMode, setSudoMode] = useState<'narrow' | 'full'>('narrow')
+  const [sudoPassword, setSudoPassword] = useState('')
+  const [userPassword, setUserPassword] = useState('')
   // Набор хранится на хабе, а не в коде страницы: правка при добавлении
   // одного хоста должна быть видна и при добавлении следующего.
   const bootstrapDefaults = useApi<BootstrapOptions>(editing ? null : '/hub/bootstrap/defaults')
@@ -2146,7 +2298,6 @@ function HostForm({
     if (!d) return
     setBootstrapUser(d.user)
     setBootstrapPackages(d.packages.join(' '))
-    setBootstrapDisablePassword(d.disable_password_auth)
   }, [bootstrapDefaults.data])
 
   async function submit(values: HostFormValues) {
@@ -2183,7 +2334,8 @@ function HostForm({
         user: bootstrapUser.trim(),
         user_key: bootstrapUserKey.trim(),
         packages: bootstrapPackages.split(/[\s,]+/).filter(Boolean),
-        disable_password_auth: bootstrapDisablePassword,
+        // Вход по паролю при первой установке выключается всегда.
+        disable_password_auth: true,
       }
       if (!editing && bootstrapEnabled) {
         await api('/hub/bootstrap/defaults', { method: 'PUT', body: bootstrapValues }).catch(() => {})
@@ -2219,7 +2371,12 @@ function HostForm({
           ? undefined
           : {
               id: createdId,
-              bootstrap: bootstrapEnabled ? bootstrapValues : undefined,
+              extras: {
+                bootstrap: bootstrapEnabled ? bootstrapValues : undefined,
+                sudo_mode: sudoMode,
+                sudo_password: sudoPassword || undefined,
+                user_password: bootstrapEnabled && bootstrapUser.trim() && userPassword ? userPassword : undefined,
+              },
             },
       )
     } catch (err) {
@@ -2420,17 +2577,47 @@ function HostForm({
               >
                 {t('hosts.bootstrapReset')}
               </Button>
-              <br />
-              <Checkbox
-                checked={bootstrapDisablePassword}
-                onChange={(e) => setBootstrapDisablePassword(e.target.checked)}
-                style={{ marginTop: '0.4rem' }}
-              >
-                {t('hosts.bootstrapDisablePassword')}
-              </Checkbox>
-              <div className="small muted">{t('hosts.bootstrapDisablePasswordHint')}</div>
             </div>
           )}
+        </div>
+      )}
+      {/* Sudo после первой установки и вход по паролю — для нового хоста.
+          Пароли здесь хаб не сохраняет: они уходят только в установку. */}
+      {!editing && (
+        <div
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.6rem 0.75rem',
+            marginBottom: '0.6rem',
+          }}
+        >
+          {needsSudo && (
+            <>
+              <div className="small">{t('hosts.sudoModeLabel')}</div>
+              <Radio.Group value={sudoMode} onChange={(e) => setSudoMode(e.target.value as 'narrow' | 'full')}>
+                <Radio value="narrow">{t('hosts.sudoModeNarrow')}</Radio>
+                <Radio value="full">{t('hosts.sudoModeFull')}</Radio>
+              </Radio.Group>
+              <div className="small muted">{t(sudoMode === 'full' ? 'hosts.sudoModeFullHint' : 'hosts.sudoModeNarrowHint')}</div>
+              {(watchedUser ?? '').trim() !== 'root' && (
+                <label className="small" style={{ display: 'block', marginTop: '0.4rem' }}>
+                  {t(authKind === 'password' ? 'hosts.sudoPasswordDiff' : 'hosts.sudoPasswordKey')}
+                  <Input.Password autoComplete="off" value={sudoPassword} onChange={(e) => setSudoPassword(e.target.value)} />
+                </label>
+              )}
+            </>
+          )}
+          {bootstrapEnabled && bootstrapUser.trim() !== '' && (
+            <label className="small" style={{ display: 'block', marginTop: '0.4rem' }}>
+              {t('hosts.userPassword', { user: bootstrapUser.trim() })}
+              <Input.Password autoComplete="new-password" value={userPassword} onChange={(e) => setUserPassword(e.target.value)} />
+              <span className="small muted">{t('hosts.userPasswordHint')}</span>
+            </label>
+          )}
+          <div className="small muted" style={{ marginTop: needsSudo ? '0.4rem' : 0 }}>
+            {t('hosts.passwordLoginOff')}
+          </div>
         </div>
       )}
 

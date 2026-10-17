@@ -25,6 +25,8 @@ type HostInstallParams struct {
 	// Bootstrap — разовая подготовка хоста перед установкой; nil для
 	// обычной установки и любого обновления.
 	Bootstrap *BootstrapOptions `json:"bootstrap,omitempty"`
+	// SudoMode — «full»: после первой установки sudo не сужать.
+	SudoMode string `json:"sudo_mode,omitempty"`
 }
 
 // HostInstallRunner выполняет KindHostInstall.
@@ -87,7 +89,7 @@ func (r *HostInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		if job != nil && !job.isDone() {
 			job.cancelNow()
 		}
-		job = &installJob{jobID: jc.Job.ID, created: time.Now(), hostID: p.HostID, bootstrap: p.Bootstrap}
+		job = &installJob{jobID: jc.Job.ID, created: time.Now(), hostID: p.HostID, bootstrap: p.Bootstrap, sudoMode: p.SudoMode}
 		r.m.jobByHost[p.HostID] = job
 	}
 	job.mu.Lock()
