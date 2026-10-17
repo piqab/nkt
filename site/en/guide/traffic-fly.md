@@ -79,6 +79,11 @@ route. Without it the gateway does not decrypt TLS, and browsers show
   root only) and never go to the hub; renewal works without the hub too.
 - The route window shows for each name: “certificate until …” or why it
   was not issued.
+- Dry run and Apply check in advance: the gateway is at least 1.13.25
+  (otherwise a refusal — Reinstall the gateway), the name's DNS points to
+  the gateway and its port 80 answers from outside (otherwise a warning in
+  the job log, since the hub may have no internet access). The gateway
+  version is shown in Gateways.
 
 ## Pools and balancing
 

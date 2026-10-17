@@ -51,7 +51,7 @@ func (rt *Runtime) tlsNameOf(name string) (string, bool) {
 // acmeRequest — в начале соединения запрос проверки Let's Encrypt.
 func acmeRequest(br *bufio.Reader) bool {
 	b, _ := br.Peek(br.Buffered())
-	return bytes.HasPrefix(b, []byte("GET /.well-known/acme-challenge/"))
+	return bytes.HasPrefix(b, []byte("GET /.well-known/acme-challenge/")) || bytes.HasPrefix(b, []byte("GET "+CheckPath80+" "))
 }
 
 // bufConn — соединение клиента, у которого начало уже прочитано в br;
@@ -132,6 +132,10 @@ func serveOne(conn net.Conn, done <-chan struct{}, h http.Handler) {
 func (rt *Runtime) serveRedirect(c net.Conn, br *bufio.Reader) {
 	bc := &bufConn{Conn: c, r: br, closed: make(chan struct{})}
 	redirect := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == CheckPath80 {
+			_, _ = io.WriteString(w, CheckReply80)
+			return
+		}
 		host := r.Host
 		if h, _, err := net.SplitHostPort(host); err == nil {
 			host = h

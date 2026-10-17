@@ -62,6 +62,15 @@ func TestRouterGatewayTLS(t *testing.T) {
 	if string(b) != "token-app.example.com" {
 		t.Fatalf("acme: %q", b)
 	}
+	resp, err = cl.Get("http://app.example.com" + CheckPath80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(b) != CheckReply80 {
+		t.Fatalf("check path: %q", b)
+	}
 	resp, err = cl.Get("http://app.example.com/x?y=1")
 	if err != nil {
 		t.Fatal(err)

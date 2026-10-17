@@ -147,7 +147,7 @@ func (d *flyDaemon) handleKey(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	writeFlyJSON(w, 200, fly.KeyResponse{PublicKey: d.pub})
+	writeFlyJSON(w, 200, fly.KeyResponse{PublicKey: d.pub, Version: version})
 }
 
 func (d *flyDaemon) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -320,7 +320,7 @@ func ufwPorts(dir string, cfg fly.GatewayConfig) error {
 func (d *flyDaemon) status(ctx context.Context) fly.GatewayStatus {
 	cfg := d.rt.Config()
 	snap := d.rt.Snapshot()
-	st := fly.GatewayStatus{Revision: snap.Revision, PublicKey: d.pub, Now: time.Now().Unix(), Routes: snap.Routes}
+	st := fly.GatewayStatus{Revision: snap.Revision, PublicKey: d.pub, Version: version, Now: time.Now().Unix(), Routes: snap.Routes}
 	if d.certs != nil {
 		st.Certs = d.certs.Status(cfg.TLSNames())
 	}
