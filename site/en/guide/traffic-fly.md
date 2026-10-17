@@ -130,7 +130,7 @@ webhooks and the n8n node get them like any other event.
 | Symptom | What to check |
 |---|---|
 | Gateway “offline” | is the edge connected to the hub? `systemctl status nkt-edge nkt-fly` on the VPS |
-| Tunnel doesn't come up | the reason is shown under the gateway in Gateways: “not configured yet” — Apply has not reached the host; “UDP 51820 is blocked” — the host sends, the gateway gets nothing: open 51820/udp in the VPS provider firewall (and outbound UDP on the host); “keys do not match” — Apply again; “tunnel is not up on the host” — `systemctl status wg-quick@nkt-flyN` on the host |
+| Tunnel doesn't come up | the reason is shown under the gateway in Gateways: “not configured yet” — Apply has not reached the host; “gateway rejects” — the host sends, the gateway does not accept: run `sudo tcpdump -ni any udp port 51820` on the gateway — nothing: 51820/udp is closed at the VPS provider or outbound UDP on the host; packets visible: the gateway firewall, or the interface has no key (`sudo wg show nkt-fly public-key` → `(none)`; gateways on 1.13.22+ restore it themselves); “keys do not match” — Apply again; “tunnel is not up on the host” — `systemctl status wg-quick@nkt-flyN` on the host |
 | “Host did not answer within 20 s” | does the host page open in the hub; `systemctl status netknownsthat` on the host |
 | “nkt cannot do Traffic Fly” | update nkt on the host (1.13.12 or newer) |
 | Target “down” | target and check ports; the container listens on its own address, not only 127.0.0.1 |
