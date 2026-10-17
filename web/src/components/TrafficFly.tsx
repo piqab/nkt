@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Select, Space, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -727,13 +727,47 @@ function RouteEditor({
   )
 }
 
+type TargetItem = { kind: string; name: string; ip?: string; state?: string; ports?: number[] }
+
+// Списки целей хоста по виду — одна загрузка на хост и вид для всех строк
+// редактора; хаб сам держит их 30 с, здесь — столько же.
+const targetLists = new Map<string, { at: number; p: Promise<TargetItem[]> }>()
+
+function loadTargets(hostId: number, kind: TargetKind, refresh = false): Promise<TargetItem[]> {
+  const key = `${hostId}/${kind}`
+  const hit = targetLists.get(key)
+  if (hit && !refresh && Date.now() - hit.at < 30_000) return hit.p
+  const p = api<{ targets: TargetItem[] }>(`/hub/fly/targets?host_id=${hostId}&kind=${kind}${refresh ? '&refresh=1' : ''}`).then((r) => r.targets)
+  p.catch(() => targetLists.delete(key))
+  targetLists.set(key, { at: Date.now(), p })
+  return p
+}
+
+function useTargets(hostId: number, kind: TargetKind) {
+  const listable = kind === 'container' || kind === 'vm' || kind === 'lxd'
+  const [items, setItems] = useState<TargetItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    if (!listable || hostId < -1) return
+    let alive = true
+    setLoading(true)
+    loadTargets(hostId, kind, tick > 0)
+      .then((v) => alive && setItems(v))
+      .catch(() => alive && setItems([]))
+      .finally(() => alive && setLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [hostId, kind, listable, tick])
+  return { items, loading, refresh: () => setTick((n) => n + 1) }
+}
+
 /** Цель пула: хост, что на нём (выбор из контейнеров, машин, LXD), порт. */
 function TargetRow({ target, hosts, onChange, onRemove }: { target: FlyTarget; hosts: HubHost[]; onChange: (t: FlyTarget) => void; onRemove: () => void }) {
   const { t } = useTranslation()
-  const list = useApi<{ targets: { kind: string; name: string; ip?: string; state?: string; ports?: number[] }[] }>(
-    target.kind !== 'host' && target.kind !== 'addr' ? `/hub/fly/targets?host_id=${target.host_id}` : null,
-  )
-  const items = (list.data?.targets ?? []).filter((x) => x.kind === target.kind)
+  const list = useTargets(target.host_id, target.kind)
+  const items = list.items.filter((x) => x.kind === target.kind)
   return (
     <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
       <Select
@@ -756,10 +790,18 @@ function TargetRow({ target, hosts, onChange, onRemove }: { target: FlyTarget; h
           }}
           loading={list.loading}
           options={items.map((x) => ({ value: x.name, label: `${x.name}${x.ip ? ` · ${x.ip}` : ''}${x.state ? ` · ${x.state}` : ''}` }))}
-          placeholder={t('fly.pickRef')}
+          placeholder={list.loading ? t('fly.loadingTargets') : t('fly.pickRef')}
+          notFoundContent={list.loading ? t('fly.loadingTargets') : t('fly.noTargets')}
           style={{ width: 240 }}
         />
       ) : null}
+      {target.kind !== 'host' && target.kind !== 'addr' && (
+        <Tooltip title={t('fly.refreshTargets')}>
+          <Button size="small" loading={list.loading} onClick={list.refresh} aria-label={t('fly.refreshTargets')}>
+            ↻
+          </Button>
+        </Tooltip>
+      )}
       <InputNumber min={1} max={65535} value={target.port || null} onChange={(v) => onChange({ ...target, port: v ?? 0 })} placeholder={t('fly.fieldPort')} />
       <Tooltip title={t('fly.weightHint')}>
         <InputNumber min={1} max={100} value={target.weight || 1} onChange={(v) => onChange({ ...target, weight: v ?? 1 })} addonBefore={t('fly.colWeight')} style={{ width: 130 }} />

@@ -2,6 +2,9 @@ package hub
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -110,5 +113,27 @@ func TestFlyValidate(t *testing.T) {
 	}
 	if _, err := s.flySave(ctx, FlyDoc{Routes: []FlyRoute{base()}}, "admin", ""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFlyTargetsKindAndCache(t *testing.T) {
+	s, _, host := flyTestServer(t)
+	get := func(q string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		s.handleFlyTargets(rec, httptest.NewRequest(http.MethodGet, "/hub/fly/targets?"+q, nil))
+		return rec
+	}
+	if rec := get(fmt.Sprintf("host_id=%d&kind=docker", host)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad kind: %d", rec.Code)
+	}
+	// Хост не отвечает — пустой список, и неудача не кэшируется.
+	if rec := get(fmt.Sprintf("host_id=%d&kind=container", host)); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"targets":[]`) {
+		t.Fatalf("unreachable host: %d %s", rec.Code, rec.Body)
+	}
+	flyTargetsCache.Lock()
+	_, cached := flyTargetsCache.m[fmt.Sprintf("%d/container", host)]
+	flyTargetsCache.Unlock()
+	if cached {
+		t.Fatal("failure cached")
 	}
 }
