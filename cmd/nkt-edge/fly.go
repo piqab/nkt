@@ -42,6 +42,8 @@ type flyDaemon struct {
 	wgConf string
 	rt     *fly.Runtime
 
+	certs *flyCerts
+
 	mu      sync.Mutex
 	pub     string
 	errs    []string
@@ -74,6 +76,9 @@ func runFly() {
 	}
 	d.pub = pub
 	d.rt.OnHealthChange = d.markNFT
+	d.certs = newFlyCerts(d.dir, func() []string { return d.rt.Config().TLSNames() })
+	d.rt.GetCertificate = d.certs.GetCertificate
+	d.rt.ACME = d.certs.m.HTTPHandler
 	if raw, err := os.ReadFile(filepath.Join(d.dir, "fly.json")); err == nil {
 		var cfg fly.GatewayConfig
 		if json.Unmarshal(raw, &cfg) == nil {
@@ -85,6 +90,19 @@ func runFly() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go d.nftLoop(ctx)
+	// Ключ интерфейса — и без хаба, который спрашивает сводку.
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				d.healKey(ctx)
+			}
+		}
+	}()
 
 	addr := env("FLY_API_ADDR", fly.DefaultAPIAddr)
 	if host, _, err := net.SplitHostPort(addr); err != nil || !net.ParseIP(host).IsLoopback() {
@@ -168,6 +186,9 @@ func (d *flyDaemon) apply(cfg fly.GatewayConfig, save bool) error {
 	}
 	if err := d.rt.Apply(cfg); err != nil {
 		errs = append(errs, err.Error())
+	}
+	if d.certs != nil {
+		d.certs.Prefetch(cfg.TLSNames())
 	}
 	if err := d.writeNFT(); err != nil {
 		errs = append(errs, err.Error())
@@ -262,6 +283,9 @@ func ufwPorts(dir string, cfg fly.GatewayConfig) error {
 		if r.Named() {
 			want[strconv.Itoa(r.Port)+"/tcp"] = true
 		}
+		if r.TLS {
+			want["80/tcp"] = true
+		}
 	}
 	state := filepath.Join(dir, "ufw.json")
 	var had []string
@@ -297,6 +321,10 @@ func (d *flyDaemon) status(ctx context.Context) fly.GatewayStatus {
 	cfg := d.rt.Config()
 	snap := d.rt.Snapshot()
 	st := fly.GatewayStatus{Revision: snap.Revision, PublicKey: d.pub, Now: time.Now().Unix(), Routes: snap.Routes}
+	if d.certs != nil {
+		st.Certs = d.certs.Status(cfg.TLSNames())
+	}
+	fwWarn := firewallWarnings(ctx)
 	for i, r := range cfg.Routes {
 		if r.Named() || i >= len(st.Routes) {
 			continue
@@ -312,20 +340,14 @@ func (d *flyDaemon) status(ctx context.Context) fly.GatewayStatus {
 		rs.Clients = len(cs.Clients)
 		rs.Top = topOf(cs.Clients)
 	}
-	// Ключ на интерфейсе пропал (стёр syncconf прежних версий, кто-то
-	// поправил руками) — вернуть из файла: без него рукопожатия хостов
-	// молча отбрасываются.
-	if out, err := exec.CommandContext(ctx, "wg", "show", flyIface, "public-key").Output(); err == nil && strings.TrimSpace(string(out)) != d.pub {
-		if exec.CommandContext(ctx, "wg", "set", flyIface, "private-key", filepath.Join(d.dir, "wg.key")).Run() == nil {
-			log.Printf("nkt-fly: private key of %s was missing, restored", flyIface)
-		}
-	}
+	d.healKey(ctx)
 	if out, err := exec.CommandContext(ctx, "wg", "show", flyIface, "dump").Output(); err == nil {
 		st.Peers = fly.ParseWGDump(string(out))
 	}
 	d.mu.Lock()
 	st.Errors = append(st.Errors, d.errs...)
 	d.mu.Unlock()
+	st.Errors = append(st.Errors, fwWarn...)
 	return st
 }
 
@@ -355,4 +377,50 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// firewallWarnings — файрвол шлюза без iptables (только nftables) с
+// политикой drop на входе или транзите: правила пропуска nkt (iptables в
+// PostUp) там не встают, и туннель или маршруты по порту могут
+// отрезаться. С iptables — правила ставятся сами, предупреждать не о чем.
+func firewallWarnings(ctx context.Context) []string {
+	if _, err := exec.LookPath("iptables"); err == nil {
+		return nil
+	}
+	out, err := exec.CommandContext(ctx, "nft", "list", "chains").Output()
+	if err != nil {
+		return nil
+	}
+	var warns []string
+	table := ""
+	for _, line := range strings.Split(string(out), "\n") {
+		l := strings.TrimSpace(line)
+		if strings.HasPrefix(l, "table ") {
+			table = l
+			continue
+		}
+		if strings.Contains(table, "nkt_fly") || !strings.Contains(l, "policy drop") {
+			continue
+		}
+		switch {
+		case strings.Contains(l, "hook input"):
+			warns = append(warns, "firewall: input policy drop in "+strings.TrimSuffix(strings.TrimPrefix(table, "table "), " {")+" — allow the WireGuard port (udp) and the ports of routes by name")
+		case strings.Contains(l, "hook forward"):
+			warns = append(warns, "firewall: forward policy drop in "+strings.TrimSuffix(strings.TrimPrefix(table, "table "), " {")+" — allow forwarding to and from nkt-fly, or routes by port are cut")
+		}
+	}
+	return warns
+}
+
+// healKey — ключ на интерфейсе пропал (стёр syncconf прежних версий,
+// кто-то поправил руками) — вернуть из файла: без него рукопожатия хостов
+// молча отбрасываются.
+func (d *flyDaemon) healKey(ctx context.Context) {
+	out, err := exec.CommandContext(ctx, "wg", "show", flyIface, "public-key").Output()
+	if err != nil || strings.TrimSpace(string(out)) == d.pub {
+		return
+	}
+	if exec.CommandContext(ctx, "wg", "set", flyIface, "private-key", filepath.Join(d.dir, "wg.key")).Run() == nil {
+		log.Printf("nkt-fly: private key of %s was missing, restored", flyIface)
+	}
 }

@@ -32,6 +32,17 @@ type GatewayStatus struct {
 	Routes    []RouteStats `json:"routes"`
 	Peers     []PeerStats  `json:"peers"`
 	Errors    []string     `json:"errors,omitempty"`
+	// Certs — сертификаты маршрутов с TLS на шлюзе.
+	Certs []CertStatus `json:"certs,omitempty"`
+}
+
+// CertStatus — сертификат имени на шлюзе: до какого времени (Unix) или
+// почему не выпущен; Pending — ещё не запрашивался.
+type CertStatus struct {
+	Name     string `json:"name"`
+	NotAfter int64  `json:"not_after,omitempty"`
+	Error    string `json:"error,omitempty"`
+	Pending  bool   `json:"pending,omitempty"`
 }
 
 // HostIfaceStatus — туннель хоста к шлюзу.

@@ -26,6 +26,7 @@ const f2bMaintainUser = "nkt"
 
 // StartMaintenance — фоновые сверки хоста до ctx.Done().
 func (s *Server) StartMaintenance(ctx context.Context) {
+	go s.flyWatchLoop(ctx)
 	go func() {
 		t := time.NewTimer(f2bMaintainDelay)
 		defer t.Stop()

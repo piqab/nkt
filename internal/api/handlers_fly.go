@@ -14,6 +14,7 @@ import (
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/fly"
+	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
 )
 
@@ -221,4 +222,122 @@ func (s *Server) flyHealKey(ctx context.Context, iface string) {
 		return
 	}
 	_, _ = RunUnrestricted(ctx, "wg", "set", iface, "private-key", key)
+}
+
+// flyWatchEvery — как часто хост сам сверяет туннели Traffic Fly: адреса
+// целей и ключ интерфейса. Работает и без хаба.
+const flyWatchEvery = 30 * time.Second
+
+func (s *Server) flyWatchLoop(ctx context.Context) {
+	if s.cfg == nil || s.cfg.IsFixtures() {
+		return
+	}
+	t := time.NewTicker(flyWatchEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		s.flyWatchOnce(ctx)
+	}
+}
+
+// flyWatchOnce — ключ на каждом интерфейсе на месте; цель-контейнер,
+// машина или LXD сменила адрес (пересоздана) — правило DNAT переписать.
+func (s *Server) flyWatchOnce(ctx context.Context) {
+	cfg := s.flyHostConfig()
+	if len(cfg.Ifaces) == 0 {
+		return
+	}
+	for _, i := range cfg.Ifaces {
+		if fly.ValidIface(i.Name) {
+			s.flyHealKey(ctx, i.Name)
+		}
+	}
+	if s.scanner == nil {
+		return
+	}
+	snap, err := s.scanner.LatestOrScan(ctx)
+	if err != nil || snap == nil {
+		return
+	}
+	changed := false
+	for ii := range cfg.Ifaces {
+		i := &cfg.Ifaces[ii]
+		ifaceChanged := false
+		for si := range i.Services {
+			sv := &i.Services[si]
+			ip := flyTargetIP(snap, sv.Kind, sv.Ref)
+			if ip == "" || ip == sv.Addr {
+				continue
+			}
+			if s.log != nil {
+				s.log.Info("fly: target address changed", "iface", i.Name, "kind", sv.Kind, "ref", sv.Ref, "from", sv.Addr, "to", ip)
+			}
+			sv.Addr, ifaceChanged = ip, true
+		}
+		if !ifaceChanged || !fly.ValidIface(i.Name) {
+			continue
+		}
+		nftFile, err := fly.FilePath(s.flyDir(), i.Name, ".nft")
+		if err != nil {
+			continue
+		}
+		if err := os.WriteFile(nftFile, []byte(fly.HostNFT(*i)), 0o600); err != nil {
+			continue
+		}
+		if res, err := RunUnrestricted(ctx, "nft", "-f", nftFile); err == nil && res.OK() {
+			changed = true
+		}
+	}
+	if changed && cfg.Validate() == nil {
+		raw, _ := json.MarshalIndent(cfg, "", "  ")
+		_ = os.WriteFile(filepath.Join(s.flyDir(), "host.json"), raw, 0o600)
+	}
+}
+
+// flyTargetIP — текущий IPv4 цели по инвентарю хоста; пусто — не
+// найдена или вид не про адрес (host, addr).
+func flyTargetIP(snap *model.Snapshot, kind, ref string) string {
+	v4 := func(s string) string {
+		if a, err := netip.ParseAddr(s); err == nil && a.Is4() {
+			return a.String()
+		}
+		return ""
+	}
+	switch kind {
+	case "container":
+		for _, c := range snap.Container {
+			if c.Name == ref {
+				for _, n := range c.Networks {
+					if ip := v4(n.IPAddress); ip != "" {
+						return ip
+					}
+				}
+			}
+		}
+	case "vm":
+		for _, v := range snap.VMs {
+			if v.Name == ref {
+				for _, n := range v.Networks {
+					if ip := v4(n.IP); ip != "" {
+						return ip
+					}
+				}
+			}
+		}
+	case "lxd":
+		for _, in := range snap.LXD {
+			if in.Name == ref {
+				for _, a := range in.IPv4 {
+					if ip := v4(a); ip != "" {
+						return ip
+					}
+				}
+			}
+		}
+	}
+	return ""
 }

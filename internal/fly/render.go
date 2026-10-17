@@ -44,6 +44,9 @@ func GatewayWG(c GatewayConfig, keyFile string) string {
 	b.WriteString("PostUp = sysctl -qw net.ipv4.ip_forward=1 net.ipv4.conf.%i.rp_filter=2; sysctl -qw net.netfilter.nf_conntrack_acct=1 || true\n")
 	b.WriteString("PostUp = iptables -I FORWARD 1 -i %i -j ACCEPT || true; iptables -I FORWARD 1 -o %i -j ACCEPT || true\n")
 	b.WriteString("PostDown = iptables -D FORWARD -i %i -j ACCEPT || true; iptables -D FORWARD -o %i -j ACCEPT || true\n")
+	// Вход на порт WireGuard — для VPS с политикой INPUT DROP без ufw.
+	fmt.Fprintf(&b, "PostUp = iptables -I INPUT 1 -p udp --dport %d -j ACCEPT 2>/dev/null || true\n", c.ListenPort)
+	fmt.Fprintf(&b, "PostDown = iptables -D INPUT -p udp --dport %d -j ACCEPT 2>/dev/null || true\n", c.ListenPort)
 	peers := append([]Peer(nil), c.Peers...)
 	sort.Slice(peers, func(i, j int) bool { return peers[i].Address < peers[j].Address })
 	for _, p := range peers {

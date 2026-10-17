@@ -305,11 +305,13 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
                     </div>
                   )}
                 </Card>
-                {me.is_admin && <EdgeCard onOpenJob={(id) => void openJob(id)} />}
               </>
             ),
           },
           { key: 'sites', label: t('deploy.tabSites'), children: <SitesPanel me={me} /> },
+          // nkt-edge — своя вкладка: им пользуются и вебхуки конвейеров, и
+          // шлюзы Traffic Fly, и API снаружи.
+          ...(me.is_admin ? [{ key: 'edge', label: 'nkt-edge', children: <EdgeCard onOpenJob={(id) => void openJob(id)} /> }] : []),
           { key: 'fly', label: 'Traffic Fly', children: <TrafficFly me={me} onOpenJob={(id) => void openJob(id)} /> },
         ]}
       />

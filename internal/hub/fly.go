@@ -61,16 +61,18 @@ type FlyTarget struct {
 
 // FlyRoute — маршрут: шлюз, имя или порт, пул.
 type FlyRoute struct {
-	ID            string      `json:"id" yaml:"id"`
-	Label         string      `json:"label,omitempty" yaml:"label,omitempty"`
-	Gateway       int64       `json:"gateway" yaml:"gateway"`
-	Kind          string      `json:"kind" yaml:"kind"`
-	Names         []string    `json:"names,omitempty" yaml:"names,omitempty"`
-	Port          int         `json:"port" yaml:"port"`
-	ProxyProtocol bool        `json:"proxy_protocol,omitempty" yaml:"proxy_protocol,omitempty"`
-	Algorithm     string      `json:"algorithm" yaml:"algorithm"`
-	Check         fly.Check   `json:"check" yaml:"check"`
-	Targets       []FlyTarget `json:"targets" yaml:"targets"`
+	ID            string   `json:"id" yaml:"id"`
+	Label         string   `json:"label,omitempty" yaml:"label,omitempty"`
+	Gateway       int64    `json:"gateway" yaml:"gateway"`
+	Kind          string   `json:"kind" yaml:"kind"`
+	Names         []string `json:"names,omitempty" yaml:"names,omitempty"`
+	Port          int      `json:"port" yaml:"port"`
+	ProxyProtocol bool     `json:"proxy_protocol,omitempty" yaml:"proxy_protocol,omitempty"`
+	// TLS — сертификат на шлюзе: цели — HTTP с адресом клиента в заголовках.
+	TLS       bool        `json:"tls,omitempty" yaml:"tls,omitempty"`
+	Algorithm string      `json:"algorithm" yaml:"algorithm"`
+	Check     fly.Check   `json:"check" yaml:"check"`
+	Targets   []FlyTarget `json:"targets" yaml:"targets"`
 }
 
 // FlyAlloc — постоянные номера: хост в подсети шлюза, служебный порт
@@ -235,7 +237,7 @@ func (d FlyDoc) gatewayConfig(g FlyGateway, keys map[int64]string, names map[int
 		if r.Gateway != g.EdgeID {
 			continue
 		}
-		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, ProxyProtocol: r.ProxyProtocol, Algorithm: r.Algorithm, Check: r.Check}
+		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Algorithm: r.Algorithm, Check: r.Check}
 		for _, t := range r.Targets {
 			if !seen[t.HostID] {
 				seen[t.HostID] = true

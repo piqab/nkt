@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.23 — 2026-10-17
+
+- **Traffic Fly: a certificate on the gateway.** An HTTPS by name route
+  has a “Certificate on the gateway (Let's Encrypt)” box: the gateway
+  obtains and renews the certificate itself (checked over its port 80),
+  terminates TLS and sends the target plain HTTP with the client address in
+  `X-Forwarded-For` and `X-Real-IP`; `http://` redirects to `https://`. A
+  container serving HTTP no longer gives `ERR_SSL_PROTOCOL_ERROR`. The
+  route window shows the certificate's expiry or why it was not issued.
+- **Traffic Fly is sturdier without the hub.** Every 30 seconds a host
+  compares container, VM and LXD target addresses itself and rewrites the
+  rule if a container was recreated with another IP; the gateway and hosts
+  check the WireGuard interface key on their own timer. On a gateway with
+  INPUT DROP the WireGuard port is opened when the tunnel comes up, and a
+  gateway without iptables but with an nftables drop policy shows a
+  warning in Gateways. The guide has a “Without the hub” section.
+- **nkt-edge is its own Deployments tab**, before Traffic Fly.
+
 ## v1.13.22 — 2026-10-17
 
 - **Traffic Fly: the tunnel did not come up after a second Apply.** The
