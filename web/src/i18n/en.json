@@ -3661,7 +3661,7 @@
     "secretCAHint": "The hub uses the CA when checking images; on deployment the host puts it into its engine's certs.d (/etc/docker/certs.d/<registry>/ca.crt or /etc/containers/certs.d) — system-wide trust is not changed."
   },
   "edge": {
-    "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",
+    "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment deployment webhooks, signed API token requests, a Traffic Fly gateway), and the hub keeps the tunnel to it. There can be several edges.",
     "install": "Install on a host",
     "manual": "Configure manually",
     "forget": "Forget",
@@ -4697,6 +4697,14 @@
       "no_handshake": "no handshake",
       "unknown": "no data"
     },
-    "tunnelBytes": "host sent {{tx}}, gateway got {{rx}}"
+    "tunnelBytes": "host sent {{tx}}, gateway got {{rx}}",
+    "tlsGateway": "Certificate on the gateway (Let's Encrypt) — the target gets plain HTTP",
+    "tlsGatewayHint": "The gateway obtains and renews a certificate for these names itself (checked over its port 80; the names' DNS must point to the gateway), redirects http:// to https://, and sends the target HTTP with the client address in X-Forwarded-For and X-Real-IP. Certificates are kept on the gateway only.",
+    "tlsPassHint": "Without the box the gateway does not decrypt TLS: the target must hold the certificate, or browsers show a protocol error.",
+    "tlsNoWildcard": "A gateway certificate needs exact names: *.domain cannot be issued over a port 80 check.",
+    "tlsTag": "TLS on gateway",
+    "certPending": "certificate not requested yet",
+    "certError": "certificate not issued: {{error}}",
+    "certUntil": "certificate until {{date}}"
   }
 }

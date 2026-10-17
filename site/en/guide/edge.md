@@ -57,7 +57,7 @@ roles, even if the edge itself let more through.
 There can be **several** edges, each on its own VPS and name: for
 example, webhooks on `hooks.example.com` and the API on
 `api.example.com` on another VPS, to separate what is open from which
-address. The nkt-edge card lists them all, each with its state, roles,
+address. The nkt-edge tab lists them all, each with its state, roles,
 addresses and actions.
 
 **The API role** passes only **signed** token requests (`X-NKT-API-Key`,
@@ -125,7 +125,7 @@ addresses get "blocked: not a public address".
 
 1. Add the VPS to the hub as a regular host (installing nkt on it is not
    required — only SSH is).
-2. "Deployments" → the **nkt-edge** card → **"Install on a host"**:
+2. "Deployments" → the **nkt-edge** tab → **"Install on a host"**:
    host, name, roles (webhooks, API), e-mail for Let's Encrypt
    (optional), "GitHub addresses only". The name is taken from the host's address in the hub if it is
    a DNS name; the **"check the name"** button tells right away whether

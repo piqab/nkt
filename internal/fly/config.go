@@ -73,10 +73,15 @@ type Route struct {
 	Port  int      `json:"port"`            // публичный порт шлюза
 	// ProxyProtocol — PROXY protocol v2 к цели (https, http): настоящий IP
 	// клиента; прочие виды сохраняют его ядром.
-	ProxyProtocol bool     `json:"proxy_protocol,omitempty"`
-	Algorithm     string   `json:"algorithm"`
-	Check         Check    `json:"check"`
-	Targets       []Target `json:"targets"`
+	ProxyProtocol bool `json:"proxy_protocol,omitempty"`
+	// TLS — https с расшифровкой на шлюзе: сертификат Let's Encrypt на
+	// имена маршрута получает и продлевает шлюз (проверка — по его же
+	// порту 80), цели уходит HTTP с X-Forwarded-For/X-Real-IP. Только
+	// точные имена (без *.) и без PROXY protocol.
+	TLS       bool     `json:"tls,omitempty"`
+	Algorithm string   `json:"algorithm"`
+	Check     Check    `json:"check"`
+	Targets   []Target `json:"targets"`
 }
 
 // Peer — хост в туннеле шлюза.
@@ -103,6 +108,11 @@ type Service struct {
 	Proto  string `json:"proto"` // tcp | udp
 	Addr   string `json:"addr"`  // куда: IP контейнера, машины или свой WG-адрес
 	ToPort int    `json:"to_port"`
+	// Kind и Ref — что это (container, vm, lxd и имя): хост сам сверяет
+	// адрес по своему инвентарю и переписывает правило, если он сменился,
+	// — и без хаба.
+	Kind string `json:"kind,omitempty"`
+	Ref  string `json:"ref,omitempty"`
 }
 
 // HostIface — туннель хоста к одному шлюзу.
@@ -207,7 +217,25 @@ func (c GatewayConfig) Validate() error {
 			}
 		}
 	}
+	// Сертификат на шлюзе проверяется Let's Encrypt по порту 80 шлюза:
+	// он должен быть его — свободен или под маршрутами HTTP по имени.
+	for _, r := range c.Routes {
+		if r.TLS && (ports["tcp/80"] || (portKinds[80] != "" && portKinds[80] != KindHTTP)) {
+			return fmt.Errorf("fly: route %s: gateway TLS needs port 80 for Let's Encrypt", r.ID)
+		}
+	}
 	return nil
+}
+
+// TLSNames — имена маршрутов с сертификатом на шлюзе.
+func (c GatewayConfig) TLSNames() []string {
+	var out []string
+	for _, r := range c.Routes {
+		if r.TLS {
+			out = append(out, r.Names...)
+		}
+	}
+	return out
 }
 
 func namedPort(routes []Route, port int) bool {
@@ -251,6 +279,12 @@ func (r Route) validate(peers map[string]bool) error {
 			if !nameRe.MatchString(n) {
 				return fmt.Errorf("fly: route %s name %q", r.ID, n)
 			}
+			if r.TLS && strings.HasPrefix(n, "*.") {
+				return fmt.Errorf("fly: route %s: a gateway certificate needs exact names, not %q", r.ID, n)
+			}
+		}
+		if r.TLS && (r.Kind != KindHTTPS || r.ProxyProtocol) {
+			return fmt.Errorf("fly: route %s: gateway TLS is for https without PROXY protocol", r.ID)
 		}
 	case KindTCP, KindUDP, KindTCPUDP:
 		if len(r.Names) > 0 || r.ProxyProtocol {
@@ -317,13 +351,22 @@ func (c HostConfig) Validate() error {
 		for _, s := range i.Services {
 			a, err := netip.ParseAddr(s.Addr)
 			k := fmt.Sprint(s.Proto, "/", s.Port)
-			if err != nil || !a.Is4() || a.IsLoopback() || a.IsUnspecified() || !validPort(s.Port) || !validPort(s.ToPort) || (s.Proto != "tcp" && s.Proto != "udp") || seen[k] {
+			if err != nil || !a.Is4() || a.IsLoopback() || a.IsUnspecified() || !validPort(s.Port) || !validPort(s.ToPort) || (s.Proto != "tcp" && s.Proto != "udp") || seen[k] ||
+				!refKind(s.Kind) || len(s.Ref) > 200 || strings.ContainsAny(s.Ref, "\x00\n\r") {
 				return fmt.Errorf("fly: iface %s service %d/%s", i.Name, s.Port, s.Proto)
 			}
 			seen[k] = true
 		}
 	}
 	return nil
+}
+
+func refKind(k string) bool {
+	switch k {
+	case "", "container", "vm", "lxd", "host", "addr":
+		return true
+	}
+	return false
 }
 
 // sortedRoutes — маршруты в порядке, не зависящем от правок (стабильные

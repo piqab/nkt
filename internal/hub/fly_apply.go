@@ -146,7 +146,7 @@ func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 				}
 				port := d.Alloc.Ports[flyPortKey(g.EdgeID, t.HostID, rt.ID, t.ID)]
 				for _, proto := range flyProtos(rt.Kind) {
-					hi.Services = append(hi.Services, fly.Service{Port: port, Proto: proto, Addr: ip, ToPort: t.Port})
+					hi.Services = append(hi.Services, fly.Service{Port: port, Proto: proto, Addr: ip, ToPort: t.Port, Kind: t.Kind, Ref: t.Ref})
 				}
 				jc.Log("fly.targetResolved", rt.ID, names[t.HostID], t.Kind, t.Ref, ip, t.Port)
 			}

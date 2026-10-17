@@ -43,6 +43,7 @@ clients ──80/443 by name, TCP/UDP ports──▶ VPS: nkt-edge (fly role)
 | Kind | What | Client IP |
 |---|---|---|
 | **HTTPS by name** | port 443, chosen by SNI; TLS is not decrypted — the certificate lives on the target | PROXY protocol v2 |
+| **HTTPS by name, certificate on the gateway** | port 443; the gateway terminates TLS, the target gets plain HTTP (see [below](#certificate-on-the-gateway)) | `X-Forwarded-For`, `X-Real-IP` |
 | **HTTP by name** | port 80, chosen by the `Host` header | PROXY protocol v2 |
 | **TCP port**, **UDP port**, **TCP+UDP** | the whole port goes to a pool | real, no target changes |
 
@@ -57,6 +58,27 @@ clients ──80/443 by name, TCP/UDP ports──▶ VPS: nkt-edge (fly role)
   tunnel address.
 - A route by port goes **through the kernel** (DNAT without source
   rewrite): the target sees the real client address by itself.
+
+## Certificate on the gateway
+
+If the target serves plain HTTP (an application container without its own
+certificate), check **Certificate on the gateway** on the HTTPS by name
+route. Without it the gateway does not decrypt TLS, and browsers show
+`ERR_SSL_PROTOCOL_ERROR`.
+
+- The gateway obtains and renews a **Let's Encrypt** certificate for the
+  route's names itself. The check goes over its port 80, so the names' DNS
+  must point to the gateway, and the gateway's port 80 must be free or
+  used by HTTP by name routes. Exact names are needed: `*.domain` cannot
+  be issued this way.
+- `http://name` is redirected to `https://`.
+- The target gets HTTP with the client address in `X-Forwarded-For` and
+  `X-Real-IP`, the scheme in `X-Forwarded-Proto: https`; `Host` is the
+  client's. PROXY protocol is not needed.
+- Certificates and keys stay on the gateway (`/etc/nkt-edge/fly/certs`,
+  root only) and never go to the hub; renewal works without the hub too.
+- The route window shows for each name: “certificate until …” or why it
+  was not issued.
 
 ## Pools and balancing
 
@@ -124,6 +146,31 @@ Once a minute the hub compares the gateway summaries and writes to
 [alerts](/en/guide/hub-operations#alerts): **target down / back up**, **no live
 targets in pool**, **tunnel down / up**. Telegram, Slack, outgoing
 webhooks and the n8n node get them like any other event.
+
+## Without the hub
+
+The hub is needed for changes, the map and alerts. Traffic itself flows
+without it: the hub can be off, unreachable or removed.
+
+- **Gateway**: the `nkt-fly` service keeps the last configuration in
+  `/etc/nkt-edge/fly/fly.json` and brings the tunnel, rules and router back
+  from it after a reboot; target checks, balancing, gateway certificates
+  and their renewal run there too. Once a minute the gateway checks the
+  WireGuard key on its interface by itself.
+- **Host**: tunnels come up via `wg-quick@nkt-flyN` from
+  `/etc/wireguard/nkt-flyN.conf`. Every 30 seconds nkt on the host
+  compares container, VM and LXD target addresses with its inventory: if a
+  container was recreated with another IP, the rule is rewritten by
+  itself.
+- **Not available without the hub**: route edits and Apply, the map and
+  summaries, alerts.
+
+If the hub is gone for good, change things by hand: on the gateway
+`/etc/nkt-edge/fly/fly.json` and `sudo systemctl restart nkt-fly`, on a
+host `/etc/wireguard/nkt-flyN.conf` and `sudo systemctl restart
+wg-quick@nkt-flyN`. To remove: on the gateway `sudo systemctl disable
+--now nkt-fly wg-quick@nkt-fly`, on a host `sudo systemctl disable --now
+wg-quick@nkt-flyN`.
 
 ## If it doesn't work
 

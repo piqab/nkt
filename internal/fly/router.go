@@ -3,11 +3,13 @@ package fly
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
 	"sort"
 	"strconv"
@@ -29,6 +31,13 @@ type Runtime struct {
 	OnHealthChange func()
 	// FromAddr — адрес шлюза в туннеле: источник для PROXY-заголовка проверок.
 	FromAddr string
+	// GetCertificate — сертификат для маршрутов с TLS на шлюзе (Let's
+	// Encrypt у службы; в тестах — свой). nil — такие маршруты не
+	// принимаются.
+	GetCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	// ACME — обработчик проверок Let's Encrypt на порту 80 поверх fallback
+	// (перенаправления на https). nil — только перенаправление.
+	ACME func(fallback http.Handler) http.Handler
 
 	mu        sync.RWMutex
 	cfg       GatewayConfig
@@ -103,6 +112,10 @@ func (rt *Runtime) Apply(cfg GatewayConfig) error {
 	for _, r := range cfg.Routes {
 		if r.Named() {
 			want[r.Port] = true
+		}
+		if r.TLS {
+			// Проверка Let's Encrypt и перенаправление на https.
+			want[80] = true
 		}
 		rc := rt.routes[r.ID]
 		if rc == nil {
@@ -257,6 +270,13 @@ func (rt *Runtime) handle(c net.Conn, port int) {
 		return
 	}
 	r, ok := rt.route(port, name)
+	// Порт 80 имени с сертификатом на шлюзе: проверка Let's Encrypt —
+	// всегда шлюзу, остальное — шлюзу же (перенаправление на https),
+	// если своего маршрута HTTP у имени нет.
+	if port == 80 && portKind(rt.Config(), port) != KindHTTPS && rt.tlsName(name) && (!ok || acmeRequest(br)) {
+		rt.serveRedirect(c, br)
+		return
+	}
 	if !ok {
 		if r.Kind != KindHTTPS && portKind(rt.Config(), port) == KindHTTP {
 			_, _ = io.WriteString(c, "HTTP/1.1 421 Misdirected Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -272,6 +292,10 @@ func (rt *Runtime) handle(c net.Conn, port int) {
 	}
 	rc.total.Add(1)
 	order := rt.pick(r, client.Addr())
+	if r.TLS {
+		rt.serveTLS(c, br, r, rc, client, order)
+		return
+	}
 	var up net.Conn
 	var used *targetState
 	for i, t := range order {

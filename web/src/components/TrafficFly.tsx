@@ -47,6 +47,8 @@ interface FlyRoute {
   names?: string[]
   port: number
   proxy_protocol?: boolean
+  /** Сертификат на шлюзе: TLS завершает шлюз, цели — HTTP. */
+  tls?: boolean
   algorithm: Algo
   check: FlyCheck
   targets: FlyTarget[]
@@ -101,10 +103,18 @@ interface PeerStats {
   handshake: number
 }
 
+/** Сертификат имени на шлюзе. */
+interface CertStatus {
+  name: string
+  not_after?: number
+  error?: string
+  pending?: boolean
+}
+
 interface GatewayStatus {
   edge_id: number
   connected: boolean
-  status?: { revision: number; now: number; routes: RouteStats[]; peers?: PeerStats[]; errors?: string[] }
+  status?: { revision: number; now: number; routes: RouteStats[]; peers?: PeerStats[]; errors?: string[]; certs?: CertStatus[] }
   error?: string
 }
 
@@ -384,6 +394,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
         <RouteDetails
           route={doc.routes.find((r) => r.id === openRoute)!}
           stats={routeStats.get(openRoute)}
+          certs={status.data?.gateways.find((g) => g.edge_id === doc.routes.find((r) => r.id === openRoute)?.gateway)?.status?.certs}
           hostNames={hostNames}
           admin={admin}
           onClose={() => setOpenRoute(null)}
@@ -539,12 +550,14 @@ function FlyMap({
 function RouteDetails({
   route,
   stats,
+  certs,
   hostNames,
   admin,
   onClose,
 }: {
   route: FlyRoute
   stats?: RouteStats
+  certs?: CertStatus[]
   hostNames: Record<string, string>
   admin: boolean
   onClose: () => void
@@ -559,12 +572,33 @@ function RouteDetails({
           <Tag>{t(`fly.kind.${route.kind}`)}</Tag>
           <Tag>{t(`fly.algo.${route.algorithm}`)}</Tag>
           {route.proxy_protocol && <Tag color="blue">PROXY protocol</Tag>}
+          {route.tls && <Tag color="green">{t('fly.tlsTag')}</Tag>}
           {stats && (
             <span className="small">
               {t('fly.statsLine', { active: stats.active, total: stats.total, failed: stats.failed, bytes: formatBytes(stats.bytes_in + stats.bytes_out) })}
             </span>
           )}
         </Space>
+        {route.tls && (
+          <div className="small">
+            {route.names?.map((n) => {
+              const c = certs?.find((x) => x.name === n)
+              return (
+                <div key={n}>
+                  <span className="mono">{n}</span>
+                  {': '}
+                  {!c || c.pending ? (
+                    <span className="muted">{t('fly.certPending')}</span>
+                  ) : c.error ? (
+                    <span style={{ color: 'var(--status-critical)' }}>{t('fly.certError', { error: c.error })}</span>
+                  ) : (
+                    <span style={{ color: 'var(--status-good)' }}>{t('fly.certUntil', { date: new Date((c.not_after ?? 0) * 1000).toLocaleDateString() })}</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
         <DataTable<FlyTarget>
           dataSource={route.targets}
           rowKey="id"
@@ -633,7 +667,7 @@ function RouteEditor({
   const set = (p: Partial<FlyRoute>) => setR({ ...r, ...p })
   const isNamed = named(r.kind)
   const idTaken = !route && doc.routes.some((x) => x.id === r.id)
-  const valid = /^[a-z0-9][a-z0-9-]{0,40}$/.test(r.id) && !idTaken && r.port > 0 && r.targets.length > 0 && (!isNamed || (r.names ?? []).length > 0) && r.targets.every((x) => x.port > 0 && x.host_id !== undefined && (x.kind === 'host' || !!x.ref))
+  const valid = /^[a-z0-9][a-z0-9-]{0,40}$/.test(r.id) && !idTaken && !(r.tls && (r.names ?? []).some((n) => n.startsWith('*.'))) && r.port > 0 && r.targets.length > 0 && (!isNamed || (r.names ?? []).length > 0) && r.targets.every((x) => x.port > 0 && x.host_id !== undefined && (x.kind === 'host' || !!x.ref))
   return (
     <Modal title={route ? t('fly.editTitle', { route: routeTitle(route) }) : t('fly.newRoute')} onClose={onClose} width={900}>
       <div className="col" style={{ gap: '0.6rem' }}>
@@ -659,6 +693,7 @@ function RouteEditor({
                   kind: k,
                   port: k === 'https' ? 443 : k === 'http' ? 80 : r.port === 443 || r.port === 80 ? 0 : r.port,
                   proxy_protocol: named(k) ? r.proxy_protocol : false,
+                  tls: k === 'https' ? r.tls : false,
                   names: named(k) ? r.names : [],
                   algorithm: !named(k) && r.algorithm === 'leastconn' ? 'source' : r.algorithm,
                   check: k === 'udp' && r.check.kind === 'tcp' && !r.check.port ? { kind: 'none' } : r.check,
@@ -679,9 +714,20 @@ function RouteEditor({
               {t('fly.fieldNames')}
               <Select mode="tags" value={r.names} onChange={(v: string[]) => set({ names: v.map((x) => x.trim().toLowerCase()).filter(Boolean) })} tokenSeparators={[',', ' ']} placeholder="app.example.com, *.app.example.com" />
             </label>
-            <Checkbox checked={r.proxy_protocol} onChange={(e) => set({ proxy_protocol: e.target.checked })}>
-              {t('fly.proxyProtocol')}
-            </Checkbox>
+            {r.kind === 'https' && (
+              <>
+                <Checkbox checked={!!r.tls} onChange={(e) => set({ tls: e.target.checked, proxy_protocol: e.target.checked ? false : r.proxy_protocol })}>
+                  {t('fly.tlsGateway')}
+                </Checkbox>
+                <span className="small muted">{t(r.tls ? 'fly.tlsGatewayHint' : 'fly.tlsPassHint')}</span>
+                {r.tls && (r.names ?? []).some((n) => n.startsWith('*.')) && <Banner kind="warn">{t('fly.tlsNoWildcard')}</Banner>}
+              </>
+            )}
+            {!r.tls && (
+              <Checkbox checked={r.proxy_protocol} onChange={(e) => set({ proxy_protocol: e.target.checked })}>
+                {t('fly.proxyProtocol')}
+              </Checkbox>
+            )}
           </>
         )}
         {!isNamed && <span className="small muted">{t('fly.portHint')}</span>}
