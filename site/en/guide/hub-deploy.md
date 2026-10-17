@@ -572,6 +572,12 @@ compose:
 - Editing such a site in the wizard works, but the next deployment restores
   the settings from `site:` if they differ.
 
+## Traffic Fly
+
+The **Traffic Fly** tab brings internet traffic through a VPS gateway to
+services on your hosts: real client IP, TCP and UDP, 80/443 by name,
+target pools with load balancing and a link map. Details: [Traffic Fly](/en/guide/traffic-fly).
+
 ## When to deploy
 
 - **The "Deploy" button** — the head of the branch from the description;

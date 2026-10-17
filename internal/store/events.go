@@ -43,6 +43,13 @@ const (
 	EventBatteryLow = "battery-low"
 	// EventUPSLost — NUT на хосте перестал получать ответ от ИБП.
 	EventUPSLost = "ups-lost"
+	// Traffic Fly: цель пула упала / вернулась, пул без живых целей,
+	// туннель хоста к шлюзу оборвался / восстановлен.
+	EventFlyTargetDown = "fly-target-down"
+	EventFlyTargetUp   = "fly-target-up"
+	EventFlyPoolEmpty  = "fly-pool-empty"
+	EventFlyTunnelDown = "fly-tunnel-down"
+	EventFlyTunnelUp   = "fly-tunnel-up"
 )
 
 // HostEvent — одно оповещение.

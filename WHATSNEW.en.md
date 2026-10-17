@@ -8,6 +8,32 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.12 — 2026-10-17
+
+- **Traffic Fly — inbound internet traffic through your own VPS.** A new
+  tab, Deployments → Traffic Fly: a cheap VPS with a public address
+  receives traffic and passes it over WireGuard tunnels to containers,
+  virtual machines, LXD and host services behind NAT.
+  - Targets see the **real client IP**: routes by port go through the
+    kernel without source rewrite, routes by name pass it via PROXY
+    protocol v2.
+  - **TCP and UDP**; **80/443 are split by name** (SNI and `Host`, an
+    exact name beats a wildcard); other ports go port-to-pool.
+  - **Pools with load balancing**: least connections, round robin or
+    sticky by client IP; weights, draining a target for maintenance, TCP
+    or HTTP checks — a down target leaves the pool by itself.
+  - **Link map** gateway → route → host → target: color is state,
+    thickness is connections. Click a route for targets, traffic and
+    clients; client addresses are shown to admins only and only while
+    there are at most 30, everyone else sees a count.
+  - Edits go through a diff window, every save is a version, history
+    allows restoring; Dry run and Apply run as jobs.
+  - The gateway is installed from the hub as nkt-edge with the new
+    **fly** role — no name or certificate needed. The gateway and hosts
+    work without the hub too: everything comes back after a reboot.
+  - New alerts: “target down / back up”, “no live targets in pool”,
+    “tunnel down / up” — to Telegram, Slack, webhooks, n8n and the app.
+
 ## v1.13.11 — 2026-10-14
 
 - **UPS: connecting instead of UPSilon now works end to end.**

@@ -268,6 +268,11 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/ai", s.handleAIStatus)
 				r.Get("/hub/ai/reviews", s.handleAIReviews)
 				r.Get("/hub/ai/answers", s.handleAIAnswers)
+				// Traffic Fly: карту и конфигурацию видит любой вошедший;
+				// IP клиентов — только администратор (handleFlyStatus).
+				r.Get("/hub/fly", s.handleFly)
+				r.Get("/hub/fly/status", s.handleFlyStatus)
+				r.Get("/hub/fly/versions", s.handleFlyVersions)
 				r.Get("/hub/ai/prompts", s.handleAIPrompts)
 				r.Get("/hub/clusters", s.handleClusterList)
 				r.Get("/hub/cluster-images", s.handleClusterImages)
@@ -372,6 +377,10 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/tokens/{id}/rotate", s.handleTokenRotate)
 					r.Delete("/hub/tokens/{id}", s.handleTokenDelete)
 					r.Get("/hub/edges", s.handleEdges)
+					r.Put("/hub/fly", s.handleFlySave)
+					r.Post("/hub/fly/apply", s.handleFlyApply)
+					r.Post("/hub/fly/versions/{n}/restore", s.handleFlyRestore)
+					r.Get("/hub/fly/targets", s.handleFlyTargets)
 					r.Post("/hub/edges", s.handleEdgeSave)
 					r.Put("/hub/edges/{id}", s.handleEdgeSave)
 					r.Delete("/hub/edges/{id}", s.handleEdgeDelete)

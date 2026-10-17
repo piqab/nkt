@@ -896,7 +896,12 @@
       "power-lost": "power lost",
       "power-restored": "power restored",
       "battery-low": "UPS battery low",
-      "ups-lost": "no link to UPS"
+      "ups-lost": "no link to UPS",
+      "fly-target-down": "Traffic Fly: target down",
+      "fly-target-up": "Traffic Fly: target back up",
+      "fly-pool-empty": "Traffic Fly: no live targets in pool",
+      "fly-tunnel-down": "Traffic Fly: tunnel down",
+      "fly-tunnel-up": "Traffic Fly: tunnel up"
     },
     "settingsTitle": "What to record and what to notify about",
     "settingsHint": "Shared by the hub, not this browser. “Record” — the event goes to the log; “notify” — it pops up in the browser when its “Notify on problems” switch is on.",
@@ -930,7 +935,8 @@
       "containers": "To host containers",
       "availability": "To host availability",
       "images": "To host images",
-      "services": "To host services"
+      "services": "To host services",
+      "fly": "Open Traffic Fly"
     }
   },
   "changes": {
@@ -3673,13 +3679,15 @@
       "hooks": "webhooks",
       "api": "API",
       "probe": "outside checks",
-      "callbacks": "callbacks"
+      "callbacks": "callbacks",
+      "fly": "Traffic Fly"
     },
     "roleHint": {
       "hooks": "a push from GitHub, Gitea, GitLab or CI → a deployment",
       "api": "signed API token requests (n8n, CI): /api/hub/…, /api/hosts/…",
       "probe": "the hub asks the edge to check DNS, ports and HTTPS from the internet; accepts nothing from outside",
-      "callbacks": "bot buttons and commands (Slack): POST /callbacks/…, the hub checks the signature"
+      "callbacks": "bot buttons and commands (Slack): POST /callbacks/…, the hub checks the signature",
+      "fly": "Traffic Fly gateway: WireGuard to hosts, port forwarding and 80/443 by name — a separate VPS"
     },
     "reinstall": "Reinstall",
     "edit": "Edit",
@@ -3695,7 +3703,9 @@
     "probeRun": "Check",
     "probeWrongCert": "someone else's certificate",
     "probeError": "error",
-    "probeCert": " · certificate {{issuer}} until {{date}}"
+    "probeCert": " · certificate {{issuer}} until {{date}}",
+    "flyAlone": "A Traffic Fly gateway goes on its own VPS: its 80/443 belong to the router, so it doesn't combine with webhooks, API and callbacks (outside checks are fine).",
+    "flyInstallHint": "The gateway needs no name or certificate: the edge listens only to the hub tunnel (8444), and the nkt-fly service to WireGuard and route ports."
   },
   "bulk": {
     "selected_one": "{{count}} selected",
@@ -4549,5 +4559,97 @@
     "willDisableUnit": "disable UPSilon autostart: {{path}}",
     "willNoAutostart": "no UPSilon autostart found — after a reboot it may take the port again",
     "willTryOthers": "no answer — try the same port with another Megatec driver and nutdrv_qx over USB; the driver's answer goes to the log"
+  },
+  "fly": {
+    "subtitle": "Inbound traffic through a VPS gateway to services on your hosts: real client IP, TCP and UDP, 80/443 by name, other ports as port-to-pool, load balancing and target checks.",
+    "revision": "Revision {{n}}",
+    "notApplied": "not applied (gateways run {{n}})",
+    "neverApplied": "not applied yet",
+    "applied": "applied",
+    "history": "History",
+    "historyTitle": "Traffic Fly — version history",
+    "noHistory": "No versions yet.",
+    "restore": "Restore version #{{n}}",
+    "dryRun": "Dry run",
+    "apply": "Apply",
+    "empty": "No routes yet — add the first one below.",
+    "emptyNoGateway": "No gateways yet. Add a gateway (a VPS with nkt-edge in the fly role), then routes.",
+    "map": "Traffic Fly link map",
+    "routes": "Routes",
+    "newRoute": "New route",
+    "noRoutes": "No routes",
+    "edit": "Edit",
+    "delete": "Delete",
+    "editTitle": "Route {{route}}",
+    "deleteTitle": "Delete route {{route}}",
+    "colRoute": "Route",
+    "colKind": "Kind",
+    "colGateway": "Gateway",
+    "colPool": "Pool",
+    "colConns": "Connections",
+    "colTarget": "Target",
+    "colHost": "Host",
+    "colState": "State",
+    "colLatency": "Latency",
+    "colWeight": "Weight",
+    "poolLive": "{{live}} of {{total}} alive",
+    "clientsN": "clients: {{n}}",
+    "connsShort": "conn.",
+    "host": "host",
+    "gateways": "Gateways",
+    "gatewaysHint": "VPSes running nkt-edge in the fly role. A gateway serves Traffic Fly only: its 80/443 belong to the routes.",
+    "addGateway": "Add gateway",
+    "noGateways": "No gateways.",
+    "gwConnected": "connected",
+    "gwOffline": "offline",
+    "tunnelsUp": "tunnels up: {{up}} of {{total}}",
+    "statsLine": "active {{active}}, total {{total}}, failed {{failed}}, traffic {{bytes}}",
+    "clients": "Clients:",
+    "tooManyIPs": "addresses are shown while there are at most {{n}} clients",
+    "alive": "alive",
+    "dead": "down",
+    "drain": "drain",
+    "fieldID": "ID",
+    "fieldLabel": "Label",
+    "fieldPort": "Port",
+    "fieldNames": "Names (exact or *.domain)",
+    "fieldAlgo": "Balancing",
+    "fieldCheck": "Target check",
+    "proxyProtocol": "Pass the client IP via PROXY protocol v2 (the target must accept it)",
+    "portHint": "The whole port goes to the pool: the gateway kernel forwards packets to the hosts and the client IP is kept without PROXY protocol. One port, one pool; a second pool needs another port or another gateway.",
+    "checkPath": "Path",
+    "checkExpect": "Status code",
+    "checkPort": "Check port",
+    "checkPortSame": "same",
+    "targets": "Targets",
+    "addTarget": "Add target",
+    "pickRef": "what on the host",
+    "weightHint": "Share of traffic relative to the other targets",
+    "notePlaceholder": "Version note (optional)",
+    "saveHint": "Saving creates a new version; gateways and hosts get it after “Apply”.",
+    "kind": {
+      "https": "HTTPS by name (443)",
+      "http": "HTTP by name (80)",
+      "tcp": "TCP port",
+      "udp": "UDP port",
+      "tcpudp": "TCP+UDP port"
+    },
+    "algo": {
+      "leastconn": "least connections",
+      "roundrobin": "round robin",
+      "source": "by client IP (sticky)"
+    },
+    "check": {
+      "tcp": "TCP connect",
+      "http": "HTTP request",
+      "none": "no check"
+    },
+    "targetKind": {
+      "container": "container",
+      "vm": "virtual machine",
+      "lxd": "LXD",
+      "host": "the host itself",
+      "addr": "address on host network"
+    }
   }
 }

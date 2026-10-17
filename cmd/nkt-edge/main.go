@@ -46,6 +46,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -92,6 +93,11 @@ func env(key, def string) string {
 }
 
 func main() {
+	// «nkt-edge fly» — служба Traffic Fly (свой юнит nkt-fly, с правами на сеть).
+	if len(os.Args) > 1 && os.Args[1] == "fly" {
+		runFly()
+		return
+	}
 	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
 	if *showVersion {
@@ -116,11 +122,11 @@ func main() {
 	s := &server{token: token, rate: rate, limiter: newLimiter(rate), apiLimiter: newLimiter(apiRate), roles: map[string]bool{}}
 	for _, role := range strings.Split(env("EDGE_ROLES", "hooks"), ",") {
 		switch role = strings.TrimSpace(role); role {
-		case "hooks", "api", "probe", "callbacks":
+		case "hooks", "api", "probe", "callbacks", "fly":
 			s.roles[role] = true
 		case "":
 		default:
-			log.Fatal("EDGE_ROLES: unknown role (hooks, api, probe, callbacks)")
+			log.Fatal("EDGE_ROLES: unknown role (hooks, api, probe, callbacks, fly)")
 		}
 	}
 	if len(s.roles) == 0 {
@@ -160,7 +166,13 @@ func main() {
 		MaxHeaderBytes: 32 << 10,
 	}
 	var serveHooks func() error
-	if proxyAddr := os.Getenv("EDGE_PROXY_ADDR"); proxyAddr != "" {
+	// Без публичных ролей (только probe и fly) свой HTTPS не нужен: 80/443
+	// шлюза Traffic Fly — у маршрутизатора nkt-fly.
+	public := s.roles["hooks"] || s.roles["api"] || s.roles["callbacks"]
+	if !public {
+		log.Print("no public roles: HTTPS listener off")
+		serveHooks = func() error { return nil }
+	} else if proxyAddr := os.Getenv("EDGE_PROXY_ADDR"); proxyAddr != "" {
 		host, _, err := net.SplitHostPort(proxyAddr)
 		if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
 			// Само значение в журнал не пишется: оно из окружения, и в нём
@@ -241,9 +253,10 @@ func (s *server) acceptHubs(l net.Listener) {
 				old.Close()
 			}
 			log.Printf("hub connected from %s", conn.RemoteAddr())
-			if s.roles["probe"] {
-				// Хаб открывает потоки сам — проверки «снаружи».
-				go func() { _ = (&http.Server{Handler: probeHandler(), ReadHeaderTimeout: 10 * time.Second}).Serve(sess) }()
+			if h := s.hubHandler(); h != nil {
+				// Хаб открывает потоки сам — проверки «снаружи», команды
+				// Traffic Fly.
+				go func() { _ = (&http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}).Serve(sess) }()
 			}
 			<-sess.CloseChan()
 			s.mu.Lock()
@@ -399,6 +412,34 @@ func (w *statusWriter) WriteHeader(code int) {
 // slog и так берёт такие значения в кавычки; это — вторая линия.
 func noNewlines(v string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(v, "\n", ""), "\r", "")
+}
+
+// hubHandler — что хаб может спросить у edge по туннелю: проверки
+// снаружи (probe) и команды Traffic Fly (fly — передаются службе nkt-fly
+// на loopback с токеном edge). nil — ничего.
+func (s *server) hubHandler() http.Handler {
+	if !s.roles["probe"] && !s.roles["fly"] {
+		return nil
+	}
+	mux := http.NewServeMux()
+	if s.roles["probe"] {
+		mux.Handle(edge.ProbePath, probeHandler())
+	}
+	if s.roles["fly"] {
+		target, _ := url.Parse("http://" + env("FLY_API_ADDR", "127.0.0.1:8446"))
+		rp := httputil.NewSingleHostReverseProxy(target)
+		token := s.token
+		rp.Director = func(r *http.Request) {
+			r.URL.Scheme, r.URL.Host = target.Scheme, target.Host
+			r.Host = target.Host
+			r.Header.Set(flyHeader, token)
+		}
+		rp.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
+			http.Error(w, `{"error":"nkt-fly is not running"}`, http.StatusBadGateway)
+		}
+		mux.Handle("/fly/", http.MaxBytesHandler(rp, 1<<20))
+	}
+	return mux
 }
 
 // probeHandler — роль probe: POST /probe от хаба по туннелю.

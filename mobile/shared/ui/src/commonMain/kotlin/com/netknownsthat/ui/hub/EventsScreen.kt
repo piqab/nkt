@@ -42,12 +42,17 @@ val EVENT_KIND get() = mapOf(
     "power-restored" to t("питание вернулось", "power restored"),
     "battery-low" to t("батарея ИБП садится", "UPS battery low"),
     "ups-lost" to t("нет связи с ИБП", "no link to UPS"),
+    "fly-target-down" to t("Traffic Fly: цель недоступна", "Traffic Fly: target down"),
+    "fly-target-up" to t("Traffic Fly: цель снова жива", "Traffic Fly: target back up"),
+    "fly-pool-empty" to t("Traffic Fly: в пуле нет живых целей", "Traffic Fly: no live targets in pool"),
+    "fly-tunnel-down" to t("Traffic Fly: туннель упал", "Traffic Fly: tunnel down"),
+    "fly-tunnel-up" to t("Traffic Fly: туннель поднялся", "Traffic Fly: tunnel up"),
 )
 
 fun eventHealth(kind: String): HealthStatus = when (kind) {
-    "unreachable", "problems", "job-failed", "power-lost", "battery-low" -> HealthStatus.BAD
-    "bans", "forecast", "rebooted", "ups-lost" -> HealthStatus.WARN
-    "recovered", "resolved", "power-restored" -> HealthStatus.OK
+    "unreachable", "problems", "job-failed", "power-lost", "battery-low", "fly-pool-empty", "fly-tunnel-down" -> HealthStatus.BAD
+    "bans", "forecast", "rebooted", "ups-lost", "fly-target-down" -> HealthStatus.WARN
+    "recovered", "resolved", "power-restored", "fly-target-up", "fly-tunnel-up" -> HealthStatus.OK
     else -> HealthStatus.UNKNOWN
 }
 

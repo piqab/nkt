@@ -900,7 +900,12 @@
       "power-lost": "пропало питание",
       "power-restored": "питание вернулось",
       "battery-low": "батарея ИБП садится",
-      "ups-lost": "нет связи с ИБП"
+      "ups-lost": "нет связи с ИБП",
+      "fly-target-down": "Traffic Fly: цель недоступна",
+      "fly-target-up": "Traffic Fly: цель снова жива",
+      "fly-pool-empty": "Traffic Fly: в пуле нет живых целей",
+      "fly-tunnel-down": "Traffic Fly: туннель упал",
+      "fly-tunnel-up": "Traffic Fly: туннель поднялся"
     },
     "settingsTitle": "Что записывать и о чём уведомлять",
     "settingsHint": "Настройка общая для хаба, а не для этого браузера. «Записывать» — событие попадает в журнал; «уведомлять» — всплывает в браузере, если в нём включён переключатель «Уведомлять о проблемах».",
@@ -934,7 +939,8 @@
       "containers": "К контейнерам хоста",
       "availability": "К доступности хоста",
       "images": "К образам хоста",
-      "services": "К сервисам хоста"
+      "services": "К сервисам хоста",
+      "fly": "К Traffic Fly"
     }
   },
   "changes": {
@@ -3681,13 +3687,15 @@
       "hooks": "вебхуки",
       "api": "API",
       "probe": "проверки снаружи",
-      "callbacks": "колбэки"
+      "callbacks": "колбэки",
+      "fly": "Traffic Fly"
     },
     "roleHint": {
       "hooks": "push из GitHub, Gitea, GitLab, CI → выкладка",
       "api": "подписанные запросы API-токенов (n8n, CI) — /api/hub/…, /api/hosts/…",
       "probe": "хаб просит edge проверить DNS, порты и HTTPS из интернета; снаружи ничего не принимает",
-      "callbacks": "кнопки и команды ботов (Slack): POST /callbacks/…, подпись проверяет хаб"
+      "callbacks": "кнопки и команды ботов (Slack): POST /callbacks/…, подпись проверяет хаб",
+      "fly": "шлюз Traffic Fly: WireGuard к хостам, проброс портов и 80/443 по именам — отдельный VPS"
     },
     "reinstall": "Переустановить",
     "edit": "Изменить",
@@ -3703,7 +3711,9 @@
     "probeRun": "Проверить",
     "probeWrongCert": "чужой сертификат",
     "probeError": "ошибка",
-    "probeCert": " · сертификат {{issuer}} до {{date}}"
+    "probeCert": " · сертификат {{issuer}} до {{date}}",
+    "flyAlone": "Шлюз Traffic Fly ставится на отдельный VPS: его 80/443 — у маршрутизатора, с вебхуками, API и колбэками не совмещается (проверки снаружи — можно).",
+    "flyInstallHint": "Имя и сертификат шлюзу не нужны: edge слушает только туннель хаба (8444), а служба nkt-fly — WireGuard и порты маршрутов."
   },
   "bulk": {
     "selected_one": "Выбран {{count}}",
@@ -4571,5 +4581,97 @@
     "willDisableUnit": "выключить автозапуск UPSilon: {{path}}",
     "willNoAutostart": "автозапуск UPSilon не найден — после перезагрузки он может занять порт снова",
     "willTryOthers": "не ответит — попробовать тот же порт другим драйвером Megatec и nutdrv_qx по USB; в журнал — что сказал драйвер"
+  },
+  "fly": {
+    "subtitle": "Вход из интернета через VPS-шлюз к сервисам на хостах: настоящий IP клиента, TCP и UDP, 80/443 по именам, остальные порты — порт в пул, балансировка и проверки целей.",
+    "revision": "Ревизия {{n}}",
+    "notApplied": "не применена (на шлюзах — {{n}})",
+    "neverApplied": "ещё не применялась",
+    "applied": "применена",
+    "history": "История",
+    "historyTitle": "Traffic Fly — история версий",
+    "noHistory": "Версий пока нет.",
+    "restore": "Вернуть версию #{{n}}",
+    "dryRun": "Сухой прогон",
+    "apply": "Применить",
+    "empty": "Маршрутов пока нет — добавьте первый ниже.",
+    "emptyNoGateway": "Нет ни одного шлюза. Добавьте шлюз (VPS с nkt-edge в роли fly), затем маршруты.",
+    "map": "Карта связей Traffic Fly",
+    "routes": "Маршруты",
+    "newRoute": "Новый маршрут",
+    "noRoutes": "Маршрутов нет",
+    "edit": "Изменить",
+    "delete": "Удалить",
+    "editTitle": "Маршрут {{route}}",
+    "deleteTitle": "Удалить маршрут {{route}}",
+    "colRoute": "Маршрут",
+    "colKind": "Вид",
+    "colGateway": "Шлюз",
+    "colPool": "Пул",
+    "colConns": "Соединения",
+    "colTarget": "Цель",
+    "colHost": "Хост",
+    "colState": "Состояние",
+    "colLatency": "Отклик",
+    "colWeight": "Вес",
+    "poolLive": "живы {{live}} из {{total}}",
+    "clientsN": "клиентов: {{n}}",
+    "connsShort": "соед.",
+    "host": "хост",
+    "gateways": "Шлюзы",
+    "gatewaysHint": "VPS с nkt-edge в роли fly. Шлюз — только для Traffic Fly: свои 80/443 он отдаёт маршрутам.",
+    "addGateway": "Добавить шлюз",
+    "noGateways": "Шлюзов нет.",
+    "gwConnected": "на связи",
+    "gwOffline": "нет связи",
+    "tunnelsUp": "туннелей живо: {{up}} из {{total}}",
+    "statsLine": "активно {{active}}, всего {{total}}, отказов {{failed}}, трафик {{bytes}}",
+    "clients": "Клиенты:",
+    "tooManyIPs": "адреса показываются, пока клиентов не больше {{n}}",
+    "alive": "жива",
+    "dead": "недоступна",
+    "drain": "вывод",
+    "fieldID": "Идентификатор",
+    "fieldLabel": "Название",
+    "fieldPort": "Порт",
+    "fieldNames": "Имена (точное или *.домен)",
+    "fieldAlgo": "Балансировка",
+    "fieldCheck": "Проверка целей",
+    "proxyProtocol": "Передавать IP клиента через PROXY protocol v2 (цель должна его принимать)",
+    "portHint": "Порт целиком уходит в пул: ядро шлюза пробрасывает пакеты на хосты, IP клиента сохраняется без PROXY protocol. Один порт — один пул; для второго пула нужен другой порт или другой шлюз.",
+    "checkPath": "Путь",
+    "checkExpect": "Код ответа",
+    "checkPort": "Порт проверки",
+    "checkPortSame": "тот же",
+    "targets": "Цели",
+    "addTarget": "Добавить цель",
+    "pickRef": "что на хосте",
+    "weightHint": "Доля трафика относительно других целей",
+    "notePlaceholder": "Пометка к версии (необязательно)",
+    "saveHint": "Запись создаёт новую версию; на шлюзы и хосты она попадёт после «Применить».",
+    "kind": {
+      "https": "HTTPS по имени (443)",
+      "http": "HTTP по имени (80)",
+      "tcp": "TCP-порт",
+      "udp": "UDP-порт",
+      "tcpudp": "TCP+UDP-порт"
+    },
+    "algo": {
+      "leastconn": "меньше соединений",
+      "roundrobin": "по кругу",
+      "source": "по IP клиента (липко)"
+    },
+    "check": {
+      "tcp": "TCP-подключение",
+      "http": "HTTP-запрос",
+      "none": "без проверки"
+    },
+    "targetKind": {
+      "container": "контейнер",
+      "vm": "виртуальная машина",
+      "lxd": "LXD",
+      "host": "сам хост",
+      "addr": "адрес в сети хоста"
+    }
   }
 }
