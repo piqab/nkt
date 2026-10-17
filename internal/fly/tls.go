@@ -27,6 +27,12 @@ import (
 
 // tlsName — у имени есть маршрут с сертификатом на шлюзе.
 func (rt *Runtime) tlsName(name string) bool {
+	_, ok := rt.tlsNameOf(name)
+	return ok
+}
+
+// tlsNameOf — имя из конфигурации шлюза, совпавшее с name.
+func (rt *Runtime) tlsNameOf(name string) (string, bool) {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 	for _, r := range rt.cfg.Routes {
@@ -35,11 +41,11 @@ func (rt *Runtime) tlsName(name string) bool {
 		}
 		for _, n := range r.Names {
 			if n == name {
-				return true
+				return n, true
 			}
 		}
 	}
-	return false
+	return "", false
 }
 
 // acmeRequest — в начале соединения запрос проверки Let's Encrypt.
@@ -127,7 +133,15 @@ func (rt *Runtime) serveRedirect(c net.Conn, br *bufio.Reader) {
 		if h, _, err := net.SplitHostPort(host); err == nil {
 			host = h
 		}
-		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusPermanentRedirect)
+		// Имя для адреса — из конфигурации шлюза, а не из запроса:
+		// перенаправить можно только на своё имя.
+		name, ok := rt.tlsNameOf(host)
+		if !ok {
+			http.Error(w, "421 Misdirected Request", http.StatusMisdirectedRequest)
+			return
+		}
+		u := url.URL{Scheme: "https", Host: name, Path: r.URL.Path, RawQuery: r.URL.RawQuery}
+		http.Redirect(w, r, u.String(), http.StatusPermanentRedirect)
 	})
 	var h http.Handler = redirect
 	if rt.ACME != nil {

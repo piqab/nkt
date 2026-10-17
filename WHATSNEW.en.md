@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.24 — 2026-10-17
+
+- **Traffic Fly: the redirect to https goes only to the gateway's own
+  name.** The redirect address on the gateway's port 80 comes from the
+  gateway configuration rather than the request's `Host` header; a request
+  with a foreign name gets 421. Names and errors in the certificate log
+  carry no line breaks.
+
 ## v1.13.23 — 2026-10-17
 
 - **Traffic Fly: a certificate on the gateway.** An HTTPS by name route

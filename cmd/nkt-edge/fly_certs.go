@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"golang.org/x/crypto/acme"
@@ -93,7 +94,9 @@ func (c *flyCerts) Prefetch(names []string) {
 			cert, err := c.m.GetCertificate(h)
 			c.record(n, cert, err)
 			if err != nil {
-				log.Printf("fly certs: %s: %v", n, err)
+				// Имя и ошибка — без переводов строк: запись журнала
+				// не подделать.
+				log.Printf("fly certs: %s: %s", logSafe(n), logSafe(err.Error()))
 			}
 		}(n)
 	}
@@ -112,4 +115,9 @@ func (c *flyCerts) Status(names []string) []fly.CertStatus {
 		out = append(out, st)
 	}
 	return out
+}
+
+// logSafe — строка для журнала без переводов строк.
+func logSafe(s string) string {
+	return strings.NewReplacer("\n", " ", "\r", " ").Replace(s)
 }
