@@ -423,18 +423,22 @@ func flyGatewayCall(ctx context.Context, sess *yamux.Session, method, path strin
 
 // flyEndpoint — публичный IPv4 шлюза (адрес edge без порта туннеля).
 func flyEndpoint(ctx context.Context, st EdgeSettings, port int) (string, error) {
+	if port <= 0 || port > 65535 {
+		return "", msgs.Errorf("fly.badListenPort", port)
+	}
+	p := uint16(port) // #nosec G115 -- 1…65535 проверено выше
 	host, _, err := net.SplitHostPort(st.Address)
 	if err != nil {
 		host = st.Address
 	}
 	if a, err := netip.ParseAddr(host); err == nil && a.Is4() {
-		return netip.AddrPortFrom(a, uint16(port)).String(), nil
+		return netip.AddrPortFrom(a, p).String(), nil
 	}
 	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", host)
 	if err != nil || len(ips) == 0 {
 		return "", msgs.Errorf("fly.noEndpoint", host)
 	}
-	return netip.AddrPortFrom(ips[0].Unmap(), uint16(port)).String(), nil
+	return netip.AddrPortFrom(ips[0].Unmap(), p).String(), nil
 }
 
 // flyResolve — адрес цели, как его видит хост: IP контейнера, машины,

@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.13 — 2026-10-17
+
+- **Traffic Fly: stricter about file names and numbers.** WireGuard keys
+  and host rules are written only under an interface name of the known
+  form (`nkt-flyN`) and only inside the Traffic Fly directory — a name from
+  a request or the hub config can't lead a write outside it. A gateway
+  WireGuard port outside 1…65535 and a connection mark leaving its range
+  are now rejected explicitly.
+
 ## v1.13.12 — 2026-10-17
 
 - **Traffic Fly — inbound internet traffic through your own VPS.** A new

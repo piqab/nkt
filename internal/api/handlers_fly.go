@@ -34,7 +34,12 @@ func (s *Server) handleFlyKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "fly.badIface"))
 		return
 	}
-	pub, err := fly.LoadOrCreateKey(filepath.Join(s.flyDir(), iface+".key"))
+	key, err := fly.FilePath(s.flyDir(), iface, ".key")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "fly.badIface"))
+		return
+	}
+	pub, err := fly.LoadOrCreateKey(key)
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
@@ -109,11 +114,17 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 	want := map[string]bool{}
 	for _, i := range cfg.Ifaces {
 		want[i.Name] = true
-		key := filepath.Join(s.flyDir(), i.Name+".key")
+		key, err := fly.FilePath(s.flyDir(), i.Name, ".key")
+		if err != nil {
+			return log, err
+		}
 		if _, err := fly.LoadOrCreateKey(key); err != nil {
 			return log, err
 		}
-		nftFile := filepath.Join(s.flyDir(), i.Name+".nft")
+		nftFile, err := fly.FilePath(s.flyDir(), i.Name, ".nft")
+		if err != nil {
+			return log, err
+		}
 		if err := os.WriteFile(nftFile, []byte(fly.HostNFT(i)), 0o600); err != nil {
 			return log, err
 		}
@@ -141,8 +152,11 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 			log = append(log, i.Name+": "+strings.TrimSpace(res.Output()+" "+errText(err)))
 			continue
 		}
-		_ = os.Remove(filepath.Join(s.flyDir(), i.Name+".nft"))
-		_ = os.Remove(filepath.Join(s.flyDir(), i.Name+".key"))
+		for _, ext := range []string{".nft", ".key"} {
+			if p, err := fly.FilePath(s.flyDir(), i.Name, ext); err == nil {
+				_ = os.Remove(p)
+			}
+		}
 		log = append(log, i.Name+": removed")
 	}
 	raw, _ := json.MarshalIndent(cfg, "", "  ")

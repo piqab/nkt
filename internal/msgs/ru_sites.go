@@ -294,6 +294,7 @@ var ruSitesCatalog = map[string]string{
 	"fly.badIface":                    "Имя туннеля Traffic Fly — nkt-fly и номер",
 	"fly.badRoute":                    "Маршрут %q: идентификатор — строчные латинские буквы, цифры и «-», уникальный",
 	"fly.badGateway":                  "Маршрут %q: шлюз — edge с ролью fly",
+	"fly.badListenPort":               "Порт WireGuard шлюза вне 1…65535: %d",
 	"fly.badTarget":                   "Маршрут %q, цель %q: хост, вид (container, vm, lxd, host, addr), имя или IPv4-адрес и порт",
 	"fly.badConfig":                   "Конфигурация шлюза не проходит проверку: %s",
 	"fly.conflict":                    "Конфигурацию изменили, пока вы её правили (у вас версия %d, сейчас %d) — откройте заново",
