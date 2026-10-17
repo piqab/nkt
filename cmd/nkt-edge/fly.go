@@ -86,7 +86,7 @@ func runFly() {
 	defer stop()
 	go d.nftLoop(ctx)
 
-	addr := env("FLY_API_ADDR", "127.0.0.1:8446")
+	addr := env("FLY_API_ADDR", fly.DefaultAPIAddr)
 	if host, _, err := net.SplitHostPort(addr); err != nil || !net.ParseIP(host).IsLoopback() {
 		log.Fatal("FLY_API_ADDR must be a loopback address with a port")
 	}

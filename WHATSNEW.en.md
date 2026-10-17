@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.18 — 2026-10-17
+
+- **Traffic Fly: “WireGuard key: HTTP 404” on a gateway that is also a
+  hub host.** The `nkt-fly` service took commands on `127.0.0.1:8446`,
+  which nkt on the same VPS holds (Kubernetes port forwards), so the hub's
+  commands went to nkt. `nkt-fly` now listens on `127.0.0.1:8447` (written
+  to `edge.env`); the installation checks that the port is free and that
+  `nkt-fly` does not crash, and a 404 from the gateway is explained in
+  words with a hint to reinstall. For a gateway already installed, press
+  “Reinstall” for it.
+
 ## v1.13.17 — 2026-10-17
 
 - **Traffic Fly and nkt-edge: installation no longer fails over another

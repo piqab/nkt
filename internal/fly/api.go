@@ -44,6 +44,11 @@ type HostIfaceStatus struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// DefaultAPIAddr — где служба nkt-fly принимает команды хаба от nkt-edge.
+// Не 8446: на VPS, который ещё и хост хаба, его держит nkt (проброс портов
+// Kubernetes), и команды ушли бы не туда.
+const DefaultAPIAddr = "127.0.0.1:8447"
+
 // HostStatus — сводка хоста.
 type HostStatus struct {
 	Revision int64             `json:"revision"`

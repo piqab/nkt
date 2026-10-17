@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/piqab/nkt/internal/edge"
+	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/secretbox"
@@ -169,6 +170,15 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			return msgs.Errorf("edge.portBusy", tunnel, holderNames(hs))
 		}
 	}
+	if isFly {
+		// Порт команд nkt-fly на loopback: чужой слушатель на нём получал
+		// бы команды хаба вместо службы шлюза.
+		_, ps, _ := net.SplitHostPort(fly.DefaultAPIAddr)
+		flyPort, _ := strconv.Atoi(ps)
+		if hs := portHolders(client, sudo, flyPort); len(hs) > 0 {
+			return msgs.Errorf("edge.portBusy", flyPort, holderNames(hs))
+		}
+	}
 
 	jc.StepKey(2, edgeSteps, "edge.stepBinary", goos, goarch)
 	bin, err := s.hub.ensureProgram(ctx, "nkt-edge", goos, goarch, report, report)
@@ -196,6 +206,9 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	envFile := fmt.Sprintf("EDGE_DOMAIN=%s\nEDGE_TOKEN=%s\nEDGE_TUNNEL_ADDR=:%s\nEDGE_GITHUB_ONLY=%t\nEDGE_ROLES=%s\n",
 		p.Domain, token, EdgeTunnelPort, p.GitHubOnly, strings.Join(roles, ","))
+	if isFly {
+		envFile += "FLY_API_ADDR=" + fly.DefaultAPIAddr + "\n"
+	}
 	if p.ProxyPort > 0 {
 		envFile += fmt.Sprintf("EDGE_PROXY_ADDR=127.0.0.1:%d\n", p.ProxyPort)
 	}
@@ -286,8 +299,13 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	// restart проходит, даже если процесс падает через долю секунды, —
 	// служба должна прожить несколько секунд тем же процессом.
-	if err := edgeServiceStable(ctx, client, sudo); err != nil {
+	if err := edgeServiceStable(ctx, client, sudo, "nkt-edge"); err != nil {
 		return err
+	}
+	if isFly {
+		if err := edgeServiceStable(ctx, client, sudo, "nkt-fly"); err != nil {
+			return err
+		}
 	}
 	// Файрвол хоста, если ufw включён: порт туннеля, а без прокси — ещё
 	// 443 и 80 (80 нужен certbot при продлении).
@@ -412,7 +430,7 @@ func portHolders(client *ssh.Client, sudo string, port int) []portHolder {
 			// экземпляр (запущен вручную, остался от прежней установки)
 			// занимал бы порты, и служба падала бы по кругу.
 			unit, _ := runRemote(client, "ps -o unit= -p "+m[2])
-			if strings.TrimSpace(unit) == "nkt-edge.service" {
+			if u := strings.TrimSpace(unit); u == "nkt-edge.service" || u == "nkt-fly.service" {
 				continue
 			}
 			hs = append(hs, portHolder{name: "nkt-edge", pid: m[2], stray: true})
@@ -538,9 +556,9 @@ func edgeIssueCert(client *ssh.Client, sudo string, p EdgeInstallParams, ports e
 
 // edgeServiceStable — служба nkt-edge активна и не перезапускается:
 // тот же MainPID через несколько секунд. Иначе — хвост её журнала.
-func edgeServiceStable(ctx context.Context, client *ssh.Client, sudo string) error {
+func edgeServiceStable(ctx context.Context, client *ssh.Client, sudo, unit string) error {
 	pid := func() string {
-		out, _ := runRemote(client, sudo+"systemctl show -p MainPID --value nkt-edge")
+		out, _ := runRemote(client, sudo+"systemctl show -p MainPID --value "+unit)
 		return strings.TrimSpace(out)
 	}
 	if !sleepCtx(ctx, time.Second) {
@@ -553,7 +571,7 @@ func edgeServiceStable(ctx context.Context, client *ssh.Client, sudo string) err
 	if first != "" && first != "0" && pid() == first {
 		return nil
 	}
-	out, _ := runRemote(client, sudo+"journalctl -u nkt-edge -n 8 --no-pager -o cat")
+	out, _ := runRemote(client, sudo+"journalctl -u "+unit+" -n 8 --no-pager -o cat")
 	return msgs.Errorf("edge.serviceCrashing", strings.TrimSpace(out))
 }
 

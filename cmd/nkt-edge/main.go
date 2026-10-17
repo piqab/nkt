@@ -60,6 +60,7 @@ import (
 	"github.com/hashicorp/yamux"
 
 	"github.com/piqab/nkt/internal/edge"
+	"github.com/piqab/nkt/internal/fly"
 )
 
 var version = "dev"
@@ -426,7 +427,7 @@ func (s *server) hubHandler() http.Handler {
 		mux.Handle(edge.ProbePath, probeHandler())
 	}
 	if s.roles["fly"] {
-		target, _ := url.Parse("http://" + env("FLY_API_ADDR", "127.0.0.1:8446"))
+		target, _ := url.Parse("http://" + env("FLY_API_ADDR", fly.DefaultAPIAddr))
 		rp := httputil.NewSingleHostReverseProxy(target)
 		token := s.token
 		rp.Director = func(r *http.Request) {

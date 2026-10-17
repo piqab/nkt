@@ -273,6 +273,7 @@ sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt
 | `EDGE_PROXY_ADDR` | пусто | За обратным прокси: вебхуки по HTTP на этом loopback-адресе (`127.0.0.1:8445`), 443 не занимается |
 | `EDGE_ROLES` | `hooks` | Роли через запятую: `hooks` — вебхуки, `api` — подписанные запросы API-токенов, `probe` — проверки снаружи по просьбе хаба, `callbacks` — колбэки ботов, `fly` — шлюз Traffic Fly |
 | `EDGE_API_RATE` | `120` | Запросов API в минуту с одного адреса |
+| `FLY_API_ADDR` | `127.0.0.1:8447` | Роль fly: где служба `nkt-fly` принимает команды хаба от edge (только loopback) |
 
 ## Обновление
 
