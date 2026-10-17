@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.25 — 2026-10-18
+
+- **Traffic Fly: the gateway certificate was not issued** (“no viable
+  challenge type found”). The gateway requested the certificate right
+  after Apply, but the issuing library offers the port 80 check only once
+  its port 80 handler exists, and it was created lazily, so Let's Encrypt
+  was offered nothing. The handler is now created when the service starts,
+  and the gateway also supports the port 443 check (TLS-ALPN-01). After
+  updating the gateway (Reinstall) the certificate is requested by itself.
+
 ## v1.13.24 — 2026-10-17
 
 - **Traffic Fly: the redirect to https goes only to the gateway's own

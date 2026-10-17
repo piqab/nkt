@@ -118,6 +118,9 @@ func (l *oneConnListener) Addr() net.Addr { return l.conn.LocalAddr() }
 
 var quietLog = log.New(io.Discard, "", 0)
 
+// acmeALPN — протокол проверки Let's Encrypt по порту 443 (tls-alpn-01).
+const acmeALPN = "acme-tls/1"
+
 // serveOne — обслужить одно соединение http.Server'ом.
 func serveOne(conn net.Conn, done <-chan struct{}, h http.Handler) {
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute, ErrorLog: quietLog}
@@ -160,7 +163,10 @@ func (rt *Runtime) serveTLS(c net.Conn, br *bufio.Reader, r Route, rc *routeCoun
 	}
 	var in, out atomic.Int64
 	bc := &bufConn{Conn: c, r: br, in: &in, out: &out, closed: make(chan struct{})}
-	tc := tls.Server(bc, &tls.Config{GetCertificate: rt.GetCertificate, MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}})
+	// acme-tls/1 — проверка Let's Encrypt по порту 443 (tls-alpn-01):
+	// сертификат проверки отдаёт GetCertificate, а соединение после
+	// рукопожатия просто закрывается.
+	tc := tls.Server(bc, &tls.Config{GetCertificate: rt.GetCertificate, MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1", acmeALPN}})
 	_ = c.SetDeadline(time.Now().Add(peekTimeout))
 	if err := tc.Handshake(); err != nil {
 		rc.failed.Add(1)
@@ -168,6 +174,10 @@ func (rt *Runtime) serveTLS(c net.Conn, br *bufio.Reader, r Route, rc *routeCoun
 		return
 	}
 	_ = c.SetDeadline(time.Time{})
+	if tc.ConnectionState().NegotiatedProtocol == acmeALPN {
+		_ = tc.Close()
+		return
+	}
 
 	ip := client.Addr().Unmap().String()
 	var (

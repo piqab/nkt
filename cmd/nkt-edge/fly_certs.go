@@ -52,6 +52,12 @@ func newFlyCerts(dir string, names func() []string) *flyCerts {
 	if u := os.Getenv("FLY_ACME_DIRECTORY"); u != "" {
 		c.m.Client = &acme.Client{DirectoryURL: u}
 	}
+	// autocert предлагает Let's Encrypt проверку по порту 80 (http-01),
+	// только если его обработчик уже создан. Порт 80 шлюз обслуживает
+	// лениво, а сертификат просит сразу после применения — без этого
+	// вызова проверка по 80 не предлагалась вовсе («no viable challenge
+	// type found»). Сам обработчик берётся заново на каждое соединение.
+	_ = c.m.HTTPHandler(nil)
 	return c
 }
 
