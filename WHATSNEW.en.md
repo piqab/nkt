@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.19 — 2026-10-17
+
+- **Traffic Fly: “0 of N alive” when there is simply no data.** Until the
+  gateway sent its summary (right after Apply, or when it missed a poll)
+  and until targets were checked at least once, the table and the map
+  showed “0 of N alive” in red, as if the targets were dead. Now it is “no
+  data” in grey, and a target not checked yet shows “checking” in the
+  route window.
+
 ## v1.13.18 — 2026-10-17
 
 - **Traffic Fly: “WireGuard key: HTTP 404” on a gateway that is also a

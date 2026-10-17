@@ -128,12 +128,20 @@ function routeText(r: FlyRoute | null): string {
   return r ? JSON.stringify(r, null, 2) + '\n' : ''
 }
 
-/** Состояние маршрута по сводке: живых целей из всех. */
-function poolState(r: FlyRoute, st?: RouteStats): { live: number; total: number; color: string } {
+/** Состояние маршрута по сводке: живых целей из всех. Сводки нет (шлюз
+ * не ответил, конфигурация ещё не применена) или цели ещё ни разу не
+ * проверены — это «неизвестно», а не «мертвы». */
+function poolState(r: FlyRoute, st?: RouteStats): { live: number; total: number; color: string; known: boolean } {
   const total = r.targets.filter((t) => !t.drain).length
-  if (!st?.targets) return { live: 0, total, color: 'var(--text-muted)' }
-  const live = st.targets.filter((t) => t.alive && !t.drain).length
-  return { live, total, color: live === 0 ? 'var(--status-critical)' : live < total ? 'var(--status-warning)' : 'var(--status-good)' }
+  const checked = (st?.targets ?? []).filter((t) => t.checked && !t.drain)
+  if (!st?.targets || (checked.length === 0 && total > 0)) return { live: 0, total, color: 'var(--text-muted)', known: false }
+  const live = checked.filter((t) => t.alive).length
+  return { live, total, color: live === 0 ? 'var(--status-critical)' : live < total ? 'var(--status-warning)' : 'var(--status-good)', known: true }
+}
+
+/** Подпись пула: «живы N из M» или «нет данных». */
+function poolText(t: (k: string, o?: Record<string, unknown>) => string, ps: ReturnType<typeof poolState>): string {
+  return ps.known ? t('fly.poolLive', { live: ps.live, total: ps.total }) : t('fly.poolUnknown', { total: ps.total })
 }
 
 export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) => void }) {
@@ -263,7 +271,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
                 const ps = poolState(r, routeStats.get(r.id))
                 return (
                   <span style={{ color: ps.color }}>
-                    {t('fly.poolLive', { live: ps.live, total: ps.total })} · {t(`fly.algo.${r.algorithm}`)}
+                    {poolText(t, ps)} · {t(`fly.algo.${r.algorithm}`)}
                   </span>
                 )
               },
@@ -466,7 +474,7 @@ function FlyMap({
   targets.forEach((x, ti) => {
     const hi = hostIDs.indexOf(x.t.host_id)
     const ts = stats.get(x.route.id)?.targets?.find((s) => s.id === x.t.id)
-    const color = x.t.drain ? 'var(--status-warning)' : !ts ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
+    const color = x.t.drain ? 'var(--status-warning)' : !ts || !ts.checked ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
     lines.push(link(X[2] + BW[2], y(hi, hostIDs.length), X[3], y(ti, targets.length), color, 1.5, `h-t-${x.route.id}-${x.t.id}`))
   })
   return (
@@ -482,12 +490,12 @@ function FlyMap({
         {doc.routes.map((r, i) => {
           const st = stats.get(r.id)
           const ps = poolState(r, st)
-          return node(1, i, doc.routes.length, routeTitle(r), `${t('fly.poolLive', { live: ps.live, total: ps.total })} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, () => onRoute(r.id), `r-${r.id}`)
+          return node(1, i, doc.routes.length, routeTitle(r), `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, () => onRoute(r.id), `r-${r.id}`)
         })}
         {hostIDs.map((h, i) => node(2, i, hostIDs.length, hostNames[String(h)] ?? `#${h}`, t('fly.host'), 'var(--seq-300, #4c8bf5)', undefined, `h-${h}`))}
         {targets.map((x, i) => {
           const ts = stats.get(x.route.id)?.targets?.find((s) => s.id === x.t.id)
-          const color = x.t.drain ? 'var(--status-warning)' : !ts ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
+          const color = x.t.drain ? 'var(--status-warning)' : !ts || !ts.checked ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
           const label = x.t.label || (x.t.kind === 'host' ? t('fly.targetKind.host') : x.t.ref || '')
           return node(3, i, targets.length, `${label}:${x.t.port}`, `${t(`fly.targetKind.${x.t.kind}`)}${ts ? ` · ${ts.active} ${t('fly.connsShort')}` : ''}`, color, () => onRoute(x.route.id), `t-${x.route.id}-${x.t.id}`)
         })}
@@ -543,6 +551,7 @@ function RouteDetails({
                 const ts = stats?.targets?.find((s) => s.id === x.id)
                 if (x.drain) return <Tag color="warning">{t('fly.drain')}</Tag>
                 if (!ts) return '—'
+                if (!ts.checked) return <Tag>{t('fly.checking')}</Tag>
                 return (
                   <Tooltip title={ts.last_error}>
                     <Tag color={ts.alive ? 'success' : 'error'}>{ts.alive ? t('fly.alive') : t('fly.dead')}</Tag>
