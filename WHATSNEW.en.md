@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.16 — 2026-10-17
+
+- **nkt-edge: “port 8444 on the host is already taken: ?” on a free
+  port.** The pre-install port check treated a port as taken whenever the
+  command printed anything, including the sudo warning “unable to resolve
+  host …” (the VPS name missing from `/etc/hosts`). Now only real
+  listening sockets on that port count.
+
 ## v1.13.15 — 2026-10-17
 
 - **New hosts: passwords are not stored, password login is turned off.**

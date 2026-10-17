@@ -384,8 +384,15 @@ type portHolder struct {
 
 // portHolders — процессы, слушающие порт (кроме самого nkt-edge).
 func portHolders(client *ssh.Client, sudo string, port int) []portHolder {
-	out, err := runRemote(client, sudo+"ss -ltnpH 'sport = :"+strconv.Itoa(port)+"'")
-	if err != nil || strings.TrimSpace(out) == "" {
+	// stderr — мимо: предупреждения sudo («unable to resolve host …»)
+	// иначе выглядели бы занятым портом. В расчёт — только строки LISTEN
+	// с этим портом.
+	raw, err := runRemote(client, sudo+"ss -ltnpH 'sport = :"+strconv.Itoa(port)+"' 2>/dev/null")
+	if err != nil {
+		return nil
+	}
+	out := ssListenLines(raw, port)
+	if out == "" {
 		return nil
 	}
 	var hs []portHolder
@@ -410,6 +417,24 @@ func portHolders(client *ssh.Client, sudo string, port int) []portHolder {
 		hs = append(hs, portHolder{name: "?"})
 	}
 	return hs
+}
+
+// ssListenLines — из вывода ss только строки слушающих сокетов на port
+// (локальный адрес кончается на «:port»): ни заголовок старого ss без -H,
+// ни посторонний текст занятым порт не делают.
+func ssListenLines(out string, port int) string {
+	suffix := ":" + strconv.Itoa(port)
+	var keep []string
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 4 || f[0] != "LISTEN" {
+			continue
+		}
+		if strings.HasSuffix(f[3], suffix) {
+			keep = append(keep, line)
+		}
+	}
+	return strings.Join(keep, "\n")
 }
 
 func holderNames(hs []portHolder) string {
