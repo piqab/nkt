@@ -4671,6 +4671,8 @@
       "lxd": "LXD",
       "host": "the host itself",
       "addr": "address on host network"
-    }
+    },
+    "poolUnknown": "no data ({{total}} targets)",
+    "checking": "checking"
   }
 }
