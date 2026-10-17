@@ -4676,6 +4676,27 @@
     "checking": "checking",
     "loadingTargets": "loading…",
     "noTargets": "nothing of this kind on the host",
-    "refreshTargets": "Reload the list from the host"
+    "refreshTargets": "Reload the list from the host",
+    "tunnel": {
+      "not_applied": "the host is not configured yet; Apply has not reached it",
+      "gateway_missing": "the gateway has no such tunnel; Apply has not reached the gateway",
+      "host_down": "the tunnel is not up on the host, or the host sends nothing (wg-quick@nkt-flyN on the host)",
+      "blocked": "the host sends packets but the gateway gets none: UDP {{port}} is blocked on the way (the VPS provider firewall or outbound UDP from the host)",
+      "keys": "packets arrive but there is no handshake: keys do not match, press Apply again",
+      "stale": "there was a handshake, but long ago; the link is lost",
+      "no_handshake": "no handshake, and the host summary could not be fetched",
+      "unknown": "the gateway sent no summary"
+    },
+    "tunnelShort": {
+      "not_applied": "not configured",
+      "gateway_missing": "not on gateway",
+      "host_down": "tunnel down",
+      "blocked": "UDP blocked",
+      "keys": "key mismatch",
+      "stale": "link lost",
+      "no_handshake": "no handshake",
+      "unknown": "no data"
+    },
+    "tunnelBytes": "host sent {{tx}}, gateway got {{rx}}"
   }
 }
