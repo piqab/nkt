@@ -38,5 +38,6 @@
   "deploy:compose": { "page": "hub-deploy", "ru": "Compose-стек", "en": "Compose stack" },
   "deploy:site": { "page": "hub-deploy", "ru": "Сайт в конвейере", "en": "A site in the pipeline" },
   "deploy:access": { "page": "hub-deploy", "ru": "Секреты", "en": "Secrets" },
-  "deploy:sites": { "page": "hub-deploy", "ru": "Сайты", "en": "Sites" }
+  "deploy:sites": { "page": "hub-deploy", "ru": "Сайты", "en": "Sites" },
+  "deploy:fly": { "page": "traffic-fly" }
 }

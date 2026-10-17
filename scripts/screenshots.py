@@ -74,6 +74,9 @@ SCREENS = [
     # Доступ извне: на стенде должны быть токен, исходящий вебхук, edge
     # с ролями и compose-конвейер (для сухого прогона).
     ('deploy-dryrun', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(3000); [...([...document.querySelectorAll('tr')].find((r) => /skiptest|httpbin/.test(r.textContent))?.querySelectorAll('button') ?? [])].find((b) => new RegExp('^' + pick({ru: 'Выложить', en: 'Deploy'}) + '$').test(b.textContent.trim()))?.click(); await sleep(2000); clickText('.ant-modal button', new RegExp('^' + pick({ru: 'Сухой прогон', en: 'Dry run'}) + '$'))"),
+    # Traffic Fly: на стенде — шлюз (edge с ролью fly) и пара маршрутов.
+    ('traffic-fly', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); tab('Traffic Fly'); await sleep(2500)"),
+    ('traffic-fly-edit', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); tab('Traffic Fly'); await sleep(2500); [...document.querySelectorAll('tr')].find((r) => /app.example/.test(r.textContent))?.querySelectorAll('button').forEach((b) => { if (new RegExp('^' + pick({ru: 'Изменить', en: 'Edit'}) + '$').test(b.textContent.trim())) b.click() }); await sleep(1500)"),
     ('deploy-edges', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); scrollToText('nkt-edge')"),
     ('edge-probe', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Проверить снаружи', en: 'Check from outside'}) + '$')); await sleep(1000); setInput('.ant-modal input', 'example.com'); await sleep(300); clickText('.ant-modal button', new RegExp('^' + pick({ru: 'Проверить', en: 'Check'}) + '$')); await sleep(4000)"),
     ('hub-api-tokens', 'hub', '/', "menu({ru: 'О системе', en: 'About'}); await sleep(1500); scrollToText(pick({ru: 'API-токены', en: 'API tokens'}))"),

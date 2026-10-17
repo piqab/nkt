@@ -13,6 +13,7 @@ import { unifiedDiff } from '../components/textDiff'
 import { JobLogModal } from './Jobs'
 import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
+import { TrafficFly } from '../components/TrafficFly'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TitleHelp } from '../components/Docs'
 import { PIPELINE_EXAMPLES, envTemplateLines, type PipelineExample } from '../pipelineExamples'
@@ -89,7 +90,7 @@ const errText = (err: unknown) => (err instanceof Error ? err.message : String(e
  * репозитория или новому тегу образа в registry. Сборку образов делает
  * внешний CI; здесь — вторая половина: «готово → выложить».
  */
-export default function Deployments({ me }: { me: Me }) {
+export default function Deployments({ me, initialTab }: { me: Me; initialTab?: string }) {
   const { t } = useTranslation()
   const list = useApi<{ pipelines: Pipeline[] }>('/hub/pipelines', 15_000)
   const [edit, setEdit] = useState<{ pipeline?: Pipeline } | null>(null)
@@ -284,6 +285,7 @@ export default function Deployments({ me }: { me: Me }) {
         </Banner>
       )}
       <Tabs
+        defaultActiveKey={initialTab ?? 'pipelines'}
         items={[
           {
             key: 'pipelines',
@@ -308,6 +310,7 @@ export default function Deployments({ me }: { me: Me }) {
             ),
           },
           { key: 'sites', label: t('deploy.tabSites'), children: <SitesPanel me={me} /> },
+          { key: 'fly', label: 'Traffic Fly', children: <TrafficFly me={me} onOpenJob={(id) => void openJob(id)} /> },
         ]}
       />
       {edit && <PipelineEditor pipeline={edit.pipeline} onClose={() => setEdit(null)} onSaved={() => void list.reload()} />}

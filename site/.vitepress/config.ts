@@ -123,6 +123,7 @@ function sidebarRu() {
       items: [
         { text: 'Выкладки', link: '/guide/hub-deploy' },
         { text: 'nkt-edge', link: '/guide/edge' },
+        { text: 'Traffic Fly', link: '/guide/traffic-fly' },
         { text: 'Примеры CI/CD', link: '/guide/cicd-examples' },
       ],
     },
@@ -199,6 +200,7 @@ function sidebarEn() {
       items: [
         { text: 'Deployments', link: '/en/guide/hub-deploy' },
         { text: 'nkt-edge', link: '/en/guide/edge' },
+        { text: 'Traffic Fly', link: '/en/guide/traffic-fly' },
         { text: 'CI/CD examples', link: '/en/guide/cicd-examples' },
       ],
     },

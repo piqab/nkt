@@ -180,6 +180,11 @@ const KIND_COLOR: Record<string, string> = {
   'power-lost': 'error',
   'power-restored': 'success',
   'battery-low': 'error',
+  'fly-target-down': 'warning',
+  'fly-target-up': 'success',
+  'fly-pool-empty': 'error',
+  'fly-tunnel-down': 'error',
+  'fly-tunnel-up': 'success',
   'ups-lost': 'warning',
 }
 
@@ -223,7 +228,7 @@ const KIND_LINK: Record<string, string> = {
   'job-failed': '/jobs',
 }
 
-export default function HostEvents({ me, onOpenHost }: { me?: Me; onOpenHost?: (id: number, name: string, path: string) => void }) {
+export default function HostEvents({ me, onOpenHost, onOpenFly }: { me?: Me; onOpenHost?: (id: number, name: string, path: string) => void; onOpenFly?: () => void }) {
   const { t } = useTranslation()
   const [filter, setFilterState] = useState<EventFilter>(loadFilter)
   const [text, setText] = useState(filter.q)
@@ -309,7 +314,14 @@ export default function HostEvents({ me, onOpenHost }: { me?: Me; onOpenHost?: (
               )}
             </span>
             {/* К хосту — сразу в раздел, где это видно, с подсветкой. */}
-            {onOpenHost && !!e.host_id && (
+            {/* Traffic Fly — настройка хаба, не раздел хоста. */}
+            {e.kind.startsWith('fly-') ? (
+              onOpenFly && (
+                <Button size="small" style={{ marginTop: '0.25rem' }} onClick={onOpenFly}>
+                  {t('events.goTo.fly')}
+                </Button>
+              )
+            ) : onOpenHost && !!e.host_id && (
               <Button
                 size="small"
                 style={{ marginTop: '0.25rem' }}

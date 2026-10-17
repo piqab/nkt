@@ -373,6 +373,8 @@ function Shell({
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
   const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'about'>('hosts')
+  // Вкладка «Выкладок», которую открыть (события Traffic Fly ведут в неё).
+  const [deployTab, setDeployTab] = useState<string | undefined>(undefined)
   // Polled independently of whichever section is actually showing, so the
   // sidebar's own "доступно обновление" badge stays current even while
   // looking at the host list — matches how criticalCount/certAlerts below
@@ -599,7 +601,10 @@ function Shell({
             mode="inline"
             className="nav-menu"
             selectedKeys={[hubView]}
-            onClick={({ key }: { key: string }) => setHubView(key as typeof hubView)}
+            onClick={({ key }: { key: string }) => {
+              setDeployTab(undefined)
+              setHubView(key as typeof hubView)
+            }}
             items={applyNavLayout(hubItems ?? [], (i) => String(i?.key ?? ''), hubNav.data?.layout, true)}
           />
 
@@ -611,7 +616,14 @@ function Shell({
               {hubView === 'hosts' ? (
                 <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} onOpenDeploy={() => setHubView('deploy')} />
               ) : hubView === 'events' ? (
-                <HostEvents me={me} onOpenHost={openHostAt} />
+                <HostEvents
+                  me={me}
+                  onOpenHost={openHostAt}
+                  onOpenFly={() => {
+                    setDeployTab('fly')
+                    setHubView('deploy')
+                  }}
+                />
               ) : hubView === 'monitoring' ? (
                 <HubMonitoring me={me} onOpenHost={openHostAt} />
               ) : hubView === 'fail2ban' ? (
@@ -628,7 +640,7 @@ function Shell({
               ) : hubView === 'clusters' ? (
                 <ClustersPage me={me} />
               ) : hubView === 'deploy' ? (
-                <Deployments me={me} />
+                <Deployments me={me} initialTab={deployTab} />
               ) : (
                 <About admin={me.is_admin} />
               )}

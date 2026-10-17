@@ -31,7 +31,10 @@ interface EdgeStatus {
   last_error?: string
 }
 
-const ROLES = ['hooks', 'api', 'probe', 'callbacks']
+const ROLES = ['hooks', 'api', 'probe', 'callbacks', 'fly']
+
+/** Роли, которым нужен свой HTTPS edge: имя, сертификат. */
+const PUBLIC_ROLES = ['hooks', 'api', 'callbacks']
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -94,7 +97,7 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
                 {e.connected ? <Tag color="success">{t('edge.connected')}</Tag> : e.enabled ? <Tag color="error">{t('edge.disconnected')}</Tag> : <Tag>{t('edge.disabled')}</Tag>}
                 {e.connected && e.since && <span className="muted">{formatRelative(e.since)}</span>}
                 {e.roles.map((r) => (
-                  <Tag key={r} color={r === 'api' ? 'purple' : r === 'probe' ? 'cyan' : r === 'callbacks' ? 'gold' : 'blue'}>
+                  <Tag key={r} color={r === 'api' ? 'purple' : r === 'probe' ? 'cyan' : r === 'callbacks' ? 'gold' : r === 'fly' ? 'magenta' : 'blue'}>
                     {t(`edge.role.${r}`)}
                   </Tag>
                 ))}
@@ -181,12 +184,25 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
   )
 }
 
-function InstallModal({ edge, onClose, onStarted }: { edge?: EdgeStatus; onClose: () => void; onStarted: (jobID: number) => void }) {
+export function InstallModal({
+  edge,
+  presetRoles,
+  onClose,
+  onStarted,
+}: {
+  edge?: EdgeStatus
+  presetRoles?: string[]
+  onClose: () => void
+  onStarted: (jobID: number) => void
+}) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
   const [hostID, setHostID] = useState<number | null>(edge?.host_id ?? null)
   const [domain, setDomain] = useState(edge?.domain ?? '')
-  const [roles, setRoles] = useState<string[]>(edge?.roles ?? ['hooks'])
+  const [roles, setRoles] = useState<string[]>(edge?.roles ?? presetRoles ?? ['hooks'])
+  // Шлюз Traffic Fly без публичных ролей: имя, почта и прокси не нужны.
+  const needDomain = roles.some((r) => PUBLIC_ROLES.includes(r))
+  const flyMixed = roles.includes('fly') && needDomain
   const [email, setEmail] = useState('')
   const [github, setGithub] = useState(false)
   const [proxyPort, setProxyPort] = useState('')
@@ -215,6 +231,7 @@ function InstallModal({ edge, onClose, onStarted }: { edge?: EdgeStatus; onClose
           optionFilterProp="search"
           options={list.map((h) => ({ value: h.id, label: osLabel(h.os_info, `${h.name} (${h.addr})`), search: `${h.name} (${h.addr})` }))}
         />
+        {needDomain && (
         <Space.Compact size="small">
           <Input
             size="small"
@@ -244,6 +261,7 @@ function InstallModal({ edge, onClose, onStarted }: { edge?: EdgeStatus; onClose
             {t('edge.check')}
           </Button>
         </Space.Compact>
+        )}
         {check && (
           <Banner kind={check.match ? 'info' : 'error'}>
             {check.match
@@ -254,24 +272,32 @@ function InstallModal({ edge, onClose, onStarted }: { edge?: EdgeStatus; onClose
           </Banner>
         )}
         <RolesPicker value={roles} onChange={setRoles} />
-        <Input size="small" placeholder={t('edge.email')} value={email} onChange={(ev) => setEmail(ev.target.value.trim())} />
-        <Checkbox checked={github} onChange={(ev) => setGithub(ev.target.checked)}>
-          {t('edge.githubOnly')}
-        </Checkbox>
-        <Input size="small" inputMode="numeric" placeholder={t('edge.proxyPort')} value={proxyPort} onChange={(ev) => setProxyPort(ev.target.value.replace(/\D/g, ''))} />
-        <p className="small muted">{t('edge.proxyHint')}</p>
+        {flyMixed && <Banner kind="warn">{t('edge.flyAlone')}</Banner>}
+        {needDomain && (
+          <>
+            <Input size="small" placeholder={t('edge.email')} value={email} onChange={(ev) => setEmail(ev.target.value.trim())} />
+            <Checkbox checked={github} onChange={(ev) => setGithub(ev.target.checked)}>
+              {t('edge.githubOnly')}
+            </Checkbox>
+            <Input size="small" inputMode="numeric" placeholder={t('edge.proxyPort')} value={proxyPort} onChange={(ev) => setProxyPort(ev.target.value.replace(/\D/g, ''))} />
+            <p className="small muted">{t('edge.proxyHint')}</p>
+          </>
+        )}
+        {roles.includes('fly') && !needDomain && <p className="small muted">{t('edge.flyInstallHint')}</p>}
         <div>
           <Button
             type="primary"
             loading={busy}
-            disabled={!hostID || !domain || roles.length === 0}
+            disabled={!hostID || (needDomain && !domain) || roles.length === 0 || flyMixed}
             onClick={async () => {
               setBusy(true)
               setError(null)
               try {
                 const res = await api<{ job_id: number }>('/hub/edges/install', {
                   method: 'POST',
-                  body: { host_id: hostID, domain, email, github_only: github, proxy_port: proxyPort ? Number(proxyPort) : 0, roles },
+                  body: needDomain
+                    ? { host_id: hostID, domain, email, github_only: github, proxy_port: proxyPort ? Number(proxyPort) : 0, roles }
+                    : { host_id: hostID, domain: '', roles },
                 })
                 onStarted(res.job_id)
               } catch (err) {

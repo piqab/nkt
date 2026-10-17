@@ -60,10 +60,24 @@ const (
 	// EdgeRoleCallbacks — колбэки ботов (Slack: команды и кнопки), POST
 	// /callbacks/{платформа}/{вид}; подпись проверяет хаб.
 	EdgeRoleCallbacks = "callbacks"
+	// EdgeRoleFly — шлюз Traffic Fly: WireGuard к хостам, проброс портов,
+	// маршрутизатор 80/443 (служба nkt-fly). 80/443 VPS — его, поэтому с
+	// публичными ролями (hooks, api, callbacks) не совмещается.
+	EdgeRoleFly = "fly"
 )
 
 // EdgeRoles — все роли, в порядке показа.
-var EdgeRoles = []string{EdgeRoleHooks, EdgeRoleAPI, EdgeRoleProbe, EdgeRoleCallbacks}
+var EdgeRoles = []string{EdgeRoleHooks, EdgeRoleAPI, EdgeRoleProbe, EdgeRoleCallbacks, EdgeRoleFly}
+
+// edgePublic — есть роли, которым нужен свой HTTPS edge (имя, certbot).
+func edgePublic(roles []string) bool {
+	for _, r := range roles {
+		if r == EdgeRoleHooks || r == EdgeRoleAPI || r == EdgeRoleCallbacks {
+			return true
+		}
+	}
+	return false
+}
 
 // EdgeSettings — один edge.
 type EdgeSettings struct {
@@ -610,8 +624,14 @@ func (s *Server) handleEdgeInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	req.Domain = strings.ToLower(strings.TrimSpace(req.Domain))
-	if !edgeDomainRe.MatchString(req.Domain) {
+	roles0, _ := validRoles(req.Roles)
+	// Шлюз Traffic Fly без публичных ролей: имя и сертификат ему не нужны.
+	if (req.Domain != "" || edgePublic(roles0)) && !edgeDomainRe.MatchString(req.Domain) {
 		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badDomain", req.Domain))
+		return
+	}
+	if slices.Contains(roles0, EdgeRoleFly) && edgePublic(roles0) {
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.flyAlone"))
 		return
 	}
 	if req.Email != "" && !edgeEmailRe.MatchString(req.Email) {

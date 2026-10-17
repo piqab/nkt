@@ -400,7 +400,8 @@ type EventSettings struct {
 
 // EventKinds — все виды в порядке показа.
 var EventKinds = []string{store.EventUnreachable, store.EventRecovered, store.EventProblems, store.EventResolved, store.EventJobFailed, store.EventRebooted, store.EventBans, store.EventForecast,
-	store.EventPowerLost, store.EventPowerRestored, store.EventBatteryLow, store.EventUPSLost}
+	store.EventPowerLost, store.EventPowerRestored, store.EventBatteryLow, store.EventUPSLost,
+	store.EventFlyTargetDown, store.EventFlyTargetUp, store.EventFlyPoolEmpty, store.EventFlyTunnelDown, store.EventFlyTunnelUp}
 
 // defaultEventSettings — всё записывается; будят недоступностью,
 // проблемами и провалом задания, но не возвратами.
@@ -417,6 +418,9 @@ func defaultEventSettings() EventSettings {
 	s.Notify[store.EventPowerRestored] = true
 	s.Notify[store.EventBatteryLow] = true
 	s.Notify[store.EventUPSLost] = true
+	s.Notify[store.EventFlyTargetDown] = true
+	s.Notify[store.EventFlyPoolEmpty] = true
+	s.Notify[store.EventFlyTunnelDown] = true
 	return s
 }
 

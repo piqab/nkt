@@ -943,8 +943,10 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	server.StartMonitoring(ctx)
 	// Соединение с nkt-edge (вебхуки из интернета без открытого хаба).
 	r.jobs.Register(hub.KindEdgeInstall, hub.NewEdgeInstallRunner(server))
+	r.jobs.Register(hub.KindFlyApply, hub.NewFlyApplyRunner(server))
 	r.jobs.Register(hub.KindEdgeUninstall, hub.NewEdgeUninstallRunner(server))
 	server.StartEdge(ctx)
+	server.StartFlyMonitor(ctx)
 	server.StartTelegram(ctx)
 	server.StartSlack()
 

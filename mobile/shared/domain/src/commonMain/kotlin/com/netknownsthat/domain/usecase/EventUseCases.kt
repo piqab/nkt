@@ -43,5 +43,12 @@ private val KIND_LINK = mapOf(
     "forecast" to "/usage",
 )
 
-/** Host section path an event leads to: its own link, else by kind. */
-fun HubEvent.hostPath(): String = link.ifBlank { KIND_LINK[kind] ?: "/" }
+/** Host section path an event leads to: its own link, else by kind.
+ * Traffic Fly links to the hub's deployments page, which the app has no
+ * screen for: a target event opens the host's containers, a tunnel event
+ * the host itself. */
+fun HubEvent.hostPath(): String = when {
+    kind.startsWith("fly-tunnel") -> "/"
+    kind.startsWith("fly-") -> "/containers"
+    else -> link.ifBlank { KIND_LINK[kind] ?: "/" }
+}

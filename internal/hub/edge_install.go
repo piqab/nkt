@@ -119,17 +119,29 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err := checkAptHost(client); err != nil {
 		return err
 	}
-	dns := s.checkEdgeDNS(ctx, client, host.Addr, p.Domain)
-	if !dns.Match {
-		if len(dns.DomainIPs) == 0 {
-			return msgs.Errorf("edge.dnsMissing", p.Domain)
+	roles, _ := validRoles(p.Roles)
+	public := edgePublic(roles)
+	isFly := slices.Contains(roles, EdgeRoleFly)
+	var ports edgePortsState
+	if public {
+		dns := s.checkEdgeDNS(ctx, client, host.Addr, p.Domain)
+		if !dns.Match {
+			if len(dns.DomainIPs) == 0 {
+				return msgs.Errorf("edge.dnsMissing", p.Domain)
+			}
+			return msgs.Errorf("edge.dnsMismatch", p.Domain, strings.Join(dns.DomainIPs, ", "), strings.Join(dns.HostIPs, ", "))
 		}
-		return msgs.Errorf("edge.dnsMismatch", p.Domain, strings.Join(dns.DomainIPs, ", "), strings.Join(dns.HostIPs, ", "))
-	}
-	jc.Log("edge.dnsOK", p.Domain, strings.Join(dns.DomainIPs, ", "))
-	ports, err := edgePorts(client, sudo, p.ProxyPort)
-	if err != nil {
-		return err
+		jc.Log("edge.dnsOK", p.Domain, strings.Join(dns.DomainIPs, ", "))
+		if ports, err = edgePorts(client, sudo, p.ProxyPort); err != nil {
+			return err
+		}
+	} else {
+		// Без публичных ролей edge слушает только туннель: 80/443 — не
+		// его (у шлюза Traffic Fly их займёт nkt-fly по маршрутам).
+		tunnel, _ := strconv.Atoi(EdgeTunnelPort)
+		if hs := portHolders(client, sudo, tunnel); len(hs) > 0 {
+			return msgs.Errorf("edge.portBusy", tunnel, holderNames(hs))
+		}
 	}
 
 	jc.StepKey(2, edgeSteps, "edge.stepBinary", goos, goarch)
@@ -156,7 +168,6 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if token == "" {
 		token = randomToken(32)
 	}
-	roles, _ := validRoles(p.Roles)
 	envFile := fmt.Sprintf("EDGE_DOMAIN=%s\nEDGE_TOKEN=%s\nEDGE_TUNNEL_ADDR=:%s\nEDGE_GITHUB_ONLY=%t\nEDGE_ROLES=%s\n",
 		p.Domain, token, EdgeTunnelPort, p.GitHubOnly, strings.Join(roles, ","))
 	if p.ProxyPort > 0 {
@@ -187,6 +198,17 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		{"nkt-edge.service", "/etc/systemd/system/nkt-edge.service", []byte(EdgeUnit), 0o644},
 		{"certbot-deploy.sh", edgeHookPath, []byte(EdgeCertbotHook), 0o755},
 	}
+	if isFly {
+		files = append(files, struct {
+			name, dst string
+			data      []byte
+			mode      uint32
+		}{"nkt-fly.service", "/etc/systemd/system/nkt-fly.service", []byte(FlyUnit), 0o644})
+		jc.Log("fly.installTools")
+		if out, err := runRemote(client, sudo+"env DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables conntrack"); err != nil {
+			return msgs.Errorf("fly.toolsFailed", strings.TrimSpace(lastLines(out, 5)))
+		}
+	}
 	for _, f := range files {
 		if err := uploadBytes(sc, f.data, stage+"/"+f.name, 0o600); err != nil {
 			return err
@@ -205,8 +227,12 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	jc.StepKey(4, edgeSteps, "edge.stepCert", p.Domain)
-	if err := edgeIssueCert(client, sudo, p, ports, jc); err != nil {
-		return err
+	if public {
+		if err := edgeIssueCert(client, sudo, p, ports, jc); err != nil {
+			return err
+		}
+	} else {
+		jc.Log("edge.certNotNeeded")
 	}
 
 	jc.StepKey(5, edgeSteps, "edge.stepService")
@@ -215,6 +241,13 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		jc.Log("edge.proxySnippet", p.Domain, p.ProxyPort)
 	}
 	script := sudo + "systemctl daemon-reload && " + sudo + "systemctl enable nkt-edge && " + sudo + "systemctl restart nkt-edge"
+	if isFly {
+		script += " && " + sudo + "systemctl enable nkt-fly && " + sudo + "systemctl restart nkt-fly"
+	} else {
+		// Роль fly сняли — служба шлюза больше не нужна (туннели и правила
+		// остаются до «Удалить» или пустой конфигурации).
+		script += "; " + sudo + "systemctl disable --now nkt-fly 2>/dev/null; true"
+	}
 	if out, err := runRemote(client, script); err != nil {
 		return msgs.Errorf("edge.serviceFailed", strings.TrimSpace(out))
 	}
@@ -226,7 +259,7 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// Файрвол хоста, если ufw включён: порт туннеля, а без прокси — ещё
 	// 443 и 80 (80 нужен certbot при продлении).
 	allow := sudo + "ufw allow " + EdgeTunnelPort + "/tcp; "
-	if p.ProxyPort == 0 {
+	if p.ProxyPort == 0 && public {
 		allow = sudo + "ufw allow 80/tcp; " + sudo + "ufw allow 443/tcp; " + allow
 	}
 	_, _ = runRemote(client, "if command -v ufw >/dev/null && "+sudo+"ufw status | grep -q 'Status: active'; then "+allow+"fi")
@@ -276,8 +309,34 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	jc.Log("edge.connected", p.Domain)
 
 	jc.StepKey(7, edgeSteps, "edge.stepVerify", p.Domain)
+	if !public {
+		// Своего HTTPS нет — проверено туннелем выше.
+		return nil
+	}
 	return edgeVerify(ctx, client, p.Domain, jc)
 }
+
+// FlyUnit — служба шлюза Traffic Fly («nkt-edge fly»): от root —
+// WireGuard, nftables, ufw и порты маршрутизатора; основной nkt-edge
+// остаётся без прав и передаёт ей команды хаба по loopback.
+const FlyUnit = `[Unit]
+Description=nkt Traffic Fly gateway (WireGuard, nftables, router 80/443)
+After=network-online.target nkt-edge.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/nkt-edge fly
+EnvironmentFile=/etc/nkt-edge/edge.env
+Environment=FLY_DIR=/etc/nkt-edge/fly
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+`
 
 // edgePortsState — кто держит порты, которые нужны edge и certbot.
 type edgePortsState struct {
@@ -603,6 +662,9 @@ func (r *EdgeUninstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	}
 	script := sudo + "systemctl disable --now nkt-edge 2>/dev/null; " +
+		// Шлюз Traffic Fly: служба, туннель и правила.
+		sudo + "systemctl disable --now nkt-fly wg-quick@nkt-fly 2>/dev/null; " + sudo + "nft delete table ip nkt_fly 2>/dev/null; " +
+		sudo + "rm -f /etc/systemd/system/nkt-fly.service /etc/wireguard/nkt-fly.conf; " +
 		sudo + "rm -f /usr/local/bin/nkt-edge /etc/systemd/system/nkt-edge.service && " +
 		sudo + "rm -rf /etc/nkt-edge /var/lib/nkt-edge /var/lib/private/nkt-edge && " +
 		sudo + "systemctl daemon-reload && " + sudo + "systemctl reset-failed nkt-edge 2>/dev/null; " +
