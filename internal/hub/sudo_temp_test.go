@@ -204,3 +204,13 @@ func TestSSListenLines(t *testing.T) {
 		t.Fatal("ipv6 listener missed")
 	}
 }
+
+func TestAptBrokenPackages(t *testing.T) {
+	out := "Setting up conntrack (1:1.4.8-2) ...\nProcessing triggers for libc-bin (2.41-12+deb13u4) ...\nErrors were encountered while processing:\n grub-pc\n shim-signed\nE: Sub-process /usr/bin/dpkg returned an error code (1)\n"
+	if got := aptBrokenPackages(out); got != "grub-pc, shim-signed" {
+		t.Fatalf("got %q", got)
+	}
+	if got := aptBrokenPackages("E: Unable to locate package x"); got != "?" {
+		t.Fatalf("got %q", got)
+	}
+}
