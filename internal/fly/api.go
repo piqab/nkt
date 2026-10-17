@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,10 +51,25 @@ type HostStatus struct {
 	Ifaces   []HostIfaceStatus `json:"ifaces"`
 }
 
+// FilePath — файл Traffic Fly в каталоге dir: имя — интерфейс (nkt-flyN)
+// или wg, ext — «.key», «.nft». Имя приходит из запроса или конфигурации
+// хаба, поэтому — только известного вида и без выхода из каталога.
+func FilePath(dir, name, ext string) (string, error) {
+	if (name != "wg" && !ValidIface(name)) || strings.Contains(name, "..") || (ext != ".key" && ext != ".nft") {
+		return "", fmt.Errorf("fly: bad file name %q", name)
+	}
+	base := filepath.Clean(dir)
+	p := filepath.Join(base, filepath.Base(filepath.Clean("/"+name+ext)))
+	if !strings.HasPrefix(p, base+string(filepath.Separator)) {
+		return "", fmt.Errorf("fly: bad file name %q", name)
+	}
+	return p, nil
+}
+
 // LoadOrCreateKey — закрытый ключ WireGuard из файла (0600); нет — создаёт.
 // Возвращает публичный.
 func LoadOrCreateKey(path string) (string, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(filepath.Clean(path))
 	if err == nil {
 		return PublicKey(strings.TrimSpace(string(raw)))
 	}

@@ -2,6 +2,7 @@ package fly
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -42,5 +43,29 @@ func TestKeys(t *testing.T) {
 	}
 	if st, _ := os.Stat(p); st.Mode().Perm() != 0o600 {
 		t.Fatal(st.Mode())
+	}
+}
+
+func TestFilePath(t *testing.T) {
+	dir := t.TempDir()
+	if p, err := FilePath(dir, "nkt-fly1", ".key"); err != nil || p != filepath.Join(dir, "nkt-fly1.key") {
+		t.Fatalf("good name: %q %v", p, err)
+	}
+	if _, err := FilePath(dir, "wg", ".key"); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"../etc/passwd", "nkt-fly1/../../x", "", "eth0", "nkt-fly1\x00"} {
+		if _, err := FilePath(dir, bad, ".key"); err == nil {
+			t.Errorf("%q: accepted", bad)
+		}
+	}
+	if _, err := FilePath(dir, "nkt-fly1", ".conf"); err == nil {
+		t.Error("ext .conf accepted")
+	}
+	if RouteMark(-1) != GatewayMarkBase || RouteMark(1<<20) != GatewayMarkBase || RouteMark(3) != GatewayMarkBase+3 {
+		t.Error("RouteMark range")
+	}
+	if HostMark(2) != HostMarkBase+2 {
+		t.Error("HostMark")
 	}
 }

@@ -64,7 +64,11 @@ func runFly() {
 	if err := os.MkdirAll(d.dir, 0o700); err != nil {
 		log.Fatalf("fly dir: %v", err)
 	}
-	pub, err := fly.LoadOrCreateKey(filepath.Join(d.dir, "wg.key"))
+	key, err := fly.FilePath(d.dir, "wg", ".key")
+	if err != nil {
+		log.Fatalf("wireguard key: %v", err)
+	}
+	pub, err := fly.LoadOrCreateKey(key)
 	if err != nil {
 		log.Fatalf("wireguard key: %v", err)
 	}
@@ -256,7 +260,7 @@ func ufwPorts(dir string, cfg fly.GatewayConfig) error {
 	}
 	state := filepath.Join(dir, "ufw.json")
 	var had []string
-	if raw, err := os.ReadFile(state); err == nil {
+	if raw, err := os.ReadFile(filepath.Clean(state)); err == nil {
 		_ = json.Unmarshal(raw, &had)
 	}
 	var errs []string

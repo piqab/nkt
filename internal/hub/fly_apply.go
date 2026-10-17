@@ -131,7 +131,7 @@ func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 				if hi == nil {
 					hc.Ifaces = append(hc.Ifaces, fly.HostIface{Name: iface, Address: addr + "/24",
 						Gateway:  fly.Peer{Name: edgeName(gi.st), PublicKey: gi.pub, Address: fmt.Sprintf("10.77.%d.1", g.Index)},
-						Endpoint: gi.endpoint, Mark: fly.HostMarkBase + uint32(g.Index), Table: fly.HostTableBase + g.Index})
+						Endpoint: gi.endpoint, Mark: fly.HostMark(g.Index), Table: fly.HostTableBase + g.Index})
 					hi = &hc.Ifaces[len(hc.Ifaces)-1]
 				}
 				port := d.Alloc.Ports[flyPortKey(g.EdgeID, t.HostID, rt.ID, t.ID)]

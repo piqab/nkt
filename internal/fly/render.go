@@ -16,7 +16,22 @@ const (
 )
 
 // RouteMark — метка соединений маршрута на шлюзе (index — с 1).
-func RouteMark(index int) uint32 { return GatewayMarkBase + uint32(index) }
+func RouteMark(index int) uint32 {
+	// Маршрутов на шлюзе — единицы; за пределами 0…0xfff метка ушла бы из
+	// своего диапазона, такой индекс — ошибка вызывающего.
+	if index < 0 || index > 0xfff {
+		return GatewayMarkBase
+	}
+	return GatewayMarkBase + uint32(index) // #nosec G115 -- 0…0xfff проверено выше
+}
+
+// HostMark — метка ответов туннеля шлюза index (1…250) на хосте.
+func HostMark(index int) uint32 {
+	if index < 0 || index > 0xfff {
+		return HostMarkBase
+	}
+	return HostMarkBase + uint32(index) // #nosec G115 -- 0…0xfff проверено выше
+}
 
 // GatewayWG — /etc/wireguard/<iface>.conf шлюза. Закрытый ключ в файл не
 // пишется: PostUp берёт его из keyFile (0600, создаётся на самом шлюзе).

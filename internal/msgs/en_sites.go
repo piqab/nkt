@@ -294,6 +294,7 @@ var enSitesCatalog = map[string]string{
 	"fly.badIface":                    "A Traffic Fly tunnel name is nkt-fly plus a number",
 	"fly.badRoute":                    "Route %q: the id is lowercase latin letters, digits and “-”, unique",
 	"fly.badGateway":                  "Route %q: the gateway is an edge with the fly role",
+	"fly.badListenPort":               "Gateway WireGuard port outside 1…65535: %d",
 	"fly.badTarget":                   "Route %q, target %q: host, kind (container, vm, lxd, host, addr), name or IPv4 address and port",
 	"fly.badConfig":                   "The gateway configuration fails validation: %s",
 	"fly.conflict":                    "The configuration changed while you edited it (you have version %d, now %d) — reopen it",
