@@ -327,6 +327,7 @@ var ruSitesCatalog = map[string]string{
 	"fly.installTools":                "Ставлю wireguard-tools, nftables и conntrack для Traffic Fly",
 	"fly.toolsFailed":                 "Не поставились wireguard-tools, nftables, conntrack: %s",
 	"fly.toolsOtherBroken":            "Пакеты для Traffic Fly на месте, но apt завершился с ошибкой из-за других пакетов (%s) — их стоит донастроить на хосте: sudo dpkg --configure -a (для grub-pc: sudo dpkg-reconfigure grub-pc)",
+	"fly.gatewayNoFly":                "шлюз не передал команду службе nkt-fly (ответ 404): edge старой версии, без роли fly или порт команд занят другой службой — нажмите «Переустановить» у шлюза",
 	"edge.certbotOtherBroken":         "certbot на месте, но apt завершился с ошибкой из-за других пакетов (%s) — их стоит донастроить на хосте: sudo dpkg --configure -a (для grub-pc: sudo dpkg-reconfigure grub-pc)",
 	"edge.certNotNeeded":              "Сертификат не нужен: у edge нет публичных ролей (только туннель)",
 	"compose.upNoPullFlag":            "? compose на хосте без «up --pull»: при pull_policy: always up скачает образ сам, без ключа конвейера — обновите docker compose",

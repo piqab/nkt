@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -212,5 +215,16 @@ func TestAptBrokenPackages(t *testing.T) {
 	}
 	if got := aptBrokenPackages("E: Unable to locate package x"); got != "?" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// Порт команд nkt-fly не совпадает с портом, который nkt держит на том же
+// VPS (проброс портов Kubernetes): шлюз часто ещё и хост хаба.
+func TestFlyAPIAddrNotNktForward(t *testing.T) {
+	c := config.Config{Addr: "127.0.0.1:8077"}
+	_, nktPort, _ := net.SplitHostPort(c.ForwardListen())
+	_, flyPort, _ := net.SplitHostPort(fly.DefaultAPIAddr)
+	if nktPort == flyPort || flyPort == "8077" || flyPort == EdgeTunnelPort {
+		t.Fatalf("nkt-fly port %s collides (nkt forward %s)", flyPort, nktPort)
 	}
 }

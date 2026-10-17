@@ -282,6 +282,7 @@ From source: `make edge` puts the binaries into `dist/`.
 | `EDGE_PROXY_ADDR` | empty | Behind a reverse proxy: webhooks over HTTP on this loopback address (`127.0.0.1:8445`), 443 is not taken |
 | `EDGE_ROLES` | `hooks` | Comma-separated roles: `hooks` for webhooks, `api` for signed API token requests, `probe` for outside checks on the hub's request, `callbacks` for bot callbacks, `fly` for a Traffic Fly gateway |
 | `EDGE_API_RATE` | `120` | API requests per minute per address |
+| `FLY_API_ADDR` | `127.0.0.1:8447` | fly role: where the `nkt-fly` service takes the hub's commands from the edge (loopback only) |
 
 ## Updating
 

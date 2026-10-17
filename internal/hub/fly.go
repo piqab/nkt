@@ -410,6 +410,11 @@ func flyGatewayCall(ctx context.Context, sess *yamux.Session, method, path strin
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(raw, &e)
+		if resp.StatusCode == http.StatusNotFound && e.Error == "" {
+			// Ответил не nkt-fly: у edge нет роли fly, edge старый или
+			// порт команд занят чужой службой.
+			return msgs.Errorf("fly.gatewayNoFly")
+		}
 		if e.Error == "" {
 			e.Error = strings.TrimSpace(string(raw))
 		}

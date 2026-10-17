@@ -327,6 +327,7 @@ var enSitesCatalog = map[string]string{
 	"fly.installTools":                "Installing wireguard-tools, nftables and conntrack for Traffic Fly",
 	"fly.toolsFailed":                 "wireguard-tools, nftables, conntrack failed to install: %s",
 	"fly.toolsOtherBroken":            "The Traffic Fly packages are in place, but apt failed because of other packages (%s); finish configuring them on the host: sudo dpkg --configure -a (for grub-pc: sudo dpkg-reconfigure grub-pc)",
+	"fly.gatewayNoFly":                "the gateway did not pass the command to the nkt-fly service (404): the edge is outdated, lacks the fly role, or another service holds the command port; press “Reinstall” for the gateway",
 	"edge.certbotOtherBroken":         "certbot is in place, but apt failed because of other packages (%s); finish configuring them on the host: sudo dpkg --configure -a (for grub-pc: sudo dpkg-reconfigure grub-pc)",
 	"edge.certNotNeeded":              "No certificate needed: the edge has no public roles (tunnel only)",
 	"compose.upNoPullFlag":            "? compose on the host has no “up --pull”: with pull_policy: always, up pulls the image itself, without the pipeline key; update docker compose",
