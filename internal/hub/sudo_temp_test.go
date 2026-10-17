@@ -186,3 +186,21 @@ func TestInstallSudoCheckAgainstRealSSHD(t *testing.T) {
 		t.Fatal("installed host checked")
 	}
 }
+
+// Предупреждение sudo и заголовок ss занятым порт не делают; настоящий
+// слушатель — делает.
+func TestSSListenLines(t *testing.T) {
+	noise := "sudo: unable to resolve host vps-1: Name or service not known\nState Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n"
+	if got := ssListenLines(noise, 8444); got != "" {
+		t.Fatalf("noise counted: %q", got)
+	}
+	busy := noise + `LISTEN 0      4096         0.0.0.0:8444       0.0.0.0:*    users:(("python3",pid=42,fd=3))` + "\n" +
+		`LISTEN 0      4096         0.0.0.0:18444      0.0.0.0:*    users:(("other",pid=7,fd=3))`
+	got := ssListenLines(busy, 8444)
+	if !strings.Contains(got, "python3") || strings.Contains(got, "other") {
+		t.Fatalf("listen lines: %q", got)
+	}
+	if got := ssListenLines(`LISTEN 0 4096 [::]:8444 [::]:*`, 8444); got == "" {
+		t.Fatal("ipv6 listener missed")
+	}
+}
