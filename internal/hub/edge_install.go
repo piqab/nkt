@@ -232,7 +232,14 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}{"nkt-fly.service", "/etc/systemd/system/nkt-fly.service", []byte(FlyUnit), 0o644})
 		jc.Log("fly.installTools")
 		if out, err := runRemote(client, sudo+"env DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables conntrack"); err != nil {
-			return msgs.Errorf("fly.toolsFailed", strings.TrimSpace(lastLines(out, 5)))
+			// apt падает и из-за чужого недонастроенного пакета (grub-pc на
+			// облачном образе ждёт ответа про диск) — свои при этом стоят.
+			// Решают сами команды, а не код возврата apt.
+			if _, cerr := runRemote(client, sudo+"sh -c "+shellQuote(flyToolsCheck)); cerr == nil {
+				jc.Log("fly.toolsOtherBroken", aptBrokenPackages(out))
+			} else {
+				return msgs.Errorf("fly.toolsFailed", strings.TrimSpace(lastLines(out, 5)))
+			}
 		}
 	}
 	for _, f := range files {
@@ -492,7 +499,12 @@ func edgeIssueCert(client *ssh.Client, sudo string, p EdgeInstallParams, ports e
 	if _, err := runRemote(client, "command -v certbot"); err != nil {
 		jc.Log("edge.certbotInstall")
 		if out, err := runRemote(client, sudo+"env DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot"); err != nil {
-			return msgs.Errorf("edge.certbotInstallFailed", tailLines(out, 8))
+			// Как с пакетами Traffic Fly: apt мог упасть на чужом пакете.
+			if _, cerr := runRemote(client, sudo+"sh -c 'command -v certbot'"); cerr == nil {
+				jc.Log("edge.certbotOtherBroken", aptBrokenPackages(out))
+			} else {
+				return msgs.Errorf("edge.certbotInstallFailed", tailLines(out, 8))
+			}
 		}
 	}
 	// Прежний edge (старые версии слушали 80) — не должен мешать certbot.
@@ -735,4 +747,29 @@ func (r *EdgeUninstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	s.kickEdge()
 	jc.Log("edge.portsKept")
 	return nil
+}
+
+// flyToolsCheck — команды, ради которых ставятся пакеты Traffic Fly.
+const flyToolsCheck = "command -v wg && command -v wg-quick && command -v nft && command -v conntrack"
+
+// aptBrokenPackages — пакеты из «Errors were encountered while processing:»
+// в выводе apt/dpkg.
+func aptBrokenPackages(out string) string {
+	var names []string
+	in := false
+	for _, line := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(l, "Errors were encountered while processing:"):
+			in = true
+		case in && l != "" && !strings.HasPrefix(l, "E:") && !strings.Contains(l, " "):
+			names = append(names, l)
+		case in:
+			in = false
+		}
+	}
+	if len(names) == 0 {
+		return "?"
+	}
+	return strings.Join(names, ", ")
 }

@@ -107,7 +107,9 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 	if err := os.MkdirAll(s.flyDir(), 0o700); err != nil {
 		return log, err
 	}
-	res, err := RunUnrestricted(ctx, "sh", "-c", "command -v wg >/dev/null && command -v wg-quick >/dev/null && command -v nft >/dev/null || { export DEBIAN_FRONTEND=noninteractive; apt-get install -y wireguard-tools nftables; }")
+	// Итог — по самим командам, а не по коду apt: apt падает и из-за
+	// чужого недонастроенного пакета (grub-pc), когда наши уже стоят.
+	res, err := RunUnrestricted(ctx, "sh", "-c", "have() { command -v wg >/dev/null && command -v wg-quick >/dev/null && command -v nft >/dev/null; }; have || { DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables; have; }")
 	if err != nil || !res.OK() {
 		return log, fmt.Errorf("wireguard-tools/nftables: %s", strings.TrimSpace(res.Output()+" "+errText(err)))
 	}

@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.17 — 2026-10-17
+
+- **Traffic Fly and nkt-edge: installation no longer fails over another
+  package.** If the host has a half-configured package (often `grub-pc` on
+  a cloud image), apt exits with an error even though the needed packages
+  were installed. The hub now checks the commands themselves (`wg`,
+  `wg-quick`, `nft`, `conntrack`, `certbot`): if they are there, the
+  installation goes on, and the log names the broken packages and how to
+  finish them (`sudo dpkg --configure -a`, for grub-pc
+  `sudo dpkg-reconfigure grub-pc`).
+
 ## v1.13.16 — 2026-10-17
 
 - **nkt-edge: “port 8444 on the host is already taken: ?” on a free

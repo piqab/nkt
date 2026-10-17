@@ -326,6 +326,8 @@ var ruSitesCatalog = map[string]string{
 	"edge.flyAlone":                   "Шлюз Traffic Fly (роль fly) ставится на отдельный VPS: его 80/443 заняты маршрутизатором, поэтому с вебхуками, API и колбэками роль не совмещается (проверки снаружи — можно)",
 	"fly.installTools":                "Ставлю wireguard-tools, nftables и conntrack для Traffic Fly",
 	"fly.toolsFailed":                 "Не поставились wireguard-tools, nftables, conntrack: %s",
+	"fly.toolsOtherBroken":            "Пакеты для Traffic Fly на месте, но apt завершился с ошибкой из-за других пакетов (%s) — их стоит донастроить на хосте: sudo dpkg --configure -a (для grub-pc: sudo dpkg-reconfigure grub-pc)",
+	"edge.certbotOtherBroken":         "certbot на месте, но apt завершился с ошибкой из-за других пакетов (%s) — их стоит донастроить на хосте: sudo dpkg --configure -a (для grub-pc: sudo dpkg-reconfigure grub-pc)",
 	"edge.certNotNeeded":              "Сертификат не нужен: у edge нет публичных ролей (только туннель)",
 	"compose.upNoPullFlag":            "? compose на хосте без «up --pull»: при pull_policy: always up скачает образ сам, без ключа конвейера — обновите docker compose",
 	"compose.upPullFailed":            "up прервался на скачивании образа: %s",
