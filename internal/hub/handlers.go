@@ -718,7 +718,15 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := s.hub.AddHost(r.Context(), name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled)
+	var id int64
+	var err error
+	if req.AuthKind == store.HostAuthPassword {
+		// Пароль нужен только первой установке (она переводит хост на
+		// ключ) — в базу он не пишется.
+		id, err = s.hub.AddHostPasswordInMemory(r.Context(), name, addr, req.SSHPort, sshUser, req.Secret, req.TerminalEnabled)
+	} else {
+		id, err = s.hub.AddHost(r.Context(), name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled)
+	}
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
@@ -984,6 +992,34 @@ func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"authorized_key": line})
+}
+
+// handlePlaceKey — POST /hub/hosts/{id}/place-key {password}: «Ручная» без
+// ручных команд — хаб один раз входит по паролю SSH, кладёт свой ключ и
+// проверяет вход им. Пароль не сохраняется; подходит он и для sudo —
+// остаётся в памяти до конца установки.
+func (s *Server) handlePlaceKey(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(r, &req); err != nil || req.Password == "" {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.placeKeyNeedsPassword"))
+		return
+	}
+	err = s.hub.PlaceKeyWithPassword(r.Context(), id, []byte(req.Password))
+	req.Password = ""
+	host, _ := s.db.HostByID(r.Context(), id)
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "host.place_key", host.Name, auditOutcome(err), nil)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // handleNarrowSudo — POST /hub/hosts/{id}/sudo/narrow: полный sudo → узкий.
@@ -1454,12 +1490,30 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	force := r.URL.Query().Get("force") == "true"
 	// Тело необязательно: обычная установка и переустановка приходят без
-	// него, подготовка нового хоста — с ним.
-	var boot BootstrapOptions
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&boot)
+	// него, подготовка нового хоста — с ним. Пароли (sudo, нового
+	// пользователя) — только в память хаба до конца установки.
+	var req struct {
+		BootstrapOptions
+		SudoMode     string `json:"sudo_mode"`
+		SudoPassword string `json:"sudo_password"`
+		UserPassword string `json:"user_password"`
 	}
-	job, err := s.hub.StartInstall(r.Context(), id, force, &boot)
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	boot := req.BootstrapOptions
+	if req.UserPassword != "" {
+		oneTime.Set(userPasswordKey(id), []byte(req.UserPassword), hostSecretTTL)
+		req.UserPassword = ""
+	}
+	// 428, а не 409: 409 у установки — «на хосте чужой nkt», и клиенты
+	// (приложение) по коду предлагают перезаписать.
+	if st, ok := s.hub.installSudoCheck(r.Context(), id, req.SudoPassword); !ok {
+		writeJSON(w, http.StatusPreconditionRequired, st)
+		return
+	}
+	req.SudoPassword = ""
+	job, err := s.hub.StartInstallWith(r.Context(), id, force, &boot, req.SudoMode)
 	if err != nil {
 		var foreign *ForeignInstallError
 		if errors.As(err, &foreign) {

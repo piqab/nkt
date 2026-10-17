@@ -1,11 +1,13 @@
 package hub
 
 import (
+	"context"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // Временный полный sudo для операций, которых нет среди hub-sudo
@@ -90,4 +92,54 @@ func restoreTempSudo(client *ssh.Client) error {
 // fullSudoRestoreHint — вернуть правило вручную на хосте.
 func fullSudoRestoreHint() string {
 	return "sudo sh -c " + shellQuote(restoreSudoScript)
+}
+
+// sudoPasswordWorks — пароль подходит для sudo (проверка без изменений на
+// хосте: sudo -S -v).
+func sudoPasswordWorks(client *ssh.Client, password []byte) bool {
+	in := append(append([]byte(nil), password...), '\n')
+	defer wipe(in)
+	_, err := runRemoteStdin(client, "sudo -k; sudo -S -p '' -v", in)
+	return err == nil
+}
+
+// installSudoCheck — перед первой установкой под пользователем не root:
+// есть ли полный sudo, а если только по паролю — подходит ли пароль
+// (введённый или, при входе по паролю, пароль SSH). Подошёл — он в
+// памяти до конца установки. Нет — ответ для окна: кто, что выполнить
+// самому, был ли введённый пароль неверным. Хост не отвечает — решает
+// само задание.
+func (m *Manager) installSudoCheck(ctx context.Context, hostID int64, sudoPassword string) (map[string]any, bool) {
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil || host.SSHUser == "root" || host.NktVersion != "" {
+		return nil, true
+	}
+	link, err := m.dialHost(ctx, host)
+	if err != nil {
+		return nil, true
+	}
+	defer link.Close()
+	if _, err := runRemote(link.client, "sudo -n true"); err == nil || m.hasHubKey(link.client) {
+		return nil, true
+	}
+	pw := []byte(sudoPassword)
+	if len(pw) == 0 && host.SSHAuthKind == store.HostAuthPassword {
+		pw, _ = m.hostSecret(host)
+	}
+	if len(pw) > 0 && sudoPasswordWorks(link.client, pw) {
+		oneTime.Set(sudoPasswordKey(hostID), pw, hostSecretTTL)
+		wipe(pw)
+		return nil, true
+	}
+	key := "hub.installNeedsSudoPassword"
+	if sudoPassword != "" {
+		key = "hub.installSudoPasswordWrong"
+	}
+	wipe(pw)
+	return map[string]any{
+		"error":        msgs.Tc(ctx, key, host.Name, host.SSHUser),
+		"sudo_needed":  true,
+		"sudo_user":    host.SSHUser,
+		"sudo_command": fullSudoCommand(host.SSHUser),
+	}, false
 }

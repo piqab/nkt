@@ -110,6 +110,10 @@ type BootstrapOptions struct {
 	// DisablePasswordAuth выключает вход по паролю в sshd — только после
 	// того, как вход по ключу проверен новым соединением.
 	DisablePasswordAuth bool `json:"disable_password_auth"`
+	// KeyOnly — только перевод на ключ хаба и выключение входа по паролю,
+	// без пакетов и нового пользователя: первая установка хоста, добавленного
+	// по паролю, без галочки подготовки.
+	KeyOnly bool `json:"-"`
 }
 
 // bootstrapUserRe — имя пользователя уходит в команды useradd/chown и в
@@ -166,18 +170,20 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 	opts BootstrapOptions, secret []byte, report func(key string, args ...any)) (bootstrapResult, error) {
 
 	var res bootstrapResult
-	if err := checkAptHost(client); err != nil {
-		return res, err
-	}
-
 	sudo := sudoPrefix(host.SSHUser)
-
-	if err := installBootstrapPackages(client, sudo, opts.Packages, report); err != nil {
-		return res, err
+	if !opts.KeyOnly {
+		if err := checkAptHost(client); err != nil {
+			return res, err
+		}
+		if err := installBootstrapPackages(client, sudo, opts.Packages, report); err != nil {
+			return res, err
+		}
+		if err := ensureDbusRunning(client, sudo, opts.Packages, report); err != nil {
+			return res, err
+		}
 	}
-
-	if err := ensureDbusRunning(client, sudo, opts.Packages, report); err != nil {
-		return res, err
+	if opts.KeyOnly {
+		report("hub.bootstrapKeyOnly")
 	}
 
 	targetUser := host.SSHUser
@@ -187,6 +193,17 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 			return res, err
 		}
 		targetUser = opts.User
+		// Пароль sudo нового пользователя (по желанию): после сужения хабу
+		// без пароля доступны только его операции, а человеку — sudo со
+		// своим паролем. Хаб его не хранит.
+		if pw, ok := oneTime.Get(userPasswordKey(host.ID)); ok {
+			err := setUserSudoPassword(client, sudo, opts.User, pw)
+			wipe(pw)
+			if err != nil {
+				return res, err
+			}
+			report("hub.bootstrapUserPassword", opts.User)
+		}
 
 		// Ключ оператора — отдельно от ключа хаба и до него: если что-то
 		// пойдёт не так дальше, у человека уже есть свой вход под этой
@@ -256,7 +273,7 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 			// Не срываем подготовку целиком: ключ уже работает, а вход по
 			// паролю просто остался включённым — это ровно то состояние, в
 			// котором хост был до сих пор.
-			report("hub.bootstrapDisablePasswordFailed", err.Error())
+			report("hub.bootstrapDisablePasswordFailed", msgs.Localize(msgs.DefaultLang, err))
 		}
 	}
 	return res, nil
@@ -487,6 +504,8 @@ func (m *Manager) applyBootstrapResult(ctx context.Context, hostID int64, host s
 	if err := m.db.SetHostSecret(ctx, hostID, store.HostAuthKey, secretEnc); err != nil {
 		return err
 	}
+	// Хост на ключе — пароль SSH, который держала память, больше не нужен.
+	oneTime.Delete(sshPasswordKey(hostID))
 	if res.SSHUser != host.SSHUser {
 		if err := m.db.UpdateHost(ctx, hostID, host.Name, host.Addr, host.SSHPort, res.SSHUser, store.HostAuthKey); err != nil {
 			return err
@@ -510,4 +529,19 @@ func lastLines(out string, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.TrimSpace(strings.Join(lines, "; "))
+}
+
+// setUserSudoPassword — пароль пользователю (chpasswd, по stdin) и группа
+// sudo (wheel там, где sudo нет).
+func setUserSudoPassword(client *ssh.Client, sudo, user string, password []byte) error {
+	in := append(append([]byte(user+":"), password...), '\n')
+	defer wipe(in)
+	if out, err := runRemoteStdin(client, sudo+"chpasswd", in); err != nil {
+		return msgs.Errorf("hub.settingUserPassword", user, err, lastLines(out, 3))
+	}
+	cmd := fmt.Sprintf("if getent group sudo >/dev/null; then %[1]susermod -aG sudo %[2]s; elif getent group wheel >/dev/null; then %[1]susermod -aG wheel %[2]s; fi", sudo, user)
+	if out, err := runRemote(client, cmd); err != nil {
+		return msgs.Errorf("hub.settingUserPassword", user, err, lastLines(out, 3))
+	}
+	return nil
 }

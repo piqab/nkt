@@ -10,7 +10,6 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -105,9 +104,9 @@ func (m *Manager) PurgeHost(ctx context.Context, hostID int64, opts PurgeOptions
 		return res
 	}
 
-	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
+	secret, err := m.hostSecret(host)
 	if err != nil {
-		res.Error = msgs.Tc(ctx, "hub.decryptingSSHSecret2", err)
+		res.Error = msgs.Localize(msgs.FromContext(ctx), err)
 		return res
 	}
 	link, err := m.dialHost(ctx, host)

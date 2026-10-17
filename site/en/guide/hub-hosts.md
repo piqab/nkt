@@ -13,24 +13,29 @@ title: Hub hosts
 - **Name** — a label in the UI.
 - **Address** — an IP or a DNS name.
 - **SSH port** — usually 22.
-- **SSH user** — `root` or a user with passwordless `sudo` (`NOPASSWD`) —
-  that's how typical VPS images are set up (`ubuntu`, `debian`, `admin`
-  with cloud-init). For a non-root user the installer adds `sudo -n`
-  itself; a `sudo` that asks for a password fails with a clear error
-  instead of hanging.
+- **SSH user** — `root` or a user with `sudo`: passwordless (`NOPASSWD`,
+  as in typical VPS images `ubuntu`, `debian`, `admin` with cloud-init) or
+  with a password — then the hub asks for the sudo password once (see
+  [Sudo and passwords](#sudo-and-passwords)).
 - **Login method**:
   - **the hub generates a key** (default, recommended) — after saving,
     the hub shows the public key and ready commands with a "copy"
     button: one to run on the host itself (creates `~/.ssh`, appends the
     key to `authorized_keys`, sets permissions), another — from your
     machine over `ssh`. The private half never leaves the hub. The key
-    can be shown again with the "key" button in the host row.
+    can be shown again with the "key" button in the host row. Instead of
+    the commands you can **enter the SSH password once** in the same
+    window: the hub appends the key itself, checks login with it and
+    starts the installation; the password is not stored.
   - **your own private key** — the contents of `id_ed25519`/`id_rsa` (not
     `.pub`), OpenSSH/PEM format, without a passphrase. The form checks the
     key right away and names the reason for a rejection: a `.pub` pasted,
     PuTTY `.ppk` format (export to OpenSSH with puttygen), a key with a
     passphrase (remove it with `ssh-keygen -p`).
-  - **password** — a regular SSH password.
+  - **password** — a regular SSH password. The hub **does not write it to
+    its database**: only the first installation needs it, and that
+    switches the host to a key; until then it lives in the hub's memory
+    (up to an hour; after a hub restart, enter it again in Edit).
 
 ### Prepare a new host
 
@@ -52,11 +57,41 @@ refuses honestly.
    public half to `authorized_keys` and verifies login with a new
    connection (for non-root — `sudo -n` too). Only then is the host record
    switched to the key; if the check fails, the password keeps working.
-4. **Disable password login** (optional) — a drop-in
+4. **Disable password login** — a drop-in
    `/etc/ssh/sshd_config.d/99-nkt-no-password.conf`, checked with
    `sshd -t`, a reload without dropping sessions and one more key login
    check. If the daemon stops letting in after the reload, the drop-in is
    removed. A failure here doesn't abort the installation.
+
+Without the preparation box, a host added with a password is still
+switched to the hub key (step 3) and loses password login (step 4) on its
+first installation — without packages or a new user.
+
+### Sudo and passwords
+
+For a non-root user the New host window offers:
+
+- **sudo after the installation** — **narrow** (default, see
+  [Narrow sudo](#narrow-sudo)) or **full, passwordless**: the hub leaves
+  it as is, and “Narrow sudo” can be pressed later;
+- **sudo password** — if the user's sudo asks for one. With password
+  login the SSH password is used by default; the field is for a different
+  sudo password. Before installing, the hub checks it (`sudo -S -v`,
+  nothing changes on the host); if it is wrong or missing, a window asks
+  for it or offers a command to grant sudo yourself. The job puts a
+  temporary “full passwordless sudo” rule in place, installs nkt and
+  leaves what you chose (narrow or full); if the installation fails, the
+  previous state of `sudoers.d/nkt-hub` comes back;
+- **sudo password of the new user** from preparation (optional) — the hub
+  sets it with `chpasswd` and adds the user to the `sudo` (`wheel`) group,
+  so you can run `sudo` with a password yourself after narrowing. Without
+  it the new user has no password.
+
+The passwords go only to the installation: the hub keeps them in memory
+until it ends, never in its database, job parameters or log. Your own
+sudo password keeps working after narrowing: the narrow rule replaces
+only the hub's file, not your password sudo. What gets turned off is
+password login **over SSH**, not the account password itself.
 
 ### Switches in the host form
 
@@ -215,7 +250,8 @@ does not light it.
 people, other keys in `authorized_keys`, a compromised application running
 as it. The hub itself gains almost nothing from it, since it is root on the
 host through nkt anyway. So the **first installation** of nkt as a user
-with full sudo narrows it right away:
+with full sudo narrows it right away (unless full sudo was chosen when
+adding the host):
 
 - the hub's public signing key goes to `/etc/nkt/hub-sign.pub` (root,
   0644); the key is derived from the hub's master key;
