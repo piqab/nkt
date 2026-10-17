@@ -3705,7 +3705,11 @@
     "probeError": "error",
     "probeCert": " · certificate {{issuer}} until {{date}}",
     "flyAlone": "A Traffic Fly gateway goes on its own VPS: its 80/443 belong to the router, so it doesn't combine with webhooks, API and callbacks (outside checks are fine).",
-    "flyInstallHint": "The gateway needs no name or certificate: the edge listens only to the hub tunnel (8444), and the nkt-fly service to WireGuard and route ports."
+    "flyInstallHint": "The gateway needs no name or certificate: the edge listens only to the hub tunnel (8444), and the nkt-fly service to WireGuard and route ports.",
+    "sudoPassword": "Sudo password of user {{user}} — used once, never stored",
+    "sudoPasswordHint": "The hub grants full sudo only for the installation and puts the previous rule back afterwards, on success and on failure alike.",
+    "sudoCommand": "Or run this on the host yourself (as root or with the sudo password) and press Install without a password:",
+    "sudoCommandHint": "After the installation press “Narrow sudo” for the host and the hub puts the narrow rule back."
   },
   "bulk": {
     "selected_one": "{{count}} selected",
