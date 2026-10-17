@@ -114,7 +114,7 @@ interface CertStatus {
 interface GatewayStatus {
   edge_id: number
   connected: boolean
-  status?: { revision: number; now: number; routes: RouteStats[]; peers?: PeerStats[]; errors?: string[]; certs?: CertStatus[] }
+  status?: { revision: number; version?: string; now: number; routes: RouteStats[]; peers?: PeerStats[]; errors?: string[]; certs?: CertStatus[] }
   error?: string
 }
 
@@ -357,6 +357,11 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
                   <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <strong className="mono">{g.name}</strong>
                     {g.connected ? <Tag color="success">{t('fly.gwConnected')}</Tag> : <Tag color="error">{t('fly.gwOffline')}</Tag>}
+                    {st?.status && (
+                      <Tooltip title={t('fly.gwVersionHint')}>
+                        <Tag>{st.status.version ? `nkt-edge ${st.status.version}` : t('fly.gwVersionOld')}</Tag>
+                      </Tooltip>
+                    )}
                     {tunnels.length > 0 && <span className="small muted">{t('fly.tunnelsUp', { up, total: tunnels.length })}</span>}
                     {(st?.status?.errors ?? []).map((e) => (
                       <Tag key={e} color="error">

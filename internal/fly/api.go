@@ -22,12 +22,23 @@ const (
 // KeyResponse — публичный ключ (закрытый не покидает машину).
 type KeyResponse struct {
 	PublicKey string `json:"public_key"`
+	// Version — версия nkt-edge шлюза (у хоста — пусто).
+	Version string `json:"version,omitempty"`
 }
+
+// CheckPath80 — служебный адрес на порту 80 шлюза для имён с сертификатом
+// на шлюзе: хаб запрашивает его снаружи и так узнаёт, что DNS имени
+// указывает на шлюз и порт 80 открыт — то, что нужно Let's Encrypt.
+const CheckPath80 = "/.well-known/nkt-fly-check"
+
+// CheckReply80 — ответ шлюза на CheckPath80.
+const CheckReply80 = "nkt-fly ok"
 
 // GatewayStatus — сводка шлюза для карты.
 type GatewayStatus struct {
 	Revision  int64        `json:"revision"`
 	PublicKey string       `json:"public_key,omitempty"`
+	Version   string       `json:"version,omitempty"`
 	Now       int64        `json:"now"`
 	Routes    []RouteStats `json:"routes"`
 	Peers     []PeerStats  `json:"peers"`

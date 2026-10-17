@@ -4705,6 +4705,8 @@
     "tlsTag": "TLS on gateway",
     "certPending": "certificate not requested yet",
     "certError": "certificate not issued: {{error}}",
-    "certUntil": "certificate until {{date}}"
+    "certUntil": "certificate until {{date}}",
+    "gwVersionHint": "The nkt-edge version on the gateway. To update: Deployments → nkt-edge → Reinstall.",
+    "gwVersionOld": "nkt-edge older than 1.13.25"
   }
 }

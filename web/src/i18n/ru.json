@@ -4727,6 +4727,8 @@
     "tlsTag": "TLS на шлюзе",
     "certPending": "сертификат ещё не запрошен",
     "certError": "сертификат не выпущен: {{error}}",
-    "certUntil": "сертификат до {{date}}"
+    "certUntil": "сертификат до {{date}}",
+    "gwVersionHint": "Версия nkt-edge на шлюзе. Обновить — «Выкладки» → nkt-edge → «Переустановить».",
+    "gwVersionOld": "nkt-edge старше 1.13.25"
   }
 }

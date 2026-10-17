@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.26 — 2026-10-18
+
+- **Traffic Fly: gateway certificate checks before applying.** When a
+  route has a gateway certificate, Dry run and Apply refuse a gateway
+  older than 1.13.25 (an old gateway used to skip the box silently) and
+  check from outside that the name's DNS points to the gateway and its
+  port 80 answers, with a clear warning in the job log instead of a vague
+  Let's Encrypt error. The gateway reports its version, shown in Gateways.
+
 ## v1.13.25 — 2026-10-18
 
 - **Traffic Fly: the gateway certificate was not issued** (“no viable

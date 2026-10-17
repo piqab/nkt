@@ -180,3 +180,12 @@ func TestFlyTunnelStates(t *testing.T) {
 		t.Fatalf("no handshake: %s", got)
 	}
 }
+
+func TestFlyVersionAtLeast(t *testing.T) {
+	min := [3]int{1, 13, 25}
+	for v, want := range map[string]bool{"": false, "1.13.24": false, "1.12.9": false, "1.13.25": true, "1.13.30": true, "1.14.0": true, "2.0.0": true, "dev": true} {
+		if got := flyVersionAtLeast(v, min); got != want {
+			t.Errorf("%q: %v", v, got)
+		}
+	}
+}

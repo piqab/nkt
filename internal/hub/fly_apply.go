@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -91,6 +94,9 @@ func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			return err
 		}
 		jc.Log("fly.gatewayReady", edgeName(st), ep)
+		if err := flyCheckGatewayTLS(ctx, jc, d, g, edgeName(st), key.Version, ep); err != nil {
+			return err
+		}
 		gws = append(gws, &gwInfo{g: g, st: st, pub: key.PublicKey, endpoint: ep, sessOK: true})
 	}
 
@@ -267,15 +273,8 @@ func (s *Server) flyHostReady(ctx context.Context, hostID int64, name string) er
 	if h.NktVersion == "" {
 		return msgs.Errorf("fly.hostNoNkt", name)
 	}
-	if v, ok := parseSemver(h.NktVersion); ok {
-		for i := range v {
-			if v[i] != flyMinHostVersion[i] {
-				if v[i] < flyMinHostVersion[i] {
-					return msgs.Errorf("fly.hostTooOld", name, h.NktVersion)
-				}
-				break
-			}
-		}
+	if !flyVersionAtLeast(h.NktVersion, flyMinHostVersion) {
+		return msgs.Errorf("fly.hostTooOld", name, h.NktVersion)
 	}
 	return nil
 }
@@ -317,4 +316,74 @@ func isTimeout(err error) bool {
 		return true
 	}
 	return strings.Contains(err.Error(), "Client.Timeout exceeded")
+}
+
+// flyMinTLSGatewayVersion — с какой версии шлюз выпускает сертификаты сам
+// (1.13.23 — сертификат на шлюзе, 1.13.25 — исправлен выпуск).
+var flyMinTLSGatewayVersion = [3]int{1, 13, 25}
+
+// flyVersionAtLeast — версия не старше min; пустая — старая; непонятная
+// (dev-сборка) — годится.
+func flyVersionAtLeast(v string, min [3]int) bool {
+	if v == "" {
+		return false
+	}
+	p, ok := parseSemver(v)
+	if !ok {
+		return true
+	}
+	for i := range p {
+		if p[i] != min[i] {
+			return p[i] > min[i]
+		}
+	}
+	return true
+}
+
+// flyCheckGatewayTLS — у шлюза есть маршруты с сертификатом на шлюзе:
+// версия шлюза это умеет (иначе — отказ: старый шлюз галочку молча
+// пропустит), а имена указывают на шлюз и его порт 80 открыт снаружи —
+// это нужно Let's Encrypt (иначе — предупреждение: хаб может и не
+// выходить в интернет).
+func flyCheckGatewayTLS(ctx context.Context, jc *jobs.Context, d FlyDoc, g FlyGateway, name, version, endpoint string) error {
+	var names []string
+	for _, r := range d.Routes {
+		if r.Gateway == g.EdgeID && r.TLS {
+			names = append(names, r.Names...)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	if !flyVersionAtLeast(version, flyMinTLSGatewayVersion) {
+		if version == "" {
+			version = "?"
+		}
+		return msgs.Errorf("fly.gatewayTooOld", name, version)
+	}
+	gwIP, _, _ := net.SplitHostPort(endpoint)
+	client := &http.Client{Timeout: 6 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for _, n := range names {
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		ips, err := net.DefaultResolver.LookupHost(cctx, n)
+		cancel()
+		if err != nil || !slices.Contains(ips, gwIP) {
+			jc.Log("fly.tlsDNS", n, strings.Join(ips, ", "), gwIP)
+			continue
+		}
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+n+fly.CheckPath80, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			jc.Log("fly.tlsPort80", n, err.Error())
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64))
+		resp.Body.Close()
+		if strings.TrimSpace(string(body)) != fly.CheckReply80 {
+			jc.Log("fly.tlsPort80", n, resp.Status)
+			continue
+		}
+		jc.Log("fly.tlsReady", n)
+	}
+	return nil
 }
