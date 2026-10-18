@@ -353,10 +353,20 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
     if (ok) void dispatch({ op: 'switch', route: r.id, target: tg.id })
   }
 
+  /** Сбросить черновик — с вопросом, если в нём что-то есть. */
+  async function discardDraft(): Promise<boolean> {
+    if (draft.length === 0) return true
+    const ok = await confirmAction(t('fly.draftDiscardText', { n: draft.length }), {
+      title: t('fly.draftDiscardTitle'),
+      okText: t('fly.draftDiscardOk'),
+      cancelText: t('fly.draftKeep'),
+    })
+    if (ok) setDraft([])
+    return ok
+  }
+
   async function leaveMapEdit() {
-    if (draft.length && !(await confirmAction(t('fly.draftDiscardAsk', { n: draft.length }), { okText: t('fly.draftDiscard') }))) return
-    setDraft([])
-    setMapEdit(false)
+    if (await discardDraft()) setMapEdit(false)
   }
 
   return (
@@ -425,8 +435,8 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
                     <Button size="small" onClick={() => setDraft(draft.slice(0, -1))}>
                       {t('fly.draftUndo')}
                     </Button>
-                    <Button size="small" onClick={() => setDraft([])}>
-                      {t('fly.draftDiscard')}
+                    <Button size="small" danger onClick={() => void discardDraft()}>
+                      {t('fly.draftDiscard', { n: draft.length })}
                     </Button>
                   </>
                 )}
@@ -1062,12 +1072,22 @@ function FlyMap({
       <g
         key={key}
         transform={`translate(${X[col]},${cy - 17})`}
-        style={{ cursor: draggable ? 'grab' : opts.onClick ? 'pointer' : 'default', opacity: opts.ghost ? 0.4 : 1, touchAction: draggable ? 'none' : undefined }}
+        style={{ cursor: draggable ? 'grab' : opts.onClick ? 'pointer' : 'default', opacity: opts.ghost ? 0.4 : 1 }}
         onClick={draggable ? undefined : opts.onClick}
         onPointerDown={
           draggable
             ? (e) => {
                 if (e.button !== 0) return
+                // Без этого браузер начинает выделять подписи, а потом сам
+                // тащит выделенный текст и обрывает перетаскивание
+                // (pointercancel). Захват — чтобы движения шли сюда, даже
+                // когда указатель вышел за карту.
+                e.preventDefault()
+                try {
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                } catch {
+                  // нет захвата — хватит обработчиков окна
+                }
                 press.current = { i: opts.index!, sx: e.clientX, sy: e.clientY, started: false, label }
               }
             : undefined
@@ -1137,7 +1157,23 @@ function FlyMap({
   return (
     <div>
       <div style={{ overflowX: 'auto' }}>
-        <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 640, maxWidth: 1100, height: 'auto' }} role="img" aria-label={t('fly.map')}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ width: '100%', minWidth: 640, maxWidth: 1100, height: 'auto',
+            // В правке: без выделения подписей и без прокрутки касанием по
+            // карте — иначе браузер забирает жест себе (pointercancel).
+            // touch-action на элементах внутри SVG Chrome не учитывает,
+            // поэтому — на всю карту.
+            userSelect: editing ? 'none' : undefined,
+            WebkitUserSelect: editing ? 'none' : undefined,
+            touchAction: editing ? 'none' : undefined,
+          }}
+          role="img"
+          aria-label={t('fly.map')}
+          onDragStart={editing ? (e) => e.preventDefault() : undefined}
+          onMouseDown={editing ? (e) => (e.target as Element).closest('[data-fly-target]') && e.preventDefault() : undefined}
+        >
           {lines}
           {gwIDs.map((id, i) => {
             const g = gateways.find((x) => x.edge_id === id)

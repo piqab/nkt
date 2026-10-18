@@ -4738,8 +4738,7 @@
     "draftApplyTitle": "Map changes: {{n}}",
     "draftApplyOk": "Apply",
     "draftUndo": "Undo",
-    "draftDiscard": "Discard",
-    "draftDiscardAsk": "Discard unapplied map changes ({{n}})?",
+    "draftDiscard": "Discard draft ({{n}})",
     "jobOps": "changes: {{n}}",
     "jobFailed": "job #{{id}} failed — log",
     "secShort": "s",
@@ -4777,6 +4776,10 @@
       "edited": "edited",
       "removed": "removed"
     },
-    "draftApplyHint": "One new revision and one job in the Traffic Fly queue: the operations are applied to the revision current at run time, then pushed to gateways and hosts. Progress shows as a spinner on the map and in the job log."
+    "draftApplyHint": "One new revision and one job in the Traffic Fly queue: the operations are applied to the revision current at run time, then pushed to gateways and hosts. Progress shows as a spinner on the map and in the job log.",
+    "draftDiscardTitle": "Discard map changes?",
+    "draftDiscardText": "{{n}} unapplied changes will be lost. The saved revision stays as it is.",
+    "draftDiscardOk": "Discard",
+    "draftKeep": "Keep editing"
   }
 }
