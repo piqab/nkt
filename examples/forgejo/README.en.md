@@ -1,5 +1,7 @@
 # Forgejo + PostgreSQL: web through the site, SSH to the outside, no install wizard
 
+> **WARNING:** this example uses a third-party repository and images — their security and stability are not guaranteed. Review them yourself before deploying to production.
+
 [Forgejo](https://forgejo.org) is a community git server (Codeberg). The
 project has no compose file for deployment, so it is here:
 [`deploy/docker-compose.yml`](deploy/docker-compose.yml): Forgejo 16.0 (the

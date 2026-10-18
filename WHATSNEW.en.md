@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.37 — 2026-10-18
+
+- **`# WARNING` lines are red and bold.** In the pipeline description and
+  config editors, in diffs before saving and in version history, a line
+  starting with `# WARNING` stands out — handy for flagging danger in your
+  own descriptions.
+- **Deployment examples warn about third-party code.** Every example (and
+  the description the Examples menu inserts) starts with two `# WARNING`
+  lines in Russian and English: the repository and images are third-party
+  and their security and stability are not guaranteed. The READMEs carry
+  the same warning.
+- **New example: Authorizer + PostgreSQL.** A sign-in and user server
+  (OAuth2/OIDC), version 2.4.2: our own compose file (theirs builds the
+  image from source and expects variables v2 does not read), settings as
+  flags from the pipeline's `.env`, the site through the proxy and a
+  commented-out Traffic Fly variant.
+- **httpbin uses the `cyd01/httpbin` image.** The example pipeline
+  overrides the image to `cyd01/httpbin:latest` (amd64 only; for arm64
+  remove the `images:` block).
+
 ## v1.13.36 — 2026-10-18
 
 - **“Hide sensitive data” covers the newer sections too.** Privacy mode now

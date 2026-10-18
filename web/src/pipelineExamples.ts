@@ -15,6 +15,9 @@ export interface PipelineExample {
   ports?: Record<string, string[]>
   envKeys?: Record<string, string[]>
   waitTimeout?: string
+  /** Добавить закомментированный вариант входа через Traffic Fly (блок
+   * fly:) с HTTP-проверкой по этому пути. */
+  flyCheckPath?: string
   /** Строки шаблона .env (в описание — комментарием). */
   // Строки .env-шаблона; {ключ} в угловых скобках — подсказка из
   // deploy.envPh.* (см. envTemplateLines), на языке интерфейса.
@@ -23,6 +26,13 @@ export interface PipelineExample {
 
 const NKT = 'https://github.com/piqab/nkt'
 
+/** Строки-предупреждения в начале описания из примера — те же, что в
+ * pipeline.yaml примеров в examples/. */
+export const EXAMPLE_WARNING = [
+  '# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.',
+  '# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.',
+]
+
 export const PIPELINE_EXAMPLES: PipelineExample[] = [
   {
     key: 'httpbin',
@@ -30,6 +40,9 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     project: 'httpbin',
     readme: `${NKT}/tree/main/examples/httpbin`,
     site: { service: 'httpbin', port: 8080 },
+    // Только latest и только amd64; на arm64 — убрать (останется
+    // go-httpbin из compose-файла).
+    images: { httpbin: 'cyd01/httpbin:latest' },
   },
   {
     key: 'uptimekuma',
@@ -97,6 +110,24 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     readme: `${NKT}/tree/main/examples/wordpress`,
     site: { service: 'wordpress', port: 80 },
     envTemplate: ['DB_PASSWORD=<{wpDbPassword}>', 'DB_ROOT_PASSWORD=<{mariadbRootPassword}>'],
+  },
+  {
+    key: 'authorizer',
+    link: `${NKT}/blob/main/examples/authorizer/deploy/docker-compose.yml`,
+    project: 'authorizer',
+    readme: `${NKT}/tree/main/examples/authorizer`,
+    site: { service: 'authorizer', port: 8080 },
+    flyCheckPath: '/healthz',
+    envTemplate: [
+      'AUTH_DOMAIN=authorizer.example.com',
+      'ALLOWED_ORIGINS=https://authorizer.example.com',
+      'CLIENT_ID=<openssl rand -hex 16>',
+      'CLIENT_SECRET=<openssl rand -hex 32>',
+      'ADMIN_SECRET=<openssl rand -hex 32>',
+      'JWT_SECRET=<openssl rand -hex 32>',
+      'ENCRYPTION_KEY=<openssl rand -hex 32>',
+      'POSTGRES_PASSWORD=<{dbPassword}>',
+    ],
   },
   {
     key: 'plausible',

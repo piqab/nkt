@@ -319,13 +319,20 @@ placeholders `<service from compose>` and `<container port>` in `site:`:
 
 | Example | What it shows |
 |---|---|
-| httpbin | one container |
+| httpbin | one container; the image is overridden (`images`) to `cyd01/httpbin:latest` — amd64 only |
 | Uptime Kuma | the project's compose file as is, data in `./data` |
 | umami + PostgreSQL | secrets from `.env` (`env_keys`), a pinned version (`images`) |
 | n8n + PostgreSQL | three services, a file alongside (`files`), everything from the project's `.env` |
 | Forgejo + PostgreSQL | no install wizard: the administrator comes from `.env` through a one-shot service; a second port to the outside, SSH 2222 (`ports` with `0.0.0.0`) |
 | WordPress + MariaDB | a site behind the HTTPS proxy (`X-Forwarded-Proto`) |
 | Plausible | three services with ClickHouse, a config directory (`files`) |
+| Authorizer + PostgreSQL | configuration by startup flags only — from `.env` in `command:`; a commented-out variant entering through Traffic Fly (`fly:`) |
+
+Every example starts with `# WARNING:` lines (in Russian and English): it
+uses a third-party repository and images whose security and stability are
+not guaranteed. Lines starting with `# WARNING` are drawn **red and bold**
+in the description and config editor, in diffs and in version history —
+you can mark warnings in your own descriptions the same way.
 
 ![Examples](/screens/en/deploy-examples.png)
 
@@ -413,7 +420,9 @@ warnings (`?`, `!`) bold orange. Nothing is recorded in the deployment history.
 **Example: httpbin.** The nkt repository has
 [`examples/httpbin`](https://github.com/piqab/nkt/tree/main/examples/httpbin):
 a [go-httpbin](https://github.com/mccutchen/go-httpbin) stack on the ready
-image `mccutchen/go-httpbin:2.25.0` and a pipeline for it. It deploys
+image `mccutchen/go-httpbin:2.25.0` and a pipeline for it (the pipeline
+overrides the image to `cyd01/httpbin:latest`; for arm64 remove its
+`images:` block). It deploys
 straight from the link
 `https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml`
 (stack name `httpbin`) or with **"Examples" → "httpbin"** in the new

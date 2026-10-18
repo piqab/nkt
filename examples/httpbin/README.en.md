@@ -1,5 +1,7 @@
 # httpbin — a compose stack deployed through the nkt hub
 
+> **WARNING:** this example uses a third-party repository and images — their security and stability are not guaranteed. Review them yourself before deploying to production.
+
 [httpbin](https://httpbin.org) is a service for testing HTTP clients
 (`/get`, `/headers`, `/status/418`, `/delay/2`…). The example shows
 `action: compose` and the "Sites" tab on a ready image.
@@ -26,6 +28,13 @@ clone with a ready image `mccutchen/go-httpbin:2.25.0` from Docker Hub for
 amd64 and arm64. The version is pinned; a new one is deployed by editing the
 tag in `docker-compose.yml` (on ghcr.io go-httpbin's versioned tags end at
 v2.16.1, hence Docker Hub).
+
+The pipeline overrides the image with an `images:` block to
+[cyd01/httpbin](https://hub.docker.com/r/cyd01/httpbin) (`latest`). It has
+no version tags and only an amd64 build: a deployment takes whatever
+`latest` is at the time, and it will not start on an arm64 host. For arm64
+or a pinned version, remove `images:` from `pipeline.yaml` — go-httpbin
+from the compose file stays.
 
 ## 1. Pipeline
 

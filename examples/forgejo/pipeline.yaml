@@ -1,3 +1,5 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
 # Forgejo + PostgreSQL из examples/ репозитория nkt.
 repo: https://github.com/piqab/nkt.git
 ref: main

@@ -1,5 +1,7 @@
 # umami: several services and secrets from .env
 
+> **WARNING:** this example uses a third-party repository and images — their security and stability are not guaranteed. Review them yourself before deploying to production.
+
 [umami](https://umami.is) is web analytics: an app and PostgreSQL. The
 example shows a two-service stack from **someone else's** repository without
 a fork: the compose file is taken from

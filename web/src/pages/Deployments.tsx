@@ -17,7 +17,7 @@ import { SitesPanel } from '../components/SitesPanel'
 import { TrafficFly } from '../components/TrafficFly'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TitleHelp } from '../components/Docs'
-import { PIPELINE_EXAMPLES, envTemplateLines, type PipelineExample } from '../pipelineExamples'
+import { EXAMPLE_WARNING, PIPELINE_EXAMPLES, envTemplateLines, type PipelineExample } from '../pipelineExamples'
 import { msg, tx, type Msg } from '../msg'
 
 interface Deployment {
@@ -858,7 +858,11 @@ function ComposeFromLink({
     const envTemplate = ex?.envTemplate
       ? `\n# ${t('deploy.envTemplateComment')}\n` + envTemplateLines(ex.envTemplate, t).map((l) => `#   ${l}\n`).join('')
       : ''
+    // Примеры — чужие репозитории и образы: предупреждение сверху, на
+    // обоих языках (файл один для всех читателей), красным в редакторе.
+    const warning = ex ? EXAMPLE_WARNING.map((l) => `${l}\n`).join('') : ''
     const yaml =
+      warning +
       (ex ? `# ${t('deploy.exampleComment')}: ${ex.readme}\n` : '') +
       `# compose: ${src}\n` +
       `repo: ${p.repo}\nref: ${p.ref}\n\naction: compose\ncompose:\n  file: ${p.file}\n  project: ${proj}\n` +
@@ -874,6 +878,18 @@ function ComposeFromLink({
       `  #   service: ${site.service}\n` +
       `  #   port: ${site.port}\n` +
       `  #   cert: manual   # ${t('deploy.fromLinkCertComment')}\n` +
+      (ex?.flyCheckPath
+        ? `  # ${t('deploy.fromLinkFlyComment')}\n` +
+          `  # fly:\n` +
+          `  #   - route: ${ex.project}\n` +
+          `  #     kind: https\n` +
+          `  #     names: [${ex.project}.example.com]\n` +
+          `  #     tls: gateway\n` +
+          `  #     service: ${site.service}\n` +
+          `  #     target_port: ${site.port}\n` +
+          `  #     check: http\n` +
+          `  #     check_path: ${ex.flyCheckPath}\n`
+        : '') +
       `\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n` +
       envTemplate
     return yaml

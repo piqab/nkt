@@ -1,0 +1,45 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Authorizer v2 + PostgreSQL из examples/ репозитория nkt.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/authorizer/deploy/docker-compose.yml
+  project: authorizer
+  hosts: [web1]
+  wait_timeout: 5m            # первый старт — миграции базы
+  # Сайт: хаб после выкладки настроит прокси и сертификат (A-запись имени
+  # должна указывать на хост). Имя — то же, что AUTH_DOMAIN в .env.
+  site:
+    domains: [auth.example.com]
+    service: authorizer
+    port: 8080
+
+  # Вариант: вход из интернета через VPS-шлюз Traffic Fly вместо прокси
+  # сайтов. Раскомментируйте fly: и уберите site: целиком — оба сразу не
+  # нужны (два входа и два сертификата на одно имя). A-запись имени — на
+  # адрес шлюза. Сертификат выпускает и продлевает шлюз, authorizer
+  # получает обычный HTTP с X-Forwarded-For / X-Real-IP /
+  # X-Forwarded-Proto: https.
+  # fly:
+  #   - route: authorizer
+  #     gateway: fly-vps        # имя шлюза; один шлюз — можно не писать
+  #     kind: https
+  #     names: [auth.example.com]
+  #     tls: gateway
+  #     service: authorizer     # сервис compose
+  #     target_port: 8080       # порт в контейнере
+  #     check: http
+  #     check_path: /healthz
+
+# .env стека — «Доступ» → «.env стека»:
+#   AUTH_DOMAIN=auth.example.com
+#   ALLOWED_ORIGINS=https://auth.example.com,https://app.example.com
+#   CLIENT_ID=<openssl rand -hex 16>
+#   CLIENT_SECRET=<openssl rand -hex 32>
+#   ADMIN_SECRET=<openssl rand -hex 32>
+#   JWT_SECRET=<openssl rand -hex 32>
+#   ENCRYPTION_KEY=<openssl rand -hex 32>
+#   POSTGRES_PASSWORD=<пароль базы>

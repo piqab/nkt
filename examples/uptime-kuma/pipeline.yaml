@@ -1,3 +1,5 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
 # Uptime Kuma — мониторинг доступности, compose-файл проекта как есть.
 repo: https://github.com/louislam/uptime-kuma.git
 ref: master

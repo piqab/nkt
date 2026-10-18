@@ -3542,6 +3542,10 @@
       "plausible": {
         "title": "Plausible (PostgreSQL + ClickHouse)",
         "hint": "Analytics: three services, ClickHouse configs alongside (files); needs ~2 GB of memory."
+      },
+      "authorizer": {
+        "title": "Authorizer + PostgreSQL",
+        "hint": "Sign-in and users for your apps (OAuth2/OIDC): settings as flags from .env, a Traffic Fly variant commented out."
       }
     },
     "imagesComment": "pinned image versions",
@@ -3658,7 +3662,8 @@
     "secretCAKeep": "empty — keep the current CA",
     "secretCAFile": "From a file…",
     "secretCAClear": "remove the CA",
-    "secretCAHint": "The hub uses the CA when checking images; on deployment the host puts it into its engine's certs.d (/etc/docker/certs.d/<registry>/ca.crt or /etc/containers/certs.d) — system-wide trust is not changed."
+    "secretCAHint": "The hub uses the CA when checking images; on deployment the host puts it into its engine's certs.d (/etc/docker/certs.d/<registry>/ca.crt or /etc/containers/certs.d) — system-wide trust is not changed.",
+    "fromLinkFlyComment": "variant instead of site: — enter through a Traffic Fly gateway: uncomment fly: (then site: is not needed)"
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment deployment webhooks, signed API token requests, a Traffic Fly gateway), and the hub keeps the tunnel to it. There can be several edges.",

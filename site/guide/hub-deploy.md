@@ -304,13 +304,20 @@ Codeberg/Gitea/Forgejo `…/src/branch/…`, их raw-варианты), выб�
 
 | Пример | Что показывает |
 |---|---|
-| httpbin | один контейнер |
+| httpbin | один контейнер; образ подменён (`images`) на `cyd01/httpbin:latest` — только amd64 |
 | Uptime Kuma | compose-файл проекта как есть, данные в `./data` |
 | umami + PostgreSQL | секреты из `.env` (`env_keys`), закреплённая версия (`images`) |
 | n8n + PostgreSQL | три сервиса, файл рядом (`files`), всё из `.env` проекта |
 | Forgejo + PostgreSQL | без мастера установки — администратор из `.env` разовым сервисом; второй порт наружу — SSH 2222 (`ports` с `0.0.0.0`) |
 | WordPress + MariaDB | сайт за HTTPS-прокси (`X-Forwarded-Proto`) |
 | Plausible | три сервиса с ClickHouse, каталог конфигов (`files`) |
+| Authorizer + PostgreSQL | настройки только флагами запуска — из `.env` в `command:`; закомментированный вариант входа через Traffic Fly (`fly:`) |
+
+Каждый пример начинается строками `# WARNING:` (на русском и английском):
+он берёт сторонний репозиторий и образы, их безопасность и стабильность не
+гарантируются. Строки, которые начинаются с `# WARNING`, редактор описаний
+и конфигов, диффы и история версий рисуют **красным и жирным** — так же
+можно помечать предупреждения в своих описаниях.
 
 ![Примеры](/screens/ru/deploy-examples.png)
 
@@ -394,7 +401,8 @@ healthcheck, стек на хосте, сайт (DNS, снаружи, хост, 
 **Пример: httpbin.** В репозитории nkt —
 [`examples/httpbin`](https://github.com/piqab/nkt/tree/main/examples/httpbin):
 стек [go-httpbin](https://github.com/mccutchen/go-httpbin) на готовом образе
-`mccutchen/go-httpbin:2.25.0` и конвейер к нему. Выкладывается прямо по
+`mccutchen/go-httpbin:2.25.0` и конвейер к нему (конвейер подменяет образ
+на `cyd01/httpbin:latest`; для arm64 уберите его блок `images:`). Выкладывается прямо по
 ссылке `https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml`
 (имя стека — `httpbin`) или **«Примеры» → «httpbin»** в окне нового
 конвейера: она заполнит ссылку и имена, останется выбрать хост. Сайт —

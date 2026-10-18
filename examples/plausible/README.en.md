@@ -1,5 +1,7 @@
 # Plausible: three services, configs alongside, ~2 GB of memory
 
+> **WARNING:** this example uses a third-party repository and images — their security and stability are not guaranteed. Review them yourself before deploying to production.
+
 [Plausible CE](https://github.com/plausible/community-edition) is web
 analytics: the app, PostgreSQL and ClickHouse. The project's compose file
 (branch `v3.2.1`: the repository itself pins the version).
