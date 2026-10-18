@@ -177,13 +177,43 @@ when applying.
 
 ## Map and summary
 
-At the top of the tab is the **map**: gateways → routes → hosts →
-targets. Color shows state (green — all alive, yellow — some, red —
+At the top of the tab is the **map**: gateways → routes → targets; the
+host is written before the target name (`web-1 › acme-app:8443`), long
+names are shortened in the middle with the full name in a tooltip. The
+state of the tunnel to the host shows as the target's border color and
+caption (“UDP blocked”, “not configured”). Color shows state (green — all alive, yellow — some, red —
 none), link thickness — active connections; the map refreshes every
 5 s. Click a route for details: targets with check, latency and
 connections, traffic and client count. **Admins** see client addresses
 while there are at most 30 of them; beyond that, only the count. Viewers
 see the map and the client count, not addresses.
+
+### Redirecting on the map
+
+The **Redirect** button (admins) turns on map editing: on the right, a
+**Containers and VMs** panel by host, with search.
+
+- A container from the panel **onto a target** replaces that target with
+  it (keeping the previous target's port).
+- A container **onto a route** adds it to the pool.
+- Clicking a target opens a menu: “Redirect to…” (pick by click — for
+  phones), “Remove from pool”.
+
+Then a window shows the route diff and a choice:
+
+- **Smoothly** (default): the new target is added and applied; once it
+  passes checks the previous one is drained (no new connections), open
+  connections finish, and only then it is removed. If the new one is not
+  alive within 90 seconds, the previous one stays in service with a
+  warning in the log.
+- **At once**: replace and apply in one step, cutting open connections to
+  the previous target. Port ranges allow only this: one target serves and
+  relay ports live in its memory.
+
+“Save and switch” starts a job and opens its log; “Save only” makes a new
+version without applying.
+
+![Redirecting on the map](/screens/en/traffic-fly-redirect.png)
 
 ## Editing, history and applying
 

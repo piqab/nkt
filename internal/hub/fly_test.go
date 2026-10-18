@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/fly"
@@ -246,5 +249,57 @@ func TestPipelineFlyRoute(t *testing.T) {
 	}
 	if !drained || !fresh {
 		t.Fatalf("targets: %+v", r.Targets)
+	}
+}
+
+// Переключение «сразу»: прежняя цель уходит одним шагом (без вывода);
+// «плавно» — остаётся выведенной до проверки новой.
+func TestFlyReconcileImmediate(t *testing.T) {
+	s, _, host := flyTestServer(t)
+	ctx := context.Background()
+	f := deploy.FlySpec{Route: "app", Kind: "https", Names: []string{"app.example.com"}, Port: 443, Service: "web", TargetPort: 8080, Check: "tcp"}
+	cs := map[int64][]flyContainer{host: {{Name: "a", Project: "p", Service: "web"}}}
+	_ = s.pipelineFlyRoute(ctx, &testFlyLog{}, "admin", store.Pipeline{Name: "p"}, "p", f, []targetHost{{ID: host, Name: "web-1"}}, cs)
+	want := []FlyTarget{{HostID: host, Kind: "container", Ref: "b", Port: 8080}}
+	_ = s.flyReconcileTargets(ctx, &testFlyLog{}, "admin", "app", want, false, "")
+	r := s.flyDoc(ctx).Routes[0]
+	if len(r.Targets) != 1 || r.Targets[0].Ref != "b" || r.Targets[0].Drain {
+		t.Fatalf("immediate: %+v", r.Targets)
+	}
+	want = []FlyTarget{{HostID: host, Kind: "container", Ref: "c", Port: 8080}}
+	_ = s.flyReconcileTargets(ctx, &testFlyLog{}, "admin", "app", want, true, "")
+	r = s.flyDoc(ctx).Routes[0]
+	if len(r.Targets) != 2 || !slices.ContainsFunc(r.Targets, func(x FlyTarget) bool { return x.Ref == "b" && x.Drain }) {
+		t.Fatalf("smooth: %+v", r.Targets)
+	}
+}
+
+// Переключение с карты: новая цель без выделенного служебного порта
+// проходит предварительную проверку и запускает задание.
+func TestFlySwitchHandler(t *testing.T) {
+	s, gw, host := flyTestServer(t)
+	ctx := context.Background()
+	d, err := s.flySave(ctx, FlyDoc{Routes: []FlyRoute{{ID: "app", Gateway: gw, Kind: fly.KindHTTPS, Names: []string{"app.example.com"}, Port: 443, Algorithm: fly.AlgoLeastConn,
+		Check: fly.Check{Kind: fly.CheckTCP}, Targets: []FlyTarget{{ID: "t1", HostID: host, Kind: "container", Ref: "a", Port: 8080}}}}}, "admin", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{"base": d.Revision, "smooth": true,
+		"targets": []FlyTarget{{ID: "c1", HostID: host, Kind: "container", Ref: "b", Port: 8080}}})
+	req := httptest.NewRequest(http.MethodPost, "/hub/fly/routes/app/switch", bytes.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "app")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rec := httptest.NewRecorder()
+	defer func() {
+		// Без менеджера заданий запуск падает уже после проверки — это и
+		// нужно: до запуска дошло.
+		if r := recover(); r == nil && rec.Code == http.StatusBadRequest {
+			t.Fatalf("validation failed: %s", rec.Body)
+		}
+	}()
+	s.handleFlySwitch(rec, req)
+	if rec.Code == http.StatusBadRequest {
+		t.Fatalf("validation failed: %s", rec.Body)
 	}
 }

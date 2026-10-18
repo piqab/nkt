@@ -157,6 +157,26 @@ func (s *Server) pipelineFlyRoute(ctx context.Context, jc flyJobLog, user string
 	if diff := flySpecDiff(cur, f, gw.EdgeID); len(diff) > 0 {
 		jc.Log("fly.pipelineDiffers", f.Route, strings.Join(diff, ", "))
 	}
+	return s.flyReconcileTargets(ctx, jc, user, f.Route, want, true, note)
+}
+
+// flyReconcileTargets — цели маршрута routeID привести к want. Те же —
+// ничего не перекладывать, только проверить. Иначе smooth — плавно: новые
+// добавить, прежние вывести, применить; новые ожили — дождаться, пока у
+// прежних закончатся соединения, и убрать их; не ожили — прежние остаются
+// в работе. Не smooth (и всегда у диапазона портов: там одна активная
+// цель) — заменить сразу.
+func (s *Server) flyReconcileTargets(ctx context.Context, jc flyJobLog, user, routeID string, want []FlyTarget, smooth bool, note string) error {
+	log := deployFlyLog{jc}
+	d := s.flyDoc(ctx)
+	idx := slices.IndexFunc(d.Routes, func(r FlyRoute) bool { return r.ID == routeID })
+	if idx < 0 {
+		return msgs.Errorf("fly.routeNotFound", routeID)
+	}
+	cur := d.Routes[idx]
+	if cur.PortTo > cur.Port {
+		smooth = false
+	}
 	wantKeys := map[string]bool{}
 	for _, t := range want {
 		wantKeys[flyTargetKey(t)] = true
@@ -172,13 +192,11 @@ func (s *Server) pipelineFlyRoute(ctx context.Context, jc flyJobLog, user string
 	undrained := !slices.ContainsFunc(cur.Targets, func(t FlyTarget) bool { return t.Drain && wantKeys[flyTargetKey(t)] })
 	if same && undrained {
 		// Ничего не изменилось: не перекладывать, только проверить.
-		jc.Log("fly.pipelineUnchanged", f.Route)
+		jc.Log("fly.pipelineUnchanged", routeID)
 		s.flyPipelineCheck(ctx, jc, cur)
 		return nil
 	}
 
-	// Цели поменялись: новые — добавить, прежние, которых больше нет, —
-	// вывести (новых соединений не получают, открытые доживают).
 	next := cur
 	next.Targets = nil
 	var added, old []string
@@ -190,20 +208,29 @@ func (s *Server) pipelineFlyRoute(ctx context.Context, jc flyJobLog, user string
 			next.Targets = append(next.Targets, t)
 			continue
 		}
-		t.Drain = true
 		old = append(old, t.ID)
-		next.Targets = append(next.Targets, t)
+		if smooth {
+			// Прежняя — выводом: новых соединений не получает, открытые
+			// доживают.
+			t.Drain = true
+			next.Targets = append(next.Targets, t)
+		}
 	}
 	for _, t := range want {
 		if haveKeys[flyTargetKey(t)] {
 			continue
 		}
 		id := t.ID
+		if id == "" {
+			id = fmt.Sprintf("c%d", t.HostID)
+		}
+		base := id
 		for n := 2; used[id]; n++ {
-			id = fmt.Sprintf("%s-%d", t.ID, n)
+			id = fmt.Sprintf("%s-%d", base, n)
 		}
 		used[id] = true
 		t.ID = id
+		t.Drain = false
 		next.Targets = append(next.Targets, t)
 		added = append(added, id)
 	}
@@ -213,18 +240,22 @@ func (s *Server) pipelineFlyRoute(ctx context.Context, jc flyJobLog, user string
 	if err != nil {
 		return err
 	}
-	jc.Log("fly.pipelineTargets", f.Route, len(added), len(old))
+	jc.Log("fly.pipelineTargets", routeID, len(added), len(old))
 	if err := s.flyApplyRun(ctx, log, user, FlyApplyParams{Revision: saved.Revision}); err != nil {
 		return err
 	}
-	if len(old) == 0 {
+	if !smooth || len(old) == 0 {
 		return nil
 	}
-	// Прежние убрать, только когда новые ожили; не ожили за flyAliveWait —
-	// оставить прежние в работе (снять вывод) и сказать.
-	alive := s.flyWaitAlive(ctx, f.Route, added)
+	// Прежние убрать, только когда новые ожили и у прежних кончились
+	// соединения; новые не ожили за flyAliveWait — прежние остаются в
+	// работе (вывод снимается).
+	alive := s.flyWaitAlive(ctx, routeID, added)
+	if alive {
+		s.flyWaitDrained(ctx, routeID, old)
+	}
 	d = s.flyDoc(ctx)
-	idx = slices.IndexFunc(d.Routes, func(r FlyRoute) bool { return r.ID == f.Route })
+	idx = slices.IndexFunc(d.Routes, func(r FlyRoute) bool { return r.ID == routeID })
 	if idx < 0 {
 		return nil
 	}
@@ -243,15 +274,42 @@ func (s *Server) pipelineFlyRoute(ctx context.Context, jc flyJobLog, user string
 	routes = slices.Clone(d.Routes)
 	routes[idx] = r
 	if !alive {
-		jc.Log("fly.pipelineNotAlive", f.Route, int(flyAliveWait.Seconds()))
+		jc.Log("fly.pipelineNotAlive", routeID, int(flyAliveWait.Seconds()))
 	} else {
-		jc.Log("fly.pipelineOldRemoved", f.Route, len(old))
+		jc.Log("fly.pipelineOldRemoved", routeID, len(old))
 	}
 	saved, err = s.flySave(ctx, FlyDoc{Gateways: d.Gateways, Routes: routes}, user, note)
 	if err != nil {
 		return err
 	}
 	return s.flyApplyRun(ctx, log, user, FlyApplyParams{Revision: saved.Revision})
+}
+
+// flyWaitDrained — у выведенных целей ids маршрута не осталось открытых
+// соединений (или прошло flyAliveWait).
+func (s *Server) flyWaitDrained(ctx context.Context, route string, ids []string) {
+	deadline := time.Now().Add(flyAliveWait)
+	for time.Now().Before(deadline) {
+		busy := false
+		for _, g := range s.flyStatuses(ctx) {
+			if g.Status == nil {
+				continue
+			}
+			for _, r := range g.Status.Routes {
+				if r.ID != route {
+					continue
+				}
+				for _, t := range r.Targets {
+					if slices.Contains(ids, t.ID) && t.Active > 0 {
+						busy = true
+					}
+				}
+			}
+		}
+		if !busy || !sleepCtx(ctx, 5*time.Second) {
+			return
+		}
+	}
 }
 
 // flyWaitAlive — все цели ids маршрута живы по сводке шлюза.

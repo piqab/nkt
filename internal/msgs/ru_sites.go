@@ -327,6 +327,8 @@ var ruSitesCatalog = map[string]string{
 	"fly.installTools":                "Ставлю wireguard-tools, nftables и conntrack для Traffic Fly",
 	"fly.toolsFailed":                 "Не поставились wireguard-tools, nftables, conntrack: %s",
 	"fly.toolsOtherBroken":            "Пакеты для Traffic Fly на месте, но apt завершился с ошибкой из-за других пакетов (%s) — их стоит донастроить на хосте: sudo dpkg --configure -a (для grub-pc: sudo dpkg-reconfigure grub-pc)",
+	"fly.routeNotFound":               "маршрута %s нет (или не заданы цели)",
+	"fly.switchTitle":                 "Traffic Fly: переключить цели маршрута %s",
 	"fly.dryWillCreate":               "Traffic Fly: маршрут %s будет создан на шлюзе %s — цели: контейнеры сервиса %s, порт %d",
 	"fly.dryWillReconcile":            "Traffic Fly: маршрут %s есть — после выкладки будут сверены цели (контейнеры сервиса %s); не изменится — не перекладывается",
 	"fly.pipelineHostFailed":          "Traffic Fly: не удалось перечитать контейнеры хоста %s: %s",

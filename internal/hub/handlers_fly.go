@@ -526,3 +526,76 @@ func (s *Server) flyTargetsOf(ctx context.Context, user string, id int64, kind s
 	}
 	return out, nil
 }
+
+// KindFlySwitch — задание «переключить цели маршрута».
+const KindFlySwitch = "fly.switch"
+
+// FlySwitchParams — маршрут, цели, к которым его привести, и как.
+type FlySwitchParams struct {
+	Route   string      `json:"route"`
+	Targets []FlyTarget `json:"targets"`
+	Smooth  bool        `json:"smooth"`
+	Note    string      `json:"note,omitempty"`
+}
+
+// FlySwitchRunner переключает цели маршрута (перетаскивание на карте).
+type FlySwitchRunner struct{ s *Server }
+
+// NewFlySwitchRunner строит исполнителя.
+func NewFlySwitchRunner(s *Server) *FlySwitchRunner { return &FlySwitchRunner{s: s} }
+
+// Run — сверка целей: плавно (новые после проверки, прежние выводом) или
+// сразу.
+func (r *FlySwitchRunner) Run(ctx context.Context, jc *jobs.Context) error {
+	var p FlySwitchParams
+	if err := jc.Params(&p); err != nil {
+		return msgs.Errorf("hub.parsingJob", err)
+	}
+	user := r.s.actingUser(ctx, jc.Job.Author, r.s.firstAdmin(ctx))
+	return r.s.flyReconcileTargets(ctx, jc, user, p.Route, p.Targets, p.Smooth, p.Note)
+}
+
+// handleFlySwitch — POST /hub/fly/routes/{id}/switch {targets, smooth,
+// note, base}: цели маршрута — заданием (с применением).
+func (s *Server) handleFlySwitch(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req struct {
+		Targets []FlyTarget `json:"targets"`
+		Smooth  bool        `json:"smooth"`
+		Note    string      `json:"note"`
+		Base    int64       `json:"base"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	d := s.flyDoc(ctx)
+	if req.Base != d.Revision {
+		writeError(w, http.StatusConflict, msgs.Tc(ctx, "fly.conflict", req.Base, d.Revision))
+		return
+	}
+	i := slices.IndexFunc(d.Routes, func(x FlyRoute) bool { return x.ID == id })
+	if i < 0 || len(req.Targets) == 0 || !flyLabelRe.MatchString(req.Note) {
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "fly.routeNotFound", id))
+		return
+	}
+	// Цели проверяются заранее — так же, как при записи версии.
+	probe := slices.Clone(d.Routes)
+	probe[i].Targets = req.Targets
+	pd := FlyDoc{Gateways: d.Gateways, Routes: probe, Alloc: d.Alloc}
+	pd.normalize()
+	if err := s.flyValidate(ctx, pd); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	user := auth.Username(ctx)
+	jid, err := s.jobs.Start(ctx, jobs.Spec{Kind: KindFlySwitch, TitleKey: "fly.switchTitle", TitleArgs: []any{id}, Queue: "fly", Author: user,
+		Params: FlySwitchParams{Route: id, Targets: req.Targets, Smooth: req.Smooth, Note: req.Note}})
+	s.db.Audit(ctx, user, "fly.switch", id, auditOutcome(err), map[string]any{"targets": len(req.Targets), "smooth": req.Smooth})
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": jid})
+}

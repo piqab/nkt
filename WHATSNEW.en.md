@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.30 — 2026-10-18
+
+- **Traffic Fly: redirect by drag and drop.** A Redirect button on the map
+  and a Containers and VMs panel: a container onto a target replaces it,
+  onto a route adds it to the pool; clicking a target opens a menu
+  (“Redirect to…”, “Remove from pool”). The window shows a diff and a
+  choice: **smoothly** (default: the new target after checks, the previous
+  one drained and removed once its connections finish; if the new one is
+  not alive, the previous stays) or **at once**; “Save and switch” runs a
+  job with a log.
+- **A simpler map:** gateway → route → target, the host before the target
+  name, long names shortened in the middle, tunnel state on the target.
+- A pipeline with `fly:` also waits for drained targets' connections to
+  finish before removing them.
+
 ## v1.13.29 — 2026-10-18
 
 - **Traffic Fly: per-client limits.** A route has “connections per
