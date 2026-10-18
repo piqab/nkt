@@ -88,7 +88,13 @@ type Route struct {
 	// (IPv4-адреса и сети); пусто — со всех. Остальных отсекает шлюз:
 	// маршруты по порту — ядро (их пакеты не идут на цели), по имени —
 	// маршрутизатор. Проверки Let's Encrypt на шлюз проходят всегда.
-	Allow     []string `json:"allow,omitempty"`
+	Allow []string `json:"allow,omitempty"`
+	// MaxConns — не больше стольких одновременных соединений с одного
+	// адреса клиента; Rate — не больше стольких новых соединений в секунду
+	// с одного адреса. 0 — без ограничения. По порту — ядро шлюза, по
+	// имени — маршрутизатор.
+	MaxConns  int      `json:"max_conns,omitempty"`
+	Rate      int      `json:"rate,omitempty"`
 	Algorithm string   `json:"algorithm"`
 	Check     Check    `json:"check"`
 	Targets   []Target `json:"targets"`
@@ -390,6 +396,9 @@ func (r Route) validate(peers map[string]bool) error {
 		}
 	default:
 		return fmt.Errorf("fly: route %s kind %q", r.ID, r.Kind)
+	}
+	if r.MaxConns < 0 || r.MaxConns > 100000 || r.Rate < 0 || r.Rate > 100000 {
+		return fmt.Errorf("fly: route %s: per-client limits", r.ID)
 	}
 	if len(r.Allow) > maxAllow {
 		return fmt.Errorf("fly: route %s: more than %d allowed addresses", r.ID, maxAllow)

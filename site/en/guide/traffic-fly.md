@@ -100,6 +100,57 @@ for a gateway certificate always pass.
 Use it for what the whole internet should not see: VM consoles, service
 ports, admin panels. In a pipeline — the `allow:` field of a `fly:` block.
 
+## Per-client limits
+
+A route has two optional fields:
+
+- **connections per address, at most** — concurrent;
+- **new per second per address, at most** — the rate of new connections
+  (with a burst of the same size).
+
+The gateway drops extra connections itself: the kernel for routes by port
+(before DNAT, the target never sees them), the router for routes by name.
+The route window shows how many were denied. Empty means no limit. Change
+them in the route editor at any time; in a pipeline — `max_conns:` and
+`rate:` in a `fly:` block.
+
+## Performance and security
+
+**Performance.** Measured on the development machine (16 cores, loopback
+and veth in namespaces), not on a VPS — the upper bound of Traffic Fly
+itself, not of your link:
+
+| Path | Result |
+|---|---|
+| route by port (kernel: gateway DNAT → tunnel → host DNAT) | ~17 Gbit/s single stream, ~50 Gbit/s with four |
+| route by name without decryption (the router copies bytes) | ~23 Gbit/s, ~9,000 new connections/s on 4 cores |
+| route by name with a gateway certificate | ~7.9 Gbit/s, ~2,300 new connections/s on 4 cores (client included) |
+
+On a VPS the limit comes earlier from WireGuard encryption (roughly from a
+few hundred Mbit/s on 1 vCPU to a gigabit or more per core) and the
+provider's network. Latency adds the gateway ↔ host path. The measurements
+are reproducible: `go test ./internal/fly -run x -bench Router` and
+`NKT_FLY_BENCH=1 go test ./internal/fly -run DataPathThroughput -v`.
+
+**Security.**
+
+- Private WireGuard and certificate keys never leave their machines; the
+  hub sees only public keys. `nkt-edge` runs unprivileged, `nkt-fly` as
+  root (it needs the network) and takes commands only on loopback with a
+  token.
+- The router is written in Go and reads at most 16 KB of a connection's
+  start within 10 seconds.
+- **A host accepts from the tunnel only what arrived at route service
+  ports**, replies and ICMP: a compromised gateway cannot reach the host's
+  other services or container networks.
+- An allowlist and per-client limits on every route.
+- TCP segment size in the tunnel is clamped to its MTU (MSS), so large
+  packets do not stall even where ICMP is filtered.
+- With a gateway certificate the gateway decrypts TLS, so a compromised
+  gateway sees that traffic. Keep the certificate at the target for
+  sensitive traffic.
+- Traffic Fly has not had an external audit.
+
 ## Pools and balancing
 
 A route has one or more **targets**: a host and what runs on it

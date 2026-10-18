@@ -194,3 +194,35 @@ func TestRouteAllow(t *testing.T) {
 		t.Fatalf("allowed client: %q", got)
 	}
 }
+
+// Ограничения на клиента в маршрутизаторе: одновременные соединения и
+// частота новых с одного адреса.
+func TestRouterClientLimits(t *testing.T) {
+	rc := &routeCounters{clients: map[string]int{}}
+	a := netip.MustParseAddr("198.51.100.7")
+	r := Route{MaxConns: 2}
+	rc.clients["198.51.100.7"] = 2
+	if rc.admit(r, a) {
+		t.Fatal("third connection admitted")
+	}
+	rc.clients["198.51.100.7"] = 1
+	if !rc.admit(r, a) {
+		t.Fatal("second connection denied")
+	}
+	r = Route{Rate: 3}
+	got := 0
+	for i := 0; i < 10; i++ {
+		if rc.admit(r, netip.MustParseAddr("198.51.100.8")) {
+			got++
+		}
+	}
+	if got != 3 {
+		t.Fatalf("rate burst admitted %d, want 3", got)
+	}
+	if !rc.admit(r, netip.MustParseAddr("198.51.100.9")) {
+		t.Fatal("other client limited")
+	}
+	if rc.denied.Load() != 8 {
+		t.Fatalf("denied %d", rc.denied.Load())
+	}
+}

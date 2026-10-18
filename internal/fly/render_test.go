@@ -201,3 +201,20 @@ func TestPortRange(t *testing.T) {
 		t.Error("host overlap accepted")
 	}
 }
+
+// MSS и ограничения на клиента грузятся в nft.
+func TestGatewayLimitsLoad(t *testing.T) {
+	g := sampleGateway()
+	g.Routes[2].MaxConns, g.Routes[2].Rate = 20, 10
+	g.Routes[3].Rate = 50
+	if err := g.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	rules := GatewayNFT(g, nil)
+	for _, want := range []string{"maxseg size set rt mtu", "ct count over 20", "limit rate over 10/second", "limit rate over 50/second"} {
+		if !strings.Contains(rules, want) {
+			t.Fatalf("%q missing:\n%s", want, rules)
+		}
+	}
+	nftLoads(t, rules)
+}
