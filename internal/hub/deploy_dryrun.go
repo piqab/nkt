@@ -246,6 +246,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			body["replace"] = old
 			jc.Log("deploy.dryStackRenamed", old, c.Project, t.Name)
 		}
+		jc.Log("deploy.dryHostChecking", t.Name)
 		code, err := s.composeHostPost(ctx, jc, user, t, "/api/compose/stacks/check", body, &res)
 		switch {
 		case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:

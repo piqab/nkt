@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.40 — 2026-10-18
+
+- **The dry run no longer breaks on image checks.** The hub waited 30
+  seconds for the host, while checking images in the registry
+  (`docker manifest inspect`) took up to half a minute per large image such
+  as `postgres:17-alpine` — the dry run failed with `context deadline
+  exceeded` although the deployment worked. Now the hub waits up to 5
+  minutes for a stack dry run and deployment (and logs that the host is
+  checking the stack), and the host checks images with a direct manifest
+  request to the registry (about a second), in parallel; private images
+  still go through docker.
+
 ## v1.13.39 — 2026-10-18
 
 - **`.env` right in the pipeline description.** An `env:` block in
