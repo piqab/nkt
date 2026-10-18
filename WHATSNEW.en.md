@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.32 — 2026-10-18
+
+- **Packages: if the hub cache cannot fetch it, install directly.** When
+  the hub package cache answers with an error (say `502` for a hosting
+  provider's internal mirror the hub cannot see), any package installation
+  nkt does on a host (Traffic Fly, nkt-edge, preparation, UPS, profiles,
+  UI buttons, system updates) is retried bypassing the cache, with a log
+  line about it. Such installations used to fail.
+- **Traffic Fly: a tidier map.** Columns of equal width (targets are not
+  stretched), and in Redirect mode candidates are drawn as the same blocks
+  as targets — border and dot by state, address and ports — as a fourth
+  column on the right.
+
 ## v1.13.31 — 2026-10-18
 
 - **Host updates use a third of the traffic.** The hub sends the nkt

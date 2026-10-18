@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/piqab/nkt/internal/aptcache"
 	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/guestcred"
 	"github.com/piqab/nkt/internal/msgs"
@@ -67,13 +68,16 @@ func originScript(o cmdOrigin) string {
 	if len(o.argv) == 3 && (o.argv[0] == "bash" || o.argv[0] == "sh") && o.argv[1] == "-c" {
 		body = o.argv[2]
 	} else {
+		// Status-Fd для apt-get добавит общая замена ниже.
 		argv := o.argv
-		if len(argv) > 0 && argv[0] == "apt-get" {
-			argv = append([]string{"apt-get", "-o", "APT::Status-Fd=1"}, argv[1:]...)
-		}
 		q := make([]string, len(argv))
 		for i, a := range argv {
 			q[i] = guestcred.ShellQuote(a)
+		}
+		// Имя apt-get — без кавычек: так его найдёт обёртка повтора мимо
+		// кэша хаба (aptcache.WrapScript).
+		if len(argv) > 0 && argv[0] == "apt-get" {
+			q[0] = "apt-get"
 		}
 		body = strings.Join(q, " ")
 	}
@@ -84,7 +88,9 @@ func originScript(o cmdOrigin) string {
 		body = strings.ReplaceAll(body, "apt-get dist-upgrade", "apt-get dist-upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold")
 	}
 	body = strings.ReplaceAll(body, "apt-get ", "apt-get -o APT::Status-Fd=1 ")
-	b.WriteString(body)
+	// Кэш пакетов хаба не достал пакет (502) — apt-get повторяется мимо
+	// него.
+	b.WriteString(aptcache.WrapScript(body))
 	b.WriteString("\n")
 	return b.String()
 }

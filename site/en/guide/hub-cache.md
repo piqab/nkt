@@ -27,6 +27,11 @@ hosts get no new open ports.
   (`dists/…`) pass through; `https` repositories are tunneled as is — the
   proxy doesn't look inside TLS.
 - The "localhost" row doesn't use the cache.
+- **The cache could not fetch a package** — say, the host installs from a
+  hosting provider's internal mirror the hub cannot see, and the cache
+  answers `502`: any package installation nkt does (Traffic Fly, nkt-edge,
+  host preparation, UPS, profiles, install buttons in the UI) is retried
+  **directly, bypassing the cache**, with a line about it in the log.
 
 "About" → **"Package cache"**: size, file count, hits and misses,
 traffic, how many hosts are on the forward, a limit in gigabytes

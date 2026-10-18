@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/piqab/nkt/internal/aptcache"
 	"github.com/piqab/nkt/internal/hubsudo"
 	"github.com/piqab/nkt/internal/msgs"
 	"io"
@@ -681,4 +682,16 @@ func gzipCached(path string) (string, error) {
 		return "", err
 	}
 	return gz, os.Rename(tmp, gz)
+}
+
+// runApt — команда с apt-get на хосте; упала из-за кэша пакетов хаба
+// (хаб не достаёт зеркало, которое хосту доступно, — 502) — ещё раз мимо
+// кэша.
+func runApt(client *ssh.Client, cmd string) (string, error) {
+	out, err := runRemote(client, cmd)
+	if err != nil && aptcache.ProxyFailed(out) {
+		out2, err2 := runRemote(client, aptcache.Direct(cmd))
+		return out + "\n" + out2, err2
+	}
+	return out, err
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/piqab/nkt/internal/aptcache"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/msgs"
 )
@@ -97,6 +98,13 @@ func (a *HostApplier) installPackage(ctx context.Context, name string) (string, 
 	res, err := a.escape(ctx, "apt-get", "install", "-y", name)
 	if err != nil {
 		return "", err
+	}
+	// Кэш пакетов хаба не достал пакет (502) — ещё раз мимо него.
+	if res.ExitCode != 0 && aptcache.ProxyFailed(res.Stdout+res.Stderr) {
+		args := append(append([]string{"apt-get"}, strings.Fields(aptcache.DirectOpts)...), "install", "-y", name)
+		if r2, err2 := a.escape(ctx, args...); err2 == nil {
+			res = r2
+		}
 	}
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("apt-get install %s: %s", name, lastMeaningfulLine(res.Stderr, res.Stdout))

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/piqab/nkt/internal/aptcache"
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/collect"
@@ -148,14 +149,14 @@ func (s *Server) handleAptDownload(w http.ResponseWriter, r *http.Request) {
 	if wantsJob(r) {
 		script := "export DEBIAN_FRONTEND=noninteractive\napt-get update -qq && apt-get install -y -qq --download-only " + strings.Join(req.Packages, " ")
 		s.startCmdJob(w, r, "apt.downloadJob", []any{strings.Join(req.Packages, " ")}, "apt",
-			cmdjob.Params{Commands: []cmdjob.Command{{Script: script, StepKey: "apt.downloadJob", StepArgs: []any{strings.Join(req.Packages, " ")}}}},
+			cmdjob.Params{Commands: []cmdjob.Command{{Script: aptcache.WrapScript(script), StepKey: "apt.downloadJob", StepArgs: []any{strings.Join(req.Packages, " ")}}}},
 			"apt.download", strings.Join(req.Packages, " "))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 	defer cancel()
 	res, err := RunUnrestrictedEnv(ctx, map[string]string{"DEBIAN_FRONTEND": "noninteractive"}, nil,
-		"sh", "-c", "apt-get update -qq && apt-get install -y -qq --download-only "+strings.Join(req.Packages, " "))
+		"sh", "-c", aptcache.WrapScript("apt-get update -qq && apt-get install -y -qq --download-only "+strings.Join(req.Packages, " ")))
 	user := auth.Username(r.Context())
 	if err == nil && res.ExitCode != 0 {
 		err = msgs.Errorf("pkgInstall.downloadFailed", lastLineOf(res.Output()))
