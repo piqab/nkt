@@ -30,6 +30,10 @@ type FlySpec struct {
 	PortTo int `yaml:"port_to,omitempty"`
 	// TLS — «gateway»: сертификат на шлюзе, цели — HTTP.
 	TLS string `yaml:"tls,omitempty"`
+	// MaxConns / Rate — не больше одновременных и новых в секунду
+	// соединений с одного адреса клиента.
+	MaxConns int `yaml:"max_conns,omitempty"`
+	Rate     int `yaml:"rate,omitempty"`
 	// Allow — белый список адресов клиентов (IPv4, сети).
 	Allow         []string `yaml:"allow,omitempty"`
 	ProxyProtocol bool     `yaml:"proxy_protocol,omitempty"`
@@ -114,6 +118,12 @@ func (f *FlySpec) validate(i int) error {
 	}
 	if f.TLS != "" && (f.TLS != "gateway" || f.Kind != "https" || f.ProxyProtocol) {
 		return msgs.Errorf("deploy.specBad", field("tls"), f.TLS)
+	}
+	if f.MaxConns < 0 || f.MaxConns > 100000 {
+		return msgs.Errorf("deploy.specBad", field("max_conns"), fmt.Sprint(f.MaxConns))
+	}
+	if f.Rate < 0 || f.Rate > 100000 {
+		return msgs.Errorf("deploy.specBad", field("rate"), fmt.Sprint(f.Rate))
 	}
 	if len(f.Allow) > 200 {
 		return msgs.Errorf("deploy.specBad", field("allow"), fmt.Sprint(len(f.Allow)))

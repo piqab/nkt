@@ -74,7 +74,11 @@ type FlyRoute struct {
 	// TLS — сертификат на шлюзе: цели — HTTP с адресом клиента в заголовках.
 	TLS bool `json:"tls,omitempty" yaml:"tls,omitempty"`
 	// Allow — белый список адресов клиентов (IPv4, сети); пусто — все.
-	Allow     []string    `json:"allow,omitempty" yaml:"allow,omitempty"`
+	Allow []string `json:"allow,omitempty" yaml:"allow,omitempty"`
+	// MaxConns / Rate — не больше одновременных и новых в секунду
+	// соединений с одного адреса клиента; 0 — без ограничения.
+	MaxConns  int         `json:"max_conns,omitempty" yaml:"max_conns,omitempty"`
+	Rate      int         `json:"rate,omitempty" yaml:"rate,omitempty"`
 	Algorithm string      `json:"algorithm" yaml:"algorithm"`
 	Check     fly.Check   `json:"check" yaml:"check"`
 	Targets   []FlyTarget `json:"targets" yaml:"targets"`
@@ -242,7 +246,7 @@ func (d FlyDoc) gatewayConfig(g FlyGateway, keys map[int64]string, names map[int
 		if r.Gateway != g.EdgeID {
 			continue
 		}
-		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, PortTo: r.PortTo, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Allow: r.Allow, Algorithm: r.Algorithm, Check: r.Check}
+		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, PortTo: r.PortTo, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Allow: r.Allow, MaxConns: r.MaxConns, Rate: r.Rate, Algorithm: r.Algorithm, Check: r.Check}
 		for _, t := range r.Targets {
 			if !seen[t.HostID] {
 				seen[t.HostID] = true

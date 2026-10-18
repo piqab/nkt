@@ -63,6 +63,13 @@ func GatewayWG(c GatewayConfig, keyFile string) string {
 func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) string {
 	var b strings.Builder
 	b.WriteString("# nkt Traffic Fly — шлюз\ntable ip nkt_fly\ndelete table ip nkt_fly\ntable ip nkt_fly {\n")
+	// MSS по MTU туннеля: SYN и SYN-ACK через туннель — с размером
+	// сегмента, который в нём помещается (иначе крупные пакеты застревают,
+	// если по дороге режут ICMP).
+	fmt.Fprintf(&b, "\tchain mss {\n\t\ttype filter hook forward priority mangle; policy accept;\n\t\toifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t\tiifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t}\n", c.Iface, c.Iface)
+	// Ограничения на клиента для маршрутов по порту: новые соединения
+	// сверх числа или частоты с одного адреса отбрасываются до DNAT.
+	b.WriteString(limitRules(c))
 	b.WriteString("\tchain prerouting {\n\t\ttype nat hook prerouting priority dstnat; policy accept;\n")
 	fmt.Fprintf(&b, "\t\tiifname %q return\n", c.Iface)
 	for i, r := range c.Routes {
@@ -175,6 +182,51 @@ func HostNFT(i HostIface) string {
 	b.WriteString("\t}\n")
 	fmt.Fprintf(&b, "\tchain reply_mark {\n\t\ttype filter hook prerouting priority mangle; policy accept;\n\t\tiifname != %q ct mark 0x%x meta mark set ct mark\n\t}\n", i.Name, i.Mark)
 	fmt.Fprintf(&b, "\tchain local_mark {\n\t\ttype route hook output priority mangle; policy accept;\n\t\tct mark 0x%x meta mark set ct mark\n\t}\n", i.Mark)
+	// Из туннеля — только то, что пришло на служебные порты маршрутов
+	// (прошло DNAT), ответы и ICMP: взломанный шлюз не достучится до
+	// остальных служб хоста и его сетей.
+	for _, ch := range []struct{ name, hook string }{{"guard_in", "input"}, {"guard_fwd", "forward"}} {
+		fmt.Fprintf(&b, "\tchain %s {\n\t\ttype filter hook %s priority filter; policy accept;\n", ch.name, ch.hook)
+		fmt.Fprintf(&b, "\t\tiifname %q ct state established,related accept\n", i.Name)
+		fmt.Fprintf(&b, "\t\tiifname %q ct status dnat accept\n", i.Name)
+		fmt.Fprintf(&b, "\t\tiifname %q ip protocol icmp accept\n", i.Name)
+		fmt.Fprintf(&b, "\t\tiifname %q counter drop\n\t}\n", i.Name)
+	}
+	// MSS по MTU туннеля: ответы контейнеров и машин (forward) и самого
+	// хоста (соединения туннеля по метке).
+	fmt.Fprintf(&b, "\tchain mss {\n\t\ttype filter hook forward priority mangle; policy accept;\n\t\toifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t}\n", i.Name)
+	fmt.Fprintf(&b, "\tchain mss_out {\n\t\ttype filter hook output priority mangle; policy accept;\n\t\tct mark 0x%x tcp flags & syn == syn tcp option maxseg size set %d\n\t}\n", i.Mark, tunnelMSS)
 	b.WriteString("}\n")
 	return b.String()
 }
+
+// limitRules — множества и цепочка ограничений на клиента (маршруты по
+// порту с MaxConns или Rate); пусто — ограничений нет.
+func limitRules(c GatewayConfig) string {
+	var sets, rules strings.Builder
+	for i, r := range c.Routes {
+		if r.Named() || (r.MaxConns == 0 && r.Rate == 0) {
+			continue
+		}
+		n := i + 1
+		for _, proto := range r.protos() {
+			match := fmt.Sprintf("iifname != %q %s dport %s ct state new ", c.Iface, proto, portSpec(r.Port, r.PortTo))
+			if r.Rate > 0 {
+				fmt.Fprintf(&sets, "\tset rate_%d_%s {\n\t\ttype ipv4_addr\n\t\tflags dynamic,timeout\n\t\ttimeout 1m\n\t}\n", n, proto)
+				fmt.Fprintf(&rules, "\t\t%sadd @rate_%d_%s { ip saddr limit rate over %d/second burst %d packets } counter drop\n", match, n, proto, r.Rate, r.Rate)
+			}
+			if r.MaxConns > 0 {
+				fmt.Fprintf(&sets, "\tset conn_%d_%s {\n\t\ttype ipv4_addr\n\t\tflags dynamic\n\t}\n", n, proto)
+				fmt.Fprintf(&rules, "\t\t%sadd @conn_%d_%s { ip saddr ct count over %d } counter drop\n", match, n, proto, r.MaxConns)
+			}
+		}
+	}
+	if rules.Len() == 0 {
+		return ""
+	}
+	return sets.String() + "\tchain limits {\n\t\ttype filter hook prerouting priority mangle; policy accept;\n" + rules.String() + "\t}\n"
+}
+
+// tunnelMSS — размер TCP-сегмента в туннеле: MTU wg-quick по умолчанию
+// 1420 минус заголовки IP и TCP.
+const tunnelMSS = 1380

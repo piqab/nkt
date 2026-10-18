@@ -596,6 +596,7 @@ rest is not overwritten.
 | `tls` | `gateway` — certificate on the gateway (`https` only, exact names) |
 | `proxy_protocol` | PROXY protocol v2 to the target (not with `tls`) |
 | `allow` | Allowed client addresses (IPv4, networks); empty — all |
+| `max_conns`, `rate` | At most this many concurrent and new-per-second connections per address |
 | `service`, `target_port` | The compose service and its port in the container (equals `port` for a range) |
 | `check`, `check_path`, `check_port` | `tcp` (default; `none` for `udp`), `http` with a path, `none` |
 

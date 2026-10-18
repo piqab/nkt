@@ -112,7 +112,7 @@ func plainBackend(t *testing.T, name string) (string, func()) {
 	return ln.Addr().String(), stop
 }
 
-func selfSigned(t *testing.T) tls.Certificate {
+func selfSigned(t testing.TB) tls.Certificate {
 	k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "app.example.com"}, DNSNames: []string{"app.example.com"},
 		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour)}

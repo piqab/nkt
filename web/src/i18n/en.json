@@ -4717,6 +4717,11 @@
     "fieldAllow": "Allowed client addresses (empty — all)",
     "allowHint": "IPv4 addresses and networks. The gateway cuts everyone else itself: the kernel for routes by port, the router for routes by name. Let's Encrypt checks always pass.",
     "allowTag": "only {{n}} addr.",
-    "deniedN": "denied: {{n}}"
+    "deniedN": "denied: {{n}}",
+    "fieldMaxConns": "Connections per address, at most",
+    "fieldRate": "New per second per address, at most",
+    "limitsHint": "Empty means no limit. The gateway drops extra connections itself: the kernel for routes by port, the router for routes by name. Against floods from one address.",
+    "maxConnsTag": "≤ {{n}} conn/addr",
+    "rateTag": "≤ {{n}} new/s"
   }
 }

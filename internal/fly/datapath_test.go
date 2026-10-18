@@ -2,6 +2,7 @@ package fly
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,12 +34,20 @@ func TestDataPathRealIP(t *testing.T) {
 		Routes: []Route{{ID: "svc", Kind: KindTCPUDP, Port: 2222, Algorithm: AlgoSourceHash, Check: Check{Kind: CheckNone},
 			Targets: []Target{{ID: "t", Host: "10.77.1.2", Port: 40001}}},
 			{ID: "local", Kind: KindTCP, Port: 3333, Algorithm: AlgoRoundRobin, Check: Check{Kind: CheckNone},
-				Targets: []Target{{ID: "t", Host: "10.77.1.2", Port: 40002}}}}}
+				Targets: []Target{{ID: "t", Host: "10.77.1.2", Port: 40002}}},
+			// Ограничение частоты: не больше 2 новых соединений в секунду
+			// с одного адреса.
+			{ID: "lim", Kind: KindTCP, Port: 4444, Rate: 2, Algorithm: AlgoRoundRobin, Check: Check{Kind: CheckNone},
+				Targets: []Target{{ID: "t", Host: "10.77.1.2", Port: 40001}}},
+			// Не больше 2 одновременных соединений с одного адреса.
+			{ID: "cap", Kind: KindTCP, Port: 5555, MaxConns: 2, Algorithm: AlgoRoundRobin, Check: Check{Kind: CheckNone},
+				Targets: []Target{{ID: "t", Host: "10.77.1.2", Port: 40003}}}}}
 	host := HostIface{Name: "nkt-fly1", Address: "10.77.1.2/24", Gateway: Peer{PublicKey: keyC, Address: "10.77.1.1"},
 		Endpoint: "203.0.113.1:51820", Mark: HostMarkBase + 1, Table: HostTableBase + 1,
 		Services: []Service{{Port: 40001, Proto: "tcp", Addr: "172.30.0.5", ToPort: 8080}, {Port: 40001, Proto: "udp", Addr: "172.30.0.5", ToPort: 8080},
 			// Цель — сам хост (его адрес в туннеле): ответы — через output.
-			{Port: 40002, Proto: "tcp", Addr: "10.77.1.2", ToPort: 9090}}}
+			{Port: 40002, Proto: "tcp", Addr: "10.77.1.2", ToPort: 9090},
+			{Port: 40003, Proto: "tcp", Addr: "10.77.1.2", ToPort: 9191}}}
 	if err := gw.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -66,8 +75,28 @@ threading.Thread(target=tcp, daemon=True).start(); udp()
 s = socket.create_connection(("203.0.113.1", 2222), 3); print(s.recv(100).decode())
 u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); u.settimeout(3); u.sendto(b"hi", ("203.0.113.1", 2222)); print(u.recvfrom(100)[0].decode())
 h = socket.create_connection(("203.0.113.1", 3333), 3); print("host-" + h.recv(100).decode())
+ok = fail = 0
+for i in range(8):
+    try:
+        x = socket.create_connection(("203.0.113.1", 4444), 1); x.recv(100); x.close(); ok += 1
+    except OSError:
+        fail += 1
+print("lim ok=%d fail=%d" % (ok, fail))
+held = []
+for i in range(3):
+    try:
+        y = socket.create_connection(("203.0.113.1", 5555), 2); y.recv(10); held.append(y)
+    except OSError:
+        pass
+print("cap held=%d" % len(held))
 `)
-	hostServer := write("hostserver.py", `import socket
+	hostServer := write("hostserver.py", `import socket, threading
+def hold():
+    s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("0.0.0.0", 9191)); s.listen()
+    keep = []
+    while True:
+        c, a = s.accept(); c.sendall(b"hi"); keep.append(c)
+threading.Thread(target=hold, daemon=True).start()
 s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("0.0.0.0", 9090)); s.listen()
 while True:
     c, a = s.accept(); c.sendall(("tcp " + a[0]).encode()); c.close()
@@ -104,7 +133,9 @@ nx $CT ip link set lo up; nx $CT ip addr add 172.30.0.5/24 dev ct0; nx $CT ip li
 nx $CT python3 SERVER >/dev/null 2>&1 & PIDS="$PIDS $!"
 nx $HO python3 HOSTSERVER >/dev/null 2>&1 & PIDS="$PIDS $!"
 sleep 0.5
-nx $CL timeout 10 python3 CLIENT || { set +x; set +x; echo "== gw"; nft list ruleset | grep -E "dport|counter"; sysctl net.ipv4.conf.all.rp_filter net.ipv4.ip_forward; echo "== host"; nx $HO nft list ruleset | grep -E "counter|mark"; nx $HO sysctl net.ipv4.conf.all.rp_filter net.ipv4.conf.nkt-fly1.rp_filter net.ipv4.ip_forward; nx $HO ip rule; nx $HO ip route show table all | grep -v local; exit 1; }
+# взломанный шлюз мимо маршрутов — к службе хоста напрямую: должно не пройти
+python3 -c 'import socket; socket.create_connection(("10.77.1.2", 9090), 2)' && echo direct-open || echo direct-blocked
+nx $CL timeout 20 python3 CLIENT || { set +x; set +x; echo "== gw"; nft list ruleset | grep -E "dport|counter"; sysctl net.ipv4.conf.all.rp_filter net.ipv4.ip_forward; echo "== host"; nx $HO nft list ruleset | grep -E "counter|mark"; nx $HO sysctl net.ipv4.conf.all.rp_filter net.ipv4.conf.nkt-fly1.rp_filter net.ipv4.ip_forward; nx $HO ip rule; nx $HO ip route show table all | grep -v local; exit 1; }
 `)
 	b, _ := os.ReadFile(script)
 	s := strings.NewReplacer("GW_NFT", gwNFT, "HOST_NFT", hostNFT, "SERVER", server, "CLIENT", client, "HOSTSERVER", hostServer,
@@ -123,5 +154,17 @@ nx $CL timeout 10 python3 CLIENT || { set +x; set +x; echo "== gw"; nft list rul
 	got := string(out)
 	if err != nil || !strings.Contains(got, "tcp 203.0.113.50") || !strings.Contains(got, "udp 203.0.113.50") || !strings.Contains(got, "host-tcp 203.0.113.50") {
 		t.Fatalf("контейнер должен видеть настоящий IP клиента, а ответ — дойти: %v\n%s", err, got)
+	}
+	if !strings.Contains(got, "direct-blocked") {
+		t.Fatalf("из туннеля мимо маршрутов к хосту пустило:\n%s", got)
+	}
+	if !strings.Contains(got, "cap held=2") {
+		t.Fatalf("ограничение одновременных соединений (ждём 2 из 3):\n%s", got)
+	}
+	var ok, fail int
+	if i := strings.Index(got, "lim ok="); i < 0 {
+		t.Fatalf("нет итога ограничения:\n%s", got)
+	} else if _, err := fmt.Sscanf(got[i:], "lim ok=%d fail=%d", &ok, &fail); err != nil || ok == 0 || fail == 0 {
+		t.Fatalf("ограничение частоты: ok=%d fail=%d\n%s", ok, fail, got)
 	}
 }

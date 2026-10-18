@@ -63,11 +63,13 @@ type targetState struct {
 
 type routeCounters struct {
 	active, total, failed atomic.Int64
-	// denied — отсечено белым списком адресов.
+	// denied — отсечено белым списком адресов и ограничениями на клиента.
 	denied            atomic.Int64
 	bytesIn, bytesOut atomic.Int64
 	mu                sync.Mutex
 	clients           map[string]int
+	// buckets — частота новых соединений по адресам клиентов (Rate).
+	buckets map[string]*rateBucket
 }
 
 // Пороги проверок: цель выключается после fall неудач подряд, включается
@@ -292,10 +294,10 @@ func (rt *Runtime) handle(c net.Conn, port int) {
 	if rc == nil {
 		return
 	}
-	// Белый список адресов: у маршрута с сертификатом на шлюзе — после
-	// рукопожатия (проверка Let's Encrypt по 443 должна пройти).
-	if !r.TLS && !r.Allowed(client.Addr()) {
-		rc.denied.Add(1)
+	// Белый список и ограничения на клиента: у маршрута с сертификатом
+	// на шлюзе — после рукопожатия (проверка Let's Encrypt по 443 должна
+	// пройти).
+	if !r.TLS && !rc.admit(r, client.Addr()) {
 		return
 	}
 	rc.total.Add(1)
@@ -628,4 +630,63 @@ func topClients(m map[string]int) []ClientCount {
 		out = out[:maxClientsShow]
 	}
 	return out
+}
+
+// rateBucket — ведро токенов частоты новых соединений одного клиента.
+type rateBucket struct {
+	tokens float64
+	last   time.Time
+}
+
+// maxBuckets — сколько адресов помнить для частоты; больше — старые
+// (без новых соединений больше минуты) забываются.
+const maxBuckets = 20000
+
+// admit — клиент допущен к маршруту: белый список, не больше MaxConns
+// одновременных соединений и Rate новых в секунду с одного адреса.
+// Отказ считается в denied.
+func (rc *routeCounters) admit(r Route, a netip.Addr) bool {
+	if !r.Allowed(a) {
+		rc.denied.Add(1)
+		return false
+	}
+	if r.MaxConns == 0 && r.Rate == 0 {
+		return true
+	}
+	ip := a.Unmap().String()
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	if r.MaxConns > 0 && rc.clients[ip] >= r.MaxConns {
+		rc.denied.Add(1)
+		return false
+	}
+	if r.Rate > 0 {
+		now := time.Now()
+		if rc.buckets == nil {
+			rc.buckets = map[string]*rateBucket{}
+		}
+		b := rc.buckets[ip]
+		if b == nil {
+			if len(rc.buckets) >= maxBuckets {
+				for k, v := range rc.buckets {
+					if now.Sub(v.last) > time.Minute {
+						delete(rc.buckets, k)
+					}
+				}
+			}
+			b = &rateBucket{tokens: float64(r.Rate), last: now}
+			rc.buckets[ip] = b
+		}
+		b.tokens += now.Sub(b.last).Seconds() * float64(r.Rate)
+		if b.tokens > float64(r.Rate) {
+			b.tokens = float64(r.Rate)
+		}
+		b.last = now
+		if b.tokens < 1 {
+			rc.denied.Add(1)
+			return false
+		}
+		b.tokens--
+	}
+	return true
 }

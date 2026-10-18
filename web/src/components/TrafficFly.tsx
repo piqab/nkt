@@ -53,6 +53,9 @@ interface FlyRoute {
   tls?: boolean
   /** Белый список адресов клиентов (IPv4, сети); пусто — все. */
   allow?: string[]
+  /** Не больше одновременных / новых в секунду соединений с одного адреса. */
+  max_conns?: number
+  rate?: number
   algorithm: Algo
   check: FlyCheck
   targets: FlyTarget[]
@@ -619,6 +622,8 @@ function RouteDetails({
               <Tag color="purple">{t('fly.allowTag', { n: route.allow?.length })}</Tag>
             </Tooltip>
           )}
+          {route.max_conns ? <Tag>{t('fly.maxConnsTag', { n: route.max_conns })}</Tag> : null}
+          {route.rate ? <Tag>{t('fly.rateTag', { n: route.rate })}</Tag> : null}
           {stats?.denied ? <span className="small muted">{t('fly.deniedN', { n: stats.denied })}</span> : null}
           {stats && (
             <span className="small">
@@ -816,6 +821,20 @@ function RouteEditor({
           />
           <span className="small muted">{t('fly.allowHint')}</span>
         </label>
+        <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
+          <Tooltip title={t('fly.limitsHint')}>
+            <label>
+              {t('fly.fieldMaxConns')}
+              <InputNumber min={1} max={100000} value={r.max_conns || null} placeholder="—" onChange={(v) => set({ max_conns: v || undefined })} />
+            </label>
+          </Tooltip>
+          <Tooltip title={t('fly.limitsHint')}>
+            <label>
+              {t('fly.fieldRate')}
+              <InputNumber min={1} max={100000} value={r.rate || null} placeholder="—" onChange={(v) => set({ rate: v || undefined })} />
+            </label>
+          </Tooltip>
+        </div>
         <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
           <label>
             {t('fly.fieldAlgo')}

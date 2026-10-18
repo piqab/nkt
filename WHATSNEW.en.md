@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.29 — 2026-10-18
+
+- **Traffic Fly: per-client limits.** A route has “connections per
+  address, at most” and “new per second per address, at most”; the gateway
+  drops the excess (the kernel for routes by port, the router for routes by
+  name), editable in the route editor, and `max_conns:`/`rate:` in
+  pipelines.
+- **A host accepts from the tunnel only route service ports**, replies and
+  ICMP, so a compromised gateway cannot reach the host's other services or
+  container networks.
+- **MSS in the tunnel** is clamped to its MTU, so large packets do not
+  stall where ICMP is filtered.
+- The guide has a “Performance and security” section with measurements
+  and the commands to repeat them.
+
 ## v1.13.28 — 2026-10-18
 
 - **Traffic Fly: access from allowed addresses only.** A route can list
