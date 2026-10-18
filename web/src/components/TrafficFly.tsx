@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Checkbox, Input, InputNumber, Select, Space, Tag, Tooltip } from 'antd'
+import { Button, Checkbox, Input, InputNumber, Radio, Select, Space, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Card, DiffView, Loading, Modal } from './ui'
@@ -191,6 +191,12 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   const [history, setHistory] = useState(false)
   const [addGateway, setAddGateway] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Перенаправление на карте: режим, окно переключения, меню цели и выбор
+  // контейнера щелчком (на телефоне перетаскивать неудобно).
+  const [redirect, setRedirect] = useState(false)
+  const [switchAsk, setSwitchAsk] = useState<{ route: FlyRoute; after: FlyTarget[]; title: string } | null>(null)
+  const [targetMenu, setTargetMenu] = useState<{ route: FlyRoute; target: FlyTarget } | null>(null)
+  const [picker, setPicker] = useState<{ route: FlyRoute; target: FlyTarget } | null>(null)
   const [busy, setBusy] = useState(false)
 
   const doc = fly.data?.doc
@@ -253,6 +259,13 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
             <Button size="small" onClick={() => setHistory(true)} disabled={!doc}>
               {t('fly.history')}
             </Button>
+            {admin && doc && doc.routes.length > 0 && (
+              <Tooltip title={t('fly.redirectHint')}>
+                <Button size="small" type={redirect ? 'primary' : 'default'} onClick={() => setRedirect(!redirect)}>
+                  {t('fly.redirect')}
+                </Button>
+              </Tooltip>
+            )}
             {admin && (
               <>
                 <Button size="small" loading={busy} disabled={!doc || doc.routes.length === 0} onClick={() => void apply(true)}>
@@ -273,7 +286,30 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
         ) : doc.routes.length === 0 ? (
           <p className="small muted">{gateways.length === 0 ? t('fly.emptyNoGateway') : t('fly.empty')}</p>
         ) : (
-          <FlyMap doc={doc} gateways={gateways} statuses={status.data?.gateways ?? []} tunnels={status.data?.tunnels ?? []} hostNames={hostNames} onRoute={setOpenRoute} />
+          <div className="row" style={{ gap: '0.8rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 640px', minWidth: 0 }}>
+              <FlyMap
+                doc={doc}
+                gateways={gateways}
+                statuses={status.data?.gateways ?? []}
+                tunnels={status.data?.tunnels ?? []}
+                hostNames={hostNames}
+                onRoute={setOpenRoute}
+                editing={redirect}
+                onDropRoute={(r, it) => setSwitchAsk({ route: r, after: [...r.targets, newTargetFrom(r, it, undefined)], title: t('fly.switchAddTitle', { route: routeTitle(r) }) })}
+                onDropTarget={(r, tg, it) =>
+                  setSwitchAsk({ route: r, after: r.targets.map((x) => (x.id === tg.id ? newTargetFrom(r, it, x) : x)), title: t('fly.switchReplaceTitle', { route: routeTitle(r) }) })
+                }
+                onTarget={(r, tg) => setTargetMenu({ route: r, target: tg })}
+              />
+            </div>
+            {redirect && (
+              <div style={{ flex: '0 1 260px', minWidth: 220 }}>
+                <strong className="small">{t('fly.paletteTitle')}</strong>
+                <FlyPalette hosts={Object.entries(hostNames).map(([id, name]) => ({ id: Number(id), name }))} />
+              </div>
+            )}
+          </div>
         )}
       </Card>
 
@@ -434,6 +470,66 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
         )}
       </Card>
 
+      {switchAsk && doc && (
+        <FlySwitchModal
+          route={switchAsk.route}
+          after={switchAsk.after}
+          title={switchAsk.title}
+          base={doc.revision}
+          onSave={(targets, note) => saveDoc(doc.routes.map((r) => (r.id === switchAsk.route.id ? { ...r, targets } : r)), note)}
+          onSwitched={(id) => onOpenJob(id)}
+          onClose={() => {
+            setSwitchAsk(null)
+            void fly.reload()
+          }}
+        />
+      )}
+      {targetMenu && (
+        <Modal title={`${hostNames[String(targetMenu.target.host_id)] ?? ''} › ${targetMenu.target.ref || targetMenu.target.kind}:${targetMenu.target.port}`} onClose={() => setTargetMenu(null)} width={420}>
+          <div className="col" style={{ gap: '0.4rem' }}>
+            <Button
+              onClick={() => {
+                setPicker(targetMenu)
+                setTargetMenu(null)
+              }}
+            >
+              {t('fly.redirectTo')}
+            </Button>
+            <Button
+              danger
+              disabled={targetMenu.route.targets.length < 2}
+              onClick={() => {
+                const r = targetMenu.route
+                setSwitchAsk({ route: r, after: r.targets.filter((x) => x.id !== targetMenu.target.id), title: t('fly.switchRemoveTitle', { route: routeTitle(r) }) })
+                setTargetMenu(null)
+              }}
+            >
+              {t('fly.removeFromPool')}
+            </Button>
+            <Button
+              type="link"
+              onClick={() => {
+                setOpenRoute(targetMenu.route.id)
+                setTargetMenu(null)
+              }}
+            >
+              {t('fly.details')}
+            </Button>
+          </div>
+        </Modal>
+      )}
+      {picker && (
+        <Modal title={t('fly.redirectTo')} onClose={() => setPicker(null)} width={480}>
+          <FlyPalette
+            hosts={Object.entries(hostNames).map(([id, name]) => ({ id: Number(id), name }))}
+            onPick={(it) => {
+              const r = picker.route
+              setSwitchAsk({ route: r, after: r.targets.map((x) => (x.id === picker.target.id ? newTargetFrom(r, it, x) : x)), title: t('fly.switchReplaceTitle', { route: routeTitle(r) }) })
+              setPicker(null)
+            }}
+          />
+        </Modal>
+      )}
       {openRoute && doc && (
         <RouteDetails
           route={doc.routes.find((r) => r.id === openRoute)!}
@@ -480,8 +576,39 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   )
 }
 
-/** Карта: шлюзы → маршруты → хосты → цели. Цвет — состояние, толщина
- * связи — соединения маршрута. Щелчок по маршруту — подробности. */
+/** Что можно бросить на карту: контейнер, машина или LXD на хосте. */
+interface DropItem {
+  host_id: number
+  kind: TargetKind
+  ref: string
+  ports?: number[]
+}
+
+const DND_TYPE = 'application/x-nkt-fly-target'
+
+/** Цель из брошенного контейнера: заменяя — порт прежней цели, добавляя
+ * — порт, который объявляет контейнер, или порт первой цели; у диапазона
+ * — порт маршрута. Идентификатор — новый, не занятый. */
+function newTargetFrom(r: FlyRoute, it: DropItem, replace: FlyTarget | undefined): FlyTarget {
+  const used = new Set(r.targets.map((x) => x.id))
+  let id = `c${it.host_id}`
+  for (let n = 2; used.has(id); n++) id = `c${it.host_id}-${n}`
+  const port = r.port_to && r.port_to > r.port ? r.port : replace?.port || it.ports?.[0] || r.targets[0]?.port || 0
+  return { id, host_id: it.host_id, kind: it.kind, ref: it.ref, port, weight: replace?.weight }
+}
+
+/** Сократить по середине: видно и начало, и конец. */
+function midEllipsis(s: string, max: number): string {
+  if (s.length <= max) return s
+  const head = Math.ceil((max - 1) / 2)
+  const tail = Math.floor((max - 1) / 2)
+  return s.slice(0, head) + '…' + s.slice(s.length - tail)
+}
+
+/** Карта: шлюзы → маршруты → цели (хост — перед именем цели). Цвет —
+ * состояние, толщина связи — соединения маршрута. В режиме правки на
+ * маршрут и на цель можно бросить контейнер из панели: на маршрут —
+ * добавить в пул, на цель — заменить её. */
 function FlyMap({
   doc,
   gateways,
@@ -489,6 +616,10 @@ function FlyMap({
   tunnels,
   hostNames,
   onRoute,
+  editing,
+  onDropRoute,
+  onDropTarget,
+  onTarget,
 }: {
   doc: FlyDoc
   gateways: FlyGatewayInfo[]
@@ -496,37 +627,80 @@ function FlyMap({
   tunnels: FlyTunnel[]
   hostNames: Record<string, string>
   onRoute: (id: string) => void
+  editing?: boolean
+  onDropRoute?: (route: FlyRoute, item: DropItem) => void
+  onDropTarget?: (route: FlyRoute, target: FlyTarget, item: DropItem) => void
+  onTarget?: (route: FlyRoute, target: FlyTarget) => void
 }) {
   const { t } = useTranslation()
+  const [over, setOver] = useState<string | null>(null)
   const ROW = 46
   const W = 1100
-  const X = [10, 280, 580, 840]
-  const BW = [220, 250, 210, 250]
+  const X = [10, 300, 640]
+  const BW = [240, 290, 450]
   const stats = new Map<string, RouteStats>()
   for (const g of statuses) for (const r of g.status?.routes ?? []) stats.set(r.id, r)
   const gwIDs = doc.gateways.map((g) => g.edge_id)
-  const hostIDs: number[] = []
   const targets: { route: FlyRoute; t: FlyTarget }[] = []
-  for (const r of doc.routes)
-    for (const tg of r.targets) {
-      if (!hostIDs.includes(tg.host_id)) hostIDs.push(tg.host_id)
-      targets.push({ route: r, t: tg })
-    }
-  const rows = Math.max(gwIDs.length, doc.routes.length, hostIDs.length, targets.length, 1)
+  for (const r of doc.routes) for (const tg of r.targets) targets.push({ route: r, t: tg })
+  const rows = Math.max(gwIDs.length, doc.routes.length, targets.length, 1)
   const H = rows * ROW + 10
   const y = (i: number, n: number) => 5 + ((rows - n) * ROW) / 2 + i * ROW + ROW / 2
+  const readItem = (e: React.DragEvent): DropItem | null => {
+    try {
+      return JSON.parse(e.dataTransfer.getData(DND_TYPE)) as DropItem
+    } catch {
+      return null
+    }
+  }
+  const dropProps = (key: string, onDrop?: (item: DropItem) => void) =>
+    editing && onDrop
+      ? {
+          onDragOver: (e: React.DragEvent) => {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'copy'
+            setOver(key)
+          },
+          onDragLeave: () => setOver((o) => (o === key ? null : o)),
+          onDrop: (e: React.DragEvent) => {
+            e.preventDefault()
+            setOver(null)
+            const it = readItem(e)
+            if (it) onDrop(it)
+          },
+        }
+      : {}
 
-  const node = (col: number, i: number, n: number, label: string, sub: string, color: string, onClick?: () => void, key?: string) => {
+  const node = (
+    col: number,
+    i: number,
+    n: number,
+    label: string,
+    sub: string,
+    color: string,
+    key: string,
+    opts: { onClick?: () => void; full?: string; drop?: (item: DropItem) => void } = {},
+  ) => {
     const cy = y(i, n)
+    // Сколько знаков помещается: ~7 px на знак при 12 px.
+    const max = Math.floor((BW[col] - 34) / 7)
+    const hot = over === key
     return (
-      <g key={key ?? `${col}-${i}`} transform={`translate(${X[col]},${cy - 17})`} style={{ cursor: onClick ? 'pointer' : 'default' }} onClick={onClick}>
-        <rect width={BW[col]} height={34} rx={7} fill="var(--surface-raised)" stroke={color} strokeWidth={2} />
+      <g
+        key={key}
+        transform={`translate(${X[col]},${cy - 17})`}
+        style={{ cursor: opts.onClick ? 'pointer' : 'default' }}
+        onClick={opts.onClick}
+        {...dropProps(key, opts.drop)}
+      >
+        <title>{opts.full ?? label}</title>
+        <rect width={BW[col]} height={34} rx={7} fill={hot ? 'var(--surface-hover, #e8f0fe)' : 'var(--surface-raised)'} stroke={hot ? 'var(--accent, #1677ff)' : color} strokeWidth={hot ? 3 : 2} strokeDasharray={editing && opts.drop ? '6 3' : undefined} />
         <circle cx={12} cy={17} r={5} fill={color} />
         <text x={24} y={15} fontSize={12} fill="var(--text-primary)">
-          {label.length > 30 ? label.slice(0, 29) + '…' : label}
+          {midEllipsis(label, max)}
         </text>
         <text x={24} y={28} fontSize={10} fill="var(--text-secondary)">
-          {sub.length > 36 ? sub.slice(0, 35) + '…' : sub}
+          {midEllipsis(sub, Math.floor((BW[col] - 34) / 6))}
         </text>
       </g>
     )
@@ -534,6 +708,14 @@ function FlyMap({
   const link = (x1: number, y1: number, x2: number, y2: number, color: string, w: number, key: string) => (
     <path key={key} d={`M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`} fill="none" stroke={color} strokeWidth={w} opacity={0.75} />
   )
+  const tunnelOf = (r: FlyRoute, host: number) => tunnels.find((x) => x.edge_id === r.gateway && x.host_id === host)
+  const targetColor = (r: FlyRoute, tg: FlyTarget) => {
+    const ts = stats.get(r.id)?.targets?.find((s) => s.id === tg.id)
+    const tn = tunnelOf(r, tg.host_id)
+    if (tn && tn.state !== 'up' && tn.state !== 'not_applied' && tn.state !== 'unknown') return 'var(--status-critical)'
+    if (tg.drain) return 'var(--status-warning)'
+    return !ts || !ts.checked ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
+  }
   const lines: JSX.Element[] = []
   doc.routes.forEach((r, ri) => {
     const gi = gwIDs.indexOf(r.gateway)
@@ -541,19 +723,10 @@ function FlyMap({
     const ps = poolState(r, st)
     const w = Math.min(10, 1.5 + Math.log2(1 + (st?.active ?? 0)))
     if (gi >= 0) lines.push(link(X[0] + BW[0], y(gi, gwIDs.length), X[1], y(ri, doc.routes.length), ps.color, w, `g-r-${r.id}`))
-    const hostsOfRoute = [...new Set(r.targets.map((x) => x.host_id))]
-    for (const h of hostsOfRoute) {
-      const hi = hostIDs.indexOf(h)
-      const tn = tunnels.find((x) => x.edge_id === r.gateway && x.host_id === h)
-      const down = tn && tn.state !== 'up' && tn.state !== 'not_applied' && tn.state !== 'unknown'
-      lines.push(link(X[1] + BW[1], y(ri, doc.routes.length), X[2], y(hi, hostIDs.length), down ? 'var(--status-critical)' : ps.color, w, `r-h-${r.id}-${h}`))
-    }
   })
   targets.forEach((x, ti) => {
-    const hi = hostIDs.indexOf(x.t.host_id)
-    const ts = stats.get(x.route.id)?.targets?.find((s) => s.id === x.t.id)
-    const color = x.t.drain ? 'var(--status-warning)' : !ts || !ts.checked ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
-    lines.push(link(X[2] + BW[2], y(hi, hostIDs.length), X[3], y(ti, targets.length), color, 1.5, `h-t-${x.route.id}-${x.t.id}`))
+    const ri = doc.routes.indexOf(x.route)
+    lines.push(link(X[1] + BW[1], y(ri, doc.routes.length), X[2], y(ti, targets.length), targetColor(x.route, x.t), 1.5, `r-t-${x.route.id}-${x.t.id}`))
   })
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -563,29 +736,180 @@ function FlyMap({
           const g = gateways.find((x) => x.edge_id === id)
           const st = statuses.find((s) => s.edge_id === id)
           const wg = `WireGuard ${doc.gateways[i].listen_port}/udp`
-          return node(0, i, gwIDs.length, g?.name ?? `#${id}`, g && g.address !== g.name ? `${g.address} · ${wg}` : wg, st?.connected ? 'var(--status-good)' : 'var(--status-critical)', undefined, `gw-${id}`)
+          return node(0, i, gwIDs.length, g?.name ?? `#${id}`, g && g.address !== g.name ? `${g.address} · ${wg}` : wg, st?.connected ? 'var(--status-good)' : 'var(--status-critical)', `gw-${id}`)
         })}
         {doc.routes.map((r, i) => {
           const st = stats.get(r.id)
           const ps = poolState(r, st)
-          return node(1, i, doc.routes.length, routeTitle(r), `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, () => onRoute(r.id), `r-${r.id}`)
-        })}
-        {hostIDs.map((h, i) => {
-          // Хост на карте — по его туннелям: все живы — синий, есть
-          // неживой — красный и причина первого из них.
-          const ts = tunnels.filter((x) => x.host_id === h)
-          const bad = ts.find((x) => x.state !== 'up')
-          const color = !bad ? 'var(--seq-300, #4c8bf5)' : bad.state === 'not_applied' || bad.state === 'unknown' ? 'var(--text-muted)' : 'var(--status-critical)'
-          return node(2, i, hostIDs.length, hostNames[String(h)] ?? `#${h}`, bad ? t(`fly.tunnelShort.${bad.state}`) : t('fly.host'), color, undefined, `h-${h}`)
+          return node(1, i, doc.routes.length, routeTitle(r), `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, `r-${r.id}`, {
+            onClick: () => onRoute(r.id),
+            drop: onDropRoute ? (it) => onDropRoute(r, it) : undefined,
+          })
         })}
         {targets.map((x, i) => {
           const ts = stats.get(x.route.id)?.targets?.find((s) => s.id === x.t.id)
-          const color = x.t.drain ? 'var(--status-warning)' : !ts || !ts.checked ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
-          const label = x.t.label || (x.t.kind === 'host' ? t('fly.targetKind.host') : x.t.ref || '')
-          return node(3, i, targets.length, `${label}:${x.t.port}`, `${t(`fly.targetKind.${x.t.kind}`)}${ts ? ` · ${ts.active} ${t('fly.connsShort')}` : ''}`, color, () => onRoute(x.route.id), `t-${x.route.id}-${x.t.id}`)
+          const tn = tunnelOf(x.route, x.t.host_id)
+          const host = hostNames[String(x.t.host_id)] ?? `#${x.t.host_id}`
+          const name = x.t.label || (x.t.kind === 'host' ? t('fly.targetKind.host') : x.t.ref || '')
+          const full = `${host} › ${name}:${x.t.port}`
+          const bad = tn && tn.state !== 'up' ? t(`fly.tunnelShort.${tn.state}`) : ''
+          const sub = `${t(`fly.targetKind.${x.t.kind}`)}${x.t.drain ? ` · ${t('fly.drainShort')}` : ''}${ts ? ` · ${ts.active} ${t('fly.connsShort')}` : ''}${bad ? ` · ${bad}` : ''}`
+          return node(2, i, targets.length, full, sub, targetColor(x.route, x.t), `t-${x.route.id}-${x.t.id}`, {
+            full,
+            onClick: () => (editing && onTarget ? onTarget(x.route, x.t) : onRoute(x.route.id)),
+            drop: onDropTarget ? (it) => onDropTarget(x.route, x.t, it) : undefined,
+          })
         })}
       </svg>
     </div>
+  )
+}
+
+/** Панель «Контейнеры и машины» режима перенаправления: по хостам, с
+ * поиском; элементы перетаскиваются на карту или выбираются щелчком. */
+function FlyPalette({ hosts, onPick }: { hosts: { id: number; name: string }[]; onPick?: (item: DropItem) => void }) {
+  const { t } = useTranslation()
+  const [kind, setKind] = useState<TargetKind>('container')
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState<number | null>(hosts[0]?.id ?? null)
+  return (
+    <div className="col" style={{ gap: '0.4rem', minWidth: 0 }}>
+      <Space.Compact size="small">
+        {(['container', 'vm', 'lxd'] as TargetKind[]).map((k) => (
+          <Button key={k} size="small" type={kind === k ? 'primary' : 'default'} onClick={() => setKind(k)}>
+            {t(`fly.targetKind.${k}`)}
+          </Button>
+        ))}
+      </Space.Compact>
+      <Input size="small" allowClear placeholder={t('fly.paletteSearch')} value={q} onChange={(e) => setQ(e.target.value)} />
+      <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+        {hosts.map((h) => (
+          <div key={h.id}>
+            <Button type="text" size="small" style={{ padding: 0, fontWeight: 600 }} onClick={() => setOpen(open === h.id ? null : h.id)}>
+              {open === h.id ? '▾' : '▸'} {h.name}
+            </Button>
+            {open === h.id && <PaletteHost hostId={h.id} kind={kind} q={q} onPick={onPick} />}
+          </div>
+        ))}
+      </div>
+      {!onPick && <span className="small muted">{t('fly.paletteHint')}</span>}
+    </div>
+  )
+}
+
+function PaletteHost({ hostId, kind, q, onPick }: { hostId: number; kind: TargetKind; q: string; onPick?: (item: DropItem) => void }) {
+  const { t } = useTranslation()
+  const list = useTargets(hostId, kind)
+  const items = list.items.filter((x) => x.kind === kind && (!q || x.name.toLowerCase().includes(q.toLowerCase())))
+  if (list.loading) return <div className="small muted" style={{ paddingLeft: '1rem' }}>{t('fly.loadingTargets')}</div>
+  if (items.length === 0) return <div className="small muted" style={{ paddingLeft: '1rem' }}>{t('fly.noTargets')}</div>
+  return (
+    <div className="col" style={{ gap: 2, paddingLeft: '0.8rem' }}>
+      {items.map((x) => {
+        const item: DropItem = { host_id: hostId, kind, ref: x.name, ports: x.ports }
+        return (
+          <div
+            key={x.name}
+            draggable={!onPick}
+            onDragStart={(e) => {
+              e.dataTransfer.setData(DND_TYPE, JSON.stringify(item))
+              e.dataTransfer.effectAllowed = 'copy'
+            }}
+            onClick={onPick ? () => onPick(item) : undefined}
+            title={`${x.name}${x.ip ? ` · ${x.ip}` : ''}${x.ports?.length ? ` · ${x.ports.join(', ')}` : ''}`}
+            className="small mono"
+            style={{ cursor: onPick ? 'pointer' : 'grab', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          >
+            {x.name}
+            {x.state && x.state !== 'running' ? <span className="muted"> · {x.state}</span> : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Переключение целей маршрута: что изменится (дифф), порт новой цели,
+ * плавно (по умолчанию) или сразу; сохранить или сохранить и переключить. */
+function FlySwitchModal({
+  route,
+  after,
+  title,
+  base,
+  onSave,
+  onSwitched,
+  onClose,
+}: {
+  route: FlyRoute
+  after: FlyTarget[]
+  title: string
+  base: number
+  onSave: (targets: FlyTarget[], note: string) => Promise<void>
+  onSwitched: (jobId: number) => void
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const isRange = !!route.port_to && route.port_to > route.port
+  const [targets, setTargets] = useState(after)
+  const [smooth, setSmooth] = useState(!isRange)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const added = targets.filter((x) => !route.targets.some((o) => o.id === x.id && o.ref === x.ref && o.host_id === x.host_id))
+  const diff = unifiedDiff(routeText(route), routeText({ ...route, targets }), t('tokens.saved'), t('tokens.draft'))
+  const run = async (doSwitch: boolean) => {
+    setBusy(true)
+    setError(null)
+    try {
+      if (doSwitch) {
+        const res = await api<{ job_id: number }>(`/hub/fly/routes/${route.id}/switch`, { method: 'POST', body: { targets, smooth, note, base } })
+        onSwitched(res.job_id)
+      } else {
+        await onSave(targets, note)
+      }
+      onClose()
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={title} onClose={onClose} width={860}>
+      <div className="col" style={{ gap: '0.5rem' }}>
+        {added.map((x) => (
+          <label key={x.id} className="small">
+            {t('fly.switchPort', { name: x.ref || x.kind })}
+            <InputNumber
+              min={1}
+              max={65535}
+              value={x.port || null}
+              disabled={isRange}
+              onChange={(v) => setTargets(targets.map((y) => (y.id === x.id ? { ...y, port: v ?? 0 } : y)))}
+            />
+          </label>
+        ))}
+        <Radio.Group value={smooth ? 'smooth' : 'now'} onChange={(e) => setSmooth(e.target.value === 'smooth')}>
+          <Radio value="smooth" disabled={isRange}>
+            {t('fly.switchSmooth')}
+          </Radio>
+          <Radio value="now">{t('fly.switchNow')}</Radio>
+        </Radio.Group>
+        <span className="small muted">{t(isRange ? 'fly.switchRangeHint' : smooth ? 'fly.switchSmoothHint' : 'fly.switchNowHint')}</span>
+        <DiffView text={diff} />
+        <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('fly.notePlaceholder')} />
+        {error && <Banner kind="error">{error}</Banner>}
+        <Space wrap>
+          <Button type="primary" loading={busy} disabled={targets.some((x) => !x.port)} onClick={() => void run(true)}>
+            {t('fly.switchApply')}
+          </Button>
+          <Button loading={busy} disabled={targets.some((x) => !x.port)} onClick={() => void run(false)}>
+            {t('fly.switchSaveOnly')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </Space>
+      </div>
+    </Modal>
   )
 }
 

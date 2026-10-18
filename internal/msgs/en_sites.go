@@ -327,6 +327,8 @@ var enSitesCatalog = map[string]string{
 	"fly.installTools":                "Installing wireguard-tools, nftables and conntrack for Traffic Fly",
 	"fly.toolsFailed":                 "wireguard-tools, nftables, conntrack failed to install: %s",
 	"fly.toolsOtherBroken":            "The Traffic Fly packages are in place, but apt failed because of other packages (%s); finish configuring them on the host: sudo dpkg --configure -a (for grub-pc: sudo dpkg-reconfigure grub-pc)",
+	"fly.routeNotFound":               "route %s not found (or no targets given)",
+	"fly.switchTitle":                 "Traffic Fly: switch targets of route %s",
 	"fly.dryWillCreate":               "Traffic Fly: route %s will be created on gateway %s; targets: containers of service %s, port %d",
 	"fly.dryWillReconcile":            "Traffic Fly: route %s exists; after the deployment its targets (containers of service %s) are reconciled; unchanged means not pushed again",
 	"fly.pipelineHostFailed":          "Traffic Fly: could not re-read the containers of host %s: %s",

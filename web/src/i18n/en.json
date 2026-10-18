@@ -4722,6 +4722,25 @@
     "fieldRate": "New per second per address, at most",
     "limitsHint": "Empty means no limit. The gateway drops extra connections itself: the kernel for routes by port, the router for routes by name. Against floods from one address.",
     "maxConnsTag": "≤ {{n}} conn/addr",
-    "rateTag": "≤ {{n}} new/s"
+    "rateTag": "≤ {{n}} new/s",
+    "redirect": "Redirect",
+    "redirectHint": "Map edit mode: drag a container from the right panel onto a route (add to the pool) or onto a target (replace it); click a target for a menu.",
+    "paletteTitle": "Containers and VMs",
+    "paletteSearch": "search",
+    "paletteHint": "Drop on a route to add to the pool, on a target to replace it.",
+    "switchAddTitle": "Add target — {{route}}",
+    "switchReplaceTitle": "Replace target — {{route}}",
+    "switchRemoveTitle": "Remove target — {{route}}",
+    "switchPort": "Port of target {{name}}",
+    "switchSmooth": "Smoothly",
+    "switchNow": "At once",
+    "switchSmoothHint": "The new target is added and applied; once it passes checks the previous one is drained (no new connections), open connections finish, and only then it is removed. If the new one is not alive within 90 s, the previous one stays in service.",
+    "switchNowHint": "Replace and apply in one step: open connections to the previous target are cut.",
+    "switchRangeHint": "Port range: one target serves and relay ports live in its memory, so only at once.",
+    "switchApply": "Save and switch",
+    "switchSaveOnly": "Save only",
+    "redirectTo": "Redirect to…",
+    "removeFromPool": "Remove from pool",
+    "drainShort": "draining"
   }
 }

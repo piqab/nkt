@@ -379,6 +379,7 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/edges", s.handleEdges)
 					r.Put("/hub/fly", s.handleFlySave)
 					r.Post("/hub/fly/apply", s.handleFlyApply)
+					r.Post("/hub/fly/routes/{id}/switch", s.handleFlySwitch)
 					r.Post("/hub/fly/versions/{n}/restore", s.handleFlyRestore)
 					r.Get("/hub/fly/targets", s.handleFlyTargets)
 					r.Post("/hub/edges", s.handleEdgeSave)
