@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Checkbox, InputNumber, Progress, Select, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { Sensitive } from '../privacy'
 import { api, qs, useApi } from '../api'
 import { Banner, Card, DiffView, Loading, Modal } from './ui'
 import { LineChart, type Series } from './charts'
@@ -385,7 +386,7 @@ function ThresholdsModal({ current, onClose, onSaved }: { current: UPSThresholds
             <ul style={{ margin: '0.3rem 0 0' }}>
               {hist.data!.history.map((h) => (
                 <li key={h.ts}>
-                  {h.ts.slice(0, 16).replace('T', ' ')} · {h.user || '—'} · {t('ups.wasValues', { charge: h.charge_pct, runtime: h.runtime_min })}{' '}
+                  {h.ts.slice(0, 16).replace('T', ' ')} · {h.user ? <Sensitive>{h.user}</Sensitive> : '—'} · {t('ups.wasValues', { charge: h.charge_pct, runtime: h.runtime_min })}{' '}
                   <Button
                     size="small"
                     type="link"

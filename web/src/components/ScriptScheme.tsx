@@ -177,8 +177,8 @@ function HostCard({ h }: { h: HostNode }) {
     <div className={`scheme-host${h.existing ? ' scheme-host-existing' : ''}`}>
       <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <DesktopOutlined />
-        <strong>{h.name}</strong>
-        {h.addr && <span className="small muted mono">{h.addr}</span>}
+        <strong className="sensitive">{h.name}</strong>
+        {h.addr && <span className="small muted mono sensitive">{h.addr}</span>}
         {h.auth && <Tag>{t(`scripts.scheme.auth.${h.auth}`)}</Tag>}
         {h.existing && <Tag>{t('scripts.scheme.existing')}</Tag>}
         {h.install && (

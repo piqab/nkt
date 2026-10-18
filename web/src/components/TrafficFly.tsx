@@ -11,6 +11,7 @@ import { unifiedDiff } from './textDiff'
 import { InstallModal } from './EdgeCard'
 import { osLabel } from './OsIcon'
 import { confirmAction } from './confirm'
+import { Sensitive, blurText, usePrivacy } from '../privacy'
 import { activeCount, applyOps, draftMarks, opBlocked, opEta, opKeys, pushOp, type FlyOp, type OpMark } from './flyOps'
 import type { HubHost, Job, Me } from '../types'
 
@@ -518,16 +519,16 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
                     (r.names ?? []).map((n) =>
                       n.startsWith('*.') ? (
                         <span key={n} className="mono">
-                          {n}
+                          <Sensitive>{n}</Sensitive>
                         </span>
                       ) : (
                         <a key={n} className="mono" href={siteURL(r, n)} target="_blank" rel="noopener noreferrer">
-                          {n} ↗
+                          <Sensitive>{n}</Sensitive> ↗
                         </a>
                       ),
                     )
                   ) : (
-                    <span className="mono">{routeTitle(r)}</span>
+                    <span className="mono">{blurText(routeTitle(r))}</span>
                   )}
                   <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setOpenRoute(r.id)}>
                     {t('fly.details')}
@@ -536,7 +537,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
               ),
             },
             { title: t('fly.colKind'), key: 'kind', render: (_, r) => <Tag>{t(`fly.kind.${r.kind}`)}</Tag> },
-            { title: t('fly.colGateway'), key: 'gw', render: (_, r) => gateways.find((g) => g.edge_id === r.gateway)?.name ?? `#${r.gateway}` },
+            { title: t('fly.colGateway'), key: 'gw', render: (_, r) => <Sensitive>{gateways.find((g) => g.edge_id === r.gateway)?.name ?? `#${r.gateway}`}</Sensitive> },
             {
               title: t('fly.colPool'),
               key: 'pool',
@@ -608,7 +609,9 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
               return (
                 <div key={g.edge_id} className="col" style={{ gap: '0.2rem' }}>
                   <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <strong className="mono">{g.name}</strong>
+                    <strong className="mono">
+                      <Sensitive>{g.name}</Sensitive>
+                    </strong>
                     {g.connected ? <Tag color="success">{t('fly.gwConnected')}</Tag> : <Tag color="error">{t('fly.gwOffline')}</Tag>}
                     {st?.status && (
                       <Tooltip title={t('fly.gwVersionHint')}>
@@ -618,17 +621,19 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
                     {tunnels.length > 0 && <span className="small muted">{t('fly.tunnelsUp', { up, total: tunnels.length })}</span>}
                     {(st?.status?.errors ?? []).map((e) => (
                       <Tag key={e} color="error">
-                        {e}
+                        {blurText(e)}
                       </Tag>
                     ))}
-                    {st?.error && <Tag color="error">{st.error}</Tag>}
+                    {st?.error && <Tag color="error">{blurText(st.error)}</Tag>}
                   </div>
                   {/* Неживые туннели — с причиной: где теряются пакеты. */}
                   {tunnels
                     .filter((x) => x.state !== 'up')
                     .map((x) => (
                       <div key={x.host_id} className="small" style={{ paddingLeft: '1rem' }}>
-                        <span className="mono">{hostNames[String(x.host_id)] ?? `#${x.host_id}`}</span>
+                        <span className="mono">
+                          <Sensitive>{hostNames[String(x.host_id)] ?? `#${x.host_id}`}</Sensitive>
+                        </span>
                         {': '}
                         <span style={{ color: x.state === 'not_applied' || x.state === 'unknown' ? 'var(--text-secondary)' : 'var(--status-critical)' }}>
                           {t(`fly.tunnel.${x.state}`, { port: doc?.gateways.find((d) => d.edge_id === g.edge_id)?.listen_port ?? 51820 })}
@@ -920,6 +925,7 @@ function FlyMap({
   const { t } = useTranslation()
   const [over, setOver] = useState<string | null>(null)
   const [drag, setDrag] = useState<{ x: number; y: number; label: string } | null>(null)
+  const [privacy] = usePrivacy()
   const ROW = 46
   // Столбцы равной ширины: цели не растягиваются, длинные имена
   // сокращаются по середине.
@@ -1060,6 +1066,9 @@ function FlyMap({
       mark?: OpMark
       busy?: number
       index?: number
+      /** Подпись (и вторая строка) — чувствительные: имена, адреса. */
+      secret?: boolean
+      secretSub?: boolean
     } = {},
   ) => {
     const cy = y(i, n)
@@ -1096,7 +1105,7 @@ function FlyMap({
         data-fly-target={editing && opts.index !== undefined && !opts.ghost ? opts.index : undefined}
         {...(opts.route ? paletteDrop(opts.drop ?? key, opts.route) : {})}
       >
-        <title>{opts.full ?? label}</title>
+        {!privacy && <title>{opts.full ?? label}</title>}
         <rect
           width={BW[col]}
           height={34}
@@ -1107,10 +1116,10 @@ function FlyMap({
           strokeDasharray={opts.dashed ? '6 4' : undefined}
         />
         <circle cx={12} cy={17} r={5} fill={color} />
-        <text x={24} y={15} fontSize={12} fill="var(--text-primary)" textDecoration={opts.ghost ? 'line-through' : undefined}>
+        <text x={24} y={15} fontSize={12} fill="var(--text-primary)" textDecoration={opts.ghost ? 'line-through' : undefined} className={opts.secret ? 'sensitive' : undefined}>
           {midEllipsis(label, max)}
         </text>
-        <text x={24} y={28} fontSize={10} fill="var(--text-secondary)">
+        <text x={24} y={28} fontSize={10} fill="var(--text-secondary)" className={opts.secretSub ? 'sensitive' : undefined}>
           {midEllipsis(sub, Math.floor((BW[col] - 34 - right) / 6))}
         </text>
         {opts.busy !== undefined
@@ -1179,13 +1188,17 @@ function FlyMap({
             const g = gateways.find((x) => x.edge_id === id)
             const st = statuses.find((s) => s.edge_id === id)
             const wg = `WireGuard ${doc.gateways[i].listen_port}/udp`
-            return node(0, i, gwIDs.length, g?.name ?? `#${id}`, g && g.address !== g.name ? `${g.address} · ${wg}` : wg, st?.connected ? 'var(--status-good)' : 'var(--status-critical)', `gw-${id}`)
+            return node(0, i, gwIDs.length, g?.name ?? `#${id}`, g && g.address !== g.name ? `${g.address} · ${wg}` : wg, st?.connected ? 'var(--status-good)' : 'var(--status-critical)', `gw-${id}`, {
+              secret: true,
+              secretSub: !!g && g.address !== g.name,
+            })
           })}
           {doc.routes.map((r, i) => {
             const st = stats.get(r.id)
             const ps = poolState(r, st)
             return node(1, i, doc.routes.length, routeTitle(r), `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, `r-${r.id}`, {
               onClick: () => onRoute(r.id),
+              secret: named(r.kind),
               drop: editing ? `route:${r.id}` : undefined,
               route: r,
               busy: busy?.get(`r:${r.id}`),
@@ -1203,6 +1216,7 @@ function FlyMap({
             const key = `${x.route.id}/${x.t.id}`
             return node(2, i, targets.length, full, sub, targetColor(x.route, x.t), `t-${key}${x.ghost ? '-ghost' : ''}`, {
               full,
+              secret: true,
               onClick: () => onRoute(x.route.id),
               drop: editing && !x.ghost ? `route:${x.route.id}` : undefined,
               route: x.ghost ? undefined : x.route,
@@ -1254,7 +1268,7 @@ function FlyMap({
             whiteSpace: 'nowrap',
           }}
         >
-          {midEllipsis(drag.label, 40)}
+          <Sensitive>{midEllipsis(drag.label, 40)}</Sensitive>
         </div>
       )}
     </div>
@@ -1282,7 +1296,7 @@ function FlyPalette({ hosts, onPick }: { hosts: { id: number; name: string }[]; 
         {hosts.map((h) => (
           <div key={h.id}>
             <Button type="text" size="small" style={{ padding: 0, fontWeight: 600 }} onClick={() => setOpen(open === h.id ? null : h.id)}>
-              {open === h.id ? '▾' : '▸'} {h.name}
+              {open === h.id ? '▾' : '▸'} <Sensitive>{h.name}</Sensitive>
             </Button>
             {open === h.id && <PaletteHost hostId={h.id} kind={kind} q={q} onPick={onPick} />}
           </div>
@@ -1296,6 +1310,7 @@ function FlyPalette({ hosts, onPick }: { hosts: { id: number; name: string }[]; 
 function PaletteHost({ hostId, kind, q, onPick }: { hostId: number; kind: TargetKind; q: string; onPick?: (item: DropItem) => void }) {
   const { t } = useTranslation()
   const list = useTargets(hostId, kind)
+  const [privacy] = usePrivacy()
   const items = list.items.filter((x) => x.kind === kind && (!q || x.name.toLowerCase().includes(q.toLowerCase())))
   if (list.loading) return <div className="small muted" style={{ paddingLeft: '1rem' }}>{t('fly.loadingTargets')}</div>
   if (items.length === 0) return <div className="small muted" style={{ paddingLeft: '1rem' }}>{t('fly.noTargets')}</div>
@@ -1314,7 +1329,7 @@ function PaletteHost({ hostId, kind, q, onPick }: { hostId: number; kind: Target
               e.dataTransfer.effectAllowed = 'copy'
             }}
             onClick={onPick ? () => onPick(item) : undefined}
-            title={`${x.name}${x.ip ? ` · ${x.ip}` : ''}${x.ports?.length ? ` · ${x.ports.join(', ')}` : ''}${x.state ? ` · ${x.state}` : ''}`}
+            title={privacy ? undefined : `${x.name}${x.ip ? ` · ${x.ip}` : ''}${x.ports?.length ? ` · ${x.ports.join(', ')}` : ''}${x.state ? ` · ${x.state}` : ''}`}
             style={{
               cursor: onPick ? 'pointer' : 'grab',
               display: 'flex',
@@ -1332,7 +1347,7 @@ function PaletteHost({ hostId, kind, q, onPick }: { hostId: number; kind: Target
             <span style={{ minWidth: 0, lineHeight: 1.15 }}>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{midEllipsis(x.name, 34)}</span>
               <span style={{ display: 'block', fontSize: 10, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {[x.ip, x.ports?.length ? x.ports.join(', ') : '', x.state && x.state !== 'running' ? x.state : ''].filter(Boolean).join(' · ') || t(`fly.targetKind.${kind}`)}
+                {blurText([x.ip, x.ports?.length ? x.ports.join(', ') : '', x.state && x.state !== 'running' ? x.state : ''].filter(Boolean).join(' · ') || t(`fly.targetKind.${kind}`))}
               </span>
             </span>
           </div>
@@ -1452,7 +1467,9 @@ function RouteDetails({
               const c = certs?.find((x) => x.name === n)
               return (
                 <div key={n}>
-                  <span className="mono">{n}</span>
+                  <span className="mono">
+                    <Sensitive>{n}</Sensitive>
+                  </span>
                   {': '}
                   {!c || c.pending ? (
                     <span className="muted">{t('fly.certPending')}</span>
@@ -1473,7 +1490,7 @@ function RouteDetails({
           pagination={false}
           columns={[
             { title: t('fly.colTarget'), key: 't', render: (_, x) => <span className="mono">{`${x.label || x.ref || t('fly.targetKind.host')}:${x.port}`}</span> },
-            { title: t('fly.colHost'), key: 'h', render: (_, x) => hostNames[String(x.host_id)] ?? `#${x.host_id}` },
+            { title: t('fly.colHost'), key: 'h', render: (_, x) => <Sensitive>{hostNames[String(x.host_id)] ?? `#${x.host_id}`}</Sensitive> },
             { title: t('fly.colKind'), key: 'k', render: (_, x) => t(`fly.targetKind.${x.kind}`) },
             {
               title: t('fly.colState'),
@@ -1498,7 +1515,7 @@ function RouteDetails({
         <div className="small">
           <strong>{t('fly.clients')}</strong>{' '}
           {showIPs ? (
-            <span className="mono">{stats!.top!.map((c) => `${c.ip}${c.conns > 1 ? ` ×${c.conns}` : ''}`).join(', ')}</span>
+            <span className="mono sensitive">{stats!.top!.map((c) => `${c.ip}${c.conns > 1 ? ` ×${c.conns}` : ''}`).join(', ')}</span>
           ) : (
             <span>{stats?.clients ?? 0}</span>
           )}
@@ -1549,7 +1566,7 @@ function RouteEditor({
           </label>
           <label>
             {t('fly.colGateway')}
-            <Select value={r.gateway} onChange={(v) => set({ gateway: v })} options={gateways.map((g) => ({ value: g.edge_id, label: g.name }))} style={{ width: 220 }} />
+            <Select value={r.gateway} onChange={(v) => set({ gateway: v })} options={gateways.map((g) => ({ value: g.edge_id, label: <Sensitive>{g.name}</Sensitive> }))} style={{ width: 220 }} />
           </label>
           <label>
             {t('fly.colKind')}
@@ -1605,7 +1622,7 @@ function RouteEditor({
           <>
             <label>
               {t('fly.fieldNames')}
-              <Select mode="tags" value={r.names} onChange={(v: string[]) => set({ names: v.map((x) => x.trim().toLowerCase()).filter(Boolean) })} tokenSeparators={[',', ' ']} placeholder="app.example.com, *.app.example.com" />
+              <Select className="sensitive" mode="tags" value={r.names} onChange={(v: string[]) => set({ names: v.map((x) => x.trim().toLowerCase()).filter(Boolean) })} tokenSeparators={[',', ' ']} placeholder="app.example.com, *.app.example.com" />
             </label>
             {r.kind === 'https' && (
               <>
@@ -1627,6 +1644,7 @@ function RouteEditor({
         <label>
           {t('fly.fieldAllow')}
           <Select
+            className="sensitive"
             mode="tags"
             value={r.allow ?? []}
             onChange={(v: string[]) => set({ allow: v.map((x) => x.trim()).filter(Boolean) })}
@@ -1768,14 +1786,14 @@ function TargetRow({ target, hosts, onChange, onRemove }: { target: FlyTarget; h
       <Select
         value={target.host_id}
         onChange={(v: number) => onChange({ ...target, host_id: v, ref: '' })}
-        options={hosts.map((h) => ({ value: h.id, label: osLabel(h.os_info, h.name), search: h.name }))}
+        options={hosts.map((h) => ({ value: h.id, label: <Sensitive>{osLabel(h.os_info, h.name)}</Sensitive>, search: h.name }))}
         optionFilterProp="search"
         showSearch
         style={{ width: 200 }}
       />
       <Select value={target.kind} onChange={(v: TargetKind) => onChange({ ...target, kind: v, ref: '' })} options={TARGET_KINDS.map((k) => ({ value: k, label: t(`fly.targetKind.${k}`) }))} style={{ width: 150 }} />
       {target.kind === 'addr' ? (
-        <Input value={target.ref} onChange={(e) => onChange({ ...target, ref: e.target.value.trim() })} placeholder="192.168.1.20" style={{ width: 170 }} />
+        <Input className="sensitive" value={target.ref} onChange={(e) => onChange({ ...target, ref: e.target.value.trim() })} placeholder="192.168.1.20" style={{ width: 170 }} />
       ) : target.kind !== 'host' ? (
         <Select
           value={target.ref || undefined}
@@ -1784,7 +1802,7 @@ function TargetRow({ target, hosts, onChange, onRemove }: { target: FlyTarget; h
             onChange({ ...target, ref: v, port: target.port || it?.ports?.[0] || 0 })
           }}
           loading={list.loading}
-          options={items.map((x) => ({ value: x.name, label: `${x.name}${x.ip ? ` · ${x.ip}` : ''}${x.state ? ` · ${x.state}` : ''}` }))}
+          options={items.map((x) => ({ value: x.name, label: blurText(`${x.name}${x.ip ? ` · ${x.ip}` : ''}${x.state ? ` · ${x.state}` : ''}`) }))}
           placeholder={list.loading ? t('fly.loadingTargets') : t('fly.pickRef')}
           notFoundContent={list.loading ? t('fly.loadingTargets') : t('fly.noTargets')}
           style={{ width: 240 }}

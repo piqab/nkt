@@ -127,3 +127,27 @@ export function blurText(text: ReactNode): ReactNode {
   if (last < text.length) out.push(text.slice(last))
   return <>{out}</>
 }
+
+/** Текст, в котором известные значения (пользователь, имя) размыты, а
+ * остальное — как у blurText: для подписей вида «пароль sudo для alex»,
+ * где значение шаблоном не узнать. */
+export function blurValues(text: string, ...values: (string | undefined | null)[]): ReactNode {
+  const vals = values.filter((v): v is string => !!v && v.length > 0).sort((a, b) => b.length - a.length)
+  if (vals.length === 0) return blurText(text)
+  const re = new RegExp(vals.map(escapeRe).join('|'), 'g')
+  const out: ReactNode[] = []
+  let last = 0
+  let i = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(<span key={i++}>{blurText(text.slice(last, m.index))}</span>)
+    out.push(
+      <span key={i++} className="sensitive">
+        {m[0]}
+      </span>,
+    )
+    last = m.index + m[0].length
+  }
+  if (last < text.length) out.push(<span key={i++}>{blurText(text.slice(last))}</span>)
+  return <>{out}</>
+}

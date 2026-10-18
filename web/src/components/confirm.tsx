@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Modal } from 'antd'
 import { blurText } from '../privacy'
 import i18n from '../i18n'
@@ -16,7 +17,7 @@ import i18n from '../i18n'
  * без переписывания вызывающего кода.
  */
 export function confirmAction(
-  content: string,
+  content: ReactNode,
   opts: { title?: string; okText?: string; cancelText?: string; danger?: boolean } = {},
 ): Promise<boolean> {
   return new Promise((resolve) => {

@@ -171,6 +171,11 @@ screen sharing and screenshots: addresses and names of hosts and
 machines, users, keys and tokens, domains, cluster API addresses, IP/MAC
 are blurred on every page and in modal windows; in logs, alerts, findings
 and audit — addresses, e-mail, domains and the host names from the list;
-terminal, logs and topology — as a whole. Nothing shows on hover — turn
+terminal, logs and topology — as a whole. Deployments too: site domains
+and hosts, nkt-edge (addresses, fingerprint), Traffic Fly — the map
+(gateways, route names, target hosts), tables, client addresses, edit
+fields; plus diffs before saving, error messages, sudo rules and user,
+nkt users, fail2ban addresses. Browser tooltips are not shown in this
+mode. Nothing shows on hover — turn
 the mode off to read. The mode mark is the orange “nkt” badge in the
 header; the state is remembered in the browser.

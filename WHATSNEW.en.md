@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.36 — 2026-10-18
+
+- **“Hide sensitive data” covers the newer sections too.** Privacy mode now
+  blurs Deployments: site domains and hosts, nkt-edge (addresses,
+  fingerprint), Traffic Fly — the map (gateways, route names, target
+  hosts), tables, client addresses, edit fields and the container panel.
+  Also diffs before saving, error messages, sudo rules and user, the nkt
+  user list, fail2ban addresses, the container user and VM network
+  addresses. The map shows no full-name tooltips in this mode.
+
 ## v1.13.35 — 2026-10-18
 
 - **Hardening after scanner findings.** Unpacking the embedded UI for a

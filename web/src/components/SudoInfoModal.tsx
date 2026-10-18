@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { blurValues } from '../privacy'
 import { api, useApi } from '../api'
 import { Banner, Loading, Modal } from './ui'
 import { confirmAction } from './confirm'
@@ -64,7 +65,7 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
 
   async function disableRule(s: SudoSource) {
     const pw = c?.password === 'P' ? '' : '\n\n' + t('sudo.noPasswordWarn', { user: d?.user })
-    if (!(await confirmAction(t('sudo.confirmRuleOff', { file: s.file, line: s.line, text: s.text, user: d?.user }) + pw))) return
+    if (!(await confirmAction(blurValues(t('sudo.confirmRuleOff', { file: s.file, line: s.line, text: s.text, user: d?.user }) + pw, d?.user)))) return
     setBusy(`rule:${s.file}:${s.line}`)
     setNote(null)
     try {
@@ -80,8 +81,8 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
   }
 
   async function act(kind: 'narrow' | 'remove') {
-    if (kind === 'remove' && !(await confirmAction(t('hosts.confirmRemoveSudo', { user: d?.user, name: hostName })))) return
-    if (kind === 'narrow' && !(await confirmAction(t('sudo.confirmNarrow', { user: d?.user, name: hostName }), { danger: false }))) return
+    if (kind === 'remove' && !(await confirmAction(blurValues(t('hosts.confirmRemoveSudo', { user: d?.user, name: hostName }), d?.user)))) return
+    if (kind === 'narrow' && !(await confirmAction(blurValues(t('sudo.confirmNarrow', { user: d?.user, name: hostName }), d?.user), { danger: false }))) return
     setBusy(kind)
     setNote(null)
     try {
@@ -123,12 +124,10 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
                 {(c.sources ?? []).map((s) => (
                   <div key={`${s.file}:${s.line}`} className="sudo-source">
                     <div className="small">
-                      <span className="mono">
-                        {s.file}:{s.line}
-                      </span>{' '}
+                      <span className="mono">{blurValues(`${s.file}:${s.line}`, d?.user)}</span>{' '}
                       <Tag color={s.kind === 'nkt' ? 'blue' : s.kind === 'user' ? 'orange' : 'red'}>{t(`sudo.kind.${s.kind}`)}</Tag>
                     </div>
-                    <pre className="mono small" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{s.text}</pre>
+                    <pre className="mono small" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{blurValues(s.text, d?.user)}</pre>
                     {s.removable ? (
                       <Button size="small" danger loading={busy === `rule:${s.file}:${s.line}`} disabled={!!busy} onClick={() => void disableRule(s)}>
                         {t('sudo.ruleOff')}
@@ -139,7 +138,7 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
                   </div>
                 ))}
               </div>
-              {c.password && c.password !== 'P' && <div className="small muted" style={{ marginTop: '0.3rem' }}>{t('sudo.noPasswordWarn', { user: d.user })}</div>}
+              {c.password && c.password !== 'P' && <div className="small muted" style={{ marginTop: '0.3rem' }}>{blurValues(t('sudo.noPasswordWarn', { user: d.user }), d.user)}</div>}
             </div>
           )}
           {c?.full && (c.sources ?? []).length === 0 && (c.full_rules ?? []).length > 0 && (

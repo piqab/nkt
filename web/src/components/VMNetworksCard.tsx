@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Checkbox, Input, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { Sensitive } from '../privacy'
 import { ApiError, api, useApi } from '../api'
 import type { Me, VMNetwork } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from './ui'
@@ -69,7 +70,7 @@ export default function VMNetworksCard({ me }: { me: Me }) {
       key: 'subnet',
       render: (_, n) => (
         <span className="small nowrap">
-          {n.address ? `${n.address}/${n.netmask}` : '—'}
+          {n.address ? <Sensitive>{`${n.address}/${n.netmask}`}</Sensitive> : '—'}
           {n.address && <div className="small muted">{n.dhcp ? t('vmnet.withDHCP') : t('vmnet.noDHCP')}</div>}
         </span>
       ),

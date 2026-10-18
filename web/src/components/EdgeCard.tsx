@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { osLabel } from './OsIcon'
 import { Button, Checkbox, Input, Select, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { Sensitive, blurValues } from '../privacy'
 import { ApiError, api, useApi } from '../api'
 import { CopyButton } from './CopyButton'
 import type { HubHost } from '../types'
@@ -94,7 +95,9 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
           {edges.map((e) => (
             <div key={e.id} className="col small" style={{ gap: '0.3rem', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
               <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <strong className="mono">{e.domain || e.address}</strong>
+                <strong className="mono">
+                  <Sensitive>{e.domain || e.address}</Sensitive>
+                </strong>
                 {e.connected ? <Tag color="success">{t('edge.connected')}</Tag> : e.enabled ? <Tag color="error">{t('edge.disconnected')}</Tag> : <Tag>{t('edge.disabled')}</Tag>}
                 {e.connected && e.since && <span className="muted">{formatRelative(e.since)}</span>}
                 {e.roles.map((r) => (
@@ -147,20 +150,28 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
               </div>
               {e.domain && e.roles.includes('hooks') && (
                 <div>
-                  {t('edge.hooksAt')}: <span className="mono">https://{e.domain}/hooks/…</span>
+                  {t('edge.hooksAt')}: <span className="mono">
+                    https://<Sensitive>{e.domain}</Sensitive>/hooks/…
+                  </span>
                 </div>
               )}
               {e.domain && e.roles.includes('api') && (
                 <div>
-                  {t('edge.apiAt')}: <span className="mono">https://{e.domain}/api/…</span>
+                  {t('edge.apiAt')}: <span className="mono">
+                    https://<Sensitive>{e.domain}</Sensitive>/api/…
+                  </span>
                 </div>
               )}
               <div>
-                {t('edge.tunnel')}: <span className="mono">{e.address}</span>
+                {t('edge.tunnel')}: <span className="mono">
+                  <Sensitive>{e.address}</Sensitive>
+                </span>
               </div>
               {e.fingerprint && (
                 <div>
-                  {t('edge.fingerprint')}: <span className="mono">{e.fingerprint}</span>
+                  {t('edge.fingerprint')}: <span className="mono">
+                    <Sensitive>{e.fingerprint}</Sensitive>
+                  </span>
                 </div>
               )}
               {!e.connected && e.last_error && <Banner kind="error">{e.last_error}</Banner>}
@@ -236,12 +247,13 @@ export function InstallModal({
             if (h && hostName(h.addr)) setDomain(hostName(h.addr))
           }}
           optionFilterProp="search"
-          options={list.map((h) => ({ value: h.id, label: osLabel(h.os_info, `${h.name} (${h.addr})`), search: `${h.name} (${h.addr})` }))}
+          options={list.map((h) => ({ value: h.id, label: <Sensitive>{osLabel(h.os_info, `${h.name} (${h.addr})`)}</Sensitive>, search: `${h.name} (${h.addr})` }))}
         />
         {needDomain && (
         <Space.Compact size="small">
           <Input
             size="small"
+            className="sensitive"
             placeholder="hooks.example.com"
             value={domain}
             onChange={(ev) => {
@@ -282,7 +294,7 @@ export function InstallModal({
         {flyMixed && <Banner kind="warn">{t('edge.flyAlone')}</Banner>}
         {needDomain && (
           <>
-            <Input size="small" placeholder={t('edge.email')} value={email} onChange={(ev) => setEmail(ev.target.value.trim())} />
+            <Input size="small" className="sensitive" placeholder={t('edge.email')} value={email} onChange={(ev) => setEmail(ev.target.value.trim())} />
             <Checkbox checked={github} onChange={(ev) => setGithub(ev.target.checked)}>
               {t('edge.githubOnly')}
             </Checkbox>
@@ -294,7 +306,7 @@ export function InstallModal({
         {sudoNeed && (
           <div className="col" style={{ gap: '0.35rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.75rem' }}>
             <label className="small">
-              {t('edge.sudoPassword', { user: sudoNeed.user })}
+              {blurValues(t('edge.sudoPassword', { user: sudoNeed.user }), sudoNeed.user)}
               <Input.Password
                 size="small"
                 autoComplete="off"
@@ -367,8 +379,8 @@ function ManualModal({ st, onClose, onSaved }: { st?: EdgeStatus; onClose: () =>
       <p className="small muted">{t('edge.manualHint')}</p>
       {error && <Banner kind="error">{error}</Banner>}
       <div className="col" style={{ gap: '0.5rem' }}>
-        <Input size="small" placeholder="vps.example.com:8444" value={address} onChange={(ev) => setAddress(ev.target.value.trim())} />
-        <Input size="small" placeholder="hooks.example.com" value={domain} onChange={(ev) => setDomain(ev.target.value.trim())} />
+        <Input size="small" className="sensitive" placeholder="vps.example.com:8444" value={address} onChange={(ev) => setAddress(ev.target.value.trim())} />
+        <Input size="small" className="sensitive" placeholder="hooks.example.com" value={domain} onChange={(ev) => setDomain(ev.target.value.trim())} />
         <Input.Password size="small" placeholder={st?.configured ? t('edge.tokenKeep') : 'EDGE_TOKEN'} value={token} onChange={(ev) => setToken(ev.target.value)} autoComplete="new-password" />
         <Checkbox checked={enabled} onChange={(ev) => setEnabled(ev.target.checked)}>
           {t('edge.enabled')}
@@ -481,7 +493,7 @@ function ProbeModal({ edge, onClose }: { edge: EdgeStatus; onClose: () => void }
     <Modal title={t('edge.probeTitle', { name: edge.domain || edge.address })} onClose={onClose} width={680}>
       <p className="small muted">{t('edge.probeHint')}</p>
       <div className="col" style={{ gap: '0.5rem' }}>
-        <Input size="small" className="mono" placeholder="shop.example.com" value={host} onChange={(ev) => setHost(ev.target.value.trim())} />
+        <Input size="small" className="mono sensitive" placeholder="shop.example.com" value={host} onChange={(ev) => setHost(ev.target.value.trim())} />
         <Input size="small" className="mono" placeholder="80, 443" value={ports} onChange={(ev) => setPorts(ev.target.value)} addonBefore={t('edge.probePorts')} />
         <Checkbox checked={https} onChange={(ev) => setHttps(ev.target.checked)}>
           {t('edge.probeHttps')}

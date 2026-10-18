@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { osLabel } from './OsIcon'
 import { Button, Checkbox, Input, InputNumber, Radio, Segmented, Select, Space, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { Sensitive, blurText } from '../privacy'
 import { api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
 import { JobLogModal } from '../pages/Jobs'
@@ -155,9 +156,13 @@ export function SitesPanel({ me }: { me: Me }) {
                 render: (_, s) => (
                   <div>
                     <a href={`https://${s.domains[0]}/`} target="_blank" rel="noreferrer" className="mono">
-                      {s.domains[0]}
+                      <Sensitive>{s.domains[0]}</Sensitive>
                     </a>
-                    {s.domains.length > 1 && <div className="small muted mono">{s.domains.slice(1).join(', ')}</div>}
+                    {s.domains.length > 1 && (
+                      <div className="small muted mono">
+                        <Sensitive>{s.domains.slice(1).join(', ')}</Sensitive>
+                      </div>
+                    )}
                     {s.pipeline_id ? (
                       <Tooltip title={t('sites.fromPipelineHint')}>
                         <Tag color="blue">{t('sites.fromPipeline', { name: s.pipeline_name ?? `#${s.pipeline_id}` })}</Tag>
@@ -166,14 +171,14 @@ export function SitesPanel({ me }: { me: Me }) {
                   </div>
                 ),
               },
-              { title: t('sites.colHost'), key: 'host', render: (_, s) => <span>{s.host_name}</span> },
+              { title: t('sites.colHost'), key: 'host', render: (_, s) => <Sensitive>{s.host_name}</Sensitive> },
               {
                 title: t('sites.colTarget'),
                 key: 'target',
                 render: (_, s) => (
                   <span className="small">
                     <Tag>{s.proxy}</Tag>
-                    <span className="mono">{s.stack ? `${s.stack}/${s.service}:${s.container_port}` : s.upstream}</span>
+                    <span className="mono">{s.stack ? `${s.stack}/${s.service}:${s.container_port}` : blurText(s.upstream)}</span>
                   </span>
                 ),
               },
@@ -184,14 +189,14 @@ export function SitesPanel({ me }: { me: Me }) {
                   <Space size={4} wrap>
                     {s.status === 'proxy-manual' ? (
                       // Не ошибка: прокси настроен вручную, причина — подсказкой.
-                      <Tooltip title={s.error}>
+                      <Tooltip title={blurText(s.error)}>
                         <Tag color="default">{t('sites.status.proxy-manual')}</Tag>
                       </Tooltip>
                     ) : (
                       <Tag color={STATUS_COLOR[s.status] ?? 'default'}>{t(`sites.status.${s.status || 'new'}`)}</Tag>
                     )}
                     {s.error && s.status !== 'proxy-manual' && (
-                      <Tooltip title={s.error}>
+                      <Tooltip title={blurText(s.error)}>
                         <span className="small" style={{ color: 'var(--status-error)' }}>{t('sites.hasError')}</span>
                       </Tooltip>
                     )}
@@ -210,7 +215,7 @@ export function SitesPanel({ me }: { me: Me }) {
                       <Tag color={dnsOK ? 'success' : 'error'}>DNS</Tag>
                       {c.https?.checked_at &&
                         (c.https.wrong_cert ? (
-                          <Tooltip title={t('sites.wrongCertHint', { names: (c.https.cert_names ?? []).join(', ') })}>
+                          <Tooltip title={blurText(t('sites.wrongCertHint', { names: (c.https.cert_names ?? []).join(', ') }))}>
                             <Tag color="error">{t('sites.wrongCert')}</Tag>
                           </Tooltip>
                         ) : c.https.ok ? (
@@ -378,13 +383,13 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
                 setHostID(v)
                 setPre(null)
               }}
-              options={(hosts.data ?? []).filter((h) => h.status === 'online').map((h) => ({ value: h.id, label: osLabel(h.os_info, h.name) }))}
+              options={(hosts.data ?? []).filter((h) => h.status === 'online').map((h) => ({ value: h.id, label: <Sensitive>{osLabel(h.os_info, h.name)}</Sensitive> }))}
               placeholder={t('sites.hostPlaceholder')}
             />
           </label>
           <label style={{ flex: 1, minWidth: 260 }}>
             {t('sites.domains')}
-            <Input value={domains} onChange={(e) => setDomains(e.target.value)} placeholder="app.example.com, www.app.example.com" className="mono" />
+            <Input value={domains} onChange={(e) => setDomains(e.target.value)} placeholder="app.example.com, www.app.example.com" className="mono sensitive" />
           </label>
           <Button loading={checking} disabled={hostID === null || !domains.trim()} onClick={() => void check()}>
             {t('sites.checkBtn')}
@@ -400,8 +405,11 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
             {pre.outside.dns.map((d) => (
               <div key={d.domain} className="small">
                 <Tag color={d.match ? 'success' : 'error'}>{d.match ? t('sites.dnsOK') : t('sites.dnsBad')}</Tag>
-                <span className="mono">{d.domain}</span> → <span className="mono">{(d.domain_ips ?? []).join(', ') || '—'}</span>
-                {!d.match && <span className="muted"> · {t('sites.hostIPs', { ips: (d.host_ips ?? []).join(', ') })}</span>}
+                <span className="mono">
+                  <Sensitive>{d.domain}</Sensitive>
+                </span>{' '}
+                → <span className="mono">{blurText((d.domain_ips ?? []).join(', ') || '—')}</span>
+                {!d.match && <span className="muted"> · {blurText(t('sites.hostIPs', { ips: (d.host_ips ?? []).join(', ') }))}</span>}
               </div>
             ))}
             <div className="small">

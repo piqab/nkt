@@ -145,7 +145,7 @@ export default function Fail2ban({ me }: { me: Me }) {
               </span>
               {data.client_ip && (
                 <span className="small muted">
-                  {t('fail2ban.yourAddr')} <span className="mono">{data.client_ip}</span>
+                  {t('fail2ban.yourAddr')} <span className="mono sensitive">{data.client_ip}</span>
                 </span>
               )}
             </div>
