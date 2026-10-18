@@ -1281,7 +1281,31 @@ function FlyPalette({ hosts, onPick }: { hosts: { id: number; name: string }[]; 
   const { t } = useTranslation()
   const [kind, setKind] = useState<TargetKind>('container')
   const [q, setQ] = useState('')
-  const [open, setOpen] = useState<number | null>(hosts[0]?.id ?? null)
+  const [open, setOpen] = useState<number | null>(null)
+  const [showEmpty, setShowEmpty] = useState(false)
+  // Сколько у хоста целей этого вида: списки всех хостов — сразу и
+  // параллельно (кэш хаба на минуту); хосты, где пусто или нет связи,
+  // скрыты. undefined — ещё грузится.
+  const [counts, setCounts] = useState<Record<string, number | undefined>>({})
+  useEffect(() => {
+    let alive = true
+    setCounts({})
+    for (const h of hosts) {
+      loadTargets(h.id, kind)
+        .then((items) => alive && setCounts((c) => ({ ...c, [h.id]: items.filter((x) => x.kind === kind).length })))
+        .catch(() => alive && setCounts((c) => ({ ...c, [h.id]: 0 })))
+    }
+    return () => {
+      alive = false
+    }
+    // Список хостов родитель строит заново на каждый опрос — зависимость
+    // по составу, а не по ссылке.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hosts.map((h) => h.id).join(','), kind])
+  const empty = hosts.filter((h) => counts[h.id] === 0)
+  const list = showEmpty ? hosts : hosts.filter((h) => counts[h.id] !== 0)
+  // Раскрыт первый непустой хост, пока пользователь не выбрал сам.
+  const opened = open ?? list.find((h) => (counts[h.id] ?? 0) > 0)?.id ?? null
   return (
     <div className="col" style={{ gap: '0.4rem', minWidth: 0 }}>
       <Space.Compact size="small">
@@ -1293,15 +1317,24 @@ function FlyPalette({ hosts, onPick }: { hosts: { id: number; name: string }[]; 
       </Space.Compact>
       <Input size="small" allowClear placeholder={t('fly.paletteSearch')} value={q} onChange={(e) => setQ(e.target.value)} />
       <div style={{ maxHeight: 460, overflowY: 'auto', paddingRight: 4 }}>
-        {hosts.map((h) => (
-          <div key={h.id}>
-            <Button type="text" size="small" style={{ padding: 0, fontWeight: 600 }} onClick={() => setOpen(open === h.id ? null : h.id)}>
-              {open === h.id ? '▾' : '▸'} <Sensitive>{h.name}</Sensitive>
-            </Button>
-            {open === h.id && <PaletteHost hostId={h.id} kind={kind} q={q} onPick={onPick} />}
-          </div>
-        ))}
+        {list.map((h) => {
+          const n = counts[h.id]
+          return (
+            <div key={h.id}>
+              <Button type="text" size="small" style={{ padding: 0, fontWeight: 600, opacity: n === undefined || n === 0 ? 0.55 : 1 }} onClick={() => setOpen(opened === h.id ? -1 : h.id)}>
+                {opened === h.id ? '▾' : '▸'} <Sensitive>{h.name}</Sensitive> <span className="muted" style={{ fontWeight: 400 }}>{n === undefined ? '…' : n}</span>
+              </Button>
+              {opened === h.id && <PaletteHost hostId={h.id} kind={kind} q={q} onPick={onPick} />}
+            </div>
+          )
+        })}
+        {list.length === 0 && <div className="small muted">{t('fly.paletteNone')}</div>}
       </div>
+      {empty.length > 0 && (
+        <Button type="link" size="small" style={{ padding: 0, alignSelf: 'flex-start' }} onClick={() => setShowEmpty(!showEmpty)}>
+          {showEmpty ? t('fly.paletteHideEmpty') : t('fly.paletteEmptyHidden', { n: empty.length })}
+        </Button>
+      )}
       {!onPick && <span className="small muted">{t('fly.paletteHint')}</span>}
     </div>
   )

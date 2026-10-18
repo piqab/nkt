@@ -1,7 +1,8 @@
 import type { CSSProperties } from 'react'
 import { Sensitive, blurText, setKnownNames } from '../privacy'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Radio, Select, Space, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Radio, Select, Space, Switch, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { HostsMap } from '../components/HostsMap'
 import {
   InfoCircleOutlined,
   CheckCircleFilled,
@@ -406,8 +407,11 @@ export default function Hosts({
   hubVersion: hubVersionProp,
   onOpenProfiles,
   onOpenDeploy,
+  onOpenHostAt,
 }: {
   onSelect: (host: { id: number; name: string }) => void
+  /** Открыть хост сразу на нужной странице (с карты — контейнер, машина). */
+  onOpenHostAt?: (id: number, name: string, path: string) => void
   hubVersion?: string
   /** Открыть раздел «Профили» хаба — из подсказки и с тега группы. */
   onOpenProfiles?: () => void
@@ -416,6 +420,22 @@ export default function Hosts({
 }) {
   const { t } = useTranslation()
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
+  // Карта вместо списка — выключена по умолчанию, выбор помнится.
+  const [mapOn, setMapOnState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('nkt-hostsmap-on') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setMapOn = (v: boolean) => {
+    setMapOnState(v)
+    try {
+      localStorage.setItem('nkt-hostsmap-on', v ? '1' : '0')
+    } catch {
+      // без localStorage — только до перезагрузки
+    }
+  }
   useEffect(() => rememberHubHosts(hosts ?? undefined), [hosts])
   // Версия хаба — из ответа списка, а не из /auth/me: тот загружен при
   // открытии вкладки, и после самообновления хаба в старой вкладке все
@@ -1651,10 +1671,22 @@ export default function Hosts({
                 if (file) void importHosts(file)
               }}
             />
+            {/* Карта — справа в той же строке; в узком окне уходит влево
+                вместе с переносом кнопок. */}
+            <span className="row small" style={{ gap: '0.35rem', alignItems: 'center', marginLeft: 'auto', cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setMapOn(!mapOn)}>
+              <Switch size="small" checked={mapOn} />
+              {t('hostsMap.toggle')}
+            </span>
           </div>
         }
       >
-        {loading && !hosts ? (
+        {mapOn && hosts?.length ? (
+          <HostsMap
+            hosts={hosts}
+            onOpenHost={(h) => onSelect({ id: h.id, name: h.name })}
+            onOpenAt={(h, path) => (onOpenHostAt ? onOpenHostAt(h.id, h.name, path) : onSelect({ id: h.id, name: h.name }))}
+          />
+        ) : loading && !hosts ? (
           <Loading what={t('hosts.loading')} />
         ) : !hosts?.length && !groupedHosts.length ? (
           <p className="small muted">{t('hosts.noHosts')}</p>
