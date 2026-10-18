@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.41 — 2026-10-18
+
+- **Hosts map.** In Hosts, on the right of the button row, a Map switch
+  (off by default): each host's containers, VMs and LXD as tiles (type,
+  state, image or OS, IP, ports, CPUs and memory), and on the left the
+  Traffic Fly routes and deployment pipelines with links to their tiles,
+  each in its own colour; a reserve target is dashed, a failing one
+  blinks. Hover or click highlights the links; the wheel zooms at the
+  cursor, dragging pans, buttons −, +, Fit; a host with more than 12 tiles
+  shows "+N more" and "Expand all"; search and filters. Clicking a tile
+  opens the host's "Containers and VMs" section.
+- **Traffic Fly: the container panel lists only hosts that have some.**
+  While editing the map each host shows its number of containers, VMs or
+  LXD; empty and offline hosts are hidden ("hosts without targets hidden:
+  N — show").
+
 ## v1.13.40 — 2026-10-18
 
 - **The dry run no longer breaks on image checks.** The hub waited 30

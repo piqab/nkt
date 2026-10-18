@@ -244,6 +244,39 @@ one, and a broken transfer does not affect the rest. The red "unreachable"
 icon appears only after **two** failed polls in a row — one chance failure
 does not light it.
 
+## Hosts map
+
+The **Map** switch on the right of the button row above the list (off by
+default, remembered in the browser) shows a map instead of the list: each
+host's containers, virtual machines and LXD as tiles, and on the left the
+Traffic Fly routes and deployment pipelines with links to their tiles.
+
+- **A tile**: type (docker, VM, LXD), name, state as the border colour
+  (green — running, grey — stopped, yellow — restarting or paused), image
+  or OS, IP, ports, the machine's CPUs and memory. Click — the host's
+  "Containers and VMs" section with the row highlighted; click the host
+  header — the host itself.
+- **Links** — every route and pipeline has its own colour. Traffic Fly:
+  an active target is a solid line, a reserve one dashed, a blinking mark
+  means the target fails its check. Deployments: lines to the stack's
+  containers on the deployment hosts. Hovering or clicking a route,
+  pipeline or tile highlights its links and dims the rest; clicking empty
+  space clears it. The legend on top has "Traffic Fly" and "Deployments"
+  checkboxes and the colour chips.
+- **Zoom and pan**: the mouse wheel zooms at the cursor, dragging empty
+  space pans; buttons **−**, **+**, the percentage (100 %) and **Fit**.
+  The view is remembered.
+- A host with more than 12 tiles shows the first ones (linked and running
+  first) and **+N more**; **Expand all** shows everything.
+- Filters: search by name, image, IP and stack, "running only", "linked
+  only".
+- The hub reads the lists from the hosts through the same calls as the
+  Traffic Fly "Containers and VMs" panel (once a minute; the refresh button
+  does it now). An offline host is a dashed block. Privacy mode blurs host
+  names, IPs and route domains.
+
+![Hosts map](/screens/en/hosts-map.png)
+
 ## Narrow sudo
 
 `NOPASSWD: ALL` makes root out of anyone who signs in as that user:

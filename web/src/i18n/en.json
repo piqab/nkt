@@ -4794,6 +4794,35 @@
     "draftDiscardTitle": "Discard map changes?",
     "draftDiscardText": "{{n}} unapplied changes will be lost. The saved revision stays as it is.",
     "draftDiscardOk": "Discard",
-    "draftKeep": "Keep editing"
+    "draftKeep": "Keep editing",
+    "paletteNone": "No host has targets of this kind",
+    "paletteEmptyHidden": "hosts without targets hidden: {{n}} — show",
+    "paletteHideEmpty": "hide empty"
+  },
+  "hostsMap": {
+    "toggle": "Map",
+    "title": "hosts map",
+    "fit": "Fit",
+    "expandAll": "Expand all",
+    "search": "search",
+    "onlyRunning": "running only",
+    "onlyLinked": "linked only",
+    "refreshHint": "Re-read containers, VMs and LXD from the hosts (otherwise once a minute)",
+    "deployments": "Deployments",
+    "legendLines": "solid — active, dashed — reserve, blinking — target down",
+    "stack": "stack",
+    "offline": "offline",
+    "noAnswer": "no answer",
+    "count": "{{n}}",
+    "empty": "no containers, VMs or LXD",
+    "more": "+{{n}} more",
+    "hint": "Wheel zooms at the cursor, drag pans. Hover or click a route, pipeline or tile to highlight its links; click a tile to open its section on the host, the header to open the host.",
+    "deploy": {
+      "succeeded": "deployed",
+      "failed": "deployment failed",
+      "running": "deploying",
+      "queued": "queued",
+      "canceled": "canceled"
+    }
   }
 }

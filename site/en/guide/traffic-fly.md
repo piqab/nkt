@@ -193,7 +193,9 @@ see the map and the client count, not addresses.
 The **Edit map** button (admins) turns on editing: on the right, as a
 fourth column, a **Containers and VMs** panel by host, with search; the
 candidates are drawn as the same blocks as targets (green border —
-running, grey — stopped; address and ports below). Below the map is the
+running, grey — stopped; address and ports below). Next to a host name is
+the number of targets of that kind; hosts without any, or offline, are
+hidden ("hosts without targets hidden: N — show"). Below the map is the
 **trash**.
 
 Everything is done with the mouse (or a finger on a phone):

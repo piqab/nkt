@@ -282,6 +282,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/clusters/{id}/nodes", s.handleClusterNodes)
 
 				r.Get("/hub/hosts", s.handleListHosts)
+				r.Get("/hub/map", s.handleHostsMap)
 				// Журнал оповещений читают все, кто видит список хостов:
 				// это то же состояние, только во времени.
 				r.Get("/hub/events", s.handleEvents)

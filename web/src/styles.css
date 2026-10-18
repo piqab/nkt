@@ -892,6 +892,9 @@ span.vm-toggle {
    нехватке места переносятся кнопки, а не режется название. */
 .hosts-card .ant-card-head-title { flex: 0 0 auto; overflow: visible; font-size: 0.92rem; }
 .hosts-card .ant-card-extra { flex: 1 1 auto; margin-inline-start: 0.6rem; display: flex; justify-content: flex-start; }
+/* Строка действий — на всю ширину: переключатель «Карта» прижат вправо
+ * (margin-left: auto), в узком окне переносится вместе с кнопками. */
+.hosts-card .ant-card-extra > .row, .hosts-card .ant-card-extra > .row > .row { flex: 1 1 auto; min-width: 0; }
 
 /* Справка по командам сценария. */
 .script-help-cmd { padding: 0.5rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }

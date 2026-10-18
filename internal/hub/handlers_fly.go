@@ -393,6 +393,14 @@ type flyTargetItem struct {
 	IP    string `json:"ip,omitempty"`
 	State string `json:"state,omitempty"`
 	Ports []int  `json:"ports,omitempty"`
+	// Для карты хостов: образ, стек compose и сервис, ОС, ресурсы.
+	Image    string        `json:"image,omitempty"`
+	Project  string        `json:"project,omitempty"`
+	Service  string        `json:"service,omitempty"`
+	OSInfo   *model.OSInfo `json:"os_info,omitempty"`
+	CPUs     int           `json:"cpus,omitempty"`
+	MemBytes int64         `json:"mem_bytes,omitempty"`
+	LXDType  string        `json:"lxd_type,omitempty"`
 }
 
 // flyTargetsCache — списки целей по хосту и виду на flyTargetsTTL:
@@ -435,7 +443,15 @@ func (s *Server) handleFlyTargets(w http.ResponseWriter, r *http.Request) {
 	refresh := r.URL.Query().Get("refresh") == "1"
 	ctx := r.Context()
 	user := auth.Username(ctx)
+	out, _ := s.flyTargetsCached(ctx, user, id, kinds, refresh)
+	writeJSON(w, http.StatusOK, map[string]any{"targets": out})
+}
+
+// flyTargetsCached — цели хоста нескольких видов (параллельно, из кэша на
+// flyTargetsTTL); ошибка — первая из видов, списки — что получилось.
+func (s *Server) flyTargetsCached(ctx context.Context, user string, id int64, kinds []string, refresh bool) ([]flyTargetItem, error) {
 	lists := make([][]flyTargetItem, len(kinds))
+	errs := make([]error, len(kinds))
 	var wg sync.WaitGroup
 	for i, k := range kinds {
 		key := fmt.Sprintf("%d/%s", id, k)
@@ -452,7 +468,7 @@ func (s *Server) handleFlyTargets(w http.ResponseWriter, r *http.Request) {
 			cctx, cancel := context.WithTimeout(ctx, flyTargetsTimeout)
 			defer cancel()
 			items, err := s.flyTargetsOf(cctx, user, id, k)
-			lists[i] = items
+			lists[i], errs[i] = items, err
 			if err == nil {
 				flyTargetsCache.Lock()
 				flyTargetsCache.m[key] = flyTargetsEntry{at: time.Now(), items: items}
@@ -465,7 +481,12 @@ func (s *Server) handleFlyTargets(w http.ResponseWriter, r *http.Request) {
 	for _, l := range lists {
 		out = append(out, l...)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"targets": out})
+	for _, err := range errs {
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
 }
 
 // flyTargetsOf — один вид целей хоста.
@@ -480,7 +501,7 @@ func (s *Server) flyTargetsOf(ctx context.Context, user string, id int64, kind s
 			return out, err
 		}
 		for _, c := range cs.Containers {
-			it := flyTargetItem{Kind: "container", Name: c.Name, State: c.State}
+			it := flyTargetItem{Kind: "container", Name: c.Name, State: c.State, Image: c.Image, Project: c.Project, Service: c.ServiceName, OSInfo: c.OSInfo}
 			for _, n := range c.Networks {
 				if n.IPAddress != "" {
 					it.IP = n.IPAddress
@@ -500,7 +521,7 @@ func (s *Server) flyTargetsOf(ctx context.Context, user string, id int64, kind s
 			return out, err
 		}
 		for _, v := range vms.VMs {
-			it := flyTargetItem{Kind: "vm", Name: v.Name, State: v.State}
+			it := flyTargetItem{Kind: "vm", Name: v.Name, State: v.State, OSInfo: v.OSInfo, CPUs: v.VCPUs, MemBytes: v.MemoryKB << 10}
 			for _, n := range v.Networks {
 				if n.IP != "" {
 					it.IP = n.IP
@@ -517,7 +538,7 @@ func (s *Server) flyTargetsOf(ctx context.Context, user string, id int64, kind s
 			return out, err
 		}
 		for _, in := range lxd.Instances {
-			it := flyTargetItem{Kind: "lxd", Name: in.Name, State: in.Status}
+			it := flyTargetItem{Kind: "lxd", Name: in.Name, State: in.Status, OSInfo: in.OSInfo, MemBytes: in.MemoryBytes, LXDType: in.Type}
 			if len(in.IPv4) > 0 {
 				it.IP = in.IPv4[0]
 			}

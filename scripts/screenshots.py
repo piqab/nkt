@@ -60,6 +60,7 @@ SCREENS = [
     # (например, создание инстанса LXD — POST /api/lxd/instances?job=1).
     ('job', 'host', '/jobs', "document.querySelector('button[aria-label=\"' + pick({ru: 'журнал', en: 'log'}) + '\"]')?.click()"),
     ('hub-hosts', 'hub', '/', ''),
+    ('hosts-map', 'hub', '/', "clickText('span', new RegExp('^' + pick({ru: 'Карта', en: 'Map'}) + '$')); await sleep(6000)"),
     ('hub-alerts', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'})"),
     ('hub-scripts', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/)"),
     ('hub-script-scheme', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/); await sleep(800); tab({ru: 'Схема', en: 'Scheme'})"),
@@ -242,7 +243,7 @@ def main():
         # Язык и тема — из localStorage, как их хранит интерфейс; ставятся до
         # загрузки страницы, чтобы не ловить перерисовку.
         pre = ws.cmd('Page.addScriptToEvaluateOnNewDocument', {
-            'source': f"localStorage.setItem('nkt-lang', {lang!r}); localStorage.setItem('nkt-theme', 'light'); localStorage.setItem('nkt-sidebar-collapsed', '0');"})
+            'source': f"localStorage.setItem('nkt-lang', {lang!r}); localStorage.setItem('nkt-theme', 'light'); localStorage.setItem('nkt-sidebar-collapsed', '0'); localStorage.setItem('nkt-hostsmap-on', '0'); localStorage.removeItem('nkt-hostsmap-view'); localStorage.removeItem('nkt-hub-host');"})
         outdir = os.path.join(args.out, lang)
         os.makedirs(outdir, exist_ok=True)
         for name, where, path, action in SCREENS:
