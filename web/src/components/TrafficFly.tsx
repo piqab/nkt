@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Button, Checkbox, Input, InputNumber, Radio, Select, Space, Tag, Tooltip } from 'antd'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Checkbox, Input, InputNumber, Select, Space, Switch, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { DeleteOutlined } from '@ant-design/icons'
 import { api, useApi } from '../api'
 import { Banner, Card, DiffView, Loading, Modal } from './ui'
 import { DataTable } from './DataTable'
@@ -9,7 +10,9 @@ import { formatBytes } from './charts'
 import { unifiedDiff } from './textDiff'
 import { InstallModal } from './EdgeCard'
 import { osLabel } from './OsIcon'
-import type { HubHost, Me } from '../types'
+import { confirmAction } from './confirm'
+import { activeCount, applyOps, draftMarks, opBlocked, opEta, opKeys, pushOp, type FlyOp, type OpMark } from './flyOps'
+import type { HubHost, Job, Me } from '../types'
 
 // Traffic Fly: проброс трафика из интернета через VPS-шлюз к сервисам на
 // хостах — с настоящим IP клиента и балансировкой. Карта, маршруты (по
@@ -191,12 +194,20 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   const [history, setHistory] = useState(false)
   const [addGateway, setAddGateway] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Перенаправление на карте: режим, окно переключения, меню цели и выбор
-  // контейнера щелчком (на телефоне перетаскивать неудобно).
-  const [redirect, setRedirect] = useState(false)
-  const [switchAsk, setSwitchAsk] = useState<{ route: FlyRoute; after: FlyTarget[]; title: string } | null>(null)
+  // Правка карты: черновик операций (одна версия и одно задание по
+  // «Применить изменения») или «применять сразу» (задание на действие).
+  // Задания в работе — спиннером с отсчётом на затронутых блоках.
+  const [mapEdit, setMapEdit] = useState(false)
+  const [applyNow, setApplyNow] = useState(false)
+  const [draft, setDraft] = useState<FlyOp[]>([])
+  const [running, setRunning] = useState<RunningJob[]>([])
+  const [failed, setFailed] = useState<number[]>([])
+  const [now, setNow] = useState(() => Date.now())
   const [targetMenu, setTargetMenu] = useState<{ route: FlyRoute; target: FlyTarget } | null>(null)
-  const [picker, setPicker] = useState<{ route: FlyRoute; target: FlyTarget } | null>(null)
+  const [picker, setPicker] = useState<FlyRoute | null>(null)
+  const [portAsk, setPortAsk] = useState<PortAsk | null>(null)
+  const [moveAsk, setMoveAsk] = useState<{ route: FlyRoute; target: FlyTarget } | null>(null)
+  const [draftAsk, setDraftAsk] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const doc = fly.data?.doc
@@ -239,6 +250,115 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   const appliedRev = status.data?.applied ?? fly.data?.applied ?? 0
   const pending = doc && fly.data && doc.revision !== appliedRev
 
+  const alive = (route: string, target: string) => {
+    const ts = routeStats.get(route)?.targets?.find((x) => x.id === target)
+    return !!ts && ts.checked && ts.alive
+  }
+  // Карта показывает, что будет: сохранённое, задания в очереди, черновик.
+  const queued = useMemo(() => running.flatMap((j) => j.ops), [running])
+  const base = useMemo(() => (doc ? applyOps(doc.routes, queued) : []), [doc, queued])
+  const preview = useMemo(() => applyOps(base, draft), [base, draft])
+  const changes = useMemo(() => draftMarks(base, preview), [base, preview])
+  const busyKeys = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const j of running) {
+      const left = Math.max(0, Math.round(j.eta - (now - j.started) / 1000))
+      for (const k of j.ops.flatMap(opKeys)) m.set(k, Math.max(left, m.get(k) ?? 0))
+    }
+    return m
+  }, [running, now])
+
+  // Задания с карты: раз в секунду — отсчёт, раз в две — состояние;
+  // закончилось — документ перечитывается, неудачное — в баннер.
+  const runningRef = useRef(running)
+  runningRef.current = running
+  const hasRunning = running.length > 0
+  useEffect(() => {
+    if (!hasRunning) return
+    let tick = 0
+    const iv = setInterval(() => {
+      setNow(Date.now())
+      if (tick++ % 2) return
+      void (async () => {
+        const done: RunningJob[] = []
+        for (const j of runningRef.current) {
+          const job = await api<Job>(`/hosts/local/jobs/${j.id}`).catch(() => null)
+          if (job && job.status !== 'queued' && job.status !== 'running') done.push({ ...j, status: job.status })
+        }
+        if (done.length === 0) return
+        await Promise.all([fly.reload(), status.reload()])
+        setRunning((rs) => rs.filter((r) => !done.some((d) => d.id === r.id)))
+        const bad = done.filter((d) => d.status !== 'succeeded').map((d) => d.id)
+        if (bad.length) setFailed((f) => [...f, ...bad])
+      })()
+    }, 1000)
+    return () => clearInterval(iv)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRunning])
+
+  async function startOps(ops: FlyOp[], note: string) {
+    const res = await api<{ job_id: number }>('/hub/fly/ops', { method: 'POST', body: { ops, note } })
+    setRunning((rs) => [...rs, { id: res.job_id, ops, started: Date.now(), eta: opEta(ops), status: 'queued' }])
+    setNow(Date.now())
+  }
+
+  // Колесо в режиме «применять сразу»: шаги веса копятся в черновике и
+  // уходят одним заданием, когда колесо остановилось.
+  const wheelTimer = useRef<number | undefined>(undefined)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+
+  /** Действие на карте: в черновик или сразу заданием. Нельзя — объяснение. */
+  async function dispatch(op: FlyOp, opts: { wheel?: boolean } = {}) {
+    const why = opBlocked(preview, op, alive)
+    if (why) {
+      setError(t(why))
+      return
+    }
+    setError(null)
+    if (!applyNow || opts.wheel) {
+      setDraft((d) => pushOp(d, op))
+      if (applyNow) {
+        window.clearTimeout(wheelTimer.current)
+        wheelTimer.current = window.setTimeout(() => {
+          const ops = draftRef.current
+          setDraft([])
+          if (ops.length) startOps(ops, '').catch((err) => setError(errText(err)))
+        }, 900)
+      }
+      return
+    }
+    try {
+      await startOps([op], '')
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+
+  /** Контейнер из панели — в маршрут резервом; порт — объявленный
+   * контейнером или первой цели маршрута, неизвестен — спросить. */
+  function addItem(r: FlyRoute, it: DropItem) {
+    const range = !!r.port_to && r.port_to > r.port
+    const port = range ? r.port : it.ports?.[0] || r.targets[0]?.port || 0
+    const op: FlyOp = { op: 'add', route: r.id, host_id: it.host_id, kind: it.kind, ref: it.ref, port }
+    if (port) void dispatch(op)
+    else setPortAsk({ title: t('fly.portAskTitle', { name: it.ref }), port: 0, onOk: (p) => void dispatch({ ...op, port: p }) })
+  }
+
+  const targetName = (tg: FlyTarget) => `${hostNames[String(tg.host_id)] ?? `#${tg.host_id}`} › ${tg.label || tg.ref || t(`fly.targetKind.${tg.kind}`)}:${tg.port}`
+
+  async function switchHere(r: FlyRoute, tg: FlyTarget) {
+    const from = r.targets.filter((x) => !x.drain && x.id !== tg.id).map(targetName).join(', ') || '—'
+    const ok = await confirmAction(t('fly.switchConfirm', { from, to: targetName(tg) }), { title: t('fly.switchConfirmTitle'), okText: t('fly.switchOk'), danger: false })
+    if (ok) void dispatch({ op: 'switch', route: r.id, target: tg.id })
+  }
+
+  async function leaveMapEdit() {
+    if (draft.length && !(await confirmAction(t('fly.draftDiscardAsk', { n: draft.length }), { okText: t('fly.draftDiscard') }))) return
+    setDraft([])
+    setMapEdit(false)
+  }
+
   return (
     <div className="col" style={{ gap: '1rem' }}>
       <Card
@@ -260,9 +380,9 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
               {t('fly.history')}
             </Button>
             {admin && doc && doc.routes.length > 0 && (
-              <Tooltip title={t('fly.redirectHint')}>
-                <Button size="small" type={redirect ? 'primary' : 'default'} onClick={() => setRedirect(!redirect)}>
-                  {t('fly.redirect')}
+              <Tooltip title={t('fly.mapEditHint')}>
+                <Button size="small" type={mapEdit ? 'primary' : 'default'} onClick={() => (mapEdit ? void leaveMapEdit() : setMapEdit(true))}>
+                  {t('fly.mapEdit')}
                 </Button>
               </Tooltip>
             )}
@@ -286,29 +406,77 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
         ) : doc.routes.length === 0 ? (
           <p className="small muted">{gateways.length === 0 ? t('fly.emptyNoGateway') : t('fly.empty')}</p>
         ) : (
-          <div className="row" style={{ gap: '0.8rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 600px', minWidth: 0 }}>
-              <FlyMap
-                doc={doc}
-                gateways={gateways}
-                statuses={status.data?.gateways ?? []}
-                tunnels={status.data?.tunnels ?? []}
-                hostNames={hostNames}
-                onRoute={setOpenRoute}
-                editing={redirect}
-                onDropRoute={(r, it) => setSwitchAsk({ route: r, after: [...r.targets, newTargetFrom(r, it, undefined)], title: t('fly.switchAddTitle', { route: routeTitle(r) }) })}
-                onDropTarget={(r, tg, it) =>
-                  setSwitchAsk({ route: r, after: r.targets.map((x) => (x.id === tg.id ? newTargetFrom(r, it, x) : x)), title: t('fly.switchReplaceTitle', { route: routeTitle(r) }) })
-                }
-                onTarget={(r, tg) => setTargetMenu({ route: r, target: tg })}
-              />
-            </div>
-            {redirect && (
-              <div style={{ flex: '0 0 280px', minWidth: 240 }}>
-                <strong className="small">{t('fly.paletteTitle')}</strong>
-                <FlyPalette hosts={Object.entries(hostNames).map(([id, name]) => ({ id: Number(id), name }))} />
+          <div className="col" style={{ gap: '0.5rem' }}>
+            {(mapEdit || running.length > 0 || failed.length > 0) && (
+              <div className="row" style={{ gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                {mapEdit && (
+                  <Tooltip title={draft.length ? t('fly.applyNowDraft') : t('fly.applyNowHint')}>
+                    <span className="row small" style={{ gap: '0.3rem', alignItems: 'center' }}>
+                      <Switch size="small" checked={applyNow} disabled={draft.length > 0} onChange={setApplyNow} />
+                      {t('fly.applyNow')}
+                    </span>
+                  </Tooltip>
+                )}
+                {draft.length > 0 && (
+                  <>
+                    <Button size="small" type="primary" onClick={() => setDraftAsk(true)}>
+                      {t('fly.draftApply', { n: draft.length })}
+                    </Button>
+                    <Button size="small" onClick={() => setDraft(draft.slice(0, -1))}>
+                      {t('fly.draftUndo')}
+                    </Button>
+                    <Button size="small" onClick={() => setDraft([])}>
+                      {t('fly.draftDiscard')}
+                    </Button>
+                  </>
+                )}
+                {running.map((j) => {
+                  const left = Math.max(0, Math.round(j.eta - (now - j.started) / 1000))
+                  return (
+                    <Tag key={j.id} color="processing" style={{ cursor: 'pointer' }} onClick={() => onOpenJob(j.id)}>
+                      ⟳ {t('fly.jobOps', { n: j.ops.length })} · {left > 0 ? `~${left} ${t('fly.secShort')}` : '…'}
+                    </Tag>
+                  )
+                })}
+                {failed.map((id) => (
+                  <Tag key={id} color="error" closable onClose={() => setFailed((f) => f.filter((x) => x !== id))} style={{ cursor: 'pointer' }} onClick={() => onOpenJob(id)}>
+                    {t('fly.jobFailed', { id })}
+                  </Tag>
+                ))}
               </div>
             )}
+            <div className="row" style={{ gap: '0.8rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 600px', minWidth: 0 }}>
+                <FlyMap
+                  doc={{ ...doc, routes: preview }}
+                  gateways={gateways}
+                  statuses={status.data?.gateways ?? []}
+                  tunnels={status.data?.tunnels ?? []}
+                  hostNames={hostNames}
+                  onRoute={setOpenRoute}
+                  editing={mapEdit}
+                  marks={changes.marks}
+                  ghosts={changes.removed}
+                  busy={busyKeys}
+                  onDropRoute={addItem}
+                  onTarget={(r, tg) => setTargetMenu({ route: r, target: tg })}
+                  onMoveDrop={(r, tg, dest) => {
+                    if (dest === 'trash') void dispatch({ op: 'remove', route: r.id, target: tg.id })
+                    else if (dest.startsWith('route:') && dest.slice(6) !== r.id) void dispatch({ op: 'move', route: r.id, target: tg.id, to: dest.slice(6) })
+                  }}
+                  onWeight={(r, tg, delta) => {
+                    const w = Math.min(100, Math.max(1, (tg.weight ?? 1) + delta))
+                    if (w !== (tg.weight ?? 1)) void dispatch({ op: 'edit', route: r.id, target: tg.id, weight: w }, { wheel: true })
+                  }}
+                />
+              </div>
+              {mapEdit && (
+                <div style={{ flex: '0 0 280px', minWidth: 240 }}>
+                  <strong className="small">{t('fly.paletteTitle')}</strong>
+                  <FlyPalette hosts={Object.entries(hostNames).map(([id, name]) => ({ id: Number(id), name }))} />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Card>
@@ -470,65 +638,151 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
         )}
       </Card>
 
-      {switchAsk && doc && (
-        <FlySwitchModal
-          route={switchAsk.route}
-          after={switchAsk.after}
-          title={switchAsk.title}
-          base={doc.revision}
-          onSave={(targets, note) => saveDoc(doc.routes.map((r) => (r.id === switchAsk.route.id ? { ...r, targets } : r)), note)}
-          onSwitched={(id) => onOpenJob(id)}
-          onClose={() => {
-            setSwitchAsk(null)
-            void fly.reload()
-          }}
-        />
-      )}
-      {targetMenu && (
-        <Modal title={`${hostNames[String(targetMenu.target.host_id)] ?? ''} › ${targetMenu.target.ref || targetMenu.target.kind}:${targetMenu.target.port}`} onClose={() => setTargetMenu(null)} width={420}>
-          <div className="col" style={{ gap: '0.4rem' }}>
-            <Button
-              onClick={() => {
-                setPicker(targetMenu)
-                setTargetMenu(null)
-              }}
-            >
-              {t('fly.redirectTo')}
-            </Button>
-            <Button
-              danger
-              disabled={targetMenu.route.targets.length < 2}
-              onClick={() => {
-                const r = targetMenu.route
-                setSwitchAsk({ route: r, after: r.targets.filter((x) => x.id !== targetMenu.target.id), title: t('fly.switchRemoveTitle', { route: routeTitle(r) }) })
-                setTargetMenu(null)
-              }}
-            >
-              {t('fly.removeFromPool')}
-            </Button>
-            <Button
-              type="link"
-              onClick={() => {
-                setOpenRoute(targetMenu.route.id)
-                setTargetMenu(null)
-              }}
-            >
-              {t('fly.details')}
-            </Button>
-          </div>
-        </Modal>
-      )}
+      {targetMenu &&
+        (() => {
+          const { route: r, target: tg } = targetMenu
+          const close = () => setTargetMenu(null)
+          const lastActive = !tg.drain && activeCount(r) <= 1
+          const canSwitch = !!tg.drain && alive(r.id, tg.id)
+          return (
+            <Modal title={targetName(tg)} onClose={close} width={420}>
+              <div className="col" style={{ gap: '0.4rem' }}>
+                <Tooltip title={canSwitch ? undefined : tg.drain ? t('fly.opNotAliveUI') : t('fly.switchAlready')}>
+                  <Button
+                    type="primary"
+                    disabled={!canSwitch}
+                    onClick={() => {
+                      close()
+                      void switchHere(r, tg)
+                    }}
+                  >
+                    {t('fly.switchHere')}
+                  </Button>
+                </Tooltip>
+                {tg.drain ? (
+                  <Button
+                    onClick={() => {
+                      close()
+                      void dispatch({ op: 'active', route: r.id, target: tg.id })
+                    }}
+                  >
+                    {t('fly.toActive')}
+                  </Button>
+                ) : (
+                  <Tooltip title={lastActive ? t('fly.opLastActiveUI') : undefined}>
+                    <Button
+                      disabled={lastActive}
+                      onClick={() => {
+                        close()
+                        void dispatch({ op: 'reserve', route: r.id, target: tg.id })
+                      }}
+                    >
+                      {t('fly.toReserve')}
+                    </Button>
+                  </Tooltip>
+                )}
+                <Button
+                  onClick={() => {
+                    close()
+                    const range = !!r.port_to && r.port_to > r.port
+                    setPortAsk({
+                      title: t('fly.editTargetTitle', { name: targetName(tg) }),
+                      port: tg.port,
+                      portLocked: range,
+                      weight: tg.weight ?? 1,
+                      onOk: (port, weight) => void dispatch({ op: 'edit', route: r.id, target: tg.id, port: range ? undefined : port, weight }),
+                    })
+                  }}
+                >
+                  {t('fly.editTarget')}
+                </Button>
+                <Tooltip title={lastActive ? t('fly.opLastActiveUI') : undefined}>
+                  <Button
+                    disabled={lastActive || preview.length < 2}
+                    onClick={() => {
+                      close()
+                      setMoveAsk(targetMenu)
+                    }}
+                  >
+                    {t('fly.moveTo')}
+                  </Button>
+                </Tooltip>
+                <Tooltip title={tg.drain ? undefined : t('fly.opRemoveActiveUI')}>
+                  <Button
+                    danger
+                    disabled={!tg.drain}
+                    onClick={() => {
+                      close()
+                      void dispatch({ op: 'remove', route: r.id, target: tg.id })
+                    }}
+                  >
+                    {t('fly.removeFromPool')}
+                  </Button>
+                </Tooltip>
+                <Button
+                  onClick={() => {
+                    close()
+                    setPicker(r)
+                  }}
+                >
+                  {t('fly.addReserve')}
+                </Button>
+                <Button
+                  type="link"
+                  onClick={() => {
+                    close()
+                    setOpenRoute(r.id)
+                  }}
+                >
+                  {t('fly.details')}
+                </Button>
+              </div>
+            </Modal>
+          )
+        })()}
       {picker && (
-        <Modal title={t('fly.redirectTo')} onClose={() => setPicker(null)} width={480}>
+        <Modal title={t('fly.addReserveTitle', { route: routeTitle(picker) })} onClose={() => setPicker(null)} width={480}>
           <FlyPalette
             hosts={Object.entries(hostNames).map(([id, name]) => ({ id: Number(id), name }))}
             onPick={(it) => {
-              const r = picker.route
-              setSwitchAsk({ route: r, after: r.targets.map((x) => (x.id === picker.target.id ? newTargetFrom(r, it, x) : x)), title: t('fly.switchReplaceTitle', { route: routeTitle(r) }) })
               setPicker(null)
+              addItem(picker, it)
             }}
           />
         </Modal>
+      )}
+      {portAsk && <PortWeightModal ask={portAsk} onClose={() => setPortAsk(null)} />}
+      {moveAsk && (
+        <MoveModal
+          title={t('fly.moveTitle', { name: targetName(moveAsk.target) })}
+          routes={preview.filter((r) => r.id !== moveAsk.route.id)}
+          onOk={(to) => void dispatch({ op: 'move', route: moveAsk.route.id, target: moveAsk.target.id, to })}
+          onClose={() => setMoveAsk(null)}
+        />
+      )}
+      {draftAsk && (
+        <DiffConfirm
+          title={t('fly.draftApplyTitle', { n: draft.length })}
+          diff={unifiedDiff(
+            base
+              .filter((r) => preview.some((p) => p.id === r.id && JSON.stringify(p) !== JSON.stringify(r)))
+              .map(routeText)
+              .join(''),
+            preview
+              .filter((p) => base.some((r) => r.id === p.id && JSON.stringify(p) !== JSON.stringify(r)))
+              .map(routeText)
+              .join(''),
+            t('tokens.saved'),
+            t('tokens.draft'),
+          )}
+          okText={t('fly.draftApplyOk')}
+          hint={t('fly.draftApplyHint')}
+          run={async (note) => {
+            await startOps(draft, note)
+            setDraft([])
+          }}
+          onClose={() => setDraftAsk(false)}
+        />
       )}
       {openRoute && doc && (
         <RouteDetails
@@ -586,15 +840,22 @@ interface DropItem {
 
 const DND_TYPE = 'application/x-nkt-fly-target'
 
-/** Цель из брошенного контейнера: заменяя — порт прежней цели, добавляя
- * — порт, который объявляет контейнер, или порт первой цели; у диапазона
- * — порт маршрута. Идентификатор — новый, не занятый. */
-function newTargetFrom(r: FlyRoute, it: DropItem, replace: FlyTarget | undefined): FlyTarget {
-  const used = new Set(r.targets.map((x) => x.id))
-  let id = `c${it.host_id}`
-  for (let n = 2; used.has(id); n++) id = `c${it.host_id}-${n}`
-  const port = r.port_to && r.port_to > r.port ? r.port : replace?.port || it.ports?.[0] || r.targets[0]?.port || 0
-  return { id, host_id: it.host_id, kind: it.kind, ref: it.ref, port, weight: replace?.weight }
+/** Задание с карты в работе: его операции видны на карте до конца. */
+interface RunningJob {
+  id: number
+  ops: FlyOp[]
+  started: number
+  eta: number
+  status: Job['status']
+}
+
+/** Спросить порт (и вес) цели. */
+interface PortAsk {
+  title: string
+  port: number
+  portLocked?: boolean
+  weight?: number
+  onOk: (port: number, weight?: number) => void
 }
 
 /** Сократить по середине: видно и начало, и конец. */
@@ -605,10 +866,16 @@ function midEllipsis(s: string, max: number): string {
   return s.slice(0, head) + '…' + s.slice(s.length - tail)
 }
 
+/** Куда брошено при перетаскивании цели: «route:<id>» или «trash». */
+function dropAt(x: number, y: number): string | null {
+  return document.elementFromPoint(x, y)?.closest('[data-fly-drop]')?.getAttribute('data-fly-drop') ?? null
+}
+
 /** Карта: шлюзы → маршруты → цели (хост — перед именем цели). Цвет —
- * состояние, толщина связи — соединения маршрута. В режиме правки на
- * маршрут и на цель можно бросить контейнер из панели: на маршрут —
- * добавить в пул, на цель — заменить её. */
+ * состояние, толщина связи — соединения маршрута, резерв — пунктиром.
+ * В режиме правки: контейнер из панели — на маршрут или его цель (в пул
+ * резервом); цель тащится мышью или пальцем на другой маршрут (перенести)
+ * или в корзину (убрать); колесо над целью — вес; щелчок — меню. */
 function FlyMap({
   doc,
   gateways,
@@ -617,9 +884,13 @@ function FlyMap({
   hostNames,
   onRoute,
   editing,
+  marks,
+  ghosts,
+  busy,
   onDropRoute,
-  onDropTarget,
   onTarget,
+  onMoveDrop,
+  onWeight,
 }: {
   doc: FlyDoc
   gateways: FlyGatewayInfo[]
@@ -628,12 +899,17 @@ function FlyMap({
   hostNames: Record<string, string>
   onRoute: (id: string) => void
   editing?: boolean
+  marks?: Map<string, OpMark>
+  ghosts?: { route: string; target: FlyTarget }[]
+  busy?: Map<string, number>
   onDropRoute?: (route: FlyRoute, item: DropItem) => void
-  onDropTarget?: (route: FlyRoute, target: FlyTarget, item: DropItem) => void
   onTarget?: (route: FlyRoute, target: FlyTarget) => void
+  onMoveDrop?: (route: FlyRoute, target: FlyTarget, dest: string) => void
+  onWeight?: (route: FlyRoute, target: FlyTarget, delta: number) => void
 }) {
   const { t } = useTranslation()
   const [over, setOver] = useState<string | null>(null)
+  const [drag, setDrag] = useState<{ x: number; y: number; label: string } | null>(null)
   const ROW = 46
   // Столбцы равной ширины: цели не растягиваются, длинные имена
   // сокращаются по середине.
@@ -643,11 +919,79 @@ function FlyMap({
   const stats = new Map<string, RouteStats>()
   for (const g of statuses) for (const r of g.status?.routes ?? []) stats.set(r.id, r)
   const gwIDs = doc.gateways.map((g) => g.edge_id)
-  const targets: { route: FlyRoute; t: FlyTarget }[] = []
-  for (const r of doc.routes) for (const tg of r.targets) targets.push({ route: r, t: tg })
+  // Убранные в черновике — бледными на прежнем месте.
+  const targets: { route: FlyRoute; t: FlyTarget; ghost?: boolean }[] = []
+  for (const r of doc.routes) {
+    for (const tg of r.targets) targets.push({ route: r, t: tg })
+    for (const g of ghosts ?? []) if (g.route === r.id) targets.push({ route: r, t: g.target, ghost: true })
+  }
   const rows = Math.max(gwIDs.length, doc.routes.length, targets.length, 1)
   const H = rows * ROW + 10
   const y = (i: number, n: number) => 5 + ((rows - n) * ROW) / 2 + i * ROW + ROW / 2
+
+  // Колбэки — через ссылку: обработчики окна вешаются один раз.
+  const cb = useRef({ onTarget, onMoveDrop, onWeight })
+  cb.current = { onTarget, onMoveDrop, onWeight }
+  const targetsRef = useRef(targets)
+  targetsRef.current = targets
+  const press = useRef<{ i: number; sx: number; sy: number; started: boolean; label: string } | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+
+  useEffect(() => {
+    if (!editing) return
+    const move = (e: PointerEvent) => {
+      const p = press.current
+      if (!p) return
+      if (!p.started && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < 6) return
+      p.started = true
+      setDrag({ x: e.clientX, y: e.clientY, label: p.label })
+      setOver(dropAt(e.clientX, e.clientY))
+    }
+    const up = (e: PointerEvent) => {
+      const p = press.current
+      press.current = null
+      if (!p) return
+      const x = targetsRef.current[p.i]
+      setDrag(null)
+      setOver(null)
+      if (!x) return
+      if (!p.started) {
+        cb.current.onTarget?.(x.route, x.t)
+        return
+      }
+      const dest = dropAt(e.clientX, e.clientY)
+      if (dest) cb.current.onMoveDrop?.(x.route, x.t, dest)
+    }
+    const cancel = () => {
+      press.current = null
+      setDrag(null)
+      setOver(null)
+    }
+    // Колесо над целью — вес ±1 (не чаще раза в 120 мс: тачпад шлёт
+    // десятки событий на жест).
+    let last = 0
+    const wheel = (e: WheelEvent) => {
+      const el = (e.target as Element | null)?.closest('[data-fly-target]')
+      if (!el) return
+      e.preventDefault()
+      if (e.timeStamp - last < 120 || e.deltaY === 0) return
+      last = e.timeStamp
+      const x = targetsRef.current[Number(el.getAttribute('data-fly-target'))]
+      if (x && !x.ghost) cb.current.onWeight?.(x.route, x.t, e.deltaY < 0 ? 1 : -1)
+    }
+    const svg = svgRef.current
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    svg?.addEventListener('wheel', wheel, { passive: false })
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      svg?.removeEventListener('wheel', wheel)
+    }
+  }, [editing])
+
   const readItem = (e: React.DragEvent): DropItem | null => {
     try {
       return JSON.parse(e.dataTransfer.getData(DND_TYPE)) as DropItem
@@ -655,8 +999,9 @@ function FlyMap({
       return null
     }
   }
-  const dropProps = (key: string, onDrop?: (item: DropItem) => void) =>
-    editing && onDrop
+  // Контейнер из панели (HTML-перетаскивание) — на маршрут или его цель.
+  const paletteDrop = (key: string, r: FlyRoute) =>
+    editing && onDropRoute
       ? {
           onDragOver: (e: React.DragEvent) => {
             e.preventDefault()
@@ -668,10 +1013,24 @@ function FlyMap({
             e.preventDefault()
             setOver(null)
             const it = readItem(e)
-            if (it) onDrop(it)
+            if (it) onDropRoute(r, it)
           },
         }
       : {}
+
+  const spinner = (col: number, left: number) => (
+    <g>
+      <text x={BW[col] - 26} y={21} fontSize={10} textAnchor="end" fill="var(--text-secondary)">
+        {left > 0 ? `${left} ${t('fly.secShort')}` : '…'}
+      </text>
+      <g transform={`translate(${BW[col] - 13},17)`}>
+        <circle r={7} fill="none" stroke="var(--border, #ccc)" strokeWidth={2} />
+        <path d="M0,-7 A7,7 0 0,1 7,0" fill="none" stroke="var(--accent, #1677ff)" strokeWidth={2}>
+          <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1s" repeatCount="indefinite" />
+        </path>
+      </g>
+    </g>
+  )
 
   const node = (
     col: number,
@@ -681,41 +1040,86 @@ function FlyMap({
     sub: string,
     color: string,
     key: string,
-    opts: { onClick?: () => void; full?: string; drop?: (item: DropItem) => void } = {},
+    opts: {
+      onClick?: () => void
+      full?: string
+      drop?: string
+      route?: FlyRoute
+      dashed?: boolean
+      ghost?: boolean
+      mark?: OpMark
+      busy?: number
+      index?: number
+    } = {},
   ) => {
     const cy = y(i, n)
+    const right = opts.busy !== undefined ? 56 : opts.mark ? 70 : 0
     // Сколько знаков помещается: ~7 px на знак при 12 px.
-    const max = Math.floor((BW[col] - 34) / 7)
-    const hot = over === key
+    const max = Math.floor((BW[col] - 34 - right) / 7)
+    const hot = !!opts.drop && over === opts.drop
+    const draggable = editing && opts.index !== undefined && !opts.ghost && opts.busy === undefined
     return (
       <g
         key={key}
         transform={`translate(${X[col]},${cy - 17})`}
-        style={{ cursor: opts.onClick ? 'pointer' : 'default' }}
-        onClick={opts.onClick}
-        {...dropProps(key, opts.drop)}
+        style={{ cursor: draggable ? 'grab' : opts.onClick ? 'pointer' : 'default', opacity: opts.ghost ? 0.4 : 1, touchAction: draggable ? 'none' : undefined }}
+        onClick={draggable ? undefined : opts.onClick}
+        onPointerDown={
+          draggable
+            ? (e) => {
+                if (e.button !== 0) return
+                press.current = { i: opts.index!, sx: e.clientX, sy: e.clientY, started: false, label }
+              }
+            : undefined
+        }
+        data-fly-drop={opts.drop}
+        data-fly-target={editing && opts.index !== undefined && !opts.ghost ? opts.index : undefined}
+        {...(opts.route ? paletteDrop(opts.drop ?? key, opts.route) : {})}
       >
         <title>{opts.full ?? label}</title>
-        <rect width={BW[col]} height={34} rx={7} fill={hot ? 'var(--surface-hover, #e8f0fe)' : 'var(--surface-raised)'} stroke={hot ? 'var(--accent, #1677ff)' : color} strokeWidth={hot ? 3 : 2} strokeDasharray={editing && opts.drop ? '6 3' : undefined} />
+        <rect
+          width={BW[col]}
+          height={34}
+          rx={7}
+          fill={hot ? 'var(--surface-hover, #e8f0fe)' : 'var(--surface-raised)'}
+          stroke={hot || opts.mark ? 'var(--accent, #1677ff)' : color}
+          strokeWidth={hot ? 3 : 2}
+          strokeDasharray={opts.dashed ? '6 4' : undefined}
+        />
         <circle cx={12} cy={17} r={5} fill={color} />
-        <text x={24} y={15} fontSize={12} fill="var(--text-primary)">
+        <text x={24} y={15} fontSize={12} fill="var(--text-primary)" textDecoration={opts.ghost ? 'line-through' : undefined}>
           {midEllipsis(label, max)}
         </text>
         <text x={24} y={28} fontSize={10} fill="var(--text-secondary)">
-          {midEllipsis(sub, Math.floor((BW[col] - 34) / 6))}
+          {midEllipsis(sub, Math.floor((BW[col] - 34 - right) / 6))}
         </text>
+        {opts.busy !== undefined
+          ? spinner(col, opts.busy)
+          : opts.mark && (
+              <text x={BW[col] - 8} y={21} fontSize={10} textAnchor="end" fill="var(--accent, #1677ff)">
+                {t(`fly.mark.${opts.mark}`)}
+              </text>
+            )}
       </g>
     )
   }
-  const link = (x1: number, y1: number, x2: number, y2: number, color: string, w: number, key: string) => (
-    <path key={key} d={`M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`} fill="none" stroke={color} strokeWidth={w} opacity={0.75} />
+  const link = (x1: number, y1: number, x2: number, y2: number, color: string, w: number, key: string, dashed = false) => (
+    <path
+      key={key}
+      d={`M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`}
+      fill="none"
+      stroke={color}
+      strokeWidth={w}
+      opacity={dashed ? 0.35 : 0.75}
+      strokeDasharray={dashed ? '5 4' : undefined}
+    />
   )
   const tunnelOf = (r: FlyRoute, host: number) => tunnels.find((x) => x.edge_id === r.gateway && x.host_id === host)
+  // Цвет — живость (и у резервной: видно, можно ли на неё переключить).
   const targetColor = (r: FlyRoute, tg: FlyTarget) => {
     const ts = stats.get(r.id)?.targets?.find((s) => s.id === tg.id)
     const tn = tunnelOf(r, tg.host_id)
     if (tn && tn.state !== 'up' && tn.state !== 'not_applied' && tn.state !== 'unknown') return 'var(--status-critical)'
-    if (tg.drain) return 'var(--status-warning)'
     return !ts || !ts.checked ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
   }
   const lines: JSX.Element[] = []
@@ -728,41 +1132,95 @@ function FlyMap({
   })
   targets.forEach((x, ti) => {
     const ri = doc.routes.indexOf(x.route)
-    lines.push(link(X[1] + BW[1], y(ri, doc.routes.length), X[2], y(ti, targets.length), targetColor(x.route, x.t), 1.5, `r-t-${x.route.id}-${x.t.id}`))
+    if (!x.ghost) lines.push(link(X[1] + BW[1], y(ri, doc.routes.length), X[2], y(ti, targets.length), targetColor(x.route, x.t), 1.5, `r-t-${x.route.id}-${x.t.id}`, !!x.t.drain))
   })
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 640, maxWidth: 1100, height: 'auto' }} role="img" aria-label={t('fly.map')}>
-        {lines}
-        {gwIDs.map((id, i) => {
-          const g = gateways.find((x) => x.edge_id === id)
-          const st = statuses.find((s) => s.edge_id === id)
-          const wg = `WireGuard ${doc.gateways[i].listen_port}/udp`
-          return node(0, i, gwIDs.length, g?.name ?? `#${id}`, g && g.address !== g.name ? `${g.address} · ${wg}` : wg, st?.connected ? 'var(--status-good)' : 'var(--status-critical)', `gw-${id}`)
-        })}
-        {doc.routes.map((r, i) => {
-          const st = stats.get(r.id)
-          const ps = poolState(r, st)
-          return node(1, i, doc.routes.length, routeTitle(r), `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, `r-${r.id}`, {
-            onClick: () => onRoute(r.id),
-            drop: onDropRoute ? (it) => onDropRoute(r, it) : undefined,
-          })
-        })}
-        {targets.map((x, i) => {
-          const ts = stats.get(x.route.id)?.targets?.find((s) => s.id === x.t.id)
-          const tn = tunnelOf(x.route, x.t.host_id)
-          const host = hostNames[String(x.t.host_id)] ?? `#${x.t.host_id}`
-          const name = x.t.label || (x.t.kind === 'host' ? t('fly.targetKind.host') : x.t.ref || '')
-          const full = `${host} › ${name}:${x.t.port}`
-          const bad = tn && tn.state !== 'up' ? t(`fly.tunnelShort.${tn.state}`) : ''
-          const sub = `${t(`fly.targetKind.${x.t.kind}`)}${x.t.drain ? ` · ${t('fly.drainShort')}` : ''}${ts ? ` · ${ts.active} ${t('fly.connsShort')}` : ''}${bad ? ` · ${bad}` : ''}`
-          return node(2, i, targets.length, full, sub, targetColor(x.route, x.t), `t-${x.route.id}-${x.t.id}`, {
-            full,
-            onClick: () => (editing && onTarget ? onTarget(x.route, x.t) : onRoute(x.route.id)),
-            drop: onDropTarget ? (it) => onDropTarget(x.route, x.t, it) : undefined,
-          })
-        })}
-      </svg>
+    <div>
+      <div style={{ overflowX: 'auto' }}>
+        <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 640, maxWidth: 1100, height: 'auto' }} role="img" aria-label={t('fly.map')}>
+          {lines}
+          {gwIDs.map((id, i) => {
+            const g = gateways.find((x) => x.edge_id === id)
+            const st = statuses.find((s) => s.edge_id === id)
+            const wg = `WireGuard ${doc.gateways[i].listen_port}/udp`
+            return node(0, i, gwIDs.length, g?.name ?? `#${id}`, g && g.address !== g.name ? `${g.address} · ${wg}` : wg, st?.connected ? 'var(--status-good)' : 'var(--status-critical)', `gw-${id}`)
+          })}
+          {doc.routes.map((r, i) => {
+            const st = stats.get(r.id)
+            const ps = poolState(r, st)
+            return node(1, i, doc.routes.length, routeTitle(r), `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, `r-${r.id}`, {
+              onClick: () => onRoute(r.id),
+              drop: editing ? `route:${r.id}` : undefined,
+              route: r,
+              busy: busy?.get(`r:${r.id}`),
+            })
+          })}
+          {targets.map((x, i) => {
+            const ts = stats.get(x.route.id)?.targets?.find((s) => s.id === x.t.id)
+            const tn = tunnelOf(x.route, x.t.host_id)
+            const host = hostNames[String(x.t.host_id)] ?? `#${x.t.host_id}`
+            const name = x.t.label || (x.t.kind === 'host' ? t('fly.targetKind.host') : x.t.ref || '')
+            const full = `${host} › ${name}:${x.t.port}`
+            const bad = tn && tn.state !== 'up' ? t(`fly.tunnelShort.${tn.state}`) : ''
+            const weight = (x.t.weight ?? 1) !== 1 ? ` · ${t('fly.weightShort', { n: x.t.weight })}` : ''
+            const sub = `${t(`fly.targetKind.${x.t.kind}`)}${x.t.drain ? ` · ${t('fly.drainShort')}` : ''}${weight}${ts ? ` · ${ts.active} ${t('fly.connsShort')}` : ''}${bad ? ` · ${bad}` : ''}`
+            const key = `${x.route.id}/${x.t.id}`
+            return node(2, i, targets.length, full, sub, targetColor(x.route, x.t), `t-${key}${x.ghost ? '-ghost' : ''}`, {
+              full,
+              onClick: () => onRoute(x.route.id),
+              drop: editing && !x.ghost ? `route:${x.route.id}` : undefined,
+              route: x.ghost ? undefined : x.route,
+              dashed: !!x.t.drain,
+              ghost: x.ghost,
+              mark: x.ghost ? 'removed' : marks?.get(key),
+              busy: x.ghost ? undefined : busy?.get(`t:${key}`),
+              index: i,
+            })
+          })}
+        </svg>
+      </div>
+      {editing && (
+        <div className="row" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
+          <div
+            data-fly-drop="trash"
+            title={t('fly.trashHint')}
+            className="row"
+            style={{
+              gap: 6,
+              alignItems: 'center',
+              padding: '6px 14px',
+              borderRadius: 8,
+              fontSize: 12,
+              border: `2px dashed ${over === 'trash' ? 'var(--status-critical)' : 'var(--text-muted)'}`,
+              background: over === 'trash' ? 'var(--status-critical-bg, #fff1f0)' : 'var(--surface-raised)',
+              color: over === 'trash' ? 'var(--status-critical)' : 'var(--text-secondary)',
+              opacity: drag ? 1 : 0.75,
+            }}
+          >
+            <DeleteOutlined /> {drag ? t('fly.trashHint') : t('fly.trash')}
+          </div>
+        </div>
+      )}
+      {drag && (
+        <div
+          style={{
+            position: 'fixed',
+            left: drag.x + 12,
+            top: drag.y + 12,
+            pointerEvents: 'none',
+            zIndex: 2000,
+            padding: '4px 10px',
+            borderRadius: 7,
+            fontSize: 12,
+            border: '2px solid var(--accent, #1677ff)',
+            background: 'var(--surface-raised)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {midEllipsis(drag.label, 40)}
+        </div>
+      )}
     </div>
   )
 }
@@ -848,82 +1306,34 @@ function PaletteHost({ hostId, kind, q, onPick }: { hostId: number; kind: Target
   )
 }
 
-/** Переключение целей маршрута: что изменится (дифф), порт новой цели,
- * плавно (по умолчанию) или сразу; сохранить или сохранить и переключить. */
-function FlySwitchModal({
-  route,
-  after,
-  title,
-  base,
-  onSave,
-  onSwitched,
-  onClose,
-}: {
-  route: FlyRoute
-  after: FlyTarget[]
-  title: string
-  base: number
-  onSave: (targets: FlyTarget[], note: string) => Promise<void>
-  onSwitched: (jobId: number) => void
-  onClose: () => void
-}) {
+/** Порт и вес цели (или только порт — для новой). */
+function PortWeightModal({ ask, onClose }: { ask: PortAsk; onClose: () => void }) {
   const { t } = useTranslation()
-  const isRange = !!route.port_to && route.port_to > route.port
-  const [targets, setTargets] = useState(after)
-  const [smooth, setSmooth] = useState(!isRange)
-  const [note, setNote] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const added = targets.filter((x) => !route.targets.some((o) => o.id === x.id && o.ref === x.ref && o.host_id === x.host_id))
-  const diff = unifiedDiff(routeText(route), routeText({ ...route, targets }), t('tokens.saved'), t('tokens.draft'))
-  const run = async (doSwitch: boolean) => {
-    setBusy(true)
-    setError(null)
-    try {
-      if (doSwitch) {
-        const res = await api<{ job_id: number }>(`/hub/fly/routes/${route.id}/switch`, { method: 'POST', body: { targets, smooth, note, base } })
-        onSwitched(res.job_id)
-      } else {
-        await onSave(targets, note)
-      }
-      onClose()
-    } catch (err) {
-      setError(errText(err))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const [port, setPort] = useState<number | null>(ask.port || null)
+  const [weight, setWeight] = useState<number | null>(ask.weight ?? null)
   return (
-    <Modal title={title} onClose={onClose} width={860}>
+    <Modal title={ask.title} onClose={onClose} width={420}>
       <div className="col" style={{ gap: '0.5rem' }}>
-        {added.map((x) => (
-          <label key={x.id} className="small">
-            {t('fly.switchPort', { name: x.ref || x.kind })}
-            <InputNumber
-              min={1}
-              max={65535}
-              value={x.port || null}
-              disabled={isRange}
-              onChange={(v) => setTargets(targets.map((y) => (y.id === x.id ? { ...y, port: v ?? 0 } : y)))}
-            />
+        <label className="small">
+          {t('fly.targetPort')}{' '}
+          <InputNumber min={1} max={65535} value={port} disabled={ask.portLocked} onChange={setPort} />
+        </label>
+        {ask.weight !== undefined && (
+          <label className="small">
+            {t('fly.targetWeight')} <InputNumber min={1} max={100} value={weight} onChange={setWeight} />
           </label>
-        ))}
-        <Radio.Group value={smooth ? 'smooth' : 'now'} onChange={(e) => setSmooth(e.target.value === 'smooth')}>
-          <Radio value="smooth" disabled={isRange}>
-            {t('fly.switchSmooth')}
-          </Radio>
-          <Radio value="now">{t('fly.switchNow')}</Radio>
-        </Radio.Group>
-        <span className="small muted">{t(isRange ? 'fly.switchRangeHint' : smooth ? 'fly.switchSmoothHint' : 'fly.switchNowHint')}</span>
-        <DiffView text={diff} />
-        <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('fly.notePlaceholder')} />
-        {error && <Banner kind="error">{error}</Banner>}
-        <Space wrap>
-          <Button type="primary" loading={busy} disabled={targets.some((x) => !x.port)} onClick={() => void run(true)}>
-            {t('fly.switchApply')}
-          </Button>
-          <Button loading={busy} disabled={targets.some((x) => !x.port)} onClick={() => void run(false)}>
-            {t('fly.switchSaveOnly')}
+        )}
+        {ask.portLocked && <span className="small muted">{t('fly.switchRangeHint')}</span>}
+        <Space>
+          <Button
+            type="primary"
+            disabled={!port}
+            onClick={() => {
+              ask.onOk(port ?? 0, weight ?? undefined)
+              onClose()
+            }}
+          >
+            {t('fly.portOk')}
           </Button>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
         </Space>
@@ -932,6 +1342,32 @@ function FlySwitchModal({
   )
 }
 
+/** Перенести цель в другой маршрут — встанет резервом. */
+function MoveModal({ title, routes, onOk, onClose }: { title: string; routes: FlyRoute[]; onOk: (to: string) => void; onClose: () => void }) {
+  const { t } = useTranslation()
+  const [to, setTo] = useState<string | undefined>(routes[0]?.id)
+  return (
+    <Modal title={title} onClose={onClose} width={460}>
+      <div className="col" style={{ gap: '0.5rem' }}>
+        <Select value={to} onChange={setTo} options={routes.map((r) => ({ value: r.id, label: routeTitle(r) }))} />
+        <span className="small muted">{t('fly.moveHint')}</span>
+        <Space>
+          <Button
+            type="primary"
+            disabled={!to}
+            onClick={() => {
+              if (to) onOk(to)
+              onClose()
+            }}
+          >
+            {t('fly.moveOk')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </Space>
+      </div>
+    </Modal>
+  )
+}
 /** Подробности маршрута: цели и их проверки, клиенты (IP — администратору
  * и только пока их немного; иначе — число). */
 function RouteDetails({
@@ -1342,7 +1778,7 @@ function TargetRow({ target, hosts, onChange, onRemove }: { target: FlyTarget; h
 }
 
 /** Дифф перед записью и пометка к версии. */
-function DiffConfirm({ title, diff, run, onClose }: { title: string; diff: string; run: (note: string) => Promise<void>; onClose: () => void }) {
+function DiffConfirm({ title, diff, run, okText, hint, onClose }: { title: string; diff: string; run: (note: string) => Promise<void>; okText?: string; hint?: string; onClose: () => void }) {
   const { t } = useTranslation()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1352,7 +1788,7 @@ function DiffConfirm({ title, diff, run, onClose }: { title: string; diff: strin
       <div className="col" style={{ gap: '0.5rem' }}>
         <DiffView text={diff} />
         <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('fly.notePlaceholder')} />
-        <span className="small muted">{t('fly.saveHint')}</span>
+        <span className="small muted">{hint ?? t('fly.saveHint')}</span>
         {error && <Banner kind="error">{error}</Banner>}
         <Space>
           <Button
@@ -1371,7 +1807,7 @@ function DiffConfirm({ title, diff, run, onClose }: { title: string; diff: strin
               }
             }}
           >
-            {t('common.save')}
+            {okText ?? t('common.save')}
           </Button>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
         </Space>

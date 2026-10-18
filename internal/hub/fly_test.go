@@ -303,3 +303,55 @@ func TestFlySwitchHandler(t *testing.T) {
 		t.Fatalf("validation failed: %s", rec.Body)
 	}
 }
+
+// Операции с карты: добавление — резервом; переключение — только на живую
+// цель; последнюю рабочую нельзя увести в резерв или перенести; рабочую
+// нельзя убрать; перенос — резервом в другой маршрут.
+func TestFlyApplyOps(t *testing.T) {
+	s, gw, host := flyTestServer(t)
+	ctx := context.Background()
+	base := []FlyRoute{
+		{ID: "app", Gateway: gw, Kind: fly.KindHTTPS, Names: []string{"app.example.com"}, Port: 443, Algorithm: fly.AlgoLeastConn, Check: fly.Check{Kind: fly.CheckTCP},
+			Targets: []FlyTarget{{ID: "a", HostID: host, Kind: "container", Ref: "a", Port: 8080}}},
+		{ID: "api", Gateway: gw, Kind: fly.KindTCP, Port: 2222, Algorithm: fly.AlgoSourceHash, Check: fly.Check{Kind: fly.CheckTCP},
+			Targets: []FlyTarget{{ID: "x", HostID: host, Kind: "container", Ref: "x", Port: 22}}},
+	}
+	alive := map[string]bool{}
+	routes, err := s.flyApplyOps(ctx, base, []FlyOp{{Op: "add", Route: "app", HostID: host, Kind: "container", Ref: "b", Port: 8080}}, alive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nb := routes[0].Targets[1]
+	if nb.Ref != "b" || !nb.Drain {
+		t.Fatalf("add must be reserve: %+v", nb)
+	}
+	if _, err := s.flyApplyOps(ctx, routes, []FlyOp{{Op: "switch", Route: "app", Target: nb.ID}}, alive); err == nil {
+		t.Fatal("switch to unchecked target accepted")
+	}
+	alive["app/"+nb.ID] = true
+	sw, err := s.flyApplyOps(ctx, routes, []FlyOp{{Op: "switch", Route: "app", Target: nb.ID}}, alive)
+	if err != nil || !sw[0].Targets[0].Drain || sw[0].Targets[1].Drain {
+		t.Fatalf("switch: %v %+v", err, sw[0].Targets)
+	}
+	for _, bad := range []FlyOp{
+		{Op: "reserve", Route: "api", Target: "x"},
+		{Op: "move", Route: "api", Target: "x", To: "app"},
+		{Op: "remove", Route: "app", Target: "a"},
+		{Op: "nope", Route: "app"},
+	} {
+		if _, err := s.flyApplyOps(ctx, routes, []FlyOp{bad}, alive); err == nil {
+			t.Errorf("%+v accepted", bad)
+		}
+	}
+	mv, err := s.flyApplyOps(ctx, routes, []FlyOp{{Op: "move", Route: "app", Target: nb.ID, To: "api"}}, alive)
+	if err != nil || len(mv[0].Targets) != 1 || len(mv[1].Targets) != 2 || !mv[1].Targets[1].Drain {
+		t.Fatalf("move: %v %+v", err, mv)
+	}
+	rm, err := s.flyApplyOps(ctx, routes, []FlyOp{{Op: "remove", Route: "app", Target: nb.ID}, {Op: "edit", Route: "app", Target: "a", Port: 9090, Weight: 3}}, alive)
+	if err != nil || len(rm[0].Targets) != 1 || rm[0].Targets[0].Port != 9090 || rm[0].Targets[0].Weight != 3 {
+		t.Fatalf("remove+edit: %v %+v", err, rm[0].Targets)
+	}
+	if len(base[0].Targets) != 1 {
+		t.Fatal("input mutated")
+	}
+}

@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.33 — 2026-10-18
+
+- **Traffic Fly: mouse-driven map editing.** An “Edit map” button
+  replaces “Redirect”. A container from the panel dropped onto a route or
+  one of its targets joins the pool **as a reserve** (checked, no
+  traffic); clicking a target opens a menu: “Switch traffic here” (only
+  when the target passes its check, after a short confirmation),
+  “Activate”, “To reserve”, “Edit” (port, weight), “Move to another
+  route”, “Remove from pool”. Drag a target onto another route or into the
+  trash below the map; the mouse wheel over a target changes its weight.
+  Reserves are drawn dashed.
+- **Draft or immediately.** By default actions pile up on the map with
+  marks (“+ new”, “→ reserve”, removed ones struck through) and go out
+  with “Apply changes (N)” — one revision and one job. The “Apply
+  immediately” switch sends each action to the queue as a job. While a job
+  runs, the affected targets show a countdown spinner.
+- **Guards.** The route's last active target cannot be moved to reserve,
+  moved away or removed; only a reserve can be removed; traffic switches
+  only to a live target. Replacing a target by dropping a container onto
+  it is gone: add it as a reserve first, then switch.
+
 ## v1.13.32 — 2026-10-18
 
 - **Packages: if the hub cache cannot fetch it, install directly.** When
