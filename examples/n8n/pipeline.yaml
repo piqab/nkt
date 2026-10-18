@@ -1,3 +1,5 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
 # n8n + PostgreSQL (+ task runner) из n8n-io/n8n-hosting, withPostgres.
 repo: https://github.com/n8n-io/n8n-hosting.git
 ref: main

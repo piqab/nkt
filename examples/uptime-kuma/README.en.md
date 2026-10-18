@@ -1,5 +1,7 @@
 # Uptime Kuma: one container, data in ./data
 
+> **WARNING:** this example uses a third-party repository and images — their security and stability are not guaranteed. Review them yourself before deploying to production.
+
 [Uptime Kuma](https://github.com/louislam/uptime-kuma) monitors the
 availability of sites and services. The project's compose file
 ([compose.yaml](https://github.com/louislam/uptime-kuma/blob/master/compose.yaml))

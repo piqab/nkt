@@ -1,5 +1,7 @@
 # WordPress + MariaDB: a site behind the HTTPS proxy
 
+> **WARNING:** this example uses a third-party repository and images — their security and stability are not guaranteed. Review them yourself before deploying to production.
+
 [`deploy/docker-compose.yml`](deploy/docker-compose.yml): WordPress 7.1
 (apache) and MariaDB 11.8; passwords from `.env`, data in the `wp-data` and
 `db-data` volumes.

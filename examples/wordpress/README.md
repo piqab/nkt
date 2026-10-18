@@ -1,5 +1,7 @@
 # WordPress + MariaDB — сайт за прокси с HTTPS
 
+> **WARNING:** пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются. Проверьте их сами, прежде чем выкладывать в рабочую среду.
+
 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) — WordPress 7.1
 (apache) и MariaDB 11.8; пароли — из `.env`, данные — в томах
 `wp-data` и `db-data`.

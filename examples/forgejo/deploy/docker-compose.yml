@@ -1,3 +1,5 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
 # Forgejo + PostgreSQL для выкладки через хаб nkt: секреты и адреса — из
 # .env конвейера («Доступ» → «.env стека»), версии закреплены. Мастера
 # установки нет: настройки — из окружения, администратор заводится

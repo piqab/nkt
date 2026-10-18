@@ -345,13 +345,19 @@ export function DiffView({ text }: { text: string }) {
               ? 'hunk'
               : undefined
         return (
-          <div key={i} className={cls}>
+          <div key={i} className={isWarningLine(line.slice(1)) && !line.startsWith('@@') ? `${cls ?? ''} code-warning`.trim() : cls}>
             {line ? blurText(line) : ' '}
           </div>
         )
       })}
     </pre>
   )
+}
+
+/** Строка-предупреждение в конфиге: «# WARNING…» (после отступа) — её
+ * редактор, дифф и просмотр рисуют красным и жирным. */
+export function isWarningLine(line: string): boolean {
+  return /^\s*#\s*WARNING\b/.test(line)
 }
 
 export function CodeEditor({
@@ -376,7 +382,15 @@ export function CodeEditor({
 }) {
   const gutterRef = useRef<HTMLDivElement>(null)
   const areaRef = useRef<HTMLTextAreaElement>(null)
+  const backRef = useRef<HTMLPreElement>(null)
   const lineCount = value === '' ? 1 : value.split('\n').length
+  const warn = value.includes('WARNING') && value.split('\n').some(isWarningLine)
+  // Подложка появилась (или текст сменился) — встать туда же, куда
+  // прокручено поле.
+  useEffect(() => {
+    const ta = areaRef.current
+    if (ta && backRef.current) backRef.current.style.transform = `translate(${-ta.scrollLeft}px, ${-ta.scrollTop}px)`
+  }, [warn, value])
 
   useEffect(() => {
     const ta = areaRef.current
@@ -399,20 +413,36 @@ export function CodeEditor({
           </div>
         ))}
       </div>
-      <textarea
-        ref={areaRef}
-        className="code-textarea"
-        value={value}
-        onChange={onChange}
-        onScroll={(e) => {
-          if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop
-        }}
-        rows={rows}
-        spellCheck={false}
-        readOnly={readOnly}
-        autoFocus={autoFocus}
-        wrap="off"
-      />
+      <div className="code-area">
+        {warn && (
+          // Подложка с тем же текстом: строки «# WARNING» — красным и
+          // жирным (в самом поле текст раскрасить нельзя — оно прозрачное
+          // поверх подложки, курсор и выделение — его).
+          <pre className="code-backdrop" ref={backRef} aria-hidden="true">
+            {value.split('\n').map((l, i) => (
+              <div key={i} className={isWarningLine(l) ? 'code-warning' : undefined}>
+                {l || ' '}
+              </div>
+            ))}
+          </pre>
+        )}
+        <textarea
+          ref={areaRef}
+          className={warn ? 'code-textarea code-textarea-over' : 'code-textarea'}
+          value={value}
+          onChange={onChange}
+          onScroll={(e) => {
+            const ta = e.currentTarget
+            if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop
+            if (backRef.current) backRef.current.style.transform = `translate(${-ta.scrollLeft}px, ${-ta.scrollTop}px)`
+          }}
+          rows={rows}
+          spellCheck={false}
+          readOnly={readOnly}
+          autoFocus={autoFocus}
+          wrap="off"
+        />
+      </div>
     </div>
   )
 }

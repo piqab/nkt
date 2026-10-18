@@ -1,5 +1,7 @@
 # Uptime Kuma — один контейнер, данные в ./data
 
+> **WARNING:** пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются. Проверьте их сами, прежде чем выкладывать в рабочую среду.
+
 [Uptime Kuma](https://github.com/louislam/uptime-kuma) — мониторинг
 доступности сайтов и сервисов. Compose-файл проекта
 ([compose.yaml](https://github.com/louislam/uptime-kuma/blob/master/compose.yaml))

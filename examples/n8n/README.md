@@ -1,5 +1,7 @@
 # n8n + PostgreSQL — три сервиса, файл рядом, всё из .env
 
+> **WARNING:** пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются. Проверьте их сами, прежде чем выкладывать в рабочую среду.
+
 [n8n](https://n8n.io) — автоматизация. Compose-файл из
 [n8n-io/n8n-hosting](https://github.com/n8n-io/n8n-hosting/tree/main/docker-compose/withPostgres)
 (вариант `withPostgres`): PostgreSQL, n8n и task runner.

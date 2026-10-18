@@ -1,3 +1,5 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
 # Конвейер «Выкладок» хаба nkt: httpbin прямо из репозитория nkt.
 # Для своего репозитория замените repo и путь в file.
 repo: https://github.com/piqab/nkt.git
@@ -9,6 +11,11 @@ compose:
   project: httpbin
   hosts: [web1]                 # или group: prod; машина хаба — localhost
   wait_timeout: 3m
+  # Образ — cyd01/httpbin поверх go-httpbin из compose-файла: только
+  # latest и только amd64. На хосте arm64 уберите блок images: — останется
+  # go-httpbin (amd64 и arm64, версия закреплена).
+  images:
+    httpbin: cyd01/httpbin:latest
   # Сайт: хаб после выкладки сам настроит прокси и сертификат (A-запись
   # имени должна указывать на хост):
   # site:

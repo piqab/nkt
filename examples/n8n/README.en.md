@@ -1,5 +1,7 @@
 # n8n + PostgreSQL: three services, a file alongside, everything from .env
 
+> **WARNING:** this example uses a third-party repository and images — their security and stability are not guaranteed. Review them yourself before deploying to production.
+
 [n8n](https://n8n.io) is automation. The compose file comes from
 [n8n-io/n8n-hosting](https://github.com/n8n-io/n8n-hosting/tree/main/docker-compose/withPostgres)
 (the `withPostgres` variant): PostgreSQL, n8n and a task runner.

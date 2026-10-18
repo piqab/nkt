@@ -440,6 +440,33 @@ label:not([class*='ant-']):has(> .ant-checkbox-wrapper) {
   overflow: auto;
 }
 .code-textarea:focus-visible { outline-offset: -2px; }
+/* Поле и подложка с подсветкой «# WARNING» (ui.tsx, CodeEditor): одна
+ * метрика текста — шрифт, кегль, интерлиньяж, отступы как у textarea. */
+.code-area { position: relative; flex: 1 1 auto; min-width: 0; display: flex; overflow: hidden; }
+.code-area > .code-textarea { flex: 1 1 auto; }
+.code-backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0.32rem 0.55rem;
+  border: 1px solid transparent;
+  border-width: 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  pointer-events: none;
+  overflow: visible;
+}
+.code-textarea-over { position: relative; background: transparent; color: transparent; caret-color: var(--text-primary); }
+.code-textarea-over::selection { color: transparent; background: color-mix(in srgb, var(--series-1) 30%, transparent); }
+.code-warning { color: var(--status-critical); font-weight: 700; }
+/* В подложке редактора жирность — тенью, а не font-weight: ширина знаков
+ * та же, что у прозрачного текста поля, и курсор не уезжает (даже если
+ * моноширинного шрифта в системе нет). */
+.code-backdrop .code-warning { font-weight: inherit; text-shadow: 0.4px 0 0 currentColor, -0.2px 0 0 currentColor; }
 
 .filters {
   display: flex;
