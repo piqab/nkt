@@ -130,13 +130,17 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	if err != nil {
 		return err
 	}
+	cfgs, err := composeConfigs(src, c, vars, files, main)
+	if err != nil {
+		return err
+	}
 	env, err := s.pipelineEnv(pl)
 	if err != nil {
 		return err
 	}
-	// Секреты из env_keys — только из .env конвейера: без них стек
-	// поднялся бы с пустыми значениями.
-	if missing := missingEnvKeys(c.AllEnvKeys(), env); len(missing) > 0 {
+	// Секреты из env_keys, блока env и ${ИМЯ} конфигов — только из .env
+	// конвейера: без них стек поднялся бы с пустыми значениями.
+	if missing := missingEnvKeys(requiredEnv(c, cfgs), env); len(missing) > 0 {
 		return msgs.Errorf("deploy.envKeysMissing", strings.Join(missing, ", "))
 	}
 	targets, err := s.resolveHosts(ctx, c.Hosts, c.Group)
@@ -154,6 +158,9 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		return msgs.Errorf("deploy.composeEngines", strings.Join(bad, "; "))
 	}
 	jc.Log("deploy.composeFiles", len(files), c.Project, len(targets))
+	for _, cf := range cfgs {
+		jc.Log("deploy.configMount", cf.Service, cf.Target, strings.Join(deploy.ConfigVars(cf.Content), ", "))
+	}
 	if err := bindComposePorts(jc, files, main, c); err != nil {
 		return err
 	}
@@ -201,6 +208,9 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 			body["registry_auths"] = regs
 			body["registry_auth"] = regs[0]
 		}
+		if len(cfgs) > 0 {
+			body["configs"] = cfgs
+		}
 		if old := replaceOn(prev, t.ID, c.Project); old != "" {
 			body["replace"] = old
 			jc.Log("deploy.stackRenamed", old, c.Project, t.Name)
@@ -214,7 +224,7 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 			EnvEdited bool   `json:"env_edited"`
 		}
 		if _, err := s.composeHostPost(ctx, jc, user, t, "/api/compose/stacks/deploy", body, &started); err != nil {
-			return msgs.Errorf("deploy.composeHostFailed", t.Name, msgs.Localize(lang, err))
+			return msgs.Errorf("deploy.composeHostFailed", t.Name, msgs.Localize(lang, hostConfigsError(err)))
 		}
 		if started.EnvEdited {
 			jc.Log("deploy.envEditedOverwritten", t.Name)

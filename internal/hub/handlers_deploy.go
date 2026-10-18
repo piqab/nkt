@@ -84,10 +84,18 @@ func (s *Server) handlePipelineCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.manifestName"))
 		return
 	}
-	if _, err := deploy.ParseSpec(req.Content); err != nil {
+	spec, err := deploy.ParseSpec(req.Content)
+	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	// Значения блока env — в .env нового конвейера, в описание — «@secret».
+	move, err := planEnvMove(req.Content, nil, false)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	req.Content = move.Content
 	secret, err := secretbox.Encrypt(s.hub.key, []byte(randomToken(32)))
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
@@ -96,12 +104,18 @@ func (s *Server) handlePipelineCreate(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	id, err := s.db.CreatePipeline(r.Context(), store.Pipeline{Name: strings.TrimSpace(req.Name), Content: req.Content,
 		HookID: randomHex(16), HookSecret: secret, Author: user})
-	s.db.Audit(r.Context(), user, "pipeline.create", req.Name, auditOutcome(err), "")
+	s.db.Audit(r.Context(), user, "pipeline.create", req.Name, auditOutcome(err), envAuditDetail(move))
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id})
+	if err := s.pipelineEnvAfterSave(r.Context(), id, user, move); err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	out := map[string]any{"id": id}
+	envMoveReply(out, move, spec)
+	writeJSON(w, http.StatusOK, out)
 }
 
 func auditOutcome(err error) string {
@@ -144,27 +158,52 @@ func (s *Server) handlePipelineUpdate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Content string `json:"content"`
 		Note    string `json:"note"`
+		// ReplaceEnv — заменить значениями из блока env уже заданные в .env
+		// (интерфейс спросил после 409 env_conflict).
+		ReplaceEnv bool `json:"replace_env"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if _, err := deploy.ParseSpec(req.Content); err != nil {
+	spec, err := deploy.ParseSpec(req.Content)
+	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	cur, err := s.pipelineEnv(p)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	move, err := planEnvMove(req.Content, cur, req.ReplaceEnv)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if len(move.Conflicts) > 0 {
+		writeEnvConflict(w, r, move.Conflicts)
+		return
+	}
+	req.Content = move.Content
 	user := auth.Username(r.Context())
 	// Выложенный конвейер правят впервые с этой версии — запомнить, где
 	// стек сейчас (по описанию до правки): иначе выкладка по новому
 	// описанию не узнает, что убрать на прежнем хосте.
 	s.rememberDeployedBefore(r.Context(), p)
-	err := s.db.UpdatePipelineContent(r.Context(), p.ID, req.Content, user, req.Note)
-	s.db.Audit(r.Context(), user, "pipeline.update", p.Name, auditOutcome(err), req.Note)
+	err = s.db.UpdatePipelineContent(r.Context(), p.ID, req.Content, user, req.Note)
+	s.db.Audit(r.Context(), user, "pipeline.update", p.Name, auditOutcome(err), envAuditNote(req.Note, move))
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	if err := s.pipelineEnvAfterSave(r.Context(), p.ID, user, move); err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	out := map[string]any{"status": "ok"}
+	envMoveReply(out, move, spec)
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handlePipelineDelete — DELETE /hub/pipelines/{id}.

@@ -14,15 +14,21 @@ compose:
   # Пароль PostgreSQL записан в файле значением — берём из .env:
   env_keys:
     plausible_db: [POSTGRES_PASSWORD]
+  # Порт на хосте вместо того, что в compose-файле (хост:контейнер; адрес —
+  # 127.0.0.1 — наружу только через прокси сайта). Занят — возьмите другой:
+  # ports:
+  #   plausible: ["127.0.0.1:18000:8000"]
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера (в описании останется "@secret"), generate: — значение
+  # создаст хаб. Посмотреть — «Секреты» → «.env» → история → «Показать».
+  env:
+    BASE_URL: https://plausible.example.com
+    SECRET_KEY_BASE: generate:base64-48
+    TOTP_VAULT_KEY: generate:base64-32
+    POSTGRES_PASSWORD: generate:password
+    DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@plausible_db:5432/plausible_db
+    DISABLE_REGISTRATION: invite_only
   site:
     domains: [plausible.example.com]
     service: plausible
     port: 8000
-
-# .env стека — «Доступ» → «.env стека»:
-#   BASE_URL=https://plausible.example.com
-#   SECRET_KEY_BASE=<openssl rand -base64 48>
-#   TOTP_VAULT_KEY=<openssl rand -base64 32>
-#   POSTGRES_PASSWORD=<пароль базы>
-#   DATABASE_URL=postgres://postgres:<пароль базы>@plausible_db:5432/plausible_db
-#   DISABLE_REGISTRATION=invite_only

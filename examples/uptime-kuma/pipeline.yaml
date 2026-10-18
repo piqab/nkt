@@ -10,6 +10,10 @@ compose:
   project: uptime-kuma
   hosts: [web1]
   wait_timeout: 5m
+  # Порт на хосте вместо того, что в compose-файле (хост:контейнер; адрес —
+  # 127.0.0.1 — наружу только через прокси сайта). Занят — возьмите другой:
+  # ports:
+  #   uptime-kuma: ["127.0.0.1:13001:3001"]
   site:
     domains: [status.example.com]
     service: uptime-kuma

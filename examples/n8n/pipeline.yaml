@@ -14,18 +14,24 @@ compose:
   # Адрес для вебхуков и работа за прокси — в файле их нет, берём из .env:
   env_keys:
     n8n: [WEBHOOK_URL, N8N_PROXY_HOPS]
+  # Порт на хосте вместо того, что в compose-файле (хост:контейнер; адрес —
+  # 127.0.0.1 — наружу только через прокси сайта). Занят — возьмите другой:
+  # ports:
+  #   n8n: ["127.0.0.1:15678:5678"]
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера (в описании останется "@secret"), generate: — значение
+  # создаст хаб. Посмотреть — «Секреты» → «.env» → история → «Показать».
+  env:
+    N8N_VERSION: 2.41.4
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: generate:password
+    POSTGRES_DB: n8n
+    POSTGRES_NON_ROOT_USER: n8n
+    POSTGRES_NON_ROOT_PASSWORD: generate:password
+    RUNNERS_AUTH_TOKEN: generate:hex16
+    WEBHOOK_URL: https://n8n.example.com/
+    N8N_PROXY_HOPS: 1
   site:
     domains: [n8n.example.com]
     service: n8n
     port: 5678
-
-# .env стека — «Доступ» → «.env стека» (версия n8n закреплена здесь):
-#   N8N_VERSION=2.41.4
-#   POSTGRES_USER=postgres
-#   POSTGRES_PASSWORD=<пароль администратора базы>
-#   POSTGRES_DB=n8n
-#   POSTGRES_NON_ROOT_USER=n8n
-#   POSTGRES_NON_ROOT_PASSWORD=<пароль базы n8n>
-#   RUNNERS_AUTH_TOKEN=<openssl rand -hex 16>
-#   WEBHOOK_URL=https://n8n.example.com/
-#   N8N_PROXY_HOPS=1

@@ -18,10 +18,10 @@ export interface PipelineExample {
   /** Добавить закомментированный вариант входа через Traffic Fly (блок
    * fly:) с HTTP-проверкой по этому пути. */
   flyCheckPath?: string
-  /** Строки шаблона .env (в описание — комментарием). */
-  // Строки .env-шаблона; {ключ} в угловых скобках — подсказка из
-  // deploy.envPh.* (см. envTemplateLines), на языке интерфейса.
-  envTemplate?: string[]
+  /** Блок env описания: имя → значение по порядку. generate:вид — значение
+   * создаст хаб при сохранении; {domain} — имя сайта примера. При
+   * сохранении всё уходит в .env конвейера («Секреты»). */
+  env?: [string, string][]
 }
 
 const NKT = 'https://github.com/piqab/nkt'
@@ -59,11 +59,11 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     site: { service: 'umami', port: 3000 },
     images: { umami: 'ghcr.io/umami-software/umami:3.4.0' },
     envKeys: { umami: ['APP_SECRET', 'TWO_FACTOR_ENCRYPTION_KEY', 'DATABASE_URL'], db: ['POSTGRES_PASSWORD'] },
-    envTemplate: [
-      'APP_SECRET=<openssl rand -hex 32>',
-      'TWO_FACTOR_ENCRYPTION_KEY=<openssl rand -hex 32>',
-      'POSTGRES_PASSWORD=<{dbPassword}>',
-      'DATABASE_URL=postgresql://umami:<{dbPassword}>@db:5432/umami',
+    env: [
+      ['APP_SECRET', 'generate:hex32'],
+      ['TWO_FACTOR_ENCRYPTION_KEY', 'generate:hex32'],
+      ['POSTGRES_PASSWORD', 'generate:password'],
+      ['DATABASE_URL', 'postgresql://umami:${POSTGRES_PASSWORD}@db:5432/umami'],
     ],
   },
   {
@@ -74,16 +74,16 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     site: { service: 'n8n', port: 5678 },
     files: ['docker-compose/withPostgres/init-data.sh'],
     envKeys: { n8n: ['WEBHOOK_URL', 'N8N_PROXY_HOPS'] },
-    envTemplate: [
-      'N8N_VERSION=2.41.4',
-      'POSTGRES_USER=postgres',
-      'POSTGRES_PASSWORD=<{dbAdminPassword}>',
-      'POSTGRES_DB=n8n',
-      'POSTGRES_NON_ROOT_USER=n8n',
-      'POSTGRES_NON_ROOT_PASSWORD=<{n8nDbPassword}>',
-      'RUNNERS_AUTH_TOKEN=<openssl rand -hex 16>',
-      'WEBHOOK_URL=https://n8n.example.com/',
-      'N8N_PROXY_HOPS=1',
+    env: [
+      ['N8N_VERSION', '2.41.4'],
+      ['POSTGRES_USER', 'postgres'],
+      ['POSTGRES_PASSWORD', 'generate:password'],
+      ['POSTGRES_DB', 'n8n'],
+      ['POSTGRES_NON_ROOT_USER', 'n8n'],
+      ['POSTGRES_NON_ROOT_PASSWORD', 'generate:password'],
+      ['RUNNERS_AUTH_TOKEN', 'generate:hex16'],
+      ['WEBHOOK_URL', 'https://{domain}/'],
+      ['N8N_PROXY_HOPS', '1'],
     ],
   },
   {
@@ -94,13 +94,13 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     site: { service: 'forgejo', port: 3000 },
     ports: { forgejo: ['0.0.0.0:2222:2222'] },
     envKeys: { 'forgejo-admin': ['FORGEJO_ADMIN_USER', 'FORGEJO_ADMIN_PASSWORD', 'FORGEJO_ADMIN_EMAIL'] },
-    envTemplate: [
-      'POSTGRES_PASSWORD=<{dbPassword}>',
-      'FORGEJO_DOMAIN=git.example.com',
-      'FORGEJO_ROOT_URL=https://git.example.com/',
-      'FORGEJO_ADMIN_USER=<{forgejoAdminUser}>',
-      'FORGEJO_ADMIN_PASSWORD=<{adminPassword}>',
-      'FORGEJO_ADMIN_EMAIL=<{adminEmail}>',
+    env: [
+      ['POSTGRES_PASSWORD', 'generate:password'],
+      ['FORGEJO_DOMAIN', '{domain}'],
+      ['FORGEJO_ROOT_URL', 'https://{domain}/'],
+      ['FORGEJO_ADMIN_USER', 'gitadmin'],
+      ['FORGEJO_ADMIN_PASSWORD', 'generate:password'],
+      ['FORGEJO_ADMIN_EMAIL', 'admin@example.com'],
     ],
   },
   {
@@ -109,7 +109,10 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     project: 'wordpress',
     readme: `${NKT}/tree/main/examples/wordpress`,
     site: { service: 'wordpress', port: 80 },
-    envTemplate: ['DB_PASSWORD=<{wpDbPassword}>', 'DB_ROOT_PASSWORD=<{mariadbRootPassword}>'],
+    env: [
+      ['DB_PASSWORD', 'generate:password'],
+      ['DB_ROOT_PASSWORD', 'generate:password'],
+    ],
   },
   {
     key: 'authorizer',
@@ -118,15 +121,15 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     readme: `${NKT}/tree/main/examples/authorizer`,
     site: { service: 'authorizer', port: 8080 },
     flyCheckPath: '/healthz',
-    envTemplate: [
-      'AUTH_DOMAIN=authorizer.example.com',
-      'ALLOWED_ORIGINS=https://authorizer.example.com',
-      'CLIENT_ID=<openssl rand -hex 16>',
-      'CLIENT_SECRET=<openssl rand -hex 32>',
-      'ADMIN_SECRET=<openssl rand -hex 32>',
-      'JWT_SECRET=<openssl rand -hex 32>',
-      'ENCRYPTION_KEY=<openssl rand -hex 32>',
-      'POSTGRES_PASSWORD=<{dbPassword}>',
+    env: [
+      ['AUTH_DOMAIN', '{domain}'],
+      ['ALLOWED_ORIGINS', 'https://{domain}'],
+      ['CLIENT_ID', 'generate:hex16'],
+      ['CLIENT_SECRET', 'generate:hex32'],
+      ['ADMIN_SECRET', 'generate:hex32'],
+      ['JWT_SECRET', 'generate:hex32'],
+      ['ENCRYPTION_KEY', 'generate:hex32'],
+      ['POSTGRES_PASSWORD', 'generate:password'],
     ],
   },
   {
@@ -138,18 +141,13 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     files: ['clickhouse/'],
     envKeys: { plausible_db: ['POSTGRES_PASSWORD'] },
     waitTimeout: '10m',
-    envTemplate: [
-      'BASE_URL=https://plausible.example.com',
-      'SECRET_KEY_BASE=<openssl rand -base64 48>',
-      'TOTP_VAULT_KEY=<openssl rand -base64 32>',
-      'POSTGRES_PASSWORD=<{dbPassword}>',
-      'DATABASE_URL=postgres://postgres:<{dbPassword}>@plausible_db:5432/plausible_db',
-      'DISABLE_REGISTRATION=invite_only',
+    env: [
+      ['BASE_URL', 'https://{domain}'],
+      ['SECRET_KEY_BASE', 'generate:base64-48'],
+      ['TOTP_VAULT_KEY', 'generate:base64-32'],
+      ['POSTGRES_PASSWORD', 'generate:password'],
+      ['DATABASE_URL', 'postgres://postgres:${POSTGRES_PASSWORD}@plausible_db:5432/plausible_db'],
+      ['DISABLE_REGISTRATION', 'invite_only'],
     ],
   },
 ]
-
-/** Строки .env-шаблона примера с подсказками на языке интерфейса. */
-export function envTemplateLines(lines: string[], t: (key: string) => string): string[] {
-  return lines.map((l) => l.replace(/\{(\w+)\}/g, (_, k: string) => t(`deploy.envPh.${k}`)))
-}

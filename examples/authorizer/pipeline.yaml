@@ -10,6 +10,22 @@ compose:
   project: authorizer
   hosts: [web1]
   wait_timeout: 5m            # первый старт — миграции базы
+  # Порт на хосте вместо того, что в compose-файле (хост:контейнер; адрес —
+  # 127.0.0.1 — наружу только через прокси сайта). Занят — возьмите другой:
+  # ports:
+  #   authorizer: ["127.0.0.1:18080:8080"]
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера (в описании останется "@secret"), generate: — значение
+  # создаст хаб. Посмотреть — «Секреты» → «.env» → история → «Показать».
+  env:
+    AUTH_DOMAIN: auth.example.com
+    ALLOWED_ORIGINS: https://auth.example.com
+    CLIENT_ID: generate:hex16
+    CLIENT_SECRET: generate:hex32
+    ADMIN_SECRET: generate:hex32
+    JWT_SECRET: generate:hex32
+    ENCRYPTION_KEY: generate:hex32
+    POSTGRES_PASSWORD: generate:password
   # Сайт: хаб после выкладки настроит прокси и сертификат (A-запись имени
   # должна указывать на хост). Имя — то же, что AUTH_DOMAIN в .env.
   site:
@@ -33,13 +49,3 @@ compose:
   #     target_port: 8080       # порт в контейнере
   #     check: http
   #     check_path: /healthz
-
-# .env стека — «Доступ» → «.env стека»:
-#   AUTH_DOMAIN=auth.example.com
-#   ALLOWED_ORIGINS=https://auth.example.com,https://app.example.com
-#   CLIENT_ID=<openssl rand -hex 16>
-#   CLIENT_SECRET=<openssl rand -hex 32>
-#   ADMIN_SECRET=<openssl rand -hex 32>
-#   JWT_SECRET=<openssl rand -hex 32>
-#   ENCRYPTION_KEY=<openssl rand -hex 32>
-#   POSTGRES_PASSWORD=<пароль базы>

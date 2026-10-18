@@ -155,6 +155,8 @@ type ComposeCheckResult struct {
 	// или compose (образ не скачан — только ports/expose из compose).
 	SitePortsFrom string `json:"site_ports_from,omitempty"`
 	SiteImage     string `json:"site_image,omitempty"`
+	// Configs — конфиги описания: что станет с ними (секреты под маской).
+	Configs []ComposeConfigChange `json:"configs,omitempty"`
 }
 
 // composeCheckDir — каталог сухого прогона: рядом со стеками, чтобы
@@ -208,6 +210,9 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Env != nil {
 		res.EnvEdited = envEditedOnHost(c, dir, req.EnvSHA)
+	}
+	if len(req.Configs) > 0 {
+		res.Configs = checkConfigs(ctx, c, dir, req.Configs, configEnv(c, dir, req.Env))
 	}
 	if res.Engine == "" || !res.Compose {
 		writeJSON(w, http.StatusOK, res)

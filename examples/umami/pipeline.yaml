@@ -15,6 +15,18 @@ compose:
   env_keys:
     umami: [APP_SECRET, TWO_FACTOR_ENCRYPTION_KEY, DATABASE_URL]
     db: [POSTGRES_PASSWORD]
+  # Порт на хосте вместо того, что в compose-файле (хост:контейнер; адрес —
+  # 127.0.0.1 — наружу только через прокси сайта). Занят — возьмите другой:
+  # ports:
+  #   umami: ["127.0.0.1:13000:3000"]
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера (в описании останется "@secret"), generate: — значение
+  # создаст хаб. Посмотреть — «Секреты» → «.env» → история → «Показать».
+  env:
+    APP_SECRET: generate:hex32
+    TWO_FACTOR_ENCRYPTION_KEY: generate:hex32
+    POSTGRES_PASSWORD: generate:password
+    DATABASE_URL: postgresql://umami:${POSTGRES_PASSWORD}@db:5432/umami
   site:
     domains: [stats.example.com]
     service: umami
@@ -22,9 +34,3 @@ compose:
   # Версия закреплена: в файле umami — latest; новая — правкой строки.
   images:
     umami: ghcr.io/umami-software/umami:3.4.0
-
-# .env стека — «Доступ» → «.env стека»:
-#   APP_SECRET=<openssl rand -hex 32>
-#   TWO_FACTOR_ENCRYPTION_KEY=<openssl rand -hex 32>
-#   POSTGRES_PASSWORD=<пароль базы>
-#   DATABASE_URL=postgresql://umami:<пароль базы>@db:5432/umami

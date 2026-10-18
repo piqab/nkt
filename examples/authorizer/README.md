@@ -28,20 +28,28 @@ MFA) с панелью администратора. Пример — верси
 выберите хост — описание готово (или вставьте `pipeline.yaml`, поправив
 `hosts` и `domains`). Сохраните.
 
-## 2. .env стека
+## 2. .env стека — в описании
 
-«Доступ» конвейера → **«.env стека»**:
+Значения `.env` — в блоке `env:` описания (`pipeline.yaml`):
 
+```yaml
+  env:
+    AUTH_DOMAIN: auth.example.com
+    ALLOWED_ORIGINS: https://auth.example.com
+    CLIENT_ID: generate:hex16
+    CLIENT_SECRET: generate:hex32
+    ADMIN_SECRET: generate:hex32
+    JWT_SECRET: generate:hex32
+    ENCRYPTION_KEY: generate:hex32
+    POSTGRES_PASSWORD: generate:password
 ```
-AUTH_DOMAIN=auth.example.com
-ALLOWED_ORIGINS=https://auth.example.com,https://app.example.com
-CLIENT_ID=<openssl rand -hex 16>
-CLIENT_SECRET=<openssl rand -hex 32>
-ADMIN_SECRET=<openssl rand -hex 32>
-JWT_SECRET=<openssl rand -hex 32>
-ENCRYPTION_KEY=<openssl rand -hex 32>
-POSTGRES_PASSWORD=<пароль базы>
-```
+
+При **сохранении** конвейера значения уходят в его зашифрованный `.env`
+(«Секреты»), а в описании остаётся `"@secret"`: ни в базе, ни в истории
+версий, ни в журнале их нет. `generate:` — значение создаёт хаб (один
+раз: пересохранение не меняет пароль базы). Посмотреть созданное —
+«Секреты» → «.env» → история → «Показать». Своё значение для уже
+заданного ключа хаб заменит только после вопроса.
 
 - `AUTH_DOMAIN` — то же имя, что в `site:` (из него `--url`, адрес в
   токенах и письмах).
@@ -49,6 +57,8 @@ POSTGRES_PASSWORD=<пароль базы>
   (через запятую, без пробелов); сам `AUTH_DOMAIN` — тоже.
 - `ENCRYPTION_KEY` — отдельно от `JWT_SECRET`: им шифруются ключи TOTP, и
   смена `JWT_SECRET` без него заперла бы всех с двухфакторным входом.
+- `ADMIN_SECRET` — пароль панели администратора: посмотреть — в истории
+  `.env`, как сказано выше.
 
 ## 3. Выкладка и вход
 

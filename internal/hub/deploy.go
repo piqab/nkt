@@ -47,6 +47,9 @@ type DeployParams struct {
 	Tag        string `json:"tag,omitempty"`
 	// Skip — проверки сухого прогона, с которых сняли галочки.
 	Skip []string `json:"skip,omitempty"`
+	// EnvToken — жетон одноразового хранилища: .env с несохранёнными
+	// значениями блока env (сами значения в параметры не идут).
+	EnvToken string `json:"env_token,omitempty"`
 }
 
 // DeployRunner — исполнитель выкладки.

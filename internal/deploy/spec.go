@@ -99,6 +99,14 @@ type ComposeSpec struct {
 	// Fly — маршруты Traffic Fly стека: целями — контейнеры сервиса на
 	// хостах выкладки; см. FlySpec.
 	Fly []FlySpec `yaml:"fly,omitempty"`
+	// Env — строки .env стека прямо в описании (см. compose_env.go): при
+	// сохранении значения уходят в .env конвейера, в описании остаётся
+	// «@secret»; generate:вид — значение создаёт хаб.
+	Env map[string]string `yaml:"env,omitempty"`
+	// Configs — файлы-конфиги сервисов (см. compose_configs.go): текст в
+	// описании или файл из репозитория, ${ИМЯ} — из .env стека (подставляет
+	// хост); монтируются в контейнер только для чтения.
+	Configs map[string][]ConfigSpec `yaml:"configs,omitempty"`
 }
 
 // PullImages — pull перед up (по умолчанию да).
@@ -239,6 +247,12 @@ func (s Spec) Validate() error {
 		if err := validateFly(c.Fly); err != nil {
 			return err
 		}
+		if err := validateEnvMap(c.Env); err != nil {
+			return err
+		}
+		if err := validateConfigs(c.Configs); err != nil {
+			return err
+		}
 	default:
 		return msgs.Errorf("deploy.specBad", "action", s.Action)
 	}
@@ -370,7 +384,16 @@ clusters: [prod]        # кластеры хаба
 #   #   port: 80                 # порт контейнера
 #   #   proxy: nginx             # необязательно: иначе какой есть, нет ни одного — nginx
 #   #   cert: manual             # готовый сертификат (по умолчанию); auto — выпуск certbot; /путь — свой файл
-#   # .env стека — в «Секреты» конвейера, хранится зашифрованным
+#   # .env стека — в «Секреты» конвейера, хранится зашифрованным, или блоком env:
+#   env:                       # при сохранении уйдёт в секреты, здесь останется "@secret"
+#     APP_DOMAIN: app.example.com
+#     DB_PASSWORD: generate:password  # значение создаст хаб (hex16, hex32, base64-48, password)
+#   configs:                   # конфиг в контейнер (только чтение); ${ИМЯ} — из .env стека
+#     web:
+#       - target: /etc/app/config.toml
+#         content: |
+#           url = "https://${APP_DOMAIN}"
+#         mode: "0444"         # секреты внутри — "0440" и uid/gid пользователя контейнера
 
 # Когда ещё выкладывать, кроме вебхука и кнопки:
 # poll: 5m                     # новый коммит в ветке
@@ -422,7 +445,16 @@ clusters: [prod]        # hub clusters
 #   #   port: 80                 # the container port
 #   #   proxy: nginx             # optional: otherwise whichever is there, with none — nginx
 #   #   cert: manual             # a ready certificate (default); auto — certbot issues it; /path — your own file
-#   # the stack's .env goes into the pipeline's "Secrets", stored encrypted
+#   # the stack's .env goes into the pipeline's "Secrets", stored encrypted, or an env: block
+#   env:                       # moved to secrets on save; "@secret" stays here
+#     APP_DOMAIN: app.example.com
+#     DB_PASSWORD: generate:password  # the hub creates the value (hex16, hex32, base64-48, password)
+#   configs:                   # a config file in the container (read-only); ${NAME} from the stack .env
+#     web:
+#       - target: /etc/app/config.toml
+#         content: |
+#           url = "https://${APP_DOMAIN}"
+#         mode: "0444"         # secrets inside — "0440" and uid/gid of the container user
 
 # When else to deploy, besides the webhook and the button:
 # poll: 5m                     # a new commit in the branch

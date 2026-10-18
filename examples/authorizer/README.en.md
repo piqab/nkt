@@ -29,20 +29,28 @@ Deployments → New pipeline → **Examples → Authorizer + PostgreSQL**, pick
 a host — the description is ready (or paste `pipeline.yaml`, adjusting
 `hosts` and `domains`). Save.
 
-## 2. The stack's .env
+## 2. The stack's .env — in the description
 
-The pipeline's Access → **Stack .env**:
+The `.env` values live in the description's `env:` block (`pipeline.yaml`):
 
+```yaml
+  env:
+    AUTH_DOMAIN: auth.example.com
+    ALLOWED_ORIGINS: https://auth.example.com
+    CLIENT_ID: generate:hex16
+    CLIENT_SECRET: generate:hex32
+    ADMIN_SECRET: generate:hex32
+    JWT_SECRET: generate:hex32
+    ENCRYPTION_KEY: generate:hex32
+    POSTGRES_PASSWORD: generate:password
 ```
-AUTH_DOMAIN=auth.example.com
-ALLOWED_ORIGINS=https://auth.example.com,https://app.example.com
-CLIENT_ID=<openssl rand -hex 16>
-CLIENT_SECRET=<openssl rand -hex 32>
-ADMIN_SECRET=<openssl rand -hex 32>
-JWT_SECRET=<openssl rand -hex 32>
-ENCRYPTION_KEY=<openssl rand -hex 32>
-POSTGRES_PASSWORD=<database password>
-```
+
+When the pipeline is **saved**, the values move into its encrypted `.env`
+("Secrets") and the description keeps `"@secret"`: they are not in the
+database, the version history or the audit log. `generate:` lets the hub
+create the value (once: saving again does not change a database
+password). To see a generated value: "Secrets" → ".env" → history →
+"Show". Replacing an already set key with your own value asks first.
 
 - `AUTH_DOMAIN` is the same name as in `site:` (it becomes `--url`, the
   address in tokens and e-mails).
@@ -51,6 +59,8 @@ POSTGRES_PASSWORD=<database password>
 - `ENCRYPTION_KEY` is separate from `JWT_SECRET`: it encrypts TOTP keys,
   and without it rotating `JWT_SECRET` would lock out everyone using
   two-factor sign-in.
+- `ADMIN_SECRET` is the admin dashboard password: see it in the `.env`
+  history as described above.
 
 ## 3. Deploy and sign in
 

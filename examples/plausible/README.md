@@ -10,7 +10,7 @@
 |---|---|
 | `./clickhouse/*.xml` в ClickHouse | `files: [clickhouse/]` — каталог целиком рядом с compose-файлом |
 | `POSTGRES_PASSWORD=postgres` значением | `env_keys` — пароль из `.env`; `DATABASE_URL` в `.env` — с тем же паролем |
-| `BASE_URL`, `SECRET_KEY_BASE` — `${…}` | `.env` конвейера |
+| `BASE_URL`, `SECRET_KEY_BASE` — `${…}` | `.env` конвейера — из блока `env:` описания (ключи и пароль создаёт хаб, `generate:`) |
 | порт приложения не публикуется | сайт публикует `8000` (EXPOSE образа) на 127.0.0.1 сам |
 | healthcheck у баз | `up --wait` ждёт; приложение стартует после миграций |
 

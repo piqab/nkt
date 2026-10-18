@@ -4,7 +4,7 @@ import { Button, Checkbox, Dropdown, Input, Select, Space, Spin, Switch, Tabs, T
 import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { Sensitive } from '../privacy'
-import { api, useApi } from '../api'
+import { ApiError, api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, DiffView, ErrorNote, Loading, Modal, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
@@ -17,7 +17,7 @@ import { SitesPanel } from '../components/SitesPanel'
 import { TrafficFly } from '../components/TrafficFly'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TitleHelp } from '../components/Docs'
-import { EXAMPLE_WARNING, PIPELINE_EXAMPLES, envTemplateLines, type PipelineExample } from '../pipelineExamples'
+import { EXAMPLE_WARNING, PIPELINE_EXAMPLES, type PipelineExample } from '../pipelineExamples'
 import { msg, tx, type Msg } from '../msg'
 
 interface Deployment {
@@ -98,6 +98,8 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
   const [dialog, setDialog] = useState<{ type: 'deploy' | 'access' | 'hook' | 'history'; p: Pipeline } | null>(null)
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Что сохранение сделало с блоком env (перенос в секреты) и конфигами.
+  const [notice, setNotice] = useState<string | null>(null)
   const [remove, setRemove] = useState<Pipeline | null>(null)
   // Уборка оставшегося стека — задание на самом хосте: окно журнала с его областью.
   const [hostJob, setHostJob] = useState<{ job: Job; scope: string } | null>(null)
@@ -280,6 +282,11 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
       </div>
       {/* Как «Кластеры» и «Сценарии»: выкладка меняет стеки на хостах. */}
       <Banner kind="warn">{t('deploy.experimental')}</Banner>
+      {notice && (
+        <Banner kind="info" onClose={() => setNotice(null)}>
+          {notice}
+        </Banner>
+      )}
       {error && (
         <Banner kind="error" onClose={() => setError(null)}>
           {error}
@@ -316,7 +323,16 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
           { key: 'fly', label: 'Traffic Fly', children: <TrafficFly me={me} onOpenJob={(id) => void openJob(id)} /> },
         ]}
       />
-      {edit && <PipelineEditor pipeline={edit.pipeline} onClose={() => setEdit(null)} onSaved={() => void list.reload()} />}
+      {edit && (
+        <PipelineEditor
+          pipeline={edit.pipeline}
+          onClose={() => setEdit(null)}
+          onSaved={(n) => {
+            if (n) setNotice(n)
+            void list.reload()
+          }}
+        />
+      )}
       {dialog?.type === 'deploy' && (
         <DeployModal
           p={dialog.p}
@@ -508,7 +524,7 @@ function HubGitBanner({ admin }: { admin: boolean }) {
 }
 
 /** Описание конвейера (YAML): правка с диффом, история редакций. */
-function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pipeline; onClose: () => void; onSaved: () => void }) {
+function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pipeline; onClose: () => void; onSaved: (notice?: string) => void }) {
   const { t } = useTranslation()
   // Новый конвейер, сохранённый кнопкой «Доступ», — дальше окно правит его.
   const [created, setCreated] = useState<Pipeline | null>(null)
@@ -556,9 +572,9 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
           for (let i = 2; taken.has(pname); i++) pname = `${base}-${i}`
           setName(pname)
         }
-        const res = await api<{ id: number }>('/hub/pipelines', { method: 'POST', body: { name: pname, content } })
+        const res = await api<{ id: number } & SaveReply>('/hub/pipelines', { method: 'POST', body: { name: pname, content } })
         id = res.id
-        onSaved()
+        onSaved(saveNotice(t, res))
       }
       const fresh = await api<Pipeline>(`/hub/pipelines/${id}`)
       if (!initial) {
@@ -577,9 +593,24 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
     setBusy(true)
     setError(null)
     try {
-      if (pipeline) await api(`/hub/pipelines/${pipeline.id}`, { method: 'PUT', body: { content: text, note } })
-      else await api('/hub/pipelines', { method: 'POST', body: { name, content: text } })
-      onSaved()
+      let res: SaveReply
+      if (pipeline) {
+        const put = (replace: boolean) => api<SaveReply>(`/hub/pipelines/${pipeline.id}`, { method: 'PUT', body: { content: text, note, replace_env: replace } })
+        try {
+          res = await put(false)
+        } catch (err) {
+          // Переменные уже заданы в .env другим значением — заменить только
+          // с подтверждения.
+          const keys = err instanceof ApiError && err.status === 409 ? (err.payload as { env_conflict?: string[] } | undefined)?.env_conflict : undefined
+          if (!keys?.length) throw err
+          const ok = await confirmAction(t('deploy.envConflictText', { keys: keys.join(', ') }), { title: t('deploy.envConflictTitle'), okText: t('deploy.envConflictOk') })
+          if (!ok) return false
+          res = await put(true)
+        }
+      } else {
+        res = await api<SaveReply>('/hub/pipelines', { method: 'POST', body: { name, content: text } })
+      }
+      onSaved(saveNotice(t, res))
       return true
     } catch (err) {
       setError(errText(err))
@@ -855,9 +886,19 @@ function ComposeFromLink({
           .map(([svc, keys]) => `    ${svc}: [${keys.join(', ')}]\n`)
           .join('')
       : ''
-    const envTemplate = ex?.envTemplate
-      ? `\n# ${t('deploy.envTemplateComment')}\n` + envTemplateLines(ex.envTemplate, t).map((l) => `#   ${l}\n`).join('')
+    // Значения .env — блоком env прямо в описании: при сохранении уходят
+    // в секреты конвейера, generate: создаёт хаб.
+    const domain = `${ex ? ex.project : proj}.example.com`
+    const env = ex?.env?.length
+      ? `  env:                             # ${t('deploy.envBlockComment')}\n` +
+        ex.env.map(([k, v]) => `    ${k}: ${yamlValue(v.replaceAll('{domain}', domain))}\n`).join('')
       : ''
+    // Порт на хосте вместо того, что в compose-файле, — закомментированный
+    // пример (адрес по умолчанию — 127.0.0.1).
+    const hostPort = Number(site.port) > 0 && Number(site.port) < 55536 ? Number(site.port) + 10000 : 18080
+    const ports =
+      `  # ports:                         # ${t('deploy.portsExampleComment')}\n` +
+      `  #   ${site.service}: ["127.0.0.1:${hostPort}:${site.port}"]\n`
     // Примеры — чужие репозитории и образы: предупреждение сверху, на
     // обоих языках (файл один для всех читателей), красным в редакторе.
     const warning = ex ? EXAMPLE_WARNING.map((l) => `${l}\n`).join('') : ''
@@ -872,9 +913,11 @@ function ComposeFromLink({
       `  wait_timeout: ${ex?.waitTimeout ?? '5m'}\n` +
       block('images', ex?.images, t('deploy.imagesComment')) +
       block('ports', ex?.ports, t('deploy.portsComment')) +
+      (ex?.ports ? '' : ports) +
       envKeys +
+      env +
       `  # site:                          # ${t('deploy.fromLinkSiteComment')}\n` +
-      `  #   domains: [${ex ? ex.project : proj}.example.com]\n` +
+      `  #   domains: [${domain}]\n` +
       `  #   service: ${site.service}\n` +
       `  #   port: ${site.port}\n` +
       `  #   cert: manual   # ${t('deploy.fromLinkCertComment')}\n` +
@@ -883,15 +926,14 @@ function ComposeFromLink({
           `  # fly:\n` +
           `  #   - route: ${ex.project}\n` +
           `  #     kind: https\n` +
-          `  #     names: [${ex.project}.example.com]\n` +
+          `  #     names: [${domain}]\n` +
           `  #     tls: gateway\n` +
           `  #     service: ${site.service}\n` +
           `  #     target_port: ${site.port}\n` +
           `  #     check: http\n` +
           `  #     check_path: ${ex.flyCheckPath}\n`
         : '') +
-      `\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n` +
-      envTemplate
+      `\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n`
     return yaml
   }
   linkYamlRef.current = () => {
@@ -2134,4 +2176,29 @@ export function patchComposeLine(text: string, key: string, value: string): stri
   const re = new RegExp(`^([ \\t]{2,})${key}:[ \\t]*([^#\\n]*?)([ \\t]*#.*)?$`, 'm')
   if (re.test(text)) return text.replace(re, (_m, indent: string, _old: string, comment?: string) => `${indent}${key}: ${value}${comment ?? ''}`)
   return text.replace(/^compose:[ \t]*$/m, (m) => `${m}\n  ${key}: ${value}`)
+}
+
+/** Ответ сохранения конвейера: что стало с блоком env и конфигами. */
+interface SaveReply {
+  content?: string
+  env_moved?: string[]
+  env_generated?: string[]
+  env_skipped?: string[]
+  config_secret_hints?: string[]
+}
+
+/** Текст для плашки после сохранения (пусто — нечего сказать). */
+function saveNotice(t: (k: string, o?: Record<string, unknown>) => string, r: SaveReply): string | undefined {
+  const parts: string[] = []
+  if (r.env_moved?.length) parts.push(t('deploy.envMoved', { keys: r.env_moved.join(', ') }))
+  if (r.env_generated?.length) parts.push(t('deploy.envGenerated', { keys: r.env_generated.join(', ') }))
+  if (r.env_skipped?.length) parts.push(t('deploy.envSkipped', { keys: r.env_skipped.join(', ') }))
+  if (r.config_secret_hints?.length) parts.push(t('deploy.configSecretHints', { list: r.config_secret_hints.join(', ') }))
+  return parts.length ? parts.join(' ') : undefined
+}
+
+/** Значение для YAML описания: с «: », «#», кавычками или «@» в начале —
+ * в двойных кавычках. */
+function yamlValue(v: string): string {
+  return /^[@!&*%|>'"`{[]|: | #|^\s|\s$/.test(v) || v === '' ? JSON.stringify(v) : v
 }
