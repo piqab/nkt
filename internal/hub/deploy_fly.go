@@ -318,7 +318,7 @@ func (s *Server) flyPipelineCheck(ctx context.Context, jc flyJobLog, r FlyRoute)
 // flyRouteFromSpec — новый маршрут по описанию конвейера.
 func flyRouteFromSpec(f deploy.FlySpec, gateway int64) FlyRoute {
 	r := FlyRoute{ID: f.Route, Gateway: gateway, Kind: f.Kind, Names: f.Names, Port: f.Port, PortTo: f.PortTo,
-		ProxyProtocol: f.ProxyProtocol, TLS: f.TLS == "gateway", Check: fly.Check{Kind: f.Check, Path: f.CheckPath, Port: f.CheckPort}}
+		ProxyProtocol: f.ProxyProtocol, TLS: f.TLS == "gateway", Allow: f.Allow, Check: fly.Check{Kind: f.Check, Path: f.CheckPath, Port: f.CheckPort}}
 	r.Algorithm = fly.AlgoSourceHash
 	if f.Named() {
 		r.Algorithm = fly.AlgoLeastConn
@@ -347,6 +347,9 @@ func flySpecDiff(r FlyRoute, f deploy.FlySpec, gateway int64) []string {
 	}
 	if r.ProxyProtocol != f.ProxyProtocol {
 		out = append(out, "proxy_protocol")
+	}
+	if !slices.Equal(r.Allow, f.Allow) && len(f.Allow) > 0 {
+		out = append(out, "allow")
 	}
 	return out
 }

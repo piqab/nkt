@@ -182,6 +182,11 @@ func (rt *Runtime) serveTLS(c net.Conn, br *bufio.Reader, r Route, rc *routeCoun
 		_ = tc.Close()
 		return
 	}
+	if !r.Allowed(client.Addr()) {
+		rc.denied.Add(1)
+		_ = tc.Close()
+		return
+	}
 
 	ip := client.Addr().Unmap().String()
 	var (

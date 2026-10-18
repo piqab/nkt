@@ -566,6 +566,7 @@ compose:
 | `port`, `port_to` | Порт шлюза (у `https`/`http` — 443/80) и конец диапазона |
 | `tls` | `gateway` — сертификат на шлюзе (только `https`, точные имена) |
 | `proxy_protocol` | PROXY protocol v2 к цели (без `tls`) |
+| `allow` | Разрешённые адреса клиентов (IPv4, сети); пусто — все |
 | `service`, `target_port` | Сервис compose и его порт в контейнере (у диапазона — равен `port`) |
 | `check`, `check_path`, `check_port` | `tcp` (по умолчанию; у `udp` — `none`), `http` с путём, `none` |
 

@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"fmt"
+	"net/netip"
 	"regexp"
 	"strings"
 
@@ -28,8 +29,10 @@ type FlySpec struct {
 	Port   int `yaml:"port,omitempty"`
 	PortTo int `yaml:"port_to,omitempty"`
 	// TLS — «gateway»: сертификат на шлюзе, цели — HTTP.
-	TLS           string `yaml:"tls,omitempty"`
-	ProxyProtocol bool   `yaml:"proxy_protocol,omitempty"`
+	TLS string `yaml:"tls,omitempty"`
+	// Allow — белый список адресов клиентов (IPv4, сети).
+	Allow         []string `yaml:"allow,omitempty"`
+	ProxyProtocol bool     `yaml:"proxy_protocol,omitempty"`
 	// Service — сервис compose; TargetPort — его порт внутри контейнера.
 	Service    string `yaml:"service"`
 	TargetPort int    `yaml:"target_port"`
@@ -111,6 +114,18 @@ func (f *FlySpec) validate(i int) error {
 	}
 	if f.TLS != "" && (f.TLS != "gateway" || f.Kind != "https" || f.ProxyProtocol) {
 		return msgs.Errorf("deploy.specBad", field("tls"), f.TLS)
+	}
+	if len(f.Allow) > 200 {
+		return msgs.Errorf("deploy.specBad", field("allow"), fmt.Sprint(len(f.Allow)))
+	}
+	for _, a := range f.Allow {
+		if p, err := netip.ParsePrefix(a); err == nil && p.Addr().Is4() {
+			continue
+		}
+		if ad, err := netip.ParseAddr(a); err == nil && ad.Is4() {
+			continue
+		}
+		return msgs.Errorf("deploy.specBad", field("allow"), a)
 	}
 	if !site.ValidName(f.Service) {
 		return msgs.Errorf("deploy.specBad", field("service"), f.Service)

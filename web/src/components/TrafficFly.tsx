@@ -51,6 +51,8 @@ interface FlyRoute {
   proxy_protocol?: boolean
   /** Сертификат на шлюзе: TLS завершает шлюз, цели — HTTP. */
   tls?: boolean
+  /** Белый список адресов клиентов (IPv4, сети); пусто — все. */
+  allow?: string[]
   algorithm: Algo
   check: FlyCheck
   targets: FlyTarget[]
@@ -92,6 +94,7 @@ interface RouteStats {
   active: number
   total: number
   failed: number
+  denied?: number
   bytes_in: number
   bytes_out: number
   clients: number
@@ -131,6 +134,8 @@ interface FlyTunnel {
 }
 
 const KINDS: Kind[] = ['https', 'http', 'tcp', 'udp', 'tcpudp']
+// Адрес или сеть IPv4 белого списка (точную проверку делает шлюз).
+const allowRe = /^(\d{1,3}\.){3}\d{1,3}(\/(\d|[12]\d|3[0-2]))?$/
 const TARGET_KINDS: TargetKind[] = ['container', 'vm', 'lxd', 'host', 'addr']
 // Список IP клиентов маршрута — до стольких; больше — только число.
 const MAX_IPS_SHOWN = 30
@@ -609,6 +614,12 @@ function RouteDetails({
           <Tag>{t(`fly.algo.${route.algorithm}`)}</Tag>
           {route.proxy_protocol && <Tag color="blue">PROXY protocol</Tag>}
           {route.tls && <Tag color="green">{t('fly.tlsTag')}</Tag>}
+          {(route.allow ?? []).length > 0 && (
+            <Tooltip title={(route.allow ?? []).join(', ')}>
+              <Tag color="purple">{t('fly.allowTag', { n: route.allow?.length })}</Tag>
+            </Tooltip>
+          )}
+          {stats?.denied ? <span className="small muted">{t('fly.deniedN', { n: stats.denied })}</span> : null}
           {stats && (
             <span className="small">
               {t('fly.statsLine', { active: stats.active, total: stats.total, failed: stats.failed, bytes: formatBytes(stats.bytes_in + stats.bytes_out) })}
@@ -703,7 +714,7 @@ function RouteEditor({
   const set = (p: Partial<FlyRoute>) => setR({ ...r, ...p })
   const isNamed = named(r.kind)
   const idTaken = !route && doc.routes.some((x) => x.id === r.id)
-  const valid = /^[a-z0-9][a-z0-9-]{0,40}$/.test(r.id) && !idTaken && !(r.tls && (r.names ?? []).some((n) => n.startsWith('*.'))) && r.port > 0 && r.targets.length > 0 && (!isNamed || (r.names ?? []).length > 0) && r.targets.every((x) => x.port > 0 && x.host_id !== undefined && (x.kind === 'host' || !!x.ref))
+  const valid = /^[a-z0-9][a-z0-9-]{0,40}$/.test(r.id) && !idTaken && (r.allow ?? []).every((a) => allowRe.test(a)) && !(r.tls && (r.names ?? []).some((n) => n.startsWith('*.'))) && r.port > 0 && r.targets.length > 0 && (!isNamed || (r.names ?? []).length > 0) && r.targets.every((x) => x.port > 0 && x.host_id !== undefined && (x.kind === 'host' || !!x.ref))
   return (
     <Modal title={route ? t('fly.editTitle', { route: routeTitle(route) }) : t('fly.newRoute')} onClose={onClose} width={900}>
       <div className="col" style={{ gap: '0.6rem' }}>
@@ -793,6 +804,18 @@ function RouteEditor({
           </>
         )}
         {!isNamed && <span className="small muted">{t('fly.portHint')}</span>}
+        <label>
+          {t('fly.fieldAllow')}
+          <Select
+            mode="tags"
+            value={r.allow ?? []}
+            onChange={(v: string[]) => set({ allow: v.map((x) => x.trim()).filter(Boolean) })}
+            tokenSeparators={[',', ' ', ';']}
+            placeholder="203.0.113.7, 198.51.100.0/24"
+            status={(r.allow ?? []).some((a) => !allowRe.test(a)) ? 'error' : undefined}
+          />
+          <span className="small muted">{t('fly.allowHint')}</span>
+        </label>
         <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
           <label>
             {t('fly.fieldAlgo')}

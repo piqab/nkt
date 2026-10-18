@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.28 — 2026-10-18
+
+- **Traffic Fly: access from allowed addresses only.** A route can list
+  client addresses and networks; the gateway cuts everyone else itself
+  (the kernel for routes by port, the router for routes by name), and the
+  route window shows how many were denied. Let's Encrypt checks always
+  pass. In pipelines — `allow:` in a `fly:` block. Handy for VM consoles,
+  service ports and admin panels.
+
 ## v1.13.27 — 2026-10-18
 
 - **Traffic Fly in pipelines.** A `fly:` block in a compose pipeline

@@ -595,6 +595,7 @@ rest is not overwritten.
 | `port`, `port_to` | Gateway port (443/80 for `https`/`http`) and range end |
 | `tls` | `gateway` — certificate on the gateway (`https` only, exact names) |
 | `proxy_protocol` | PROXY protocol v2 to the target (not with `tls`) |
+| `allow` | Allowed client addresses (IPv4, networks); empty — all |
 | `service`, `target_port` | The compose service and its port in the container (equals `port` for a range) |
 | `check`, `check_path`, `check_port` | `tcp` (default; `none` for `udp`), `http` with a path, `none` |
 

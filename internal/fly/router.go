@@ -63,9 +63,11 @@ type targetState struct {
 
 type routeCounters struct {
 	active, total, failed atomic.Int64
-	bytesIn, bytesOut     atomic.Int64
-	mu                    sync.Mutex
-	clients               map[string]int
+	// denied — отсечено белым списком адресов.
+	denied            atomic.Int64
+	bytesIn, bytesOut atomic.Int64
+	mu                sync.Mutex
+	clients           map[string]int
 }
 
 // Пороги проверок: цель выключается после fall неудач подряд, включается
@@ -288,6 +290,12 @@ func (rt *Runtime) handle(c net.Conn, port int) {
 	rc := rt.routes[r.ID]
 	rt.mu.RUnlock()
 	if rc == nil {
+		return
+	}
+	// Белый список адресов: у маршрута с сертификатом на шлюзе — после
+	// рукопожатия (проверка Let's Encrypt по 443 должна пройти).
+	if !r.TLS && !r.Allowed(client.Addr()) {
+		rc.denied.Add(1)
 		return
 	}
 	rc.total.Add(1)
@@ -555,10 +563,12 @@ type ClientCount struct {
 
 // RouteStats — маршрут в сводке.
 type RouteStats struct {
-	ID       string        `json:"id"`
-	Active   int64         `json:"active"`
-	Total    int64         `json:"total"`
-	Failed   int64         `json:"failed"`
+	ID     string `json:"id"`
+	Active int64  `json:"active"`
+	Total  int64  `json:"total"`
+	Failed int64  `json:"failed"`
+	// Denied — отсечено белым списком (маршруты по имени).
+	Denied   int64         `json:"denied,omitempty"`
 	BytesIn  int64         `json:"bytes_in"`
 	BytesOut int64         `json:"bytes_out"`
 	Clients  int           `json:"clients"`
@@ -581,7 +591,7 @@ func (rt *Runtime) Snapshot() Stats {
 	for _, r := range rt.cfg.Routes {
 		rs := RouteStats{ID: r.ID}
 		if rc := rt.routes[r.ID]; rc != nil {
-			rs.Active, rs.Total, rs.Failed = rc.active.Load(), rc.total.Load(), rc.failed.Load()
+			rs.Active, rs.Total, rs.Failed, rs.Denied = rc.active.Load(), rc.total.Load(), rc.failed.Load(), rc.denied.Load()
 			rs.BytesIn, rs.BytesOut = rc.bytesIn.Load(), rc.bytesOut.Load()
 			rc.mu.Lock()
 			rs.Clients = len(rc.clients)

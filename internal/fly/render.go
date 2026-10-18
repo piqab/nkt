@@ -81,12 +81,14 @@ func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) stri
 		for _, proto := range r.protos() {
 			if r.Range() {
 				// Диапазон: порт не меняется, цель — первая живая.
-				fmt.Fprintf(&b, "\t\t%s dport %s ct mark set 0x%x counter dnat to %s comment %q\n",
-					proto, portSpec(r.Port, r.PortTo), RouteMark(i+1), live[0].Host, "fly:"+r.ID)
+				fmt.Fprintf(&b, "\t\t%s dport %s %sct mark set 0x%x counter dnat to %s comment %q\n",
+					proto, portSpec(r.Port, r.PortTo), r.allowNFT(), RouteMark(i+1), live[0].Host, "fly:"+r.ID)
 				continue
 			}
-			fmt.Fprintf(&b, "\t\t%s dport %d ct mark set 0x%x counter dnat %s comment %q\n",
-				proto, r.Port, RouteMark(i+1), dnatTarget(r.Algorithm, live), "fly:"+r.ID)
+			// Белый список — условием самого правила: чужие пакеты на цели
+			// не уходят (на шлюзе этот порт никто не слушает).
+			fmt.Fprintf(&b, "\t\t%s dport %d %sct mark set 0x%x counter dnat %s comment %q\n",
+				proto, r.Port, r.allowNFT(), RouteMark(i+1), dnatTarget(r.Algorithm, live), "fly:"+r.ID)
 		}
 	}
 	b.WriteString("\t}\n}\n")

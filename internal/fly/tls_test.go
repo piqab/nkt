@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -139,5 +140,57 @@ func TestRouterGatewayTLSALPN(t *testing.T) {
 	c.Close()
 	if hits != 0 {
 		t.Fatal("challenge reached the target")
+	}
+}
+
+// Белый список адресов: маршрут по имени отсекает чужих, правило ядра —
+// с условием на адрес клиента и грузится в nft.
+func TestRouteAllow(t *testing.T) {
+	r := Route{Allow: []string{"203.0.113.7", "198.51.100.0/24"}}
+	for a, want := range map[string]bool{"203.0.113.7": true, "198.51.100.200": true, "203.0.113.8": false, "::ffff:198.51.100.1": true} {
+		if got := r.Allowed(netip.MustParseAddr(a)); got != want {
+			t.Errorf("%s: %v", a, got)
+		}
+	}
+	g := sampleGateway()
+	g.Routes[2].Allow = []string{"203.0.113.7", "198.51.100.0/24"}
+	if err := g.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	rules := GatewayNFT(g, nil)
+	if !strings.Contains(rules, "tcp dport 2222 ip saddr { 203.0.113.7/32, 198.51.100.0/24 } ct mark set") {
+		t.Fatalf("allow rule:\n%s", rules)
+	}
+	nftLoads(t, rules)
+	g.Routes[2].Allow = []string{"10.0.0.0/33"}
+	if g.Validate() == nil {
+		t.Error("bad prefix accepted")
+	}
+	g.Routes[2].Allow = []string{"2001:db8::1"}
+	if g.Validate() == nil {
+		t.Error("ipv6 accepted")
+	}
+
+	// Маршрутизатор: клиент 127.0.0.1 не в списке — соединение закрыто.
+	n := &testNet{public: map[int]string{}, backends: map[string]string{"10.77.1.2:40001": proxyBackend(t, "app", true)}}
+	rt := newRuntime(t, n)
+	err := rt.Apply(cfgFor(Route{ID: "app", Kind: KindHTTPS, Names: []string{"app.example.com"}, Port: 443, ProxyProtocol: true, Algorithm: AlgoLeastConn,
+		Check: Check{Kind: CheckNone}, Allow: []string{"203.0.113.7"}, Targets: []Target{{ID: "t", Host: "10.77.1.2", Port: 40001}}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := get(t, n.public[443], "app.example.com", true); !strings.HasPrefix(got, "ERR") {
+		t.Fatalf("not allowed client got through: %q", got)
+	}
+	if st := rt.Snapshot(); st.Routes[0].Denied != 1 {
+		t.Fatalf("denied: %+v", st.Routes[0])
+	}
+	cfg := rt.Config()
+	cfg.Routes[0].Allow = []string{"127.0.0.0/8"}
+	if err := rt.Apply(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := get(t, n.public[443], "app.example.com", true); got != "app 127.0.0.1 app.example.com" {
+		t.Fatalf("allowed client: %q", got)
 	}
 }

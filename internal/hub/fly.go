@@ -72,7 +72,9 @@ type FlyRoute struct {
 	PortTo        int  `json:"port_to,omitempty" yaml:"port_to,omitempty"`
 	ProxyProtocol bool `json:"proxy_protocol,omitempty" yaml:"proxy_protocol,omitempty"`
 	// TLS — сертификат на шлюзе: цели — HTTP с адресом клиента в заголовках.
-	TLS       bool        `json:"tls,omitempty" yaml:"tls,omitempty"`
+	TLS bool `json:"tls,omitempty" yaml:"tls,omitempty"`
+	// Allow — белый список адресов клиентов (IPv4, сети); пусто — все.
+	Allow     []string    `json:"allow,omitempty" yaml:"allow,omitempty"`
 	Algorithm string      `json:"algorithm" yaml:"algorithm"`
 	Check     fly.Check   `json:"check" yaml:"check"`
 	Targets   []FlyTarget `json:"targets" yaml:"targets"`
@@ -240,7 +242,7 @@ func (d FlyDoc) gatewayConfig(g FlyGateway, keys map[int64]string, names map[int
 		if r.Gateway != g.EdgeID {
 			continue
 		}
-		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, PortTo: r.PortTo, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Algorithm: r.Algorithm, Check: r.Check}
+		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, PortTo: r.PortTo, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Allow: r.Allow, Algorithm: r.Algorithm, Check: r.Check}
 		for _, t := range r.Targets {
 			if !seen[t.HostID] {
 				seen[t.HostID] = true
