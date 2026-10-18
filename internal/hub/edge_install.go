@@ -225,7 +225,7 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return err
 	}
 	defer func() { _, _ = runRemote(client, "rm -rf "+stage) }()
-	if err := uploadFile(sc, bin, stage+"/nkt-edge", 0o755, report); err != nil {
+	if err := uploadBinary(client, sc, bin, stage+"/nkt-edge", 0o755, report, report); err != nil {
 		return err
 	}
 	files := []struct {

@@ -20,7 +20,7 @@ On the target host — nothing but the binary.
 | Command | What it does |
 |---|---|
 | `make build` | **The main target.** The production binary `dist/nkt` (a static ELF, version from `VERSION` and `git describe`). With Docker — in containers, without — through `native-build`. Another architecture: `make build GOARCH=arm64` |
-| `make web` | Only the web UI into `internal/webui/dist`, where `go:embed` picks it up. `make build` calls it itself |
+| `make web` | Only the web UI into `internal/webui/dist`, where `go:embed` picks it up; large JS and CSS are stored gzipped (`web/scripts/gzip-dist.mjs`, served with `Content-Encoding: gzip`). `make build` calls it itself |
 | `make native-build` | Build without Docker: if Go or Node is missing, asks and installs them into `$HOME/.local`, without sudo |
 | `make build-dev` | A binary for the current OS — **only for fixtures mode** |
 | `make edge` | `nkt-edge` (deployment webhooks for a VPS) into `dist/` |

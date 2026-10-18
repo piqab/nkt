@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -288,7 +289,7 @@ func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitConten
 		}
 	}
 	if via == BinaryViaSFTP {
-		if err := uploadFile(sftpClient, src.LocalPath, tmpBin, 0o644, progress); err != nil {
+		if err := uploadBinary(client, sftpClient, src.LocalPath, tmpBin, 0o644, progress, report); err != nil {
 			return msgs.Errorf("hub.uploadingBinary2", err)
 		}
 	}
@@ -604,4 +605,80 @@ func uploadBytes(sftpClient *sftp.Client, data []byte, remotePath string, mode o
 		return err
 	}
 	return sftpClient.Chmod(remotePath, mode)
+}
+
+// uploadBinary — бинарник на хост сжатым (gzip): по каналу втрое меньше
+// (30 МБ → 11 МБ). Сжатая копия делается один раз и лежит в кэше рядом с
+// бинарником; на хосте распаковывается и сверяется по SHA-256 с
+// бинарником хаба. Нет на хосте gzip или sha256sum, не вышло сжать —
+// передаётся как есть.
+func uploadBinary(client *ssh.Client, sftpClient *sftp.Client, localPath, remotePath string, mode os.FileMode, progress, report func(key string, args ...any)) error {
+	if _, err := runRemote(client, "command -v gzip >/dev/null && command -v sha256sum >/dev/null"); err != nil {
+		return uploadFile(sftpClient, localPath, remotePath, mode, progress)
+	}
+	gz, err := gzipCached(localPath)
+	if err != nil {
+		return uploadFile(sftpClient, localPath, remotePath, mode, progress)
+	}
+	want, err := fileSHA256(localPath)
+	if err != nil {
+		return err
+	}
+	if st, err := os.Stat(gz); err == nil && report != nil {
+		if info, err := os.Stat(localPath); err == nil {
+			report("hub.uploadingCompressed", float64(st.Size())/1048576, float64(info.Size())/1048576)
+		}
+	}
+	remoteGz := remotePath + ".gz"
+	if err := uploadFile(sftpClient, gz, remoteGz, 0o644, progress); err != nil {
+		return err
+	}
+	cmd := fmt.Sprintf("gzip -dc %[1]s > %[2]s && rm -f %[1]s && chmod %[3]o %[2]s && sha256sum %[2]s", shellQuote(remoteGz), shellQuote(remotePath), mode)
+	out, err := runRemote(client, cmd)
+	if err != nil {
+		return msgs.Errorf("hub.binaryUnpack", err, lastLines(out, 3))
+	}
+	if got, _, _ := strings.Cut(strings.TrimSpace(out), " "); got != want {
+		return msgs.Errorf("hub.binaryMismatch", got, want)
+	}
+	return nil
+}
+
+// gzipCached — сжатая копия файла рядом с ним (path.gz); есть и не старше
+// самого файла — берётся она.
+func gzipCached(path string) (string, error) {
+	gz := path + ".gz"
+	src, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if st, err := os.Stat(gz); err == nil && st.Size() > 0 && !st.ModTime().Before(src.ModTime()) {
+		return gz, nil
+	}
+	in, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer in.Close()
+	tmp := gz + ".tmp"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
+	if err != nil {
+		return "", err
+	}
+	zw, _ := gzip.NewWriterLevel(out, gzip.BestCompression)
+	if _, err := io.Copy(zw, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return "", err
+	}
+	if err := zw.Close(); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return "", err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return "", err
+	}
+	return gz, os.Rename(tmp, gz)
 }

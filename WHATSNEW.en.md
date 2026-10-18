@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.31 — 2026-10-18
+
+- **Host updates use a third of the traffic.** The hub sends the nkt
+  binary (and nkt-edge) compressed: about 11 MB instead of 30. The host
+  unpacks it and checks it against the hub's binary by SHA-256; without
+  `gzip` on the host it goes as before. The compressed copy is made once
+  and kept in the hub cache.
+- **The binary is 2.3 MB smaller** (29.7 → 27.4 MB): the web UI is stored
+  compressed inside it and sent to the browser as is, so pages load faster.
+
 ## v1.13.30 — 2026-10-18
 
 - **Traffic Fly: redirect by drag and drop.** A Redirect button on the map

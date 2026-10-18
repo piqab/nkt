@@ -20,7 +20,7 @@ Docker 29.6 (сборка релиза и стенд), Go 1.26 (минимум 1
 | Команда | Что делает |
 |---|---|
 | `make build` | **Основная цель.** Продакшен-бинарник `dist/nkt` (статический ELF, версия из `VERSION` и `git describe`). С Docker — в контейнерах, без — через `native-build`. Другая архитектура: `make build GOARCH=arm64` |
-| `make web` | Только веб-интерфейс в `internal/webui/dist`, откуда его вшивает `go:embed`. `make build` вызывает сам |
+| `make web` | Только веб-интерфейс в `internal/webui/dist`, откуда его вшивает `go:embed`; крупные JS и CSS кладутся сжатыми (`web/scripts/gzip-dist.mjs`, отдаются с `Content-Encoding: gzip`). `make build` вызывает сам |
 | `make native-build` | Сборка без Docker: при нехватке Go или Node спрашивает и ставит их в `$HOME/.local`, без sudo |
 | `make build-dev` | Бинарник для текущей ОС — **только для режима fixtures** |
 | `make edge` | `nkt-edge` (вебхуки выкладок для VPS) в `dist/` |
