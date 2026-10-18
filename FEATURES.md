@@ -11,6 +11,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Three modes: `local` (a real host), `fixtures` (a host snapshot for development, works on Windows too), `hub`.
 - Russian and English UI: the language follows the browser, switches at the bottom of the menu, and every server message arrives in the UI language.
 - Light, dark and system theme; the sidebar collapses to icons (by button or automatically on narrow screens), the state is remembered.
+- Privacy mode (“hide sensitive data”) for screen sharing and screenshots: addresses, host names, users, keys and domains are blurred across all sections — from hosts and logs to deployments, nkt-edge and the Traffic Fly map, diffs and error messages.
 - Accounts with `admin` and `viewer` roles, argon2id passwords, sessions, brute-force protection, login with a host system account (PAM).
 - Read-only mode (`NKT_ALLOW_MUTATIONS=false`) that disables every change.
 - Audit log: every change is recorded with the user, the outcome and the command output.

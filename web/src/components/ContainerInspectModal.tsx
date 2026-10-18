@@ -3,6 +3,7 @@ import { OsTitle } from './OsIcon'
 import { Button, Input, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined, EyeOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { Sensitive } from '../privacy'
 import { useApi } from '../api'
 import { Banner, ErrorNote, Loading, Modal, formatDateTime } from './ui'
 import { formatBytes } from './charts'
@@ -169,7 +170,7 @@ export function ContainerInspectModal({ name, admin, onClose }: { name: string; 
                   {row(t('docker.inspectStarted'), d.started_at && !d.started_at.startsWith('0001') ? formatDateTime(d.started_at) : '')}
                   {row(t('docker.inspectRestart'), `${d.restart_policy || 'no'}${d.restart_retries ? ` (${d.restart_retries})` : ''} · ${t('docker.inspectRestarts', { count: d.restart_count })}`)}
                   {row(t('docker.inspectCommand'), cmd ? <span className="mono">{cmd}</span> : '')}
-                  {row(t('docker.inspectUser'), d.user)}
+                  {row(t('docker.inspectUser'), d.user ? <Sensitive>{d.user}</Sensitive> : '')}
                   {row(t('docker.inspectWorkdir'), d.working_dir)}
                   {row(t('docker.inspectLimits'), [d.memory_limit ? `${t('docker.inspectMemory')} ${formatBytes(d.memory_limit)}` : '', d.nano_cpus ? `CPU ${d.nano_cpus / 1e9}` : ''].filter(Boolean).join(' · '))}
                   {row(t('docker.inspectCompose'), d.compose_project ? `${d.compose_project} · ${d.compose_service ?? ''}` : '')}
@@ -213,7 +214,7 @@ export function ContainerInspectModal({ name, admin, onClose }: { name: string; 
                     {d.networks.map((n) => (
                       <div key={n.name} className="small">
                         <span className="mono">{n.name}</span>
-                        {n.ip ? ` · ${n.ip}` : ''}
+                        {n.ip ? <> · <Sensitive>{n.ip}</Sensitive></> : ''}
                         {n.gateway ? ` · ${t('docker.inspectGateway')} ${n.gateway}` : ''}
                         {n.aliases?.length ? <span className="muted"> · {n.aliases.join(', ')}</span> : null}
                       </div>

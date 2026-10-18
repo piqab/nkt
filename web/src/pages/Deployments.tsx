@@ -3,6 +3,7 @@ import { osLabel } from '../components/OsIcon'
 import { Button, Checkbox, Dropdown, Input, Select, Space, Spin, Switch, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { Sensitive } from '../privacy'
 import { api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, DiffView, ErrorNote, Loading, Modal, formatRelative } from '../components/ui'
@@ -418,7 +419,10 @@ function RemoveModal({ p, onClose, onStarted }: { p: Pipeline; onClose: () => vo
                 checked={it.state === 'remove' && chosen.includes(key(it))}
                 onChange={(e) => setPicked(e.target.checked ? [...chosen, key(it)] : chosen.filter((k) => k !== key(it)))}
               >
-                <span className="mono">{it.host}</span> · <span className="mono">{it.project}</span>
+                <span className="mono">
+                  <Sensitive>{it.host}</Sensitive>
+                </span>{' '}
+                · <span className="mono">{it.project}</span>
               </Checkbox>
               {it.state === 'remove' && <Tag color="error">{t('deploy.planRemove')}</Tag>}
               {it.state === 'shared' && <Tag color="blue">{t('deploy.planShared', { name: it.shared_with })}</Tag>}
@@ -1458,9 +1462,9 @@ function SecretsRegistries({ p, info, onChanged }: { p: Pipeline; info: SecretsI
           {
             title: t('deploy.secretColRegistry'),
             key: 'host',
-            render: (_, r) => (r.host ? <span className="mono">{r.host}</span> : <Tag color="warning">{t('deploy.secretRegistryUnbound')}</Tag>),
+            render: (_, r) => (r.host ? <span className="mono sensitive">{r.host}</span> : <Tag color="warning">{t('deploy.secretRegistryUnbound')}</Tag>),
           },
-          { title: t('deploy.secretColLogin'), key: 'user', render: (_, r) => <span className="mono">{r.user}</span> },
+          { title: t('deploy.secretColLogin'), key: 'user', render: (_, r) => <span className="mono sensitive">{r.user}</span> },
           { title: t('deploy.secretColToken'), key: 'hint', render: (_, r) => (r.hint ? <span className="mono">…{r.hint}</span> : '•••') },
           { title: 'CA', key: 'ca', render: (_, r) => (r.ca ? <Tag>{t('deploy.secretOwnCA')}</Tag> : '—') },
           {

@@ -39,7 +39,7 @@ export function GuestLoginBar({ kind, name, canControl }: { kind: 'lxd' | 'vm'; 
         {d?.set ? (
           <>
             <span>
-              {t('guestLogin.login')}: <strong className="mono">{d.user}</strong>
+              {t('guestLogin.login')}: <strong className="mono sensitive">{d.user}</strong>
             </span>
             {shown ? (
               <span className="mono">

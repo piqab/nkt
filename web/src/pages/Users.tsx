@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button, Form, Input, Select, type TableColumnsType } from 'antd'
 import { UserSwitchOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { Sensitive } from '../privacy'
 import { api, useApi } from '../api'
 import type { Account, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
@@ -75,7 +76,9 @@ export default function Users({ me }: { me: Me }) {
       key: 'username',
       render: (_, u) => (
         <>
-          <strong>{u.username}</strong>
+          <strong>
+            <Sensitive>{u.username}</Sensitive>
+          </strong>
           {u.username === me.username && <span className="small muted">{t('users.you')}</span>}
         </>
       ),

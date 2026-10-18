@@ -153,7 +153,9 @@ export function Banner({
       type={kind === 'warn' ? 'warning' : kind}
       showIcon
       icon={icon ? <span aria-hidden="true">{icon}</span> : undefined}
-      message={children}
+      // Свободный текст сообщения (ошибки с адресами, именами) — с
+      // размывкой приватного режима; готовая разметка — как есть.
+      message={blurText(children)}
       closable={onClose !== undefined}
       onClose={onClose}
     />
@@ -344,7 +346,7 @@ export function DiffView({ text }: { text: string }) {
               : undefined
         return (
           <div key={i} className={cls}>
-            {line || ' '}
+            {line ? blurText(line) : ' '}
           </div>
         )
       })}

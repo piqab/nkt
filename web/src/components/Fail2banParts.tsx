@@ -286,7 +286,7 @@ export function IPCheck({ ip, hubLevel, me }: { ip: string; hubLevel?: boolean; 
 export function IPWithCheck({ ip, hubLevel, me }: { ip: string; hubLevel?: boolean; me?: Me }) {
   return (
     <span className="row row-nowrap" style={{ gap: '0.15rem', alignItems: 'center', display: 'inline-flex' }}>
-      <span className="mono">{ip}</span>
+      <span className="mono sensitive">{ip}</span>
       <IPCheck ip={ip} hubLevel={hubLevel} me={me} />
     </span>
   )

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { OsIconOf } from '../components/OsIcon'
 import { Button, Input, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { Sensitive } from '../privacy'
 import { useApi } from '../api'
 import type { Me } from '../types'
 import { Card, ErrorNote, Loading } from '../components/ui'
@@ -69,7 +70,7 @@ export default function HubFail2ban({ me }: { me: Me }) {
               {hosts.map((h) => (
                 <Tag key={h.id} color={!h.known ? 'default' : !h.installed ? 'default' : h.running ? (h.banned > 0 ? 'orange' : 'green') : 'red'}>
                   <OsIconOf kind="host" hostID={h.id} name={h.name} size={12} />
-                  {h.name}:{' '}
+                  <Sensitive>{h.name}</Sensitive>:{' '}
                   {!h.known
                     ? t('fail2ban.unknownShort')
                     : !h.installed
@@ -115,7 +116,7 @@ export default function HubFail2ban({ me }: { me: Me }) {
                         {r.hosts.map((h) => (
                           <Tag key={h.id}>
                             <OsIconOf kind="host" hostID={h.id} name={h.name} size={12} />
-                            {h.name}: <span className="mono">{h.jails.join(', ')}</span>
+                            <Sensitive>{h.name}</Sensitive>: <span className="mono">{h.jails.join(', ')}</span>
                           </Tag>
                         ))}
                       </div>
