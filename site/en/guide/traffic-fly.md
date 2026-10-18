@@ -188,34 +188,57 @@ connections, traffic and client count. **Admins** see client addresses
 while there are at most 30 of them; beyond that, only the count. Viewers
 see the map and the client count, not addresses.
 
-### Redirecting on the map
+### Editing on the map
 
-The **Redirect** button (admins) turns on map editing: on the right, as a
+The **Edit map** button (admins) turns on editing: on the right, as a
 fourth column, a **Containers and VMs** panel by host, with search; the
 candidates are drawn as the same blocks as targets (green border —
-running, grey — stopped; address and ports below).
+running, grey — stopped; address and ports below). Below the map is the
+**trash**.
 
-- A container from the panel **onto a target** replaces that target with
-  it (keeping the previous target's port).
-- A container **onto a route** adds it to the pool.
-- Clicking a target opens a menu: “Redirect to…” (pick by click — for
-  phones), “Remove from pool”.
+Everything is done with the mouse (or a finger on a phone):
 
-Then a window shows the route diff and a choice:
+- A container from the panel **onto a route or any of its targets** joins
+  the pool **as a reserve**: it is checked but gets no traffic until you
+  switch to it. The port is the one the container declares or that of the
+  route's first target; if unknown, the map asks.
+- Drag a target **onto another route** to move it there as a reserve;
+  **into the trash** to remove it from the pool.
+- **Mouse wheel** over a target changes its weight by ±1.
+- **Clicking a target** opens a menu: “Switch traffic here”, “Activate”,
+  “To reserve”, “Edit” (port, weight), “Move to another route”, “Remove
+  from pool”, “Add a container as reserve…” (pick by click — for phones),
+  “details”.
 
-- **Smoothly** (default): the new target is added and applied; once it
-  passes checks the previous one is drained (no new connections), open
-  connections finish, and only then it is removed. If the new one is not
-  alive within 90 seconds, the previous one stays in service with a
-  warning in the log.
-- **At once**: replace and apply in one step, cutting open connections to
-  the previous target. Port ranges allow only this: one target serves and
-  relay ports live in its memory.
+A reserve target is drawn dashed — both border and link — with a
+“reserve” caption; its dot color follows the check, so you can see
+whether it is safe to switch to. **Switch traffic here** is available
+only on a reserve target that passes its check; after a short “Switch
+traffic from A to B?” confirmation that target goes into service and the
+others into reserve: no new connections, open ones finish. The usual
+order is to add as a reserve, wait for the green dot, then switch.
 
-“Save and switch” starts a job and opens its log; “Save only” makes a new
-version without applying.
+Guards: the route's last active target cannot be moved to reserve,
+moved to another route or removed, and only a reserve target can be
+removed — the map explains why.
 
-![Redirecting on the map](/screens/en/traffic-fly-redirect.png)
+**Draft** (default): actions pile up on the map — new targets are marked
+“+ new”, changed ones “→ active”, “→ reserve”, “edited”, removed ones
+stay faded and struck through. Above the map are **Apply changes (N)**
+(route diff and a note for the revision; one new revision and one job),
+**Undo** and **Discard**.
+
+**Apply immediately** (a switch above the map, off by default): every
+action goes to the Traffic Fly queue as a job right away; wheel steps are
+collected and sent as one job once the wheel stops.
+
+While a job runs, the affected routes and targets show a **spinner with
+a countdown**, and a job tag sits above the map (click — log); a failed
+job leaves a red tag linking to its log. Operations are applied to the
+revision current at run time, so queued jobs don't get in each other's
+way.
+
+![Editing on the map](/screens/en/traffic-fly-redirect.png)
 
 ## Editing, history and applying
 
