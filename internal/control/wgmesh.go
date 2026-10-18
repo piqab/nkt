@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/piqab/nkt/internal/aptcache"
 	"github.com/piqab/nkt/internal/msgs"
 )
 
@@ -152,7 +153,7 @@ func (m *WGManager) Apply(ctx context.Context, mesh WGMesh) error {
 		return err
 	}
 	install := "command -v wg >/dev/null 2>&1 || { export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq wireguard-tools; }"
-	if out, err := m.run(ctx, "sh", "-c", install); err != nil || out.ExitCode != 0 {
+	if out, err := m.run(ctx, "sh", "-c", aptcache.WrapScript(install)); err != nil || out.ExitCode != 0 {
 		return msgs.Errorf("control.wgApply", "apt-get", lastErr(out.Output(), err))
 	}
 	enc := base64.StdEncoding.EncodeToString([]byte(mesh.Config()))

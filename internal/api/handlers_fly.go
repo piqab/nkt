@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/piqab/nkt/internal/aptcache"
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/model"
@@ -113,7 +114,7 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 	}
 	// Итог — по самим командам, а не по коду apt: apt падает и из-за
 	// чужого недонастроенного пакета (grub-pc), когда наши уже стоят.
-	res, err := RunUnrestricted(ctx, "sh", "-c", "have() { command -v wg >/dev/null && command -v wg-quick >/dev/null && command -v nft >/dev/null; }; have || { DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables; have; }")
+	res, err := RunUnrestricted(ctx, "sh", "-c", aptcache.WrapScript("have() { command -v wg >/dev/null && command -v wg-quick >/dev/null && command -v nft >/dev/null; }; have || { DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables; have; }"))
 	if err != nil || !res.OK() {
 		return log, fmt.Errorf("wireguard-tools/nftables: %s", strings.TrimSpace(res.Output()+" "+errText(err)))
 	}

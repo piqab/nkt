@@ -287,7 +287,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
           <p className="small muted">{gateways.length === 0 ? t('fly.emptyNoGateway') : t('fly.empty')}</p>
         ) : (
           <div className="row" style={{ gap: '0.8rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 640px', minWidth: 0 }}>
+            <div style={{ flex: '1 1 600px', minWidth: 0 }}>
               <FlyMap
                 doc={doc}
                 gateways={gateways}
@@ -304,7 +304,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
               />
             </div>
             {redirect && (
-              <div style={{ flex: '0 1 260px', minWidth: 220 }}>
+              <div style={{ flex: '0 0 280px', minWidth: 240 }}>
                 <strong className="small">{t('fly.paletteTitle')}</strong>
                 <FlyPalette hosts={Object.entries(hostNames).map(([id, name]) => ({ id: Number(id), name }))} />
               </div>
@@ -635,9 +635,11 @@ function FlyMap({
   const { t } = useTranslation()
   const [over, setOver] = useState<string | null>(null)
   const ROW = 46
-  const W = 1100
-  const X = [10, 300, 640]
-  const BW = [240, 290, 450]
+  // Столбцы равной ширины: цели не растягиваются, длинные имена
+  // сокращаются по середине.
+  const W = 900
+  const X = [10, 315, 620]
+  const BW = [270, 270, 270]
   const stats = new Map<string, RouteStats>()
   for (const g of statuses) for (const r of g.status?.routes ?? []) stats.set(r.id, r)
   const gwIDs = doc.gateways.map((g) => g.edge_id)
@@ -730,7 +732,7 @@ function FlyMap({
   })
   return (
     <div style={{ overflowX: 'auto' }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 720, height: 'auto' }} role="img" aria-label={t('fly.map')}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 640, maxWidth: 1100, height: 'auto' }} role="img" aria-label={t('fly.map')}>
         {lines}
         {gwIDs.map((id, i) => {
           const g = gateways.find((x) => x.edge_id === id)
@@ -782,7 +784,7 @@ function FlyPalette({ hosts, onPick }: { hosts: { id: number; name: string }[]; 
         ))}
       </Space.Compact>
       <Input size="small" allowClear placeholder={t('fly.paletteSearch')} value={q} onChange={(e) => setQ(e.target.value)} />
-      <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+      <div style={{ maxHeight: 460, overflowY: 'auto', paddingRight: 4 }}>
         {hosts.map((h) => (
           <div key={h.id}>
             <Button type="text" size="small" style={{ padding: 0, fontWeight: 600 }} onClick={() => setOpen(open === h.id ? null : h.id)}>
@@ -804,10 +806,12 @@ function PaletteHost({ hostId, kind, q, onPick }: { hostId: number; kind: Target
   if (list.loading) return <div className="small muted" style={{ paddingLeft: '1rem' }}>{t('fly.loadingTargets')}</div>
   if (items.length === 0) return <div className="small muted" style={{ paddingLeft: '1rem' }}>{t('fly.noTargets')}</div>
   return (
-    <div className="col" style={{ gap: 2, paddingLeft: '0.8rem' }}>
+    <div className="col" style={{ gap: 6, padding: '4px 0 8px' }}>
       {items.map((x) => {
         const item: DropItem = { host_id: hostId, kind, ref: x.name, ports: x.ports }
         return (
+          // Карточка — как блок карты: рамка и точка по состоянию, имя,
+          // ниже — адрес, порты и состояние.
           <div
             key={x.name}
             draggable={!onPick}
@@ -816,12 +820,27 @@ function PaletteHost({ hostId, kind, q, onPick }: { hostId: number; kind: Target
               e.dataTransfer.effectAllowed = 'copy'
             }}
             onClick={onPick ? () => onPick(item) : undefined}
-            title={`${x.name}${x.ip ? ` · ${x.ip}` : ''}${x.ports?.length ? ` · ${x.ports.join(', ')}` : ''}`}
-            className="small mono"
-            style={{ cursor: onPick ? 'pointer' : 'grab', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            title={`${x.name}${x.ip ? ` · ${x.ip}` : ''}${x.ports?.length ? ` · ${x.ports.join(', ')}` : ''}${x.state ? ` · ${x.state}` : ''}`}
+            style={{
+              cursor: onPick ? 'pointer' : 'grab',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              height: 34,
+              padding: '0 10px',
+              borderRadius: 7,
+              border: `2px solid ${x.state === 'running' ? 'var(--status-good)' : 'var(--text-muted)'}`,
+              background: 'var(--surface-raised)',
+              userSelect: 'none',
+            }}
           >
-            {x.name}
-            {x.state && x.state !== 'running' ? <span className="muted"> · {x.state}</span> : null}
+            <span style={{ width: 10, height: 10, borderRadius: '50%', flex: 'none', background: x.state === 'running' ? 'var(--status-good)' : 'var(--text-muted)' }} />
+            <span style={{ minWidth: 0, lineHeight: 1.15 }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{midEllipsis(x.name, 34)}</span>
+              <span style={{ display: 'block', fontSize: 10, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {[x.ip, x.ports?.length ? x.ports.join(', ') : '', x.state && x.state !== 'running' ? x.state : ''].filter(Boolean).join(' · ') || t(`fly.targetKind.${kind}`)}
+              </span>
+            </span>
           </div>
         )
       })}

@@ -244,7 +244,7 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			mode      uint32
 		}{"nkt-fly.service", "/etc/systemd/system/nkt-fly.service", []byte(FlyUnit), 0o644})
 		jc.Log("fly.installTools")
-		if out, err := runRemote(client, sudo+"env DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables conntrack"); err != nil {
+		if out, err := runApt(client, sudo+"env DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables conntrack"); err != nil {
 			// apt падает и из-за чужого недонастроенного пакета (grub-pc на
 			// облачном образе ждёт ответа про диск) — свои при этом стоят.
 			// Решают сами команды, а не код возврата apt.
@@ -516,7 +516,7 @@ func edgePorts(client *ssh.Client, sudo string, proxyPort int) (edgePortsState, 
 func edgeIssueCert(client *ssh.Client, sudo string, p EdgeInstallParams, ports edgePortsState, jc *jobs.Context) error {
 	if _, err := runRemote(client, "command -v certbot"); err != nil {
 		jc.Log("edge.certbotInstall")
-		if out, err := runRemote(client, sudo+"env DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot"); err != nil {
+		if out, err := runApt(client, sudo+"env DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot"); err != nil {
 			// Как с пакетами Traffic Fly: apt мог упасть на чужом пакете.
 			if _, cerr := runRemote(client, sudo+"sh -c 'command -v certbot'"); cerr == nil {
 				jc.Log("edge.certbotOtherBroken", aptBrokenPackages(out))

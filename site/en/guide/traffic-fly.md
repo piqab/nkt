@@ -190,8 +190,10 @@ see the map and the client count, not addresses.
 
 ### Redirecting on the map
 
-The **Redirect** button (admins) turns on map editing: on the right, a
-**Containers and VMs** panel by host, with search.
+The **Redirect** button (admins) turns on map editing: on the right, as a
+fourth column, a **Containers and VMs** panel by host, with search; the
+candidates are drawn as the same blocks as targets (green border —
+running, grey — stopped; address and ports below).
 
 - A container from the panel **onto a target** replaces that target with
   it (keeping the previous target's port).

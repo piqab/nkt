@@ -291,17 +291,17 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 func installBootstrapPackages(client *ssh.Client, sudo string, packages []string, report func(key string, args ...any)) error {
 	report("hub.bootstrapPackages", strings.Join(packages, " "))
 	apt := sudo + "env DEBIAN_FRONTEND=noninteractive apt-get "
-	if out, err := runRemote(client, apt+"update"); err != nil {
+	if out, err := runApt(client, apt+"update"); err != nil {
 		return fmt.Errorf("apt-get update: %w: %s", err, lastLines(out, 5))
 	}
-	if _, err := runRemote(client, apt+"install -y "+strings.Join(packages, " ")); err == nil {
+	if _, err := runApt(client, apt+"install -y "+strings.Join(packages, " ")); err == nil {
 		return nil
 	}
 
 	report("hub.bootstrapPackagesOneByOne")
 	var failed []string
 	for _, p := range packages {
-		if _, err := runRemote(client, apt+"install -y "+p); err != nil {
+		if _, err := runApt(client, apt+"install -y "+p); err != nil {
 			failed = append(failed, p)
 		}
 	}
