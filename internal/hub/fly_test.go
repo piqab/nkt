@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/fly"
+	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -187,5 +190,61 @@ func TestFlyVersionAtLeast(t *testing.T) {
 		if got := flyVersionAtLeast(v, min); got != want {
 			t.Errorf("%q: %v", v, got)
 		}
+	}
+}
+
+// testFlyLog — журнал задания для тестов: ключи строк.
+type testFlyLog struct{ keys []string }
+
+func (l *testFlyLog) Log(key string, _ ...any)               { l.keys = append(l.keys, key) }
+func (l *testFlyLog) Logf(string, ...any)                    {}
+func (l *testFlyLog) StepKey(_, _ int, key string, _ ...any) { l.keys = append(l.keys, key) }
+func (l *testFlyLog) Lang() msgs.Lang                        { return msgs.RU }
+
+// Маршрут конвейера: нет — создаётся; те же цели — не перекладывается;
+// новый контейнер — новая цель, прежняя выводится, вид маршрута не
+// перезаписывается.
+func TestPipelineFlyRoute(t *testing.T) {
+	s, gw, host := flyTestServer(t)
+	ctx := context.Background()
+	f := deploy.FlySpec{Route: "app", Kind: "https", Names: []string{"app.example.com"}, Port: 443, TLS: "gateway", Service: "web", TargetPort: 8080, Check: "tcp"}
+	targets := []targetHost{{ID: host, Name: "web-1"}}
+	cs := map[int64][]flyContainer{host: {{Name: "shop-web-1", Project: "shop", Service: "web"}, {Name: "other", Project: "x", Service: "web"}}}
+	pl := store.Pipeline{Name: "shop"}
+
+	lg := &testFlyLog{}
+	err := s.pipelineFlyRoute(ctx, lg, "admin", pl, "shop", f, targets, cs)
+	d := s.flyDoc(ctx)
+	if len(d.Routes) != 1 || len(d.Routes[0].Targets) != 1 || d.Routes[0].Targets[0].Ref != "shop-web-1" || !d.Routes[0].TLS || d.Routes[0].Gateway != gw {
+		t.Fatalf("created: %+v (err %v)", d.Routes, err)
+	}
+	rev := d.Revision
+
+	lg = &testFlyLog{}
+	if err := s.pipelineFlyRoute(ctx, lg, "admin", pl, "shop", f, targets, cs); err != nil {
+		t.Fatal(err)
+	}
+	if s.flyDoc(ctx).Revision != rev || !slices.Contains(lg.keys, "fly.pipelineUnchanged") {
+		t.Fatalf("unchanged route was rewritten: %v", lg.keys)
+	}
+
+	// Другой контейнер и другой вид в описании: цель меняется (прежняя —
+	// выводом), вид — нет, только предупреждение.
+	cs[host] = []flyContainer{{Name: "shop-web-2", Project: "shop", Service: "web"}}
+	f2 := f
+	f2.TLS = ""
+	lg = &testFlyLog{}
+	_ = s.pipelineFlyRoute(ctx, lg, "admin", pl, "shop", f2, targets, cs)
+	r := s.flyDoc(ctx).Routes[0]
+	if !r.TLS || !slices.Contains(lg.keys, "fly.pipelineDiffers") {
+		t.Fatalf("route kind overwritten or no warning: %+v %v", r, lg.keys)
+	}
+	var drained, fresh bool
+	for _, x := range r.Targets {
+		drained = drained || (x.Ref == "shop-web-1" && x.Drain)
+		fresh = fresh || (x.Ref == "shop-web-2" && !x.Drain)
+	}
+	if !drained || !fresh {
+		t.Fatalf("targets: %+v", r.Targets)
 	}
 }

@@ -71,6 +71,11 @@ type Route struct {
 	Kind  string   `json:"kind"`
 	Names []string `json:"names,omitempty"` // https, http
 	Port  int      `json:"port"`            // публичный порт шлюза
+	// PortTo — конец диапазона портов (tcp, udp, tcpudp): порт сохраняется
+	// насквозь (шлюз → хост → цель, N → N), цель — одна активная: первая
+	// живая по порядку (выделенный coturn relay-порт живёт в памяти того,
+	// кто его выделил). 0 — один порт.
+	PortTo int `json:"port_to,omitempty"`
 	// ProxyProtocol — PROXY protocol v2 к цели (https, http): настоящий IP
 	// клиента; прочие виды сохраняют его ядром.
 	ProxyProtocol bool `json:"proxy_protocol,omitempty"`
@@ -105,8 +110,9 @@ type GatewayConfig struct {
 // Service — служебный порт хоста: из туннеля на цель.
 type Service struct {
 	Port   int    `json:"port"`
-	Proto  string `json:"proto"` // tcp | udp
-	Addr   string `json:"addr"`  // куда: IP контейнера, машины или свой WG-адрес
+	PortTo int    `json:"port_to,omitempty"` // диапазон Port..PortTo, порт сохраняется
+	Proto  string `json:"proto"`             // tcp | udp
+	Addr   string `json:"addr"`              // куда: IP контейнера, машины или свой WG-адрес
 	ToPort int    `json:"to_port"`
 	// Kind и Ref — что это (container, vm, lxd и имя): хост сам сверяет
 	// адрес по своему инвентарю и переписывает правило, если он сменился,
@@ -209,11 +215,13 @@ func (c GatewayConfig) Validate() error {
 			}
 		default:
 			for _, proto := range r.protos() {
-				k := fmt.Sprint(proto, "/", r.Port)
-				if ports[k] || proto == "tcp" && namedPort(c.Routes, r.Port) {
-					return fmt.Errorf("fly: port %s twice", k)
+				for _, p := range r.ports() {
+					k := fmt.Sprint(proto, "/", p)
+					if ports[k] || proto == "tcp" && namedPort(c.Routes, p) {
+						return fmt.Errorf("fly: port %s twice", k)
+					}
+					ports[k] = true
 				}
-				ports[k] = true
 			}
 		}
 	}
@@ -263,12 +271,54 @@ func (r Route) protos() []string {
 // Named — маршрут по имени (обслуживает маршрутизатор, не ядро).
 func (r Route) Named() bool { return r.Kind == KindHTTPS || r.Kind == KindHTTP }
 
+// Range — маршрут занимает диапазон портов.
+func (r Route) Range() bool { return r.PortTo > r.Port }
+
+// maxRangePorts — самый широкий диапазон одного маршрута (coturn:
+// 49152–65535).
+const maxRangePorts = 20000
+
+// ports — порты маршрута (один или диапазон).
+func (r Route) ports() []int {
+	if !r.Range() {
+		return []int{r.Port}
+	}
+	out := make([]int, 0, r.PortTo-r.Port+1)
+	for p := r.Port; p <= r.PortTo; p++ {
+		out = append(out, p)
+	}
+	return out
+}
+
+// portSpec — порт или диапазон для nft.
+func portSpec(from, to int) string {
+	if to > from {
+		return fmt.Sprintf("%d-%d", from, to)
+	}
+	return fmt.Sprint(from)
+}
+
 func (r Route) validate(peers map[string]bool) error {
 	if !idRe.MatchString(r.ID) {
 		return fmt.Errorf("fly: route id %q", r.ID)
 	}
 	if !validPort(r.Port) {
 		return fmt.Errorf("fly: route %s port %d", r.ID, r.Port)
+	}
+	if r.PortTo != 0 {
+		if r.Named() || !validPort(r.PortTo) || r.PortTo <= r.Port || r.PortTo-r.Port > maxRangePorts {
+			return fmt.Errorf("fly: route %s port range %d-%d", r.ID, r.Port, r.PortTo)
+		}
+		// Проверка — на порту внутри диапазона (другие порты хоста в
+		// туннеле не пробрасываются).
+		if r.Check.Port != 0 && (r.Check.Port < r.Port || r.Check.Port > r.PortTo) {
+			return fmt.Errorf("fly: route %s: check port %d is outside %d-%d", r.ID, r.Check.Port, r.Port, r.PortTo)
+		}
+		for _, t := range r.Targets {
+			if t.Port != r.Port {
+				return fmt.Errorf("fly: route %s: a port range keeps ports, target %s port must be %d", r.ID, t.ID, r.Port)
+			}
+		}
 	}
 	switch r.Kind {
 	case KindHTTPS, KindHTTP:
@@ -351,7 +401,18 @@ func (c HostConfig) Validate() error {
 		for _, s := range i.Services {
 			a, err := netip.ParseAddr(s.Addr)
 			k := fmt.Sprint(s.Proto, "/", s.Port)
-			if err != nil || !a.Is4() || a.IsLoopback() || a.IsUnspecified() || !validPort(s.Port) || !validPort(s.ToPort) || (s.Proto != "tcp" && s.Proto != "udp") || seen[k] ||
+			clash := seen[k]
+			if s.PortTo != 0 {
+				if s.PortTo <= s.Port || s.PortTo-s.Port > maxRangePorts || !validPort(s.PortTo) {
+					return fmt.Errorf("fly: iface %s service range %d-%d", i.Name, s.Port, s.PortTo)
+				}
+				for p := s.Port + 1; p <= s.PortTo; p++ {
+					pk := fmt.Sprint(s.Proto, "/", p)
+					clash = clash || seen[pk]
+					seen[pk] = true
+				}
+			}
+			if err != nil || !a.Is4() || a.IsLoopback() || a.IsUnspecified() || !validPort(s.Port) || !validPort(s.ToPort) || (s.Proto != "tcp" && s.Proto != "udp") || clash ||
 				!refKind(s.Kind) || len(s.Ref) > 200 || strings.ContainsAny(s.Ref, "\x00\n\r") {
 				return fmt.Errorf("fly: iface %s service %d/%s", i.Name, s.Port, s.Proto)
 			}

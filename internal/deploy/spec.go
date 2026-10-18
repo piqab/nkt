@@ -96,6 +96,9 @@ type ComposeSpec struct {
 	// Site — сайт стека: строкой — проверить по HTTPS после выкладки,
 	// блоком — настроить (прокси, сертификат); см. SiteSpec.
 	Site *SiteSpec `yaml:"site,omitempty"`
+	// Fly — маршруты Traffic Fly стека: целями — контейнеры сервиса на
+	// хостах выкладки; см. FlySpec.
+	Fly []FlySpec `yaml:"fly,omitempty"`
 }
 
 // PullImages — pull перед up (по умолчанию да).
@@ -231,6 +234,9 @@ func (s Spec) Validate() error {
 			return err
 		}
 		if err := c.Site.validate(c); err != nil {
+			return err
+		}
+		if err := validateFly(c.Fly); err != nil {
 			return err
 		}
 	default:

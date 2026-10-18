@@ -46,6 +46,8 @@ interface FlyRoute {
   kind: Kind
   names?: string[]
   port: number
+  /** Конец диапазона портов (TCP/UDP): порт сохраняется насквозь. */
+  port_to?: number
   proxy_protocol?: boolean
   /** Сертификат на шлюзе: TLS завершает шлюз, цели — HTTP. */
   tls?: boolean
@@ -141,7 +143,14 @@ function named(k: Kind) {
 
 function routeTitle(r: FlyRoute): string {
   if (named(r.kind)) return `${(r.names ?? []).join(', ')}${r.port === (r.kind === 'https' ? 443 : 80) ? '' : `:${r.port}`}`
-  return `${r.kind === 'tcpudp' ? 'tcp+udp' : r.kind} :${r.port}`
+  return `${r.kind === 'tcpudp' ? 'tcp+udp' : r.kind} :${r.port}${r.port_to && r.port_to > r.port ? `-${r.port_to}` : ''}`
+}
+
+/** Адрес сайта для имени маршрута по имени (порт — если нестандартный). */
+function siteURL(r: FlyRoute, name: string): string {
+  const scheme = r.kind === 'https' ? 'https' : 'http'
+  const std = r.kind === 'https' ? 443 : 80
+  return `${scheme}://${name}${r.port === std ? '' : `:${r.port}`}/`
 }
 
 function routeText(r: FlyRoute | null): string {
@@ -168,7 +177,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   const { t } = useTranslation()
   const admin = me.is_admin
   const fly = useApi<{ doc: FlyDoc; text: string; gateways: FlyGatewayInfo[]; applied: number }>('/hub/fly')
-  const status = useApi<{ gateways: GatewayStatus[]; hosts: Record<string, string>; tunnels?: FlyTunnel[]; now: number }>('/hub/fly/status', 5_000)
+  const status = useApi<{ gateways: GatewayStatus[]; hosts: Record<string, string>; tunnels?: FlyTunnel[]; revision?: number; applied?: number; now: number }>('/hub/fly/status', 5_000)
   const [edit, setEdit] = useState<FlyRoute | 'new' | null>(null)
   const [openRoute, setOpenRoute] = useState<string | null>(null)
   const [history, setHistory] = useState(false)
@@ -211,7 +220,10 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   }
   const [diffAsk, setDiffAsk] = useState<{ title: string; diff: string; run: (note: string) => Promise<void> } | null>(null)
 
-  const pending = doc && fly.data && doc.revision !== fly.data.applied
+  // Номер применённой версии — из сводки (опрос раз в 5 с): задание
+  // «Применить» меняет его, а сам документ страница не перечитывает.
+  const appliedRev = status.data?.applied ?? fly.data?.applied ?? 0
+  const pending = doc && fly.data && doc.revision !== appliedRev
 
   return (
     <div className="col" style={{ gap: '1rem' }}>
@@ -227,7 +239,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
             {doc && (
               <span className="small muted">
                 {t('fly.revision', { n: doc.revision })}{' '}
-                {pending ? <Tag color="warning">{fly.data?.applied ? t('fly.notApplied', { n: fly.data.applied }) : t('fly.neverApplied')}</Tag> : doc.revision > 0 && <Tag color="success">{t('fly.applied')}</Tag>}
+                {pending ? <Tag color="warning">{appliedRev ? t('fly.notApplied', { n: appliedRev }) : t('fly.neverApplied')}</Tag> : doc.revision > 0 && <Tag color="success">{t('fly.applied')}</Tag>}
               </span>
             )}
             <Button size="small" onClick={() => setHistory(true)} disabled={!doc}>
@@ -277,9 +289,28 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
               title: t('fly.colRoute'),
               key: 'route',
               render: (_, r) => (
-                <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setOpenRoute(r.id)}>
-                  <span className="mono">{routeTitle(r)}</span>
-                </Button>
+                <span className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* Имена сайта — ссылками в новую вкладку; подробности —
+                      отдельной кнопкой. */}
+                  {named(r.kind) ? (
+                    (r.names ?? []).map((n) =>
+                      n.startsWith('*.') ? (
+                        <span key={n} className="mono">
+                          {n}
+                        </span>
+                      ) : (
+                        <a key={n} className="mono" href={siteURL(r, n)} target="_blank" rel="noopener noreferrer">
+                          {n} ↗
+                        </a>
+                      ),
+                    )
+                  ) : (
+                    <span className="mono">{routeTitle(r)}</span>
+                  )}
+                  <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setOpenRoute(r.id)}>
+                    {t('fly.details')}
+                  </Button>
+                </span>
               ),
             },
             { title: t('fly.colKind'), key: 'kind', render: (_, r) => <Tag>{t(`fly.kind.${r.kind}`)}</Tag> },
@@ -710,9 +741,35 @@ function RouteEditor({
           </label>
           <label>
             {t('fly.fieldPort')}
-            <InputNumber min={1} max={65535} value={r.port || null} onChange={(v) => set({ port: v ?? 0 })} />
+            <InputNumber
+              min={1}
+              max={65535}
+              value={r.port || null}
+              onChange={(v) => set({ port: v ?? 0, targets: r.port_to ? r.targets.map((x) => ({ ...x, port: v ?? 0 })) : r.targets })}
+            />
           </label>
+          {!isNamed && (
+            <Tooltip title={t('fly.portToHint')}>
+              <label>
+                {t('fly.fieldPortTo')}
+                <InputNumber
+                  min={1}
+                  max={65535}
+                  value={r.port_to || null}
+                  placeholder="—"
+                  onChange={(v) =>
+                    set({
+                      port_to: v && v > r.port ? v : undefined,
+                      // Диапазон сохраняет порты: у целей — тот же порт.
+                      targets: v && v > r.port ? r.targets.map((x) => ({ ...x, port: r.port })) : r.targets,
+                    })
+                  }
+                />
+              </label>
+            </Tooltip>
+          )}
         </div>
+        {!isNamed && r.port_to && r.port_to > r.port ? <span className="small muted">{t('fly.rangeHint')}</span> : null}
         {isNamed && (
           <>
             <label>
@@ -887,9 +944,11 @@ function TargetRow({ target, hosts, onChange, onRemove }: { target: FlyTarget; h
       <Tooltip title={t('fly.weightHint')}>
         <InputNumber min={1} max={100} value={target.weight || 1} onChange={(v) => onChange({ ...target, weight: v ?? 1 })} addonBefore={t('fly.colWeight')} style={{ width: 130 }} />
       </Tooltip>
-      <Checkbox checked={!!target.drain} onChange={(e) => onChange({ ...target, drain: e.target.checked })}>
-        {t('fly.drain')}
-      </Checkbox>
+      <Tooltip title={t('fly.drainHint')}>
+        <Checkbox checked={!!target.drain} onChange={(e) => onChange({ ...target, drain: e.target.checked })}>
+          {t('fly.drainLabel')}
+        </Checkbox>
+      </Tooltip>
       <Button size="small" danger onClick={onRemove}>
         ×
       </Button>

@@ -253,6 +253,8 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 			jc.Log("deploy.siteFailed", d, chk.Error)
 		}
 	}
+	// Traffic Fly — после стека: целями маршрутов — его контейнеры.
+	s.pipelineFly(ctx, jc, user, pl, c, targets)
 	return nil
 }
 

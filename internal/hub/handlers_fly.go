@@ -232,7 +232,8 @@ func (s *Server) handleFlyStatus(w http.ResponseWriter, r *http.Request) {
 			names[fmt.Sprint(h.ID)] = h.Name
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"gateways": list, "hosts": names, "tunnels": s.flyTunnels(ctx, auth.Username(ctx), list), "now": time.Now().Unix()})
+	writeJSON(w, http.StatusOK, map[string]any{"gateways": list, "hosts": names, "tunnels": s.flyTunnels(ctx, auth.Username(ctx), list),
+		"revision": s.flyDoc(ctx).Revision, "applied": s.flyAppliedState(ctx).Revision, "now": time.Now().Unix()})
 }
 
 // flyTunnelJSON — туннель «шлюз — хост» и почему он не жив.

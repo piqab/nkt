@@ -79,6 +79,12 @@ func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) stri
 			continue
 		}
 		for _, proto := range r.protos() {
+			if r.Range() {
+				// Диапазон: порт не меняется, цель — первая живая.
+				fmt.Fprintf(&b, "\t\t%s dport %s ct mark set 0x%x counter dnat to %s comment %q\n",
+					proto, portSpec(r.Port, r.PortTo), RouteMark(i+1), live[0].Host, "fly:"+r.ID)
+				continue
+			}
 			fmt.Fprintf(&b, "\t\t%s dport %d ct mark set 0x%x counter dnat %s comment %q\n",
 				proto, r.Port, RouteMark(i+1), dnatTarget(r.Algorithm, live), "fly:"+r.ID)
 		}
@@ -158,6 +164,10 @@ func HostNFT(i HostIface) string {
 		return svcs[a].Proto < svcs[c].Proto
 	})
 	for _, s := range svcs {
+		if s.PortTo > s.Port {
+			fmt.Fprintf(&b, "\t\tiifname %q %s dport %s counter dnat to %s\n", i.Name, s.Proto, portSpec(s.Port, s.PortTo), s.Addr)
+			continue
+		}
 		fmt.Fprintf(&b, "\t\tiifname %q %s dport %d counter dnat to %s:%d\n", i.Name, s.Proto, s.Port, s.Addr, s.ToPort)
 	}
 	b.WriteString("\t}\n")

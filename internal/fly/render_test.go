@@ -143,3 +143,61 @@ func nftLoads(t *testing.T, rules string) {
 		t.Fatalf("nft не принял правила: %v\n%s\n%s", err, out, rules)
 	}
 }
+
+// Диапазон портов (coturn relay): порт сохраняется насквозь, цель —
+// первая живая; пересечения и неверные диапазоны отвергаются; правила
+// шлюза и хоста грузятся в nft.
+func TestPortRange(t *testing.T) {
+	g := sampleGateway()
+	turn := Route{ID: "turn", Kind: KindUDP, Port: 49152, PortTo: 65535, Algorithm: AlgoSourceHash, Check: Check{Kind: CheckNone},
+		Targets: []Target{{ID: "c1", Host: "10.77.1.3", Port: 49152}, {ID: "c2", Host: "10.77.1.2", Port: 49152}}}
+	g.Routes = append(g.Routes, turn)
+	if err := g.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	rules := GatewayNFT(g, func(route, target string) bool { return !(route == "turn" && target == "c1") })
+	if !strings.Contains(rules, "udp dport 49152-65535 ct mark set") || !strings.Contains(rules, "dnat to 10.77.1.2 comment \"fly:turn\"") {
+		t.Fatalf("range rule:\n%s", rules)
+	}
+	nftLoads(t, rules)
+
+	bad := map[string]func(*Route){
+		"named":       func(r *Route) { r.Kind, r.Names = KindHTTPS, []string{"x.example.com"} },
+		"reversed":    func(r *Route) { r.PortTo = r.Port - 1 },
+		"too wide":    func(r *Route) { r.Port, r.PortTo = 1024, 65535 },
+		"check out":   func(r *Route) { r.Check = Check{Kind: CheckTCP, Port: 3478} },
+		"target port": func(r *Route) { r.Targets[0].Port = 3478 },
+	}
+	for name, f := range bad {
+		c := sampleGateway()
+		r := turn
+		r.Targets = append([]Target(nil), turn.Targets...)
+		f(&r)
+		c.Routes = append(c.Routes, r)
+		if c.Validate() == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	// Пересечение с одиночным портом.
+	c := sampleGateway()
+	c.Routes = append(c.Routes, turn, Route{ID: "one", Kind: KindUDP, Port: 50000, Algorithm: AlgoSourceHash, Check: Check{Kind: CheckNone},
+		Targets: []Target{{ID: "x", Host: "10.77.1.2", Port: 40020}}})
+	if c.Validate() == nil {
+		t.Error("overlap accepted")
+	}
+
+	h := sampleHost()
+	h.Services = append(h.Services, Service{Port: 49152, PortTo: 65535, Proto: "udp", Addr: "172.17.0.9", ToPort: 49152})
+	if err := (HostConfig{Ifaces: []HostIface{h}}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	hr := HostNFT(h)
+	if !strings.Contains(hr, "udp dport 49152-65535 counter dnat to 172.17.0.9\n") {
+		t.Fatalf("host range rule:\n%s", hr)
+	}
+	nftLoads(t, hr)
+	h.Services = append(h.Services, Service{Port: 50000, Proto: "udp", Addr: "172.17.0.8", ToPort: 50000})
+	if (HostConfig{Ifaces: []HostIface{h}}).Validate() == nil {
+		t.Error("host overlap accepted")
+	}
+}

@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.27 — 2026-10-18
+
+- **Traffic Fly in pipelines.** A `fly:` block in a compose pipeline
+  description: after a successful deployment the route's targets become the
+  service containers on the deployment hosts. No route — it is created; the
+  same targets — nothing is pushed, only checked (targets alive,
+  certificate valid); targets changed — new ones are added, previous ones
+  drained and removed once the new ones pass checks. The pipeline never
+  overwrites an existing route's kind, names or certificate — it only
+  warns. Dry run shows what will happen.
+- **Port ranges** for coturn relay ports and the like: ports are kept end
+  to end, one target serves (the first live one).
+- **Apply without changes pushes nothing**: a node with the same
+  configuration is skipped, certificates read “valid until …, not
+  reissued”.
+- “Not applied” no longer lingers after Apply; site names in Routes are
+  links opening a new tab; target drain is labelled clearly (“no new
+  connections”) with a hint.
+- The guide has examples: a site with a gateway certificate, MQTT, STUN,
+  coturn and a pipeline with `fly:`.
+
 ## v1.13.26 — 2026-10-18
 
 - **Traffic Fly: gateway certificate checks before applying.** When a

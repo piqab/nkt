@@ -4707,6 +4707,12 @@
     "certError": "certificate not issued: {{error}}",
     "certUntil": "certificate until {{date}}",
     "gwVersionHint": "The nkt-edge version on the gateway. To update: Deployments → nkt-edge → Reinstall.",
-    "gwVersionOld": "nkt-edge older than 1.13.25"
+    "gwVersionOld": "nkt-edge older than 1.13.25",
+    "details": "details",
+    "drainLabel": "no new connections",
+    "drainHint": "Takes the target out for maintenance: new connections stop coming, open ones finish. Wait for 0 connections on the target and it can be restarted.",
+    "fieldPortTo": "to port",
+    "portToHint": "A port range (e.g. coturn relay ports 49152–65535): ports are kept end to end, one target is active, the others are standby.",
+    "rangeHint": "Range: gateway port N goes to target port N; the first live target serves, the others take over if it fails. Check: TCP on a port inside the range, or none."
   }
 }

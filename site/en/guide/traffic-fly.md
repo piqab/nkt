@@ -49,6 +49,9 @@ clients ──80/443 by name, TCP/UDP ports──▶ VPS: nkt-edge (fly role)
 
 - **80 and 443 are split by name**: `app.example.com`, `*.example.com`;
   an exact name beats a wildcard. One name, one route.
+- **Port range** (the “to port” field, TCP/UDP): ports are kept end to
+  end, one target serves — the first live one; for coturn relay ports and
+  the like (see the [example](#coturn-turn)).
 - **Other ports**: one gateway port, one pool. A second pool on the same
   port needs another port or a second gateway (a VPS with another
   address).
@@ -133,6 +136,9 @@ see the map and the client count, not addresses.
   Hosts go before gateways so traffic flows only once tunnels are ready.
   A host or gateway with nothing left to do removes its tunnels and
   rules.
+- A node that already has the same configuration (and confirms it) is
+  **not pushed again**: the log says “configuration already in place”, and
+  for certificates “valid until …, not reissued” or “being issued”.
 - Hosts get `wireguard-tools` and `nftables` installed if missing; the
   gateway gets them with the edge install.
 
@@ -151,6 +157,123 @@ Once a minute the hub compares the gateway summaries and writes to
 [alerts](/en/guide/hub-operations#alerts): **target down / back up**, **no live
 targets in pool**, **tunnel down / up**. Telegram, Slack, outgoing
 webhooks and the n8n node get them like any other event.
+
+## Examples
+
+### A container site with a certificate on the gateway
+
+Container `shop-web-1` on host `web1` serves HTTP on port 8080.
+
+| Field | Value |
+|---|---|
+| Kind | HTTPS by name (443) |
+| Names | `shop.example.com` |
+| Certificate on the gateway | yes |
+| Targets | `web1` → container `shop-web-1`, port 8080 |
+| Check | HTTP request, path `/healthz` |
+
+DNS `shop.example.com` → the gateway address; ports 80 and 443/tcp open at
+the VPS provider. After Apply the gateway obtains the certificate,
+`http://` goes to `https://`, and the application sees the client address
+in `X-Forwarded-For`.
+
+### MQTT
+
+| Broker | Route |
+|---|---|
+| no TLS | “TCP port” 1883 → the broker container, port 1883 |
+| TLS at the broker | “TCP port” 8883 → the broker, port 8883 (certificate at the broker) |
+| several brokers on one 8883 | “HTTPS by name”, port 8883, names `mqtt1.example.com`, `mqtt2.example.com` — the gateway picks the broker by name (SNI) without decrypting TLS; the client address only via PROXY protocol (EMQX and HiveMQ support it, mosquitto does not) |
+| MQTT over WebSocket | “HTTPS by name” to the broker's path, optionally with a gateway certificate |
+
+By port, the broker sees the real client IP with no setup.
+
+### STUN
+
+“TCP+UDP port” 3478 → the STUN server, port 3478. The gateway does not
+rewrite the client address, so STUN answers the client with its real
+external address, as it should.
+
+### coturn (TURN)
+
+TURN hands clients relay ports from a range, and each port must reach the
+coturn instance that allocated it. So relay goes as a **port range** (the
+“to port” field): ports are kept end to end, and one target serves — the
+first live one, the others are standby.
+
+| Route | Kind | Ports | Target |
+|---|---|---|---|
+| `turn` | TCP+UDP port | 3478 | coturn, 3478 |
+| `turns` | TCP port | 5349 | coturn, 5349 (TLS at coturn) |
+| `turn-relay` | UDP port, range | 49152–65535 | coturn (same host), no check |
+
+In `turnserver.conf` coturn must announce the gateway address and the same
+range to clients:
+
+```ini
+listening-port=3478
+tls-listening-port=5349
+min-port=49152
+max-port=65535
+# gateway address outside / coturn address on its own network (container, VM)
+external-ip=203.0.113.10/172.18.0.5
+realm=turn.example.com
+```
+
+At the VPS provider open 3478/tcp+udp, 5349/tcp and 49152–65535/udp. Keep
+the coturn container in `network_mode: host` or with a fixed address on its
+network: the address in `external-ip` must match where the gateway sends
+traffic.
+
+## In a pipeline
+
+A route can be managed right from a compose pipeline with a `fly:` block
+(all fields are in [Deployments](/en/guide/hub-deploy#traffic-fly-in-a-pipeline)):
+
+```yaml
+action: compose
+compose:
+  file: deploy/docker-compose.yml
+  project: shop
+  hosts: [web1, web2]
+  fly:
+    - route: shop               # the Traffic Fly route
+      gateway: fly-vps          # the gateway; may be omitted if there is one
+      kind: https
+      names: [shop.example.com]
+      tls: gateway              # certificate on the gateway
+      service: web              # the compose service
+      target_port: 8080         # its port in the container
+      check: http
+      check_path: /healthz
+    - route: shop-mqtt
+      kind: tcp
+      port: 1883
+      service: broker
+      target_port: 1883
+```
+
+After a successful deployment the hub:
+
+- finds the service container on every deployment host (by compose labels,
+  with a fresh host scan);
+- no route yet — **creates** it with these targets and applies;
+- the route exists with the same targets — **pushes nothing**, only checks
+  that targets are alive and the certificate is valid (a container
+  recreated with another address — the host rewrote its rule in that same
+  scan);
+- targets changed — adds the new ones and **drains the previous ones** (no
+  new connections, open ones finish), waits for the new ones to pass
+  checks (up to 90 s), and only then removes the previous ones; if they do
+  not come alive, the previous ones stay in service with a warning in the
+  log;
+- does **not overwrite** the kind, names, ports or certificate of an
+  existing route: a difference from the description is a warning in the
+  log.
+
+The gateway certificate is not reissued either: the gateway uses the saved
+one and goes to Let's Encrypt only when fewer than 30 days remain. The
+deployment Dry run shows whether a route will be created or reconciled.
 
 ## Without the hub
 
