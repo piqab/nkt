@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/piqab/nkt/internal/guestcred"
+	"github.com/piqab/nkt/internal/webui"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -661,21 +662,17 @@ func (s *Server) Handler() http.Handler {
 // spaHandler serves the embedded frontend, falling back to index.html so that
 // client-side routes survive a page reload.
 func (s *Server) spaHandler() http.Handler {
-	fileServer := http.FileServer(http.FS(s.ui))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		if path == "" {
 			path = "index.html"
 		}
-		if f, err := s.ui.Open(path); err == nil {
-			_ = f.Close()
-			// Hashed asset names are immutable; index.html must never be cached.
-			if strings.HasPrefix(path, "assets/") {
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			} else {
-				w.Header().Set("Cache-Control", "no-cache")
-			}
-			fileServer.ServeHTTP(w, r)
+		// Hashed asset names are immutable; index.html must never be cached.
+		cache := "no-cache"
+		if strings.HasPrefix(path, "assets/") {
+			cache = "public, max-age=31536000, immutable"
+		}
+		if webui.ServeAsset(w, r, s.ui, path, cache) {
 			return
 		}
 		index, err := fs.ReadFile(s.ui, "index.html")
