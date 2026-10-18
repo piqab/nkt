@@ -136,6 +136,7 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
   const [privacy] = usePrivacy()
   const data = useApi<MapData>('/hub/map', 60_000)
   const [refreshing, setRefreshing] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [expandAll, setExpandAll] = useState<boolean>(() => store.get('expand', false))
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [q, setQ] = useState('')
@@ -146,7 +147,15 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
   const [view, setView] = useState<{ x: number; y: number; k: number }>(() => store.get('view', { x: 0, y: 0, k: 1 }))
   const [hover, setHover] = useState<string | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
-  const boxRef = useRef<HTMLDivElement>(null)
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  // Окно карты появляется только после загрузки данных (до того —
+  // «Загрузка…»): обработчик колеса вешается на него, когда оно есть.
+  const [box, setBox] = useState<HTMLDivElement | null>(null)
+  const boxCallback = (el: HTMLDivElement | null) => {
+    boxRef.current = el
+    setBox(el)
+  }
 
   useEffect(() => store.set('expand', expandAll), [expandAll])
   useEffect(() => store.set('running', onlyRunning), [onlyRunning])
@@ -229,6 +238,8 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
     for (const h of hosts) {
       const hd = data.data?.hosts[String(h.id)]
       const offline = h.status !== 'online'
+      // «Только запущенные» — и без хостов, которые не на связи.
+      if (onlyRunning && (offline || hd?.error)) continue
       let items = (hd?.items ?? []).filter((it) => {
         if (onlyRunning && (it.state ?? '').toLowerCase() !== 'running') return false
         if (onlyLinked && !linkedTiles.has(tileKey(h.id, it.kind, it.name))) return false
@@ -302,7 +313,7 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
   // Масштаб колесом в точке курсора, сдвиг — перетаскиванием пустого места.
   const drag = useRef<{ sx: number; sy: number; x: number; y: number; moved: boolean } | null>(null)
   useEffect(() => {
-    const el = boxRef.current
+    const el = box
     if (!el) return
     const wheel = (e: WheelEvent) => {
       e.preventDefault()
@@ -316,7 +327,7 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
     }
     el.addEventListener('wheel', wheel, { passive: false })
     return () => el.removeEventListener('wheel', wheel)
-  }, [])
+  }, [box])
   const zoomBy = (f: number) => {
     const el = boxRef.current
     const cx = (el?.clientWidth ?? 800) / 2
@@ -343,6 +354,139 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
     const y2 = b.y + (l.to.startsWith('host:') ? HEAD_H / 2 : TILE_H / 2)
     const mx = (x1 + x2) / 2
     return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`
+  }
+
+  // PNG всей карты: копия SVG без сдвига и масштаба, цвета темы —
+  // значениями, сверху дата и легенда; в приватном режиме чувствительное
+  // заменено «•••» (размывка CSS в картинку не переносится).
+  async function exportPng() {
+    const src = svgRef.current
+    if (!src) return
+    setExporting(true)
+    try {
+      const css = getComputedStyle(document.documentElement)
+      // var(--имя, запасное) — значением темы; запасное бывает со своими
+      // скобками (rgba(…)), поэтому — со счётом скобок, не регуляркой.
+      const resolve = (v: string | null): string | null => {
+        if (!v) return v
+        let out = v
+        for (let i = out.indexOf('var('); i >= 0; i = out.indexOf('var(')) {
+          let depth = 0
+          let j = i + 3
+          for (; j < out.length; j++) {
+            if (out[j] === '(') depth++
+            else if (out[j] === ')' && --depth === 0) break
+          }
+          const inner = out.slice(i + 4, j)
+          const comma = inner.indexOf(',')
+          const name = (comma >= 0 ? inner.slice(0, comma) : inner).trim()
+          const def = comma >= 0 ? inner.slice(comma + 1).trim() : ''
+          const val = css.getPropertyValue(name).trim() || def || 'transparent'
+          out = out.slice(0, i) + val + out.slice(j + 1)
+        }
+        return out
+      }
+      const PAD = 16
+      const font = getComputedStyle(document.body).fontFamily
+      // Шапка: дата и легенда строками по ширине карты.
+      const W = layout.width + PAD * 2
+      const legend: { x: number; y: number; color: string; label: string; secret: boolean }[] = []
+      let lx = PAD
+      let ly = PAD + 34
+      for (const n of layout.left) {
+        const label = midEllipsis(n.label, 36)
+        const w = 18 + label.length * 7 + 18
+        if (lx + w > W - PAD) {
+          lx = PAD
+          ly += 20
+        }
+        legend.push({ x: lx, y: ly, color: n.color, label, secret: n.key.startsWith('route:') })
+        lx += w
+      }
+      const headH = (layout.left.length ? ly + 14 : PAD + 24) + 8
+      const H = layout.height + headH + PAD
+      const ns = 'http://www.w3.org/2000/svg'
+      const out = document.createElementNS(ns, 'svg')
+      out.setAttribute('xmlns', ns)
+      out.setAttribute('width', String(W))
+      out.setAttribute('height', String(H))
+      out.setAttribute('viewBox', `0 0 ${W} ${H}`)
+      out.setAttribute('font-family', font)
+      const bg = document.createElementNS(ns, 'rect')
+      bg.setAttribute('width', String(W))
+      bg.setAttribute('height', String(H))
+      bg.setAttribute('fill', resolve('var(--surface, #ffffff)')!)
+      out.appendChild(bg)
+      const text = (x: number, y: number, s: string, size: number, color: string, weight = 400) => {
+        const el = document.createElementNS(ns, 'text')
+        el.setAttribute('x', String(x))
+        el.setAttribute('y', String(y))
+        el.setAttribute('font-size', String(size))
+        el.setAttribute('font-weight', String(weight))
+        el.setAttribute('fill', resolve(color)!)
+        el.textContent = s
+        out.appendChild(el)
+      }
+      text(PAD, PAD + 14, new Date().toLocaleString(), 14, 'var(--text-primary, #222)', 600)
+      for (const l of legend) {
+        const r = document.createElementNS(ns, 'rect')
+        r.setAttribute('x', String(l.x))
+        r.setAttribute('y', String(l.y - 10))
+        r.setAttribute('width', '12')
+        r.setAttribute('height', '12')
+        r.setAttribute('rx', '2')
+        r.setAttribute('fill', l.color)
+        out.appendChild(r)
+        text(l.x + 18, l.y, privacy && l.secret ? '•••' : l.label, 12, 'var(--text-primary, #222)')
+      }
+      const g = (src.querySelector(':scope > g') as SVGGElement).cloneNode(true) as SVGGElement
+      g.setAttribute('transform', `translate(${PAD},${headH})`)
+      g.querySelectorAll('title, animate').forEach((el) => el.remove())
+      for (const el of [g, ...Array.from(g.querySelectorAll('*'))] as Element[]) {
+        for (const a of ['fill', 'stroke']) {
+          const v = el.getAttribute(a)
+          if (v) el.setAttribute(a, resolve(v)!)
+        }
+        const st = el.getAttribute('style')
+        if (st) el.setAttribute('style', resolve(st)!)
+        if (privacy && el.classList.contains('sensitive')) el.textContent = '•••'
+        el.removeAttribute('class')
+      }
+      out.appendChild(g)
+      const xml = new XMLSerializer().serializeToString(out)
+      const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }))
+      try {
+        const img = new Image()
+        await new Promise<void>((ok, fail) => {
+          img.onload = () => ok()
+          img.onerror = () => fail(new Error('svg'))
+          img.src = url
+        })
+        // 2×, но не больше ~16 000 точек по стороне (предел браузера).
+        const scale = Math.max(0.5, Math.min(2, 16000 / Math.max(W, H)))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(W * scale)
+        canvas.height = Math.round(H * scale)
+        const ctx = canvas.getContext('2d')!
+        ctx.scale(scale, scale)
+        ctx.drawImage(img, 0, 0)
+        const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, 'image/png'))
+        if (!blob) throw new Error('png')
+        const d = new Date()
+        const pad2 = (n: number) => String(n).padStart(2, '0')
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `hosts-map-${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}.png`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+    } finally {
+      setExporting(false)
+    }
   }
 
   // Первый показ (вид ещё не запоминался) — вся карта в окно.
@@ -392,6 +536,11 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
           {t('hostsMap.onlyLinked')}
         </Checkbox>
         <span style={{ flex: 1 }} />
+        <Tooltip title={privacy ? t('hostsMap.pngPrivacy') : t('hostsMap.pngHint')}>
+          <Button size="small" disabled={!data.data || exporting} loading={exporting} onClick={() => void exportPng()}>
+            PNG
+          </Button>
+        </Tooltip>
         <Tooltip title={t('hostsMap.refreshHint')}>
           <Button size="small" icon={<ReloadOutlined />} loading={refreshing || data.loading} onClick={() => void refresh()} />
         </Tooltip>
@@ -424,7 +573,7 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
         <Loading what={t('hostsMap.title')} />
       ) : (
         <div
-          ref={boxRef}
+          ref={boxCallback}
           style={{ position: 'relative', height, overflow: 'hidden', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', cursor: drag.current ? 'grabbing' : 'grab', touchAction: 'none', userSelect: 'none' }}
           onPointerDown={(e) => {
             if (e.button !== 0) return
@@ -449,7 +598,7 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
             }, 0)
           }}
         >
-          <svg width="100%" height="100%" role="img" aria-label={t('hostsMap.title')}>
+          <svg ref={svgRef} width="100%" height="100%" role="img" aria-label={t('hostsMap.title')}>
             <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
               {visibleLinks.map((l, i) => {
                 const d = linkPath(l)
@@ -482,7 +631,7 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
                   <text x={14} y={16} fontSize={12} fill="var(--text-primary)" className={n.key.startsWith('route:') ? 'sensitive' : undefined}>
                     {midEllipsis(n.label, 32)}
                   </text>
-                  <text x={14} y={30} fontSize={10} fill={n.bad ? 'var(--status-critical)' : 'var(--text-secondary)'}>
+                  <text x={14} y={30} fontSize={10} fill={n.bad ? 'var(--status-critical)' : 'var(--text-secondary)'} className={n.key.startsWith('route:') ? 'sensitive' : undefined}>
                     {midEllipsis(n.sub, 38)}
                   </text>
                 </g>
