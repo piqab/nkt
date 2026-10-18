@@ -16,15 +16,21 @@ compose:
   # Без этих переменных в .env сухой прогон не пропустит выкладку:
   env_keys:
     forgejo-admin: [FORGEJO_ADMIN_USER, FORGEJO_ADMIN_PASSWORD, FORGEJO_ADMIN_EMAIL]
+  # Порт на хосте вместо того, что в compose-файле (хост:контейнер; адрес —
+  # 127.0.0.1 — наружу только через прокси сайта). Занят — возьмите другой:
+  # ports:
+  #   forgejo: ["127.0.0.1:13000:3000"]
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера (в описании останется "@secret"), generate: — значение
+  # создаст хаб. Посмотреть — «Секреты» → «.env» → история → «Показать».
+  env:
+    POSTGRES_PASSWORD: generate:password
+    FORGEJO_DOMAIN: git.example.com
+    FORGEJO_ROOT_URL: https://git.example.com/
+    FORGEJO_ADMIN_USER: gitadmin
+    FORGEJO_ADMIN_PASSWORD: generate:password
+    FORGEJO_ADMIN_EMAIL: admin@example.com
   site:
     domains: [git.example.com]
     service: forgejo
     port: 3000
-
-# .env стека — «Доступ» → «.env стека»:
-#   POSTGRES_PASSWORD=<пароль базы>
-#   FORGEJO_DOMAIN=git.example.com
-#   FORGEJO_ROOT_URL=https://git.example.com/
-#   FORGEJO_ADMIN_USER=<логин администратора; не admin, api, user, org, login… — Forgejo их запрещает>
-#   FORGEJO_ADMIN_PASSWORD=<пароль администратора>
-#   FORGEJO_ADMIN_EMAIL=<почта администратора>

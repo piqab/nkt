@@ -24,9 +24,10 @@ and email from `.env`, and exits; nkt counts that as a successful
 deployment. If the administrator already exists, later deployments leave it
 alone; change the password in Forgejo itself.
 
-"Examples" → "Forgejo + PostgreSQL", a host, your name in `site:`; `.env`
-from the template in `pipeline.yaml` (`env_keys` will not let it deploy
-without the administrator's data). After the deployment, sign in as the
+"Examples" → "Forgejo + PostgreSQL", a host, your name in `site:`; the `.env`
+values are in the `env:` block of `pipeline.yaml` (the hub creates the
+passwords; adjust the administrator's login and email). The administrator
+password: "Secrets" → ".env" → history → "Show". After the deployment, sign in as the
 administrator right away.
 
 Gitea data does not move to Forgejo 16: remove the old gitea example's stack

@@ -74,6 +74,13 @@ type composeCheck struct {
 	SiteImage      string   `json:"site_image"`
 	// SitePortsFrom — image, compose или пусто (старый хост).
 	SitePortsFrom string `json:"site_ports_from"`
+	// Configs — конфиги описания на хосте: new, changed, same; Diff — с
+	// секретами под маской.
+	Configs []struct {
+		Path  string `json:"path"`
+		State string `json:"state"`
+		Diff  string `json:"diff"`
+	} `json:"configs"`
 }
 
 // dryRun — задание сухого прогона.
@@ -112,12 +119,22 @@ func (r *DeployRunner) dryRun(ctx context.Context, jc *jobs.Context, p DeployPar
 	if err := g.Checkout(ctx, spec.Repo, ref, commit, src); err != nil {
 		return err
 	}
-	return r.checkCompose(ctx, jc, pl, spec, src, vars, dryChecksOn(p.Skip))
+	var envOver *string
+	if p.EnvToken != "" {
+		raw, ok := oneTime.Take(p.EnvToken)
+		if !ok {
+			return msgs.Errorf("deploy.dryEnvExpired")
+		}
+		e := string(raw)
+		wipe(raw)
+		envOver = &e
+	}
+	return r.checkCompose(ctx, jc, pl, spec, src, vars, dryChecksOn(p.Skip), envOver)
 }
 
 // checkCompose — сухой прогон стека на всех его хостах; ошибка — если
 // хоть на одном выкладка не прошла бы.
-func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl store.Pipeline, spec deploy.Spec, src string, vars deploy.Vars, on dryOn) error {
+func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl store.Pipeline, spec deploy.Spec, src string, vars deploy.Vars, on dryOn, envOver *string) error {
 	s := r.s
 	c := spec.Compose
 	lang := jc.Lang()
@@ -125,9 +142,20 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	if err != nil {
 		return err
 	}
-	env, err := s.pipelineEnv(pl)
+	cfgs, err := composeConfigs(src, c, vars, files, main)
 	if err != nil {
 		return err
+	}
+	env := envOver
+	if env == nil {
+		if env, err = s.pipelineEnv(pl); err != nil {
+			return err
+		}
+	} else {
+		jc.Log("deploy.dryEnvFromSpec")
+	}
+	for _, cf := range cfgs {
+		jc.Log("deploy.configMount", cf.Service, cf.Target, strings.Join(deploy.ConfigVars(cf.Content), ", "))
 	}
 	targets, err := s.resolveHosts(ctx, c.Hosts, c.Group)
 	if err != nil {
@@ -172,11 +200,11 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	}
 	var missingEnv []string
 	if on("config") {
-		missingEnv = missingEnvKeys(c.AllEnvKeys(), env)
+		missingEnv = missingEnvKeys(requiredEnv(c, cfgs), env)
 		if len(missingEnv) > 0 {
 			problems++
 			jc.Log("deploy.dryEnvKeysMissing", strings.Join(missingEnv, ", "))
-		} else if keys := c.AllEnvKeys(); len(keys) > 0 {
+		} else if keys := requiredEnv(c, cfgs); len(keys) > 0 {
 			jc.Log("deploy.dryEnvKeysOK", strings.Join(keys, ", "))
 		}
 		envText := ""
@@ -205,6 +233,9 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	for _, t := range targets {
 		var res composeCheck
 		body := composeBody(c, main, files, env, pl.EnvSHA, "")
+		if len(cfgs) > 0 {
+			body["configs"] = cfgs
+		}
 		if c.Site.Managed() && on("site_host") {
 			body["site_service"], body["site_port"] = c.Site.Service, c.Site.Port
 		}
@@ -222,8 +253,14 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			continue
 		case err != nil:
 			problems++
-			jc.Log("deploy.dryHostError", t.Name, msgs.Localize(lang, err))
+			jc.Log("deploy.dryHostError", t.Name, msgs.Localize(lang, hostConfigsError(err)))
 			continue
+		}
+		for _, cs := range res.Configs {
+			jc.Log("deploy.dryConfig."+cs.State, t.Name, cs.Path)
+			if cs.Diff != "" {
+				jc.Log("deploy.dryConfigDiff", cs.Diff)
+			}
 		}
 		if len(regs) > 0 && on("images") {
 			recheckImages(ctx, &res, regs)
@@ -460,6 +497,14 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("deploy.dryOnlyCompose"))
 		return
 	}
+	// Несохранённые значения блока env — мимо параметров задания: .env
+	// с ними — в одноразовое хранилище памяти, в описании — «@secret».
+	content, envToken, _, err := s.dryEnvOverride(ctx, req.PipelineID, req.Content)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	req.Content = content
 	if (req.Ref != "" && !deploy.ValidRef(req.Ref)) || (req.Tag != "" && !deploy.ValidRef(req.Tag)) {
 		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "deploy.specBad", "ref", req.Ref+req.Tag))
 		return
@@ -487,7 +532,7 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindDeploy, TitleKey: "deploy.dryTitle", TitleArgs: []any{name},
 		Queue: queue, Author: user, Steps: 3,
-		Params: DeployParams{DryRun: true, PipelineID: req.PipelineID, Content: req.Content, Ref: req.Ref, Tag: req.Tag, Skip: req.Skip},
+		Params: DeployParams{DryRun: true, PipelineID: req.PipelineID, Content: req.Content, Ref: req.Ref, Tag: req.Tag, Skip: req.Skip, EnvToken: envToken},
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)

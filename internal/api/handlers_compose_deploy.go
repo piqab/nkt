@@ -79,6 +79,9 @@ type composeDeployRequest struct {
 	// RegistryAuths — ключи всех registry стека (с CA); RegistryAuth —
 	// один, от хаба, который знает только его.
 	RegistryAuths []composeRegistryAuth `json:"registry_auths,omitempty"`
+	// Configs — конфиги из описания конвейера: шаблоны, ${ИМЯ} подставляет
+	// хост из .env (см. compose_configs.go).
+	Configs []composeConfigFile `json:"configs,omitempty"`
 }
 
 // ComposeDeployParams — вход задания (без содержимого файлов).
@@ -124,6 +127,14 @@ func (req *composeDeployRequest) validate() error {
 	}
 	if names := deploy.BuildOnlyServices(req.Files[req.File]); len(names) > 0 {
 		return msgs.Errorf("compose.buildOnly", strings.Join(names, ", "))
+	}
+	if err := validateConfigs(req.Configs); err != nil {
+		return err
+	}
+	for rel := range req.Files {
+		if path.Dir(rel) == deploy.ConfigsDir {
+			return msgs.Errorf("compose.badPath", rel)
+		}
 	}
 	if req.Replace != "" && (!site.ValidName(req.Replace) || req.Replace == req.Project) {
 		return msgs.Errorf("compose.badProject", req.Replace)
@@ -187,12 +198,13 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 	type prev struct {
 		data   []byte
 		exists bool
+		mode   fs.FileMode
 	}
 	before := map[string]prev{}
 	restore := func() {
 		for p, b := range before {
 			if b.exists {
-				_ = c.WriteFile(p, b.data, 0o644)
+				_ = c.WriteFile(p, b.data, b.mode)
 			} else {
 				_ = c.DeleteFile(p)
 			}
@@ -200,7 +212,9 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	write := func(p string, data []byte, mode fs.FileMode) error {
 		old, err := c.ReadFile(p)
-		before[p] = prev{data: old, exists: err == nil}
+		// Откат — с правами новой записи: прежний конфиг с секретами не
+		// должен стать читаемым всем.
+		before[p] = prev{data: old, exists: err == nil, mode: mode}
 		return c.WriteFile(p, data, mode)
 	}
 	for rel, content := range req.Files {
@@ -214,6 +228,13 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 	if req.Env != nil {
 		envEdited = envEditedOnHost(c, dir, req.EnvSHA)
 		if err := write(dir+"/.env", []byte(*req.Env), 0o600); err != nil {
+			restore()
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+	}
+	if len(req.Configs) > 0 {
+		if err := writeConfigs(ctx, c, dir, req.Configs, configEnv(c, dir, req.Env), write); err != nil {
 			restore()
 			writeErr(w, r, http.StatusBadRequest, err)
 			return

@@ -10,7 +10,7 @@ analytics: the app, PostgreSQL and ClickHouse. The project's compose file
 |---|---|
 | `./clickhouse/*.xml` for ClickHouse | `files: [clickhouse/]`, the whole directory next to the compose file |
 | `POSTGRES_PASSWORD=postgres` as a value | `env_keys`: the password from `.env`; `DATABASE_URL` in `.env` uses the same password |
-| `BASE_URL`, `SECRET_KEY_BASE` as `${…}` | the pipeline `.env` |
+| `BASE_URL`, `SECRET_KEY_BASE` as `${…}` | the pipeline `.env` — from the description's `env:` block (the hub creates keys and the password, `generate:`) |
 | the app port is not published | the site publishes `8000` (the image's EXPOSE) on 127.0.0.1 itself |
 | healthchecks on the databases | `up --wait` waits; the app starts after migrations |
 

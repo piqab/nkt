@@ -23,20 +23,26 @@ as is, and nkt changes what is needed in the copy that goes to the host.
 a host and the description is ready (or paste `pipeline.yaml`, adjusting
 `hosts` and `domains`). Save.
 
-## 2. Stack .env
+## 2. The stack's .env — in the description
 
-The pipeline's "Access" → **"Stack .env"**:
+The `.env` values live in the description's `env:` block (`pipeline.yaml`):
 
+```yaml
+  env:
+    APP_SECRET: generate:hex32
+    TWO_FACTOR_ENCRYPTION_KEY: generate:hex32
+    POSTGRES_PASSWORD: generate:password
+    DATABASE_URL: postgresql://umami:${POSTGRES_PASSWORD}@db:5432/umami
 ```
-APP_SECRET=<openssl rand -hex 32>
-TWO_FACTOR_ENCRYPTION_KEY=<openssl rand -hex 32>
-POSTGRES_PASSWORD=<database password>
-DATABASE_URL=postgresql://umami:<database password>@db:5432/umami
-```
 
-The password in `POSTGRES_PASSWORD` and in `DATABASE_URL` is the same.
-Without any of the variables the deployment does not start (the dry run
-names the missing ones).
+When the pipeline is **saved**, the values move into its encrypted `.env`
+("Secrets") and the description keeps `"@secret"`: they are not in the
+database, the version history or the audit log. `generate:` lets the hub
+create the value (once: saving again does not change a database
+password). To see a generated value: "Secrets" → ".env" → history →
+"Show". Replacing an already set key with your own value asks first.
+
+`DATABASE_URL` refers to `${POSTGRES_PASSWORD}`, so the password is the same.
 
 ## 3. Deployment and site
 

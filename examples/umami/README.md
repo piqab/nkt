@@ -23,19 +23,26 @@ compose-файл берётся из
 выберите хост — описание готово (или вставьте `pipeline.yaml`, поправив
 `hosts` и `domains`). Сохраните.
 
-## 2. .env стека
+## 2. .env стека — в описании
 
-«Доступ» конвейера → **«.env стека»**:
+Значения `.env` — в блоке `env:` описания (`pipeline.yaml`):
 
+```yaml
+  env:
+    APP_SECRET: generate:hex32
+    TWO_FACTOR_ENCRYPTION_KEY: generate:hex32
+    POSTGRES_PASSWORD: generate:password
+    DATABASE_URL: postgresql://umami:${POSTGRES_PASSWORD}@db:5432/umami
 ```
-APP_SECRET=<openssl rand -hex 32>
-TWO_FACTOR_ENCRYPTION_KEY=<openssl rand -hex 32>
-POSTGRES_PASSWORD=<пароль базы>
-DATABASE_URL=postgresql://umami:<пароль базы>@db:5432/umami
-```
 
-Пароль в `POSTGRES_PASSWORD` и в `DATABASE_URL` — один и тот же. Без
-любой из переменных выкладка не начнётся (сухой прогон назовёт, каких нет).
+При **сохранении** конвейера значения уходят в его зашифрованный `.env`
+(«Секреты»), а в описании остаётся `"@secret"`: ни в базе, ни в истории
+версий, ни в журнале их нет. `generate:` — значение создаёт хаб (один
+раз: пересохранение не меняет пароль базы). Посмотреть созданное —
+«Секреты» → «.env» → история → «Показать». Своё значение для уже
+заданного ключа хаб заменит только после вопроса.
+
+`DATABASE_URL` ссылается на `${POSTGRES_PASSWORD}` — пароль один и тот же.
 
 ## 3. Выкладка и сайт
 

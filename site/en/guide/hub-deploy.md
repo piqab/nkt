@@ -334,6 +334,10 @@ not guaranteed. Lines starting with `# WARNING` are drawn **red and bold**
 in the description and config editor, in diffs and in version history —
 you can mark warnings in your own descriptions the same way.
 
+The examples' `.env` values are in an `env:` block (passwords and keys are
+`generate:`, created by the hub on save), next to a commented-out `ports:`
+showing how to publish the service on another host port.
+
 ![Examples](/screens/en/deploy-examples.png)
 
 ![Compose from a link](/screens/en/deploy-compose.png)
@@ -432,6 +436,84 @@ description) or by hand in "Sites": stack `httpbin`, service `httpbin`,
 port 8080. The original's compose file,
 [postmanlabs/httpbin](https://github.com/postmanlabs/httpbin), builds the
 image from source (`build: '.'`); the hub rejects it with an explanation.
+
+### .env in the description (the env block)
+
+The stack's `.env` values can go right into the description, as an `env:`
+block in `compose:`:
+
+```yaml
+compose:
+  ...
+  env:
+    APP_DOMAIN: app.example.com          # a plain value
+    DB_PASSWORD: generate:password       # the hub creates the value
+    DATABASE_URL: postgres://app:${DB_PASSWORD}@db/app
+    SMTP_PASSWORD: "@secret"             # already in "Secrets" → ".env"
+```
+
+- **When the pipeline is saved**, the values move into its encrypted
+  `.env` (the ".env" tab in "Secrets", with version history), and the
+  description keeps `"@secret"` in their place. The values are not in the
+  description database, its version history or the audit log. After
+  saving, a notice on the page says what was moved, created or left as is.
+- **`generate:kind`** — the hub creates the value, once: `hex16`, `hex32`,
+  `base64-32`, `base64-48`, `password` (24 letters and digits, nothing
+  that breaks a database URL). For an already set key `generate:` is
+  skipped — saving again does not change a database password. To see a
+  generated value: "Secrets" → ".env" → history → "Show" (recorded in the
+  audit log).
+- **Your own value for an already set key** replaces it only after the
+  "Replace values in secrets?" question.
+- **References** `${NAME}` to keys above work as in `.env` itself.
+- **A dry run** of an unsaved description sees the block's values (through
+  hub memory, not the job parameters); `generate:` values there are
+  temporary.
+- The block's keys are required at deploy time: a key without a value in
+  `.env` stops the deployment, and the dry run names the missing ones.
+
+### Config files in the container (configs)
+
+A service's configuration file — right in the description or from the
+repository, with secrets filled in from `.env`:
+
+```yaml
+compose:
+  ...
+  configs:
+    app:                                   # the compose service
+      - target: /etc/app/config.toml       # the path in the container
+        content: |                         # text in the description…
+          [server]
+          url = "https://${APP_DOMAIN}"
+          secret = "${JWT_SECRET}"
+        mode: "0440"                       # 0444 by default
+        uid: 1000                          # owner (root by default)
+        gid: 1000
+      - target: /etc/app/extra.yaml
+        file: deploy/extra.yaml            # …or a file from the repository
+```
+
+- The **host** fills in `${NAME}` from the stack's `.env` at deploy time;
+  the finished file with secrets goes through neither the host's config
+  history nor any log. Only names from `.env` are replaced — other `$`
+  (`$host` in nginx, `$1` in scripts) stay as they are; `$${` is a literal
+  `${`. A name without a value in `.env` is an error before any host.
+- The file lands in the stack's `.nkt-configs/` and is mounted into the
+  service **read-only**; in the compose file copy the service gets the
+  volume and a label with the template hash: a changed config recreates
+  the service.
+- The default mode is `0444` — containers often run as non-root. With
+  secrets inside, use `mode: "0440"` and the container user's `uid`/`gid`.
+- Exactly one source — `content` or `file`; up to 256 KB per file and 50
+  configs. Large and binary files go through `files`.
+- Something that looks like a secret written right into `content`
+  (`password = …` without `${…}`) gets a warning on save: move the value
+  into `env` and reference it as `${NAME}`.
+- Dry run: which configs will be created or changed — with a diff where
+  values from `.env` are replaced by `••••`.
+- The host needs nkt of this version or newer: an older host answers
+  "does not know description configs — update nkt on the host".
 
 ## Sites
 

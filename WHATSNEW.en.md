@@ -8,6 +8,25 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.39 — 2026-10-18
+
+- **`.env` right in the pipeline description.** An `env:` block in
+  `compose:`: on save the values move into the pipeline's encrypted `.env`
+  ("Secrets") and the description keeps `"@secret"` — the values are in
+  neither the database, the version history nor the audit log.
+  `generate:hex32`, `generate:password` and others let the hub create the
+  value, once; replacing an already set value with your own asks first.
+  A dry run of a draft sees the values through hub memory.
+- **Container config files from the description.** A `configs:` block —
+  text right in the description or a file from the repository; the host
+  fills in `${NAME}` from the stack's `.env`, the file is mounted read-only
+  with mode and owner; a change recreates the service. The finished file
+  with secrets stays out of the config history; the dry run shows the diff
+  with secrets masked.
+- **Deployment examples without a trip to Secrets.** All examples' `.env`
+  values are an `env:` block with `generate:`, next to a commented-out
+  `ports:` (how to publish the service on another host port).
+
 ## v1.13.38 — 2026-10-18
 
 - **`# WARNING` in the changes window is red and bold too.** In a diff an

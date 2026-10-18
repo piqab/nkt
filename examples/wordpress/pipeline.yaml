@@ -10,11 +10,17 @@ compose:
   project: wordpress
   hosts: [web1]
   wait_timeout: 5m
+  # Порт на хосте вместо того, что в compose-файле (хост:контейнер; адрес —
+  # 127.0.0.1 — наружу только через прокси сайта). Занят — возьмите другой:
+  # ports:
+  #   wordpress: ["127.0.0.1:10080:80"]
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера (в описании останется "@secret"), generate: — значение
+  # создаст хаб. Посмотреть — «Секреты» → «.env» → история → «Показать».
+  env:
+    DB_PASSWORD: generate:password
+    DB_ROOT_PASSWORD: generate:password
   site:
     domains: [blog.example.com]
     service: wordpress
     port: 80
-
-# .env стека — «Доступ» → «.env стека»:
-#   DB_PASSWORD=<пароль базы WordPress>
-#   DB_ROOT_PASSWORD=<пароль root MariaDB>

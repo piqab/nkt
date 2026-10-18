@@ -13,7 +13,7 @@
 - Healthchecks on both services: `up --wait` waits for the database and
   WordPress to be ready.
 
-"Examples" → "WordPress + MariaDB", a host, your name in `site:`, `.env`
-from the template. After deploying, open the site: the WordPress installer.
+"Examples" → "WordPress + MariaDB", a host, your name in `site:`, the `.env`
+values in the `env:` block (the hub creates the passwords). After deploying, open the site: the WordPress installer.
 
 Verified: deployed on docker 29 in ~18 seconds, both services healthy; behind a proxy with `X-Forwarded-Proto: https` WordPress redirects to `https://…` without a loop.
