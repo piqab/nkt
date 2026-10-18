@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.42 — 2026-10-18
+
+- **Hosts map: wheel zoom works.** The wheel handler was attached before
+  the map window existed, so zoom only worked with the buttons.
+- **Hosts map as PNG.** The PNG button downloads the whole map as an image
+  (with the current filters, at twice the screen density), the date and
+  legend on top; in privacy mode host names, IPs and domains are replaced
+  by `•••`.
+- "Running only" also hides offline hosts; a route's gateway address is
+  blurred in privacy mode.
+
 ## v1.13.41 — 2026-10-18
 
 - **Hosts map.** In Hosts, on the right of the button row, a Map switch

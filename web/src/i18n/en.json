@@ -4823,6 +4823,8 @@
       "running": "deploying",
       "queued": "queued",
       "canceled": "canceled"
-    }
+    },
+    "pngHint": "Download the whole map as a PNG image (with date and legend)",
+    "pngPrivacy": "Download PNG: privacy mode — host names, IPs and domains are replaced by “•••” in the image"
   }
 }

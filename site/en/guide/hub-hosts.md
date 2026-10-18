@@ -266,10 +266,14 @@ Traffic Fly routes and deployment pipelines with links to their tiles.
 - **Zoom and pan**: the mouse wheel zooms at the cursor, dragging empty
   space pans; buttons **−**, **+**, the percentage (100 %) and **Fit**.
   The view is remembered.
+- **PNG** — the whole map as an image (regardless of zoom and pan, with
+  the current filters), the date and legend on top, at twice the screen
+  density. In privacy mode host names, IPs and domains in the image are
+  replaced by `•••`.
 - A host with more than 12 tiles shows the first ones (linked and running
   first) and **+N more**; **Expand all** shows everything.
-- Filters: search by name, image, IP and stack, "running only", "linked
-  only".
+- Filters: search by name, image, IP and stack, "running only" (also
+  hides offline hosts), "linked only".
 - The hub reads the lists from the hosts through the same calls as the
   Traffic Fly "Containers and VMs" panel (once a minute; the refresh button
   does it now). An offline host is a dashed block. Privacy mode blurs host
