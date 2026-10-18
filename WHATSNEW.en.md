@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.38 — 2026-10-18
+
+- **`# WARNING` in the changes window is red and bold too.** In a diff an
+  added or removed warning line stayed green or plain: the added-line
+  color overrode the highlight.
+
 ## v1.13.37 — 2026-10-18
 
 - **`# WARNING` lines are red and bold.** In the pipeline description and
