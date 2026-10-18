@@ -539,6 +539,9 @@ pre.diff {
 pre.diff .add { color: var(--success-text); }
 pre.diff .del { color: var(--status-critical); }
 pre.diff .hunk { color: var(--text-muted); }
+/* «# WARNING» в диффе — красным и жирным и в добавленных/убранных строках
+ * (иначе цвет .add/.del сильнее). */
+pre.diff .code-warning { color: var(--status-critical); font-weight: 700; }
 
 /* ------------------------------------------------------------------- login */
 
