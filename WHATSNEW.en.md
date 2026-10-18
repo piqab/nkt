@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.35 — 2026-10-18
+
+- **Hardening after scanner findings.** Unpacking the embedded UI for a
+  browser without gzip is size-capped; the compressed binary copy in the
+  hub cache no longer loses a disk write error; the build script reads
+  each file once.
+
 ## v1.13.34 — 2026-10-18
 
 - **Traffic Fly: dragging targets on the map works.** Pressing a target

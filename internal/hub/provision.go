@@ -667,18 +667,16 @@ func gzipCached(path string) (string, error) {
 		return "", err
 	}
 	zw, _ := gzip.NewWriterLevel(out, gzip.BestCompression)
-	if _, err := io.Copy(zw, in); err != nil {
-		out.Close()
-		os.Remove(tmp)
-		return "", err
+	_, err = io.Copy(zw, in)
+	if err == nil {
+		err = zw.Close()
 	}
-	if err := zw.Close(); err != nil {
-		out.Close()
-		os.Remove(tmp)
-		return "", err
+	// Файл закрывается один раз и при ошибке: её закрытия не теряем.
+	if cerr := out.Close(); err == nil {
+		err = cerr
 	}
-	if err := out.Close(); err != nil {
-		os.Remove(tmp)
+	if err != nil {
+		_ = os.Remove(tmp)
 		return "", err
 	}
 	return gz, os.Rename(tmp, gz)

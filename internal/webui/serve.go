@@ -43,9 +43,16 @@ func ServeAsset(w http.ResponseWriter, r *http.Request, fsys fs.FS, path, cache 
 		http.Error(w, "broken asset", http.StatusInternalServerError)
 		return true
 	}
-	_, _ = io.Copy(w, zr)
+	// Ресурсы свои, из бинарника, но распаковка всё равно с потолком —
+	// чтобы испорченный архив не раздулся без меры.
+	if _, err := io.CopyN(w, zr, maxAssetSize); err != nil && err != io.EOF {
+		return true
+	}
 	return true
 }
+
+// maxAssetSize — больше этого ресурс интерфейса распакованным не бывает.
+const maxAssetSize = 64 << 20
 
 func acceptsGzip(r *http.Request) bool {
 	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
