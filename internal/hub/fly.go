@@ -61,13 +61,16 @@ type FlyTarget struct {
 
 // FlyRoute — маршрут: шлюз, имя или порт, пул.
 type FlyRoute struct {
-	ID            string   `json:"id" yaml:"id"`
-	Label         string   `json:"label,omitempty" yaml:"label,omitempty"`
-	Gateway       int64    `json:"gateway" yaml:"gateway"`
-	Kind          string   `json:"kind" yaml:"kind"`
-	Names         []string `json:"names,omitempty" yaml:"names,omitempty"`
-	Port          int      `json:"port" yaml:"port"`
-	ProxyProtocol bool     `json:"proxy_protocol,omitempty" yaml:"proxy_protocol,omitempty"`
+	ID      string   `json:"id" yaml:"id"`
+	Label   string   `json:"label,omitempty" yaml:"label,omitempty"`
+	Gateway int64    `json:"gateway" yaml:"gateway"`
+	Kind    string   `json:"kind" yaml:"kind"`
+	Names   []string `json:"names,omitempty" yaml:"names,omitempty"`
+	Port    int      `json:"port" yaml:"port"`
+	// PortTo — конец диапазона портов (TCP/UDP): порт сохраняется
+	// насквозь, цель — одна активная (первая живая).
+	PortTo        int  `json:"port_to,omitempty" yaml:"port_to,omitempty"`
+	ProxyProtocol bool `json:"proxy_protocol,omitempty" yaml:"proxy_protocol,omitempty"`
 	// TLS — сертификат на шлюзе: цели — HTTP с адресом клиента в заголовках.
 	TLS       bool        `json:"tls,omitempty" yaml:"tls,omitempty"`
 	Algorithm string      `json:"algorithm" yaml:"algorithm"`
@@ -237,7 +240,7 @@ func (d FlyDoc) gatewayConfig(g FlyGateway, keys map[int64]string, names map[int
 		if r.Gateway != g.EdgeID {
 			continue
 		}
-		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Algorithm: r.Algorithm, Check: r.Check}
+		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, PortTo: r.PortTo, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Algorithm: r.Algorithm, Check: r.Check}
 		for _, t := range r.Targets {
 			if !seen[t.HostID] {
 				seen[t.HostID] = true
@@ -247,8 +250,13 @@ func (d FlyDoc) gatewayConfig(g FlyGateway, keys map[int64]string, names map[int
 				}
 				cfg.Peers = append(cfg.Peers, fly.Peer{Name: names[t.HostID], PublicKey: key, Address: d.hostAddr(g, t.HostID)})
 			}
+			port := d.Alloc.Ports[flyPortKey(g.EdgeID, t.HostID, r.ID, t.ID)]
+			if r.PortTo > r.Port {
+				// Диапазон: на хосте те же порты, что на шлюзе.
+				port = r.Port
+			}
 			fr.Targets = append(fr.Targets, fly.Target{ID: t.ID, Label: t.Label, Host: d.hostAddr(g, t.HostID),
-				Port: d.Alloc.Ports[flyPortKey(g.EdgeID, t.HostID, r.ID, t.ID)], Weight: t.Weight, Drain: t.Drain})
+				Port: port, Weight: t.Weight, Drain: t.Drain})
 		}
 		cfg.Routes = append(cfg.Routes, fr)
 	}

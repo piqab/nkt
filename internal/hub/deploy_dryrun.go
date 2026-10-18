@@ -256,6 +256,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			jc.Log("deploy.siteFailed", d, chk.Error)
 		}
 	}
+	problems += s.dryRunFly(ctx, jc, c)
 	if problems > 0 {
 		return msgs.Errorf("deploy.dryFailed", problems)
 	}

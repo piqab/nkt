@@ -2,6 +2,8 @@ package hub
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +34,23 @@ type flyApplied struct {
 	Revision int64   `json:"revision"`
 	Hosts    []int64 `json:"hosts"`
 	Gateways []int64 `json:"gateways"`
+	// HostPush / GatewayPush — что ушло на узел последним: отпечаток
+	// конфигурации (без номера версии) и номер. Совпадает, и узел
+	// сообщает этот номер — «Применить» его не перекладывает.
+	HostPush    map[int64]flyPush `json:"host_push,omitempty"`
+	GatewayPush map[int64]flyPush `json:"gateway_push,omitempty"`
+}
+
+type flyPush struct {
+	Hash string `json:"hash"`
+	Rev  int64  `json:"rev"`
+}
+
+// flyCfgHash — отпечаток конфигурации без номера версии.
+func flyCfgHash(v any) string {
+	raw, _ := json.Marshal(v)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
 
 // FlyApplyRunner раскладывает Traffic Fly по шлюзам и хостам.
@@ -53,16 +72,28 @@ func (s *Server) flyAppliedState(ctx context.Context) flyApplied {
 // шлюзов: шлюз начинает слать трафик, когда туннели уже готовы. Сухой
 // прогон — всё, кроме записи: собранные конфигурации проверяются.
 func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
-	s := r.s
 	var p FlyApplyParams
 	if err := jc.Params(&p); err != nil {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
+	return r.s.flyApplyRun(ctx, jc, jc.Job.Author, p)
+}
+
+// flyLog — куда применение пишет ход: журнал своего задания или чужого
+// (выкладка конвейера применяет маршрут внутри своего задания).
+type flyLog interface {
+	Log(key string, args ...any)
+	Logf(format string, args ...any)
+	StepKey(n, total int, key string, args ...any)
+}
+
+// flyApplyRun — применение Traffic Fly (тело задания fly.apply).
+func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p FlyApplyParams) error {
 	d := s.flyDoc(ctx)
 	if p.Revision != 0 && p.Revision != d.Revision {
 		return msgs.Errorf("fly.revisionChanged", p.Revision, d.Revision)
 	}
-	user := s.actingUser(ctx, jc.Job.Author, s.firstAdmin(ctx))
+	user := s.actingUser(ctx, author, s.firstAdmin(ctx))
 	names := map[int64]string{localHostID: "localhost"}
 	if list, err := s.db.ListHosts(ctx); err == nil {
 		for _, h := range list {
@@ -152,6 +183,11 @@ func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 				}
 				port := d.Alloc.Ports[flyPortKey(g.EdgeID, t.HostID, rt.ID, t.ID)]
 				for _, proto := range flyProtos(rt.Kind) {
+					if rt.PortTo > rt.Port {
+						// Диапазон: те же порты насквозь (N → N).
+						hi.Services = append(hi.Services, fly.Service{Port: rt.Port, PortTo: rt.PortTo, Proto: proto, Addr: ip, ToPort: rt.Port, Kind: t.Kind, Ref: t.Ref})
+						continue
+					}
 					hi.Services = append(hi.Services, fly.Service{Port: port, Proto: proto, Addr: ip, ToPort: t.Port, Kind: t.Kind, Ref: t.Ref})
 				}
 				jc.Log("fly.targetResolved", rt.ID, names[t.HostID], t.Kind, t.Ref, ip, t.Port)
@@ -199,7 +235,24 @@ func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	jc.StepKey(3, 4, "fly.stepPushHosts", len(ids))
 	var applied []int64
+	hostPush := map[int64]flyPush{}
 	for _, id := range ids {
+		c := *hostCfg[id]
+		c.Revision = 0
+		hash := flyCfgHash(c)
+		if len(hostCfg[id].Ifaces) > 0 {
+			applied = append(applied, id)
+		}
+		// То же, что уже на хосте (и хост это подтверждает), — не
+		// перекладывать: туннели и правила не трогаются вовсе.
+		if pp, ok := prev.HostPush[id]; ok && pp.Hash == hash {
+			var hs fly.HostStatus
+			if err := s.flyHostCall(ctx, user, id, names[id], "GET", "/api/fly/status", nil, &hs); err == nil && hs.Revision == pp.Rev {
+				jc.Log("fly.hostUpToDate", names[id])
+				hostPush[id] = pp
+				continue
+			}
+		}
 		var res struct {
 			Log []string `json:"log"`
 		}
@@ -209,24 +262,46 @@ func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		for _, l := range res.Log {
 			jc.Logf("    %s: %s", names[id], l)
 		}
-		if len(hostCfg[id].Ifaces) > 0 {
-			applied = append(applied, id)
-		}
+		hostPush[id] = flyPush{Hash: hash, Rev: d.Revision}
 	}
 
 	// 4. Шлюзы.
 	jc.StepKey(4, 4, "fly.stepPushGateways", len(gws))
 	var gwIDs []int64
+	gwPush := map[int64]flyPush{}
 	for _, gi := range gws {
 		_, sess, ok := s.flySession(ctx, gi.g.EdgeID)
 		if !ok {
 			return msgs.Errorf("fly.gatewayOffline", edgeName(gi.st), gi.g.EdgeID)
 		}
+		gwIDs = append(gwIDs, gi.g.EdgeID)
+		c := gwCfg[gi.g.EdgeID]
+		c.Revision = 0
+		hash := flyCfgHash(c)
+		if pp, ok := prev.GatewayPush[gi.g.EdgeID]; ok && pp.Hash == hash {
+			var st fly.GatewayStatus
+			if err := flyGatewayCall(ctx, sess, "GET", fly.PathStatus, nil, &st); err == nil && st.Revision == pp.Rev {
+				jc.Log("fly.gatewayUpToDate", edgeName(gi.st))
+				gwPush[gi.g.EdgeID] = pp
+				s.flyLogCerts(jc, st)
+				continue
+			}
+		}
 		if err := flyGatewayCall(ctx, sess, "PUT", fly.PathConfig, gwCfg[gi.g.EdgeID], nil); err != nil {
 			return msgs.Errorf("fly.gatewayApply", edgeName(gi.st), err)
 		}
 		jc.Log("fly.gatewayApplied", edgeName(gi.st), len(gwCfg[gi.g.EdgeID].Routes))
-		gwIDs = append(gwIDs, gi.g.EdgeID)
+		gwPush[gi.g.EdgeID] = flyPush{Hash: hash, Rev: d.Revision}
+		// Сертификаты: шлюз берёт сохранённые, а к Let's Encrypt идёт
+		// только за новыми и за теми, что скоро истекают, — подождать
+		// немного и сказать, что с каждым именем.
+		if len(c.TLSNames()) > 0 {
+			sleepCtx(ctx, 3*time.Second)
+			var st fly.GatewayStatus
+			if err := flyGatewayCall(ctx, sess, "GET", fly.PathStatus, nil, &st); err == nil {
+				s.flyLogCerts(jc, st)
+			}
+		}
 	}
 	// Шлюзы без маршрутов в этой ревизии — пустая конфигурация.
 	for _, id := range prev.Gateways {
@@ -241,7 +316,7 @@ func (r *FlyApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			}
 		}
 	}
-	raw, _ := json.Marshal(flyApplied{Revision: d.Revision, Hosts: applied, Gateways: gwIDs})
+	raw, _ := json.Marshal(flyApplied{Revision: d.Revision, Hosts: applied, Gateways: gwIDs, HostPush: hostPush, GatewayPush: gwPush})
 	if err := s.db.KVSet(ctx, flyAppliedKey, string(raw)); err != nil {
 		return err
 	}
@@ -345,7 +420,7 @@ func flyVersionAtLeast(v string, min [3]int) bool {
 // пропустит), а имена указывают на шлюз и его порт 80 открыт снаружи —
 // это нужно Let's Encrypt (иначе — предупреждение: хаб может и не
 // выходить в интернет).
-func flyCheckGatewayTLS(ctx context.Context, jc *jobs.Context, d FlyDoc, g FlyGateway, name, version, endpoint string) error {
+func flyCheckGatewayTLS(ctx context.Context, jc flyLog, d FlyDoc, g FlyGateway, name, version, endpoint string) error {
 	var names []string
 	for _, r := range d.Routes {
 		if r.Gateway == g.EdgeID && r.TLS {
@@ -386,4 +461,19 @@ func flyCheckGatewayTLS(ctx context.Context, jc *jobs.Context, d FlyDoc, g FlyGa
 		jc.Log("fly.tlsReady", n)
 	}
 	return nil
+}
+
+// flyLogCerts — сертификаты шлюза в журнал задания: действует (не
+// перевыпускается), выпускается или почему не выпущен.
+func (s *Server) flyLogCerts(jc flyLog, st fly.GatewayStatus) {
+	for _, c := range st.Certs {
+		switch {
+		case c.Error != "":
+			jc.Log("fly.certFailed", c.Name, c.Error)
+		case c.NotAfter > 0:
+			jc.Log("fly.certValid", c.Name, time.Unix(c.NotAfter, 0).Format("2006-01-02"))
+		default:
+			jc.Log("fly.certIssuing", c.Name)
+		}
+	}
 }

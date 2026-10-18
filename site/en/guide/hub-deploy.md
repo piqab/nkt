@@ -578,6 +578,26 @@ The **Traffic Fly** tab brings internet traffic through a VPS gateway to
 services on your hosts: real client IP, TCP and UDP, 80/443 by name,
 target pools with load balancing and a link map. Details: [Traffic Fly](/en/guide/traffic-fly).
 
+### Traffic Fly in a pipeline
+
+The `compose.fly` block — [Traffic Fly](/en/guide/traffic-fly#in-a-pipeline)
+routes whose targets become the service containers on the deployment hosts
+after a deployment. No route — it is created; an existing one has only its
+targets reconciled (new ones after a check, previous ones drained), the
+rest is not overwritten.
+
+| Field | Value |
+|---|---|
+| `route` | Route id (`a-z0-9-`) |
+| `gateway` | The gateway: host name, address or edge name; empty if there is one |
+| `kind` | `https` (default), `http`, `tcp`, `udp`, `tcpudp` |
+| `names` | Names for `https`/`http` |
+| `port`, `port_to` | Gateway port (443/80 for `https`/`http`) and range end |
+| `tls` | `gateway` — certificate on the gateway (`https` only, exact names) |
+| `proxy_protocol` | PROXY protocol v2 to the target (not with `tls`) |
+| `service`, `target_port` | The compose service and its port in the container (equals `port` for a range) |
+| `check`, `check_path`, `check_port` | `tcp` (default; `none` for `udp`), `http` with a path, `none` |
+
 ## When to deploy
 
 - **The "Deploy" button** — the head of the branch from the description;

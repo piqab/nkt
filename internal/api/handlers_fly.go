@@ -263,6 +263,12 @@ func (s *Server) flyWatchOnce(ctx context.Context) {
 	if err != nil || snap == nil {
 		return
 	}
+	s.flyFollowTargets(ctx, cfg, snap)
+}
+
+// flyFollowTargets — цели-контейнеры, машины и LXD с новым адресом
+// (пересозданы) — правило DNAT переписать.
+func (s *Server) flyFollowTargets(ctx context.Context, cfg fly.HostConfig, snap *model.Snapshot) {
 	changed := false
 	for ii := range cfg.Ifaces {
 		i := &cfg.Ifaces[ii]
@@ -340,4 +346,40 @@ func flyTargetIP(snap *model.Snapshot, kind, ref string) string {
 		}
 	}
 	return ""
+}
+
+// handleFlyRefresh — POST /fly/refresh: свежий скан хоста; адреса целей
+// Traffic Fly сверяются с ним сейчас, а не через 30 секунд; ответ —
+// контейнеры с проектом и сервисом compose (выкладка конвейера находит по
+// ним контейнер сервиса).
+func (s *Server) handleFlyRefresh(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var snap *model.Snapshot
+	var err error
+	if s.cfg.IsFixtures() {
+		snap, err = s.scanner.LatestOrScan(ctx)
+	} else {
+		snap, err = s.scanner.Scan(ctx)
+	}
+	if err != nil || snap == nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if !s.cfg.IsFixtures() {
+		if cfg := s.flyHostConfig(); len(cfg.Ifaces) > 0 {
+			s.flyFollowTargets(ctx, cfg, snap)
+		}
+	}
+	type item struct {
+		Name    string `json:"name"`
+		Project string `json:"project,omitempty"`
+		Service string `json:"service,omitempty"`
+		State   string `json:"state,omitempty"`
+		IP      string `json:"ip,omitempty"`
+	}
+	out := []item{}
+	for _, c := range snap.Container {
+		out = append(out, item{Name: c.Name, Project: c.Project, Service: c.ServiceName, State: c.State, IP: flyTargetIP(snap, "container", c.Name)})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"containers": out})
 }
