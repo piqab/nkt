@@ -88,6 +88,18 @@ route. Without it the gateway does not decrypt TLS, and browsers show
   the job log, since the hub may have no internet access). The gateway
   version is shown in Gateways.
 
+## Access from listed addresses only
+
+A route can have **allowed client addresses** — IPv4 addresses and
+networks (`203.0.113.7`, `198.51.100.0/24`, up to 200). The gateway cuts
+everyone else itself: the kernel for routes by port (their packets never
+reach the targets), the router for routes by name, before the target. The
+route window shows how many connections were denied. Let's Encrypt checks
+for a gateway certificate always pass.
+
+Use it for what the whole internet should not see: VM consoles, service
+ports, admin panels. In a pipeline — the `allow:` field of a `fly:` block.
+
 ## Pools and balancing
 
 A route has one or more **targets**: a host and what runs on it

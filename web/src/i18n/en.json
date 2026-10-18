@@ -4713,6 +4713,10 @@
     "drainHint": "Takes the target out for maintenance: new connections stop coming, open ones finish. Wait for 0 connections on the target and it can be restarted.",
     "fieldPortTo": "to port",
     "portToHint": "A port range (e.g. coturn relay ports 49152–65535): ports are kept end to end, one target is active, the others are standby.",
-    "rangeHint": "Range: gateway port N goes to target port N; the first live target serves, the others take over if it fails. Check: TCP on a port inside the range, or none."
+    "rangeHint": "Range: gateway port N goes to target port N; the first live target serves, the others take over if it fails. Check: TCP on a port inside the range, or none.",
+    "fieldAllow": "Allowed client addresses (empty — all)",
+    "allowHint": "IPv4 addresses and networks. The gateway cuts everyone else itself: the kernel for routes by port, the router for routes by name. Let's Encrypt checks always pass.",
+    "allowTag": "only {{n}} addr.",
+    "deniedN": "denied: {{n}}"
   }
 }

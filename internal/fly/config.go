@@ -83,7 +83,12 @@ type Route struct {
 	// имена маршрута получает и продлевает шлюз (проверка — по его же
 	// порту 80), цели уходит HTTP с X-Forwarded-For/X-Real-IP. Только
 	// точные имена (без *.) и без PROXY protocol.
-	TLS       bool     `json:"tls,omitempty"`
+	TLS bool `json:"tls,omitempty"`
+	// Allow — с каких адресов клиентов маршрут принимает соединения
+	// (IPv4-адреса и сети); пусто — со всех. Остальных отсекает шлюз:
+	// маршруты по порту — ядро (их пакеты не идут на цели), по имени —
+	// маршрутизатор. Проверки Let's Encrypt на шлюз проходят всегда.
+	Allow     []string `json:"allow,omitempty"`
 	Algorithm string   `json:"algorithm"`
 	Check     Check    `json:"check"`
 	Targets   []Target `json:"targets"`
@@ -271,6 +276,49 @@ func (r Route) protos() []string {
 // Named — маршрут по имени (обслуживает маршрутизатор, не ядро).
 func (r Route) Named() bool { return r.Kind == KindHTTPS || r.Kind == KindHTTP }
 
+// maxAllow — сколько адресов и сетей в белом списке маршрута.
+const maxAllow = 200
+
+// parseAllow — адрес или сеть IPv4 белого списка.
+func parseAllow(s string) (netip.Prefix, error) {
+	if p, err := netip.ParsePrefix(s); err == nil && p.Addr().Is4() {
+		return p.Masked(), nil
+	}
+	a, err := netip.ParseAddr(s)
+	if err != nil || !a.Is4() {
+		return netip.Prefix{}, fmt.Errorf("fly: bad address %q", s)
+	}
+	return netip.PrefixFrom(a, 32), nil
+}
+
+// Allowed — клиент с адресом a допущен к маршруту.
+func (r Route) Allowed(a netip.Addr) bool {
+	if len(r.Allow) == 0 {
+		return true
+	}
+	a = a.Unmap()
+	for _, s := range r.Allow {
+		if p, err := parseAllow(s); err == nil && p.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// allowNFT — условие nft на адрес клиента; пусто — без условия.
+func (r Route) allowNFT() string {
+	if len(r.Allow) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(r.Allow))
+	for _, s := range r.Allow {
+		if p, err := parseAllow(s); err == nil {
+			parts = append(parts, p.String())
+		}
+	}
+	return "ip saddr { " + strings.Join(parts, ", ") + " } "
+}
+
 // Range — маршрут занимает диапазон портов.
 func (r Route) Range() bool { return r.PortTo > r.Port }
 
@@ -342,6 +390,14 @@ func (r Route) validate(peers map[string]bool) error {
 		}
 	default:
 		return fmt.Errorf("fly: route %s kind %q", r.ID, r.Kind)
+	}
+	if len(r.Allow) > maxAllow {
+		return fmt.Errorf("fly: route %s: more than %d allowed addresses", r.ID, maxAllow)
+	}
+	for _, a := range r.Allow {
+		if _, err := parseAllow(a); err != nil {
+			return fmt.Errorf("fly: route %s: allowed address %q", r.ID, a)
+		}
 	}
 	switch r.Algorithm {
 	case AlgoRoundRobin, AlgoSourceHash:
