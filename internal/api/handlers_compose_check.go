@@ -13,10 +13,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/parse"
 	"github.com/piqab/nkt/internal/site"
@@ -265,11 +267,28 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 		issues, bad := composeImageIssues(ctx, c, res.Engine, work, composeServices(ctx, c, res.Engine, args))
 		res.ImageIssues = issues
 		if out, err := c.RunTimeout(ctx, time.Minute, res.Engine, append(args, "config", "--images")...); err == nil && out.OK() {
+			// Образы — параллельно (до 4 сразу), порядок — как в файле:
+			// прогон длится самый долгий образ, а не их сумму.
+			var imgs []string
 			for _, img := range dedupe(splitLines(out.Stdout)) {
 				if !bad[img] {
-					res.Images = append(res.Images, s.checkImage(ctx, c, res.Engine, img, res.HostArch))
+					imgs = append(imgs, img)
 				}
 			}
+			checks := make([]ComposeImageCheck, len(imgs))
+			var wg sync.WaitGroup
+			sem := make(chan struct{}, 4)
+			for i, img := range imgs {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+					checks[i] = s.checkImage(ctx, c, res.Engine, img, res.HostArch)
+				}()
+			}
+			wg.Wait()
+			res.Images = append(res.Images, checks...)
 		}
 	}
 	if on("ports") {
@@ -380,6 +399,20 @@ func (s *Server) checkImage(ctx context.Context, c collect.Collector, engine, im
 		if a := strings.TrimSpace(res.Stdout); a != "" {
 			out.Arches = []string{a}
 		}
+	}
+	// Прямой запрос манифеста к registry — секунда-две; «docker manifest
+	// inspect» у больших индексов (postgres) — до полуминуты. Не вышло
+	// (закрытый образ, вход только через docker login хоста, свой CA) —
+	// прежний путь через движок.
+	dctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	found, arches, derr := deploy.ManifestPlatforms(dctx, img, deploy.RegistryAccess{})
+	cancel()
+	if derr == nil && found {
+		out.State, out.Detail = "registry", ""
+		if len(arches) > 0 {
+			out.Arches = arches
+		}
+		return out
 	}
 	var res collect.CommandResult
 	var err error

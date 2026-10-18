@@ -20,6 +20,15 @@ func (s *Server) hostCall(ctx context.Context, user string, hostID int64, method
 	return s.hub.HostAPI(ctx, hostID, method, path, in, out)
 }
 
+// hostCallLong — hostCall для долгих вызовов (сухой прогон и выкладка
+// стека): ответа ждём до hostAPILongTimeout, а не 30 с.
+func (s *Server) hostCallLong(ctx context.Context, user string, hostID int64, method, path string, in, out any) (int, error) {
+	if hostID == localHostID {
+		return s.localAPI(ctx, user, method, path, in, out)
+	}
+	return s.hub.HostAPITimeout(ctx, hostID, method, path, in, out, hostAPILongTimeout)
+}
+
 // waitHostJobVia ждёт задание на хосте, пересказывая его журнал в своё
 // (как GroupApplyRunner.waitHostJob, но и для машины хаба).
 func (s *Server) waitHostJobVia(ctx context.Context, jc *jobs.Context, user string, hostID, jobID int64) error {

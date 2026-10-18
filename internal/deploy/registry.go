@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -311,6 +312,77 @@ func ManifestExists(ctx context.Context, image string, acc RegistryAccess) (bool
 		return false, nil
 	}
 	return false, msgs.Errorf("deploy.registryHTTP", image, resp.StatusCode)
+}
+
+// ManifestPlatforms — есть ли образ в registry и под какие архитектуры
+// (linux) он собран: GET манифеста, без слоёв. Быстрее «docker manifest
+// inspect» в разы. Одиночный манифест архитектуры не называет — пусто.
+func ManifestPlatforms(ctx context.Context, image string, acc RegistryAccess) (bool, []string, error) {
+	client, err := acc.Client()
+	if err != nil {
+		return false, nil, err
+	}
+	name, ref := image, "latest"
+	if at := strings.LastIndex(name, "@"); at > 0 {
+		name, ref = name[:at], name[at+1:]
+	} else if colon := strings.LastIndex(name, ":"); colon > strings.LastIndex(name, "/") {
+		name, ref = name[:colon], name[colon+1:]
+	}
+	base, repo := registryBase(name)
+	u := base + "/v2/" + repo + "/manifests/" + ref
+	get := func(auth string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", manifestAccept)
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		return client.Do(req)
+	}
+	resp, err := get("")
+	if err != nil {
+		return false, nil, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		challenge := resp.Header.Get("WWW-Authenticate")
+		resp.Body.Close()
+		auth, err := registryAuth(ctx, client, challenge, acc.Cred)
+		if err != nil {
+			return false, nil, err
+		}
+		if resp, err = get(auth); err != nil {
+			return false, nil, err
+		}
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return false, nil, nil
+	default:
+		return false, nil, msgs.Errorf("deploy.registryHTTP", image, resp.StatusCode)
+	}
+	var doc struct {
+		Manifests []struct {
+			Platform struct {
+				Architecture string `json:"architecture"`
+				OS           string `json:"os"`
+			} `json:"platform"`
+		} `json:"manifests"`
+	}
+	_ = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&doc)
+	var arches []string
+	for _, m := range doc.Manifests {
+		a := m.Platform.Architecture
+		if a == "" || a == "unknown" || (m.Platform.OS != "" && m.Platform.OS != "linux") || slices.Contains(arches, a) {
+			continue
+		}
+		arches = append(arches, a)
+	}
+	sort.Strings(arches)
+	return true, arches, nil
 }
 
 // RegistryLogin — вход в registry host этим доступом: GET /v2/, по вызову

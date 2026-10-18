@@ -304,7 +304,9 @@ var composeOptionalFields = []string{"env_sha", "site_service", "site_port", "sk
 
 // composeHostPost — POST к хосту с откатом на старый хост.
 func (s *Server) composeHostPost(ctx context.Context, jc *jobs.Context, user string, t targetHost, path string, body map[string]any, out any) (int, error) {
-	code, err := s.hostCall(ctx, user, t.ID, "POST", path, body, out)
+	// Сухой прогон проверяет образы в registry, выкладка — compose config:
+	// дольше обычных 30 с ожидания ответа.
+	code, err := s.hostCallLong(ctx, user, t.ID, "POST", path, body, out)
 	if err == nil || code != http.StatusBadRequest || !strings.Contains(msgs.Localize(msgs.EN, err), "unknown field") {
 		return code, err
 	}
@@ -319,7 +321,7 @@ func (s *Server) composeHostPost(ctx context.Context, jc *jobs.Context, user str
 		return code, err
 	}
 	jc.Log("deploy.hostOld", t.Name, strings.Join(dropped, ", "))
-	return s.hostCall(ctx, user, t.ID, "POST", path, body, out)
+	return s.hostCallLong(ctx, user, t.ID, "POST", path, body, out)
 }
 
 // pipelineEnv — расшифрованный .env стека конвейера (nil — не задан).

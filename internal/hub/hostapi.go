@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/piqab/nkt/internal/msgs"
+	"errors"
 	"io"
+	"net"
 	"net/http"
+	"time"
+
+	"github.com/piqab/nkt/internal/msgs"
 
 	"github.com/piqab/nkt/internal/auth"
 )
@@ -26,6 +30,18 @@ const hostAPIMaxBody = 8 << 20
 // out, если задан, заполняется разбором JSON-ответа. Ненулевой код — не
 // ошибка Go: вызывающий решает сам, что делать с 404 или 503.
 func (m *Manager) HostAPI(ctx context.Context, hostID int64, method, path string, in, out any) (int, error) {
+	return m.HostAPITimeout(ctx, hostID, method, path, in, out, 0)
+}
+
+// hostAPILongTimeout — срок долгих вызовов (сухой прогон стека проверяет
+// образы в registry, выкладка — compose config): хост работает дольше
+// обычных 30 с, а канал при этом жив.
+const hostAPILongTimeout = 5 * time.Minute
+
+// HostAPITimeout — HostAPI со своим сроком ответа (0 — обычный). У
+// долгого вызова истёкший срок — не мёртвый канал: соединение из пула не
+// выбрасывается.
+func (m *Manager) HostAPITimeout(ctx context.Context, hostID int64, method, path string, in, out any, timeout time.Duration) (int, error) {
 	dial, channel, onFail, err := m.dialerFor(ctx, hostID)
 	if err != nil {
 		return 0, err
@@ -66,10 +82,19 @@ func (m *Manager) HostAPI(ctx context.Context, hostID int64, method, path string
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := tunnelHTTPClient(dial, addr).Do(req)
+	client := tunnelHTTPClient(dial, addr)
+	if timeout > 0 {
+		client.Timeout = timeout
+	}
+	resp, err := client.Do(req)
 	if err != nil {
-		if ctx.Err() == nil {
+		var ne net.Error
+		slow := timeout > 0 && errors.As(err, &ne) && ne.Timeout()
+		if ctx.Err() == nil && !slow {
 			onFail()
+		}
+		if slow {
+			return 0, msgs.Errorf("hub.hostSlow", path, int(timeout.Minutes()))
 		}
 		return 0, err
 	}

@@ -453,4 +453,6 @@ var enSitesCatalog = map[string]string{
 	"deploy.dryConfig.same":           "  %s: config %s unchanged",
 	"deploy.dryConfigDiff":            "%s",
 	"compose.configChown":             "Could not change the owner of config %s: %s",
+	"hub.hostSlow":                    "The host did not answer %s within %d min — it is still working (a slow registry or docker daemon); try again later",
+	"deploy.dryHostChecking": "  %s: checking the stack on the host (compose config, images in the registry, ports, resources)…",
 }

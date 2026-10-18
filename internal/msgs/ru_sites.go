@@ -453,4 +453,6 @@ var ruSitesCatalog = map[string]string{
 	"deploy.dryConfig.same":           "  %s: конфиг %s без изменений",
 	"deploy.dryConfigDiff":            "%s",
 	"compose.configChown":             "Не удалось сменить владельца конфига %s: %s",
+	"hub.hostSlow":                    "Хост не ответил на %s за %d мин — он ещё работает (медленный registry или демон docker); повторите позже",
+	"deploy.dryHostChecking": "  %s: проверка стека на хосте (compose config, образы в registry, порты, ресурсы)…",
 }
