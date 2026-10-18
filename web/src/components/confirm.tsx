@@ -17,14 +17,16 @@ import i18n from '../i18n'
  */
 export function confirmAction(
   content: string,
-  opts: { title?: string; okText?: string; danger?: boolean } = {},
+  opts: { title?: string; okText?: string; cancelText?: string; danger?: boolean } = {},
 ): Promise<boolean> {
   return new Promise((resolve) => {
     Modal.confirm({
       title: blurText(opts.title ?? i18n.t('common.confirmTitle')),
       content: blurText(content),
       okText: opts.okText ?? i18n.t('common.confirmOk'),
-      cancelText: i18n.t('common.cancel'),
+      // Своя подпись отмены — когда «Отмена» рядом с действием читается
+      // двусмысленно («Отменить» черновик или отменить окно?).
+      cancelText: opts.cancelText ?? i18n.t('common.cancel'),
       okButtonProps: { danger: opts.danger ?? true },
       // Ширина против умолчания antd: тексты подтверждений здесь длинные —
       // они перечисляют последствия, а не спрашивают «вы уверены?».

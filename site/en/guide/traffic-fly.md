@@ -226,7 +226,9 @@ removed — the map explains why.
 “+ new”, changed ones “→ active”, “→ reserve”, “edited”, removed ones
 stay faded and struck through. Above the map are **Apply changes (N)**
 (route diff and a note for the revision; one new revision and one job),
-**Undo** and **Discard**.
+**Undo** and **Discard draft (N)** — which asks “Discard map changes?”
+(“Discard” / “Keep editing”); the same question comes up when leaving
+editing with a non-empty draft.
 
 **Apply immediately** (a switch above the map, off by default): every
 action goes to the Traffic Fly queue as a job right away; wheel steps are

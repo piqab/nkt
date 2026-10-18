@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.34 — 2026-10-18
+
+- **Traffic Fly: dragging targets on the map works.** Pressing a target
+  used to start selecting captions and the browser broke off the drag; on
+  phones scrolling took the gesture. Targets now drag with a mouse or a
+  finger (in editing mode the map does not scroll by touch).
+- **A clear draft discard.** A “Discard draft (N)” button and a “Discard
+  map changes?” window with “Discard” and “Keep editing” instead of
+  “Cancel” / “Discard”.
+
 ## v1.13.33 — 2026-10-18
 
 - **Traffic Fly: mouse-driven map editing.** An “Edit map” button
