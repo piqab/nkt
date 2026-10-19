@@ -324,8 +324,12 @@ and the cursor reads `stack <name> · containers: N`.
   for **Roll back** (stop the new, start the old) or **Remove old**
   (containers; with the "and the data" checkbox, also volumes and the
   stack's directories). After a week, if the old one is still there, an
-  "Old stack after a move" alert. Only a **stopped** container counts as
-  the old copy: a running one (say, moved back) drags as usual.
+  "Old stack after a move" alert. The map recognises the old copy by the
+  container's **latest move record** with this host, not by its state: it
+  is grey and dashed right after the move, does not drag, and a click
+  opens the menu rather than the host's section. Its Traffic Fly marks are
+  grey and do not blink (a reserve, stopped on purpose). Moving back is a
+  new record, and the returned container is ordinary again.
 - **Networks.** Compose recreates the project's own networks on the new
   host. The stack's **external** networks (`external: true`, made by
   `docker network create` or by another stack) are listed in the window;
@@ -351,7 +355,10 @@ and the cursor reads `stack <name> · containers: N`.
   a move runs there is
   a spinner on the tile, "← moving" on the new host and a job tag (click —
   log); when it ends the map re-reads the hosts bypassing the cache and
-  redraws the links.
+  redraws the links: the hosts refresh their container lists right after
+  every move step, and the map waits until the containers appear on the
+  new host and stop on the old one. While it re-reads, it is covered with
+  "Refreshing the map…" and cannot be rearranged.
 - **Traffic Fly.** If the container is a route target, the window shows
   which route and role; the **Switch the routes to the new host** checkbox
   (on) keeps the role: an active target becomes active on the new host (the

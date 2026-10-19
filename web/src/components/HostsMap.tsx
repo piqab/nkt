@@ -208,7 +208,15 @@ export function HostsMap({
           const okMoves = movingRef.current.filter((m) => done.some((d) => d.id === m.id && d.ok))
           for (let i = 0; i < 3; i++) {
             const fresh = await api<MapData>('/hub/map?refresh=1').catch(() => null)
-            const arrived = okMoves.every((m) => m.names.every((n) => (fresh?.hosts[String(m.to)]?.items ?? []).some((it) => it.kind === 'container' && it.name === n)))
+            // Свежо — когда на новом хосте контейнеры есть, а на старом
+            // уже не работают.
+            const arrived = okMoves.every((m) =>
+              m.names.every(
+                (n) =>
+                  (fresh?.hosts[String(m.to)]?.items ?? []).some((it) => it.kind === 'container' && it.name === n) &&
+                  !(fresh?.hosts[String(m.from)]?.items ?? []).some((it) => it.kind === 'container' && it.name === n && (it.state ?? '').toLowerCase() === 'running'),
+              ),
+            )
             if (!fresh || arrived) break
             await new Promise((r) => window.setTimeout(r, 2000))
           }
@@ -330,13 +338,17 @@ export function HostsMap({
   // Старая копия — только неработающий контейнер: тот же стек переносят
   // туда и обратно с теми же именами, и работающий не должен считаться
   // старым (иначе его не перетащить).
-  const migratedHere = (hostId: number, name: string, state?: string): { rec: MigrationRecord; role: 'from' | 'to' } | null => {
-    const list = [...(migrations.data?.migrations ?? [])].reverse().filter((r) => r.state === 'moved' && r.containers.includes(name))
-    const to = list.find((r) => r.to === hostId)
-    const from = list.find((r) => r.from === hostId)
-    if (from && (state ?? '').toLowerCase() !== 'running') return { rec: from, role: 'from' }
-    if (to) return { rec: to, role: 'to' }
-    return null
+  // Решает последняя запись переноса этого контейнера с этим хостом, а
+  // не состояние: список хоста после переноса может быть ещё старым
+  // («работает»). Перенос обратно — новая запись в обратную сторону, и
+  // вернувшийся контейнер снова обычный.
+  const migratedHere = (hostId: number, name: string): { rec: MigrationRecord; role: 'from' | 'to' } | null => {
+    const last = [...(migrations.data?.migrations ?? [])]
+      .filter((r) => r.containers.includes(name) && (r.from === hostId || r.to === hostId))
+      .sort((a, b) => a.ts.localeCompare(b.ts))
+      .pop()
+    if (!last || last.state !== 'moved') return null
+    return { rec: last, role: last.from === hostId ? 'from' : 'to' }
   }
   const boxRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -765,7 +777,7 @@ export function HostsMap({
         </Checkbox>
         {admin && (
           <Tooltip title={t('hostsMap.moveHint')}>
-            <Button size="small" type={moveMode ? 'primary' : 'default'} onClick={() => setMoveMode(!moveMode)}>
+            <Button size="small" type={moveMode ? 'primary' : 'default'} disabled={settling} onClick={() => setMoveMode(!moveMode)}>
               {t('hostsMap.moveMode')}
             </Button>
           </Tooltip>
@@ -773,14 +785,14 @@ export function HostsMap({
         {moveMode && (
           <Tooltip title={drafts.length ? t('hostsMap.applyNowDraft') : t('hostsMap.applyNowHint')}>
             <span className="row small" style={{ gap: '0.3rem', alignItems: 'center' }}>
-              <Switch size="small" checked={applyNow} disabled={drafts.length > 0} onChange={setApplyNow} />
+              <Switch size="small" checked={applyNow} disabled={drafts.length > 0 || settling} onChange={setApplyNow} />
               {t('hostsMap.applyNow')}
             </span>
           </Tooltip>
         )}
         {drafts.length > 0 && (
           <>
-            <Button size="small" type="primary" danger onClick={() => void applyDrafts()}>
+            <Button size="small" type="primary" danger disabled={settling} onClick={() => void applyDrafts()}>
               {t('hostsMap.applyMoves', { n: drafts.length })}
             </Button>
             <Button size="small" onClick={() => setDrafts([])}>
@@ -965,7 +977,7 @@ export function HostsMap({
                       .filter(Boolean)
                       .join(' · ')
                     const kindLabel = it.kind === 'container' ? 'docker' : it.kind === 'vm' ? 'VM' : 'LXD'
-                    const mig = it.kind === 'container' ? migratedHere(b.host.id, it.name, it.state) : null
+                    const mig = it.kind === 'container' ? migratedHere(b.host.id, it.name) : null
                     const movable = moveMode && it.kind === 'container' && !b.offline && mig?.role !== 'from'
                     const dragged = tileDrag?.host === b.host.id && (tileDrag.project ? it.kind === 'container' && it.project === tileDrag.project : it.name === tileDrag.name)
                     return (
@@ -987,7 +999,7 @@ export function HostsMap({
                               }
                             : undefined
                         }
-                        {...clickable(() => (mig?.role === 'from' && admin ? setRecMenu(mig.rec) : moveMode ? undefined : onOpenAt(b.host, itemPath(it))))}
+                        {...clickable(() => (mig?.role === 'from' ? (admin ? setRecMenu(mig.rec) : undefined) : moveMode ? undefined : onOpenAt(b.host, itemPath(it))))}
                       >
                         {!privacy && <title>{`${it.name}${it.project ? ` · ${t('hostsMap.stack')} ${it.project}` : ''}\n${sub}${it.state ? `\n${it.state}` : ''}`}</title>}
                         <rect
@@ -995,9 +1007,15 @@ export function HostsMap({
                           height={TILE_H}
                           rx={6}
                           fill="var(--surface-raised)"
-                          stroke={dragged || movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name) ? 'var(--accent, #1677ff)' : stateColor(it.state)}
+                          stroke={
+                            dragged || movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name)
+                              ? 'var(--accent, #1677ff)'
+                              : mig?.role === 'from'
+                                ? 'var(--text-muted)' // старая копия — остановлена, даже если список ещё старый
+                                : stateColor(it.state)
+                          }
                           strokeWidth={dragged ? 3 : 2}
-                          strokeDasharray={draftTile(b.host.id, it.name) ? '5 3' : undefined}
+                          strokeDasharray={draftTile(b.host.id, it.name) || mig?.role === 'from' ? '5 3' : undefined}
                         />
                         {movingTile(b.host.id, it.name) && (
                           <g transform={`translate(${TILE_W - 12},${TILE_H - 12})`}>
@@ -1042,11 +1060,19 @@ export function HostsMap({
                         )}
                         {/* Метки связей: маршрут Traffic Fly — кружок (пустой — резерв,
                             красный центр — не жива), конвейер — квадрат. */}
-                        {flyMarks.map((l, i) => (
-                          <circle key={`f${i}`} cx={TILE_W - 10 - i * 14} cy={11} r={5} fill={l.dashed ? 'var(--surface-raised)' : l.color} stroke={l.color} strokeWidth={2}>
-                            {l.dead && <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" />}
-                          </circle>
-                        ))}
+                        {flyMarks.map((l, i) =>
+                          mig?.role === 'from' ? (
+                            // Старая копия после переноса — резерв, остановлена
+                            // намеренно: не мигает, серая.
+                            <circle key={`f${i}`} cx={TILE_W - 10 - i * 14} cy={11} r={5} fill="var(--surface-raised)" stroke="var(--text-muted)" strokeWidth={2}>
+                              {!privacy && <title>{t('hostsMap.flyOldCopy')}</title>}
+                            </circle>
+                          ) : (
+                            <circle key={`f${i}`} cx={TILE_W - 10 - i * 14} cy={11} r={5} fill={l.dashed ? 'var(--surface-raised)' : l.color} stroke={l.color} strokeWidth={2}>
+                              {l.dead && <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" />}
+                            </circle>
+                          ),
+                        )}
                         {pipeMarks.slice(0, 1).map((l) => (
                           <rect key="p" x={TILE_W - 15 - flyMarks.length * 14} y={6} width={10} height={10} rx={2} fill={l.color} />
                         ))}
@@ -1083,7 +1109,13 @@ export function HostsMap({
             </g>
           </svg>
           {settling && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--surface) 65%, transparent)', pointerEvents: 'none' }}>
+            // Перехватывает щелчки и перетаскивание: пока карта
+            // перечитывается, её не перестраивают (колесо масштаба — можно).
+            <div
+              style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--surface) 65%, transparent)', cursor: 'progress' }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
               <span style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface-raised)', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
                 <LoadingOutlined /> {t('hostsMap.settling')}
               </span>

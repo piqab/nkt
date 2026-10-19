@@ -454,7 +454,13 @@ func (s *Server) migrateRemove(ctx context.Context, jc *jobs.Context, a migrateR
 }
 
 // runMigrateOp — операции переноса в задании хоста (op_jobs.go).
-func (s *Server) runMigrateOp(ctx context.Context, jc *jobs.Context, op string, raw json.RawMessage) (bool, error) {
+func (s *Server) runMigrateOp(ctx context.Context, jc *jobs.Context, op string, raw json.RawMessage) (handled bool, err error) {
+	// Шаги меняют контейнеры хоста: снимок — сразу, до конца задания.
+	// Хаб читает список контейнеров после него, и старый снимок (до пяти
+	// минут) показал бы остановленное работающим.
+	if strings.HasPrefix(op, "migrate.") {
+		defer func() { _, _ = s.scanner.Scan(context.WithoutCancel(ctx)) }()
+	}
 	switch op {
 	case "migrate.pack":
 		var a migratePackArgs
@@ -549,11 +555,12 @@ func (s *Server) handleMigrateStartStop(w http.ResponseWriter, r *http.Request) 
 		err = msgs.Errorf("migrate.dockerFailed", verb, strings.TrimSpace(res.Output()))
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "migrate."+verb, strings.Join(req.Containers, ", "), auditResult(err), errText(err))
+	// Снимок — до ответа: хаб сразу перечитывает список контейнеров.
+	_, _ = s.scanner.Scan(context.WithoutCancel(ctx))
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	s.rescanLater()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
