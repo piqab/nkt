@@ -34,16 +34,23 @@ self-contained alternatives.
 
 ## Option 1. systemd from the prebuilt binary
 
-The binary is the same as for a [host](/en/guide/getting-started#_1-binary);
-the unit and env file are the hub's own:
+Everything in one block — the latest binary for this machine's
+architecture checked against `SHA256SUMS`, the hub's unit and `hub.env`,
+editing the settings, start:
 
 ```bash
+V=$(curl -fsSL https://api.github.com/repos/piqab/nkt/releases/latest | sed -n 's/.*"tag_name": *"\(.*\)".*/\1/p')
+A=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[67]l/arm/')
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-linux-$A
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+sudo install -m 0755 nkt-linux-$A /usr/local/bin/nkt
 sudo install -d -m 0750 /etc/netknownsthat
 curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/hub.env.example \
   | sudo install -m 0640 /dev/stdin /etc/netknownsthat/hub.env
 curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat-hub.service \
   | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat-hub.service
-sudo $EDITOR /etc/netknownsthat/hub.env
+sudo nano /etc/netknownsthat/hub.env     # or any editor
 sudo systemctl daemon-reload
 sudo systemctl enable --now netknownsthat-hub
 sudo journalctl -u netknownsthat-hub -n 30     # admin password

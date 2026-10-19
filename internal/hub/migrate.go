@@ -367,6 +367,10 @@ func (r *MigrateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	s := r.s
 	user := s.actingUser(ctx, jc.Job.Author, s.firstAdmin(ctx))
+	// Содержимое обоих хостов меняется — карта после задания читает их
+	// заново (и до конца задания старый список в кэш не ляжет).
+	defer flyTargetsForget(p.From)
+	defer flyTargetsForget(p.To)
 	switch p.Action {
 	case "move":
 		return s.migrateMove(ctx, jc, user, p)
@@ -709,6 +713,8 @@ func (s *Server) migrateAfter(ctx context.Context, jc *jobs.Context, user string
 	if rec == nil || rec.State != "moved" {
 		return msgs.Errorf("migrate.badRequest")
 	}
+	defer flyTargetsForget(rec.From)
+	defer flyTargetsForget(rec.To)
 	state := ""
 	switch p.Action {
 	case "rollback":

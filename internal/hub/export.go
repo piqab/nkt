@@ -71,6 +71,9 @@ func (m *Manager) ExportHub(ctx context.Context, includeKey, includeUsers bool) 
 	if err := m.exportSites(ctx, &export); err != nil {
 		return store.HubExport{}, err
 	}
+	m.exportDeployed(ctx, &export)
+	m.exportFly(ctx, &export)
+	m.exportMigrations(ctx, &export)
 	return export, nil
 }
 
@@ -151,6 +154,7 @@ func (m *Manager) ImportPlan(ctx context.Context, export store.HubExport) ([]sto
 	plan = append(plan, edge)
 	plan = append(plan, m.planAccess(ctx, export)...)
 	plan = append(plan, m.planSites(ctx, export))
+	plan = append(plan, m.planFly(ctx, export), m.planMigrations(ctx, export))
 	// История «Мониторинга»: совпадение — у хоста с этим именем здесь уже
 	// есть история; «заменить» её дополняет.
 	mon := store.PlanSection{Section: store.SectionMonitoring, Items: []store.PlanItem{}}
@@ -324,6 +328,14 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 		export.LegacySignKeys = nil
 	}
 
+	// Конвейеры до импорта: их состояние выкладки — только у добавленных
+	// и заменённых.
+	pipesBefore := map[string]bool{}
+	if list, err := m.db.ListPipelines(ctx); err == nil {
+		for _, p := range list {
+			pipesBefore[p.Name] = true
+		}
+	}
 	rep := m.db.ImportHosts(ctx, export, res)
 	rep.Errors = append(pre, rep.Errors...)
 	m.importMonitoring(ctx, export.Monitoring, res, &rep)
@@ -332,6 +344,11 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 	m.importAccess(ctx, export, res, &rep)
 	// Сайты — после хостов и конвейеров: ищутся по их именам.
 	m.importSites(ctx, export.Sites, res, &rep)
+	// Состояние выкладок, Traffic Fly и учёт переносов — после хостов,
+	// конвейеров и edge: номера ищутся по их именам и адресам.
+	m.importDeployed(ctx, export.Pipelines, pipesBefore, res, &rep)
+	m.importFly(ctx, export.Fly, res, &rep)
+	m.importMigrations(ctx, export.Migrations, res, &rep)
 	// Образы для кластеров: чего нет в библиотеке этого хаба.
 	have := map[string]bool{}
 	for _, img := range m.ClusterImages() {

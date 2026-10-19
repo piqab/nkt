@@ -36,7 +36,8 @@ embedded in the binary.
 
 ```bash
 V=$(curl -fsSL https://api.github.com/repos/piqab/nkt/releases/latest | sed -n 's/.*"tag_name": *"\(.*\)".*/\1/p')
-curl -fsSL -o nkt https://github.com/piqab/nkt/releases/download/$V/nkt-linux-amd64 && sudo install -m 0755 nkt /usr/local/bin/nkt
+A=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[67]l/arm/')
+curl -fsSL -o nkt https://github.com/piqab/nkt/releases/download/$V/nkt-linux-$A && sudo install -m 0755 nkt /usr/local/bin/nkt
 sudo nkt scan
 ```
 

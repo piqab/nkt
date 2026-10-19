@@ -8,6 +8,28 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.51 — 2026-10-19
+
+- **The map shows the result after a move.** While the map re-reads the
+  hosts after a move it is covered with "Refreshing the map after the
+  move…"; the hub drops both hosts' cached lists at the end of the job (and
+  a stale answer requested during the move can no longer overwrite the
+  fresh one), and if the moved container is not visible on the new host
+  yet, the map re-reads once more.
+- **Hub export and import — Traffic Fly, deployments, moves.** The file
+  now carries the Traffic Fly routes with their history and the tunnel
+  address and port allocation, where each pipeline's stack is deployed
+  (plus old stacks not yet removed), and the container move records. Host
+  and nkt-edge numbers differ on another hub — the import remaps them by
+  name and address; whatever is missing is skipped and listed in the
+  report. Routes appear one by one in the import plan with "skip /
+  replace". After the import press "Apply" in Traffic Fly.
+- **Hub installation in one block.** In the "Hub installation" guide the
+  binary, the `SHA256SUMS` check, the unit, `hub.env` and the start are a
+  single command block; the machine's architecture is detected
+  automatically (in the host and nkt-edge installation too). `nano`
+  instead of `$EDITOR`.
+
 ## v1.13.50 — 2026-10-19
 
 - **A stack on the map is one block.** Containers of one compose project

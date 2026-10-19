@@ -540,4 +540,9 @@ var ruSitesCatalog = map[string]string{
 	"migrate.removePath":              "каталог %s",
 	"migrate.netMissing":              "на новом хосте нет внешних сетей стека: %s — создайте их там (docker network create) или переносите связанные стеки вместе",
 	"migrate.netShared":               "сеть %s общая: на старом хосте к ней подключены ещё %s — после переноса они потеряют связь с этим стеком",
+	"hub.importFlyNoHost": "Traffic Fly, маршрут %s: цель %s пропущена — хоста %s нет в этом хабе",
+	"hub.importFlyNoGateway": "Traffic Fly, маршрут %s пропущен — шлюза %s (nkt-edge) нет в этом хабе",
+	"hub.importFlyApply": "Traffic Fly импортирован — откройте его и нажмите «Применить», чтобы разложить маршруты по шлюзам и хостам",
+	"hub.importDeployedNoHost": "конвейер %s: хоста %s нет в этом хабе — в состоянии выкладки он пропущен",
+	"hub.importMigrationNoHost": "перенос %s: хоста %s нет в этом хабе — запись пропущена",
 }

@@ -34,6 +34,24 @@ type PipelineExport struct {
 	DrySkip string `json:"dry_skip,omitempty"`
 	// EnvVersions — история .env, старые первыми (зашифрованы, как EnvEnc).
 	EnvVersions []EnvVersionExport `json:"env_versions,omitempty"`
+	// Deployed — где стек выложен сейчас; Leftovers — старые стеки, которые
+	// не удалось убрать (хосты — по именам).
+	Deployed  *DeployedExport  `json:"deployed,omitempty"`
+	Leftovers []LeftoverExport `json:"leftovers,omitempty"`
+}
+
+// DeployedExport — стек последней удачной выкладки конвейера.
+type DeployedExport struct {
+	Project string   `json:"project"`
+	Hosts   []string `json:"hosts"`
+}
+
+// LeftoverExport — неубранный старый стек конвейера.
+type LeftoverExport struct {
+	Host    string `json:"host"`
+	Project string `json:"project"`
+	Reason  string `json:"reason,omitempty"`
+	At      string `json:"at"`
 }
 
 // EnvVersionExport — версия .env конвейера (пусто — .env убран).

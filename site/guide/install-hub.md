@@ -33,16 +33,22 @@ title: Установка хаба
 
 ## Вариант 1. systemd из готового бинарника
 
-Бинарник — как для [хоста](/guide/getting-started#_1-бинарник), юнит и
-env-файл свои:
+Всё одним блоком — бинарник последней версии под архитектуру машины с
+проверкой `SHA256SUMS`, юнит и `hub.env` хаба, правка настроек, запуск:
 
 ```bash
+V=$(curl -fsSL https://api.github.com/repos/piqab/nkt/releases/latest | sed -n 's/.*"tag_name": *"\(.*\)".*/\1/p')
+A=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[67]l/arm/')
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-linux-$A
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+sudo install -m 0755 nkt-linux-$A /usr/local/bin/nkt
 sudo install -d -m 0750 /etc/netknownsthat
 curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/hub.env.example \
   | sudo install -m 0640 /dev/stdin /etc/netknownsthat/hub.env
 curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat-hub.service \
   | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat-hub.service
-sudo $EDITOR /etc/netknownsthat/hub.env
+sudo nano /etc/netknownsthat/hub.env     # или любой редактор
 sudo systemctl daemon-reload
 sudo systemctl enable --now netknownsthat-hub
 sudo journalctl -u netknownsthat-hub -n 30     # пароль администратора
