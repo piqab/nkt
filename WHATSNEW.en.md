@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.47 — 2026-10-19
+
+- **Moving a container to (or from) the hub machine no longer hangs.** The
+  hub's migration job and the host steps shared one queue, and on the hub
+  machine the job manager is shared — the job waited for its own step. Now
+  they use different queues.
+- **Cancelling a move rolls it back.** Cancelling in Jobs also cancels the
+  step on the host: packing starts the containers again by itself; after
+  the stop, what was created on the new host is removed and the stack on
+  the old host starts.
+- **A stalled transfer is cut off.** 10 minutes without data between hosts
+  ends the transfer with a clear reason and a rollback instead of waiting
+  forever.
+
 ## v1.13.46 — 2026-10-19
 
 - **Security policy.** The repository has `.github/SECURITY.md`:

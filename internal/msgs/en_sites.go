@@ -524,4 +524,5 @@ var enSitesCatalog = map[string]string{
 	"migrate.stepRemoveOld":           "Removing the old %s from %s",
 	"migrate.reminder":                "Stack %s was moved to %s (%s) and the old one here has been stopped for a week — remove it or roll back: hosts map",
 	"migrate.hostOld":                 "nkt on host %s cannot migrate containers — update nkt there",
+	"migrate.transferStalled":         "Transfer of %s stalled: %d min without data — the channel to the host broke",
 }
