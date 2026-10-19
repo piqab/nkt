@@ -69,3 +69,70 @@ func WithoutHosts(content string, drop []string) (string, bool) {
 	}
 	return content, false
 }
+
+// ReplaceHost — описание, где в compose.hosts хост from заменён на to
+// (перенос стека на другой хост). Остальной текст — как был. ok=false —
+// списка хостов нет (стек выбирается группой), from в нём нет или to там
+// уже есть.
+func ReplaceHost(content, from, to string) (string, bool) {
+	same := func(a, b string) bool {
+		return strings.EqualFold(strings.Trim(strings.TrimSpace(a), `"'`), strings.TrimSpace(b))
+	}
+	lines := strings.Split(content, "\n")
+	for i, l := range lines {
+		if m := hostsFlowRe.FindStringSubmatch(l); m != nil {
+			names := strings.Split(m[2], ",")
+			found := -1
+			for k, n := range names {
+				switch {
+				case same(n, to):
+					return content, false
+				case same(n, from):
+					found = k
+				}
+			}
+			if found < 0 {
+				return content, false
+			}
+			out := make([]string, 0, len(names))
+			for k, n := range names {
+				if n = strings.TrimSpace(n); n == "" {
+					continue
+				}
+				if k == found {
+					n = to
+				}
+				out = append(out, n)
+			}
+			lines[i] = m[1] + "hosts: [" + strings.Join(out, ", ") + "]" + m[3]
+			return strings.Join(lines, "\n"), true
+		}
+		if m := hostsBlockRe.FindStringSubmatch(l); m != nil {
+			indent := len(m[1])
+			found := -1
+			for j := i + 1; j < len(lines); j++ {
+				it := listItemRe.FindStringSubmatch(lines[j])
+				if it == nil || len(it[1]) < indent {
+					break
+				}
+				switch {
+				case same(it[2], to):
+					return content, false
+				case same(it[2], from):
+					found = j
+				}
+			}
+			if found < 0 {
+				return content, false
+			}
+			it := listItemRe.FindStringSubmatch(lines[found])
+			repl := it[1] + "- " + to
+			if it[3] != "" {
+				repl += " " + it[3]
+			}
+			lines[found] = repl
+			return strings.Join(lines, "\n"), true
+		}
+	}
+	return content, false
+}

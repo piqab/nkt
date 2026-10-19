@@ -71,6 +71,8 @@ const TILE_H = 46
 const GAP = 8
 const COLS = 3
 const COLLAPSED = 12
+/** Меток Traffic Fly на плитке, дальше — «+N». */
+const MARKS_MAX = 3
 const HEAD_H = 34
 /** Подпись над рамкой стека. */
 const STACK_H = 16
@@ -234,7 +236,7 @@ export function HostsMap({
   }, [hasMoving])
   void tick
   const startMove = async (d: DraftMove) => {
-    const res = await api<{ job_id: number }>('/hub/migrate', { method: 'POST', body: { from: d.from.id, to: d.to.id, container: d.item.name, switch_fly: d.switchFly, clean_leftovers: d.cleanLeftovers } })
+    const res = await api<{ job_id: number }>('/hub/migrate', { method: 'POST', body: { from: d.from.id, to: d.to.id, container: d.item.name, switch_fly: d.switchFly, clean_leftovers: d.cleanLeftovers, switch_pipeline: d.switchPipeline } })
     setMoving((l) => [...l, { id: res.job_id, from: d.from.id, to: d.to.id, names: d.names, title: d.item.name, started: Date.now() }])
     return res.job_id
   }
@@ -269,7 +271,8 @@ export function HostsMap({
     try {
       const pv = await api<MigratePreview>('/hub/migrate/preview', { method: 'POST', body: { from: ask.from.id, to: ask.to.id, container: ask.item.name }, timeoutMs: 120_000 })
       const problems = (pv.leftovers ? pv.leftovers.problems : pv.problems) ?? []
-      if (problems.length > 0 || (pv.warnings ?? []).length > 0) {
+      // Конвейер, который перенос не переключит, — тоже повод показать окно.
+      if (problems.length > 0 || (pv.warnings ?? []).length > 0 || (pv.pipeline && !pv.pipeline.can_switch)) {
         setMigrateAsk(ask)
         return
       }
@@ -280,6 +283,7 @@ export function HostsMap({
         names: (pv.plan.containers ?? []).map((c) => c.name),
         switchFly: (pv.fly ?? []).length > 0,
         cleanLeftovers: !!pv.leftovers,
+        switchPipeline: !!pv.pipeline?.can_switch,
       })
       onOpenJob?.(id)
     } catch {
@@ -405,6 +409,7 @@ export function HostsMap({
     return { links, routeColor, pipeColor }
   }, [data.data])
 
+  const routesById = useMemo(() => new Map((data.data?.routes ?? []).map((r) => [r.id, r])), [data.data])
   const visibleLinks = links.filter((l) => (l.from.startsWith('route:') ? showFly : showDeploy))
   const linkedTiles = new Set(visibleLinks.map((l) => l.to))
 
@@ -1059,23 +1064,52 @@ export function HostsMap({
                           </text>
                         )}
                         {/* Метки связей: маршрут Traffic Fly — кружок (пустой — резерв,
-                            красный центр — не жива), конвейер — квадрат. */}
-                        {flyMarks.map((l, i) =>
-                          mig?.role === 'from' ? (
-                            // Старая копия после переноса — резерв, остановлена
-                            // намеренно: не мигает, серая.
-                            <circle key={`f${i}`} cx={TILE_W - 10 - i * 14} cy={11} r={5} fill="var(--surface-raised)" stroke="var(--text-muted)" strokeWidth={2}>
-                              {!privacy && <title>{t('hostsMap.flyOldCopy')}</title>}
-                            </circle>
-                          ) : (
-                            <circle key={`f${i}`} cx={TILE_W - 10 - i * 14} cy={11} r={5} fill={l.dashed ? 'var(--surface-raised)' : l.color} stroke={l.color} strokeWidth={2}>
-                              {l.dead && <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" />}
-                            </circle>
-                          ),
-                        )}
-                        {pipeMarks.slice(0, 1).map((l) => (
-                          <rect key="p" x={TILE_W - 15 - flyMarks.length * 14} y={6} width={10} height={10} rx={2} fill={l.color} />
-                        ))}
+                            мигает — не жива), конвейер — квадрат. Больше трёх — два
+                            кружка и «+N» (красный и мигает, если среди скрытых есть
+                            упавшая цель); весь список — в подсказке. */}
+                        {(() => {
+                          const old = mig?.role === 'from'
+                          const shown = flyMarks.length > MARKS_MAX ? flyMarks.slice(0, MARKS_MAX - 1) : flyMarks
+                          const hidden = flyMarks.slice(shown.length)
+                          const hiddenDead = !old && hidden.some((l) => l.dead)
+                          const width = shown.length * 14 + (hidden.length ? 26 : 0)
+                          const tip = flyMarks
+                            .map((l) => {
+                              const r = routesById.get(l.from.slice('route:'.length))
+                              const name = r ? routeTitle(r) : l.from
+                              const role = old ? t('hostsMap.flyOldCopy') : l.dashed ? t('hostsMap.flyReserve') : t('hostsMap.flyActive')
+                              return `${name} · ${role}${l.dead && !old ? ` · ${t('hostsMap.flyDead')}` : ''}`
+                            })
+                            .join('\n')
+                          return (
+                            <g>
+                              {!privacy && flyMarks.length > 0 && <title>{tip}</title>}
+                              {shown.map((l, i) =>
+                                old ? (
+                                  // Старая копия после переноса — резерв, остановлена
+                                  // намеренно: не мигает, серая.
+                                  <circle key={`f${i}`} cx={TILE_W - 10 - i * 14} cy={11} r={5} fill="var(--surface-raised)" stroke="var(--text-muted)" strokeWidth={2} />
+                                ) : (
+                                  <circle key={`f${i}`} cx={TILE_W - 10 - i * 14} cy={11} r={5} fill={l.dashed ? 'var(--surface-raised)' : l.color} stroke={l.color} strokeWidth={2}>
+                                    {l.dead && <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" />}
+                                  </circle>
+                                ),
+                              )}
+                              {hidden.length > 0 && (
+                                <g transform={`translate(${TILE_W - 6 - shown.length * 14 - 22},4)`}>
+                                  <rect width={22} height={14} rx={7} fill={hiddenDead ? 'var(--status-critical)' : 'var(--surface-raised)'} stroke={hiddenDead ? 'var(--status-critical)' : 'var(--border-strong, #bbb)'} />
+                                  <text x={11} y={10.5} fontSize={9} textAnchor="middle" fill={hiddenDead ? '#fff' : 'var(--text-secondary)'}>
+                                    +{hidden.length}
+                                  </text>
+                                  {hiddenDead && <animate attributeName="opacity" values="1;0.35;1" dur="1.5s" repeatCount="indefinite" />}
+                                </g>
+                              )}
+                              {pipeMarks.slice(0, 1).map((l) => (
+                                <rect key="p" x={TILE_W - 15 - width} y={6} width={10} height={10} rx={2} fill={l.color} />
+                              ))}
+                            </g>
+                          )
+                        })()}
                       </g>
                     )
                   })}
@@ -1210,6 +1244,8 @@ interface MigratePreview {
   problems?: string[]
   warnings?: string[]
   fly?: { route: string; title: string; ref: string; was_active: boolean }[]
+  /** Стек выложен конвейером: его хост, учёт и сайт переключаются. */
+  pipeline?: { name: string; domains?: string[]; can_switch: boolean } | null
   /** Перенос обратно: остатки старой копии на новом хосте. */
   leftovers?: { record: string; host: string; ts: string; containers: string[]; paths?: string[]; volumes?: string[]; problems?: string[] }
 }
@@ -1222,6 +1258,7 @@ interface DraftMove {
   names: string[]
   switchFly: boolean
   cleanLeftovers: boolean
+  switchPipeline: boolean
 }
 
 /** Перенос в работе. */
@@ -1254,6 +1291,7 @@ function MigrateModal({
   const [busy, setBusy] = useState(false)
   const [switchFly, setSwitchFly] = useState(true)
   const [clean, setClean] = useState(true)
+  const [switchPipe, setSwitchPipe] = useState(true)
   useEffect(() => {
     api<MigratePreview>('/hub/migrate/preview', { method: 'POST', body: { from: ask.from.id, to: ask.to.id, container: ask.item.name }, timeoutMs: 120_000 })
       .then(setPv)
@@ -1275,6 +1313,7 @@ function MigrateModal({
         names: (pv?.plan.containers ?? []).map((c) => c.name),
         switchFly: switchFly && (pv?.fly ?? []).length > 0,
         cleanLeftovers: clean && !!pv?.leftovers,
+        switchPipeline: switchPipe && !!pv?.pipeline?.can_switch,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -1348,6 +1387,28 @@ function MigrateModal({
                 {w}
               </Banner>
             ))}
+            {pv?.pipeline && (
+              <div>
+                <strong>{t('hostsMap.pipelineStack', { name: pv.pipeline.name })}</strong>
+                {pv.pipeline.can_switch ? (
+                  <>
+                    <div>
+                      <Checkbox checked={switchPipe} onChange={(e) => setSwitchPipe(e.target.checked)}>
+                        {t('hostsMap.switchPipeline', { host: ask.to.name })}
+                      </Checkbox>
+                    </div>
+                    {switchPipe && (pv.pipeline.domains ?? []).length > 0 && (
+                      <span className="muted">
+                        {t('hostsMap.pipelineSite')} <span className="mono sensitive">{(pv.pipeline.domains ?? []).join(', ')}</span>
+                      </span>
+                    )}
+                    {!switchPipe && <Banner kind="error">{t('hostsMap.pipelineStays', { name: pv.pipeline.name, host: ask.from.name })}</Banner>}
+                  </>
+                ) : (
+                  <Banner kind="warn">{t('hostsMap.pipelineCannot', { name: pv.pipeline.name, host: ask.from.name })}</Banner>
+                )}
+              </div>
+            )}
             <Banner kind="warn">{t('hostsMap.migrateDowntime')}</Banner>
             {pv?.leftovers && (
               <Banner kind="warn">
