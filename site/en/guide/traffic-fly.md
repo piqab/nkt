@@ -206,6 +206,13 @@ Everything is done with the mouse (or a finger on a phone):
   route's first target; if unknown, the map asks.
 - Drag a target **onto another route** to move it there as a reserve;
   **into the trash** to remove it from the pool.
+- **Swap:** a route's active targets are drawn on top with the reserves
+  below. Drag a reserve onto an active target (or an active one onto a
+  reserve) of the same route and those two trade places: the reserve goes
+  into service, the active one into reserve, the rest of the pool stays as
+  is. While dragging, the spot is highlighted green "↑ switch here" or red
+  "target down": only a target that passes its check goes into service,
+  and only after the same "Switch traffic from A to B?" question.
 - **Mouse wheel** over a target changes its weight by ±1.
 - **Clicking a target** opens a menu: “Switch traffic here”, “Activate”,
   “To reserve”, “Edit” (port, weight), “Move to another route”, “Remove

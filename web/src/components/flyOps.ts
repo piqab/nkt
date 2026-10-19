@@ -3,7 +3,7 @@
 // применения: что добавится, что уйдёт в резерв, что уберётся.
 
 export interface FlyOp {
-  op: 'add' | 'switch' | 'active' | 'reserve' | 'edit' | 'move' | 'remove'
+  op: 'add' | 'switch' | 'active' | 'reserve' | 'edit' | 'move' | 'remove' | 'swap'
   route: string
   target?: string
   to?: string
@@ -12,6 +12,8 @@ export interface FlyOp {
   ref?: string
   port?: number
   weight?: number
+  /** swap: рабочая цель, которая уходит в резерв (Target — в работу). */
+  with?: string
 }
 
 export interface OpTarget {
@@ -61,6 +63,14 @@ export function applyOps<T extends OpRoute>(routes: T[], ops: FlyOp[]): T[] {
       case 'active':
         if (ti >= 0) r.targets[ti].drain = false
         break
+      case 'swap': {
+        const wi = r.targets.findIndex((t) => t.id === op.with)
+        if (ti >= 0 && wi >= 0 && r.targets[ti].drain && !r.targets[wi].drain) {
+          r.targets[ti].drain = false
+          r.targets[wi].drain = true
+        }
+        break
+      }
       case 'reserve':
         if (ti >= 0) r.targets[ti].drain = true
         break
@@ -125,6 +135,11 @@ export function opBlocked(routes: OpRoute[], op: FlyOp, alive: (route: string, t
   switch (op.op) {
     case 'switch':
       return alive(r.id, t.id) ? null : 'fly.opNotAliveUI'
+    case 'swap': {
+      const w = r.targets.find((x) => x.id === op.with)
+      if (!w || !t.drain || w.drain) return 'fly.opSwapUI'
+      return alive(r.id, t.id) ? null : 'fly.opNotAliveUI'
+    }
     case 'reserve':
     case 'move':
       return !t.drain && activeCount(r) <= 1 ? 'fly.opLastActiveUI' : null
@@ -139,6 +154,7 @@ export function opKeys(op: FlyOp): string[] {
   const keys = [`r:${op.route}`]
   if (op.target) keys.push(`t:${op.route}/${op.target}`)
   if (op.to) keys.push(`r:${op.to}`)
+  if (op.with) keys.push(`t:${op.route}/${op.with}`)
   return keys
 }
 

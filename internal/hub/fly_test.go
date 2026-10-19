@@ -333,6 +333,23 @@ func TestFlyApplyOps(t *testing.T) {
 	if err != nil || !sw[0].Targets[0].Drain || sw[0].Targets[1].Drain {
 		t.Fatalf("switch: %v %+v", err, sw[0].Targets)
 	}
+	// Обмен: в пуле с двумя рабочими меняются местами только эти две
+	// цели; резервная — только живая; наоборот (рабочая в Target) — отказ.
+	pool := []FlyRoute{{ID: "p", Gateway: gw, Kind: fly.KindTCP, Port: 3000, Algorithm: fly.AlgoLeastConn, Check: fly.Check{Kind: fly.CheckTCP},
+		Targets: []FlyTarget{{ID: "a", HostID: host, Kind: "container", Ref: "a", Port: 1}, {ID: "b", HostID: host, Kind: "container", Ref: "b", Port: 1}, {ID: "r", HostID: host, Kind: "container", Ref: "r", Port: 1, Drain: true}}}}
+	if _, err := s.flyApplyOps(ctx, pool, []FlyOp{{Op: "swap", Route: "p", Target: "r", With: "a"}}, map[string]bool{}); err == nil {
+		t.Fatal("swap to unchecked target accepted")
+	}
+	sp, err := s.flyApplyOps(ctx, pool, []FlyOp{{Op: "swap", Route: "p", Target: "r", With: "a"}}, map[string]bool{"p/r": true})
+	if err != nil || !sp[0].Targets[0].Drain || sp[0].Targets[1].Drain || sp[0].Targets[2].Drain {
+		t.Fatalf("swap: %v %+v", err, sp[0].Targets)
+	}
+	if !pool[0].Targets[2].Drain {
+		t.Fatal("swap changed the input")
+	}
+	if _, err := s.flyApplyOps(ctx, pool, []FlyOp{{Op: "swap", Route: "p", Target: "a", With: "b"}}, map[string]bool{"p/a": true}); err == nil {
+		t.Fatal("swap of two active targets accepted")
+	}
 	for _, bad := range []FlyOp{
 		{Op: "reserve", Route: "api", Target: "x"},
 		{Op: "move", Route: "api", Target: "x", To: "app"},

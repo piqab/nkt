@@ -28,6 +28,9 @@ import (
 //	edit     — порт и вес;
 //	move     — в маршрут To резервом; последнюю рабочую — нельзя;
 //	remove   — убрать; только резервную.
+//	swap     — обмен: резервная Target — в работу, рабочая With — в
+//	           резерв (остальные цели не трогаются); Target — только
+//	           живая по проверке.
 type FlyOp struct {
 	Op     string `json:"op"`
 	Route  string `json:"route"`
@@ -38,6 +41,8 @@ type FlyOp struct {
 	Ref    string `json:"ref,omitempty"`
 	Port   int    `json:"port,omitempty"`
 	Weight int    `json:"weight,omitempty"`
+	// With — у swap: рабочая цель, которая уходит в резерв.
+	With string `json:"with,omitempty"`
 }
 
 // KindFlyOps — задание «изменения Traffic Fly с карты».
@@ -165,6 +170,25 @@ func (s *Server) flyApplyOps(ctx context.Context, in []FlyRoute, ops []FlyOp, al
 			for i := range routes[ri].Targets {
 				routes[ri].Targets[i].Drain = i != ti
 			}
+		case "swap":
+			// Одним шагом: двумя операциями маршрут на миг остался бы
+			// без этой рабочей цели.
+			ti, err := target(ri, op.Target)
+			if err != nil {
+				return nil, err
+			}
+			wi, err := target(ri, op.With)
+			if err != nil {
+				return nil, err
+			}
+			if !routes[ri].Targets[ti].Drain || routes[ri].Targets[wi].Drain || ti == wi {
+				return nil, msgs.Errorf("fly.opSwapBad", op.Route, op.Target, op.With)
+			}
+			if !alive[op.Route+"/"+op.Target] {
+				return nil, msgs.Errorf("fly.opNotAlive", op.Route, op.Target)
+			}
+			routes[ri].Targets[ti].Drain = false
+			routes[ri].Targets[wi].Drain = true
 		case "active":
 			ti, err := target(ri, op.Target)
 			if err != nil {
