@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.43 — 2026-10-19
+
+- **Traffic Fly: active targets on top, switching by drag.** On the map
+  and in route details active targets come first with reserves below.
+  While editing the map, drop a reserve onto an active target of the same
+  route (or the other way round) and those two trade places; the rest of
+  the pool stays as is. The spot is highlighted green or red; only a
+  target that passes its check goes into service, and only after the
+  "Switch traffic from A to B?" question.
+
 ## v1.13.42 — 2026-10-18
 
 - **Hosts map: wheel zoom works.** The wheel handler was attached before

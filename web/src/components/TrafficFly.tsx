@@ -366,6 +366,22 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
     return ok
   }
 
+  /** Обмен рабочей и резервной цели маршрута (перетаскиванием одной на
+   * другую): в работу — резервная из пары, только живая, с вопросом. */
+  async function swapTargets(r: FlyRoute, dragged: FlyTarget, otherId: string) {
+    const route = preview.find((x) => x.id === r.id)
+    const other = route?.targets.find((x) => x.id === otherId)
+    if (!route || !other || other.id === dragged.id || !!other.drain === !!dragged.drain) return
+    const up = dragged.drain ? dragged : other
+    const down = dragged.drain ? other : dragged
+    if (!alive(r.id, up.id)) {
+      setError(t('fly.opNotAliveUI'))
+      return
+    }
+    const ok = await confirmAction(t('fly.switchConfirm', { from: targetName(down), to: targetName(up) }), { title: t('fly.switchConfirmTitle'), okText: t('fly.switchOk'), danger: false })
+    if (ok) void dispatch({ op: 'swap', route: r.id, target: up.id, with: down.id })
+  }
+
   async function leaveMapEdit() {
     if (await discardDraft()) setMapEdit(false)
   }
@@ -474,6 +490,11 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
                   onMoveDrop={(r, tg, dest) => {
                     if (dest === 'trash') void dispatch({ op: 'remove', route: r.id, target: tg.id })
                     else if (dest.startsWith('route:') && dest.slice(6) !== r.id) void dispatch({ op: 'move', route: r.id, target: tg.id, to: dest.slice(6) })
+                    else if (dest.startsWith('target:')) {
+                      const [rid, tid] = dest.slice(7).split('/')
+                      if (rid !== r.id) void dispatch({ op: 'move', route: r.id, target: tg.id, to: rid })
+                      else void swapTargets(r, tg, tid)
+                    }
                   }}
                   onWeight={(r, tg, delta) => {
                     const w = Math.min(100, Math.max(1, (tg.weight ?? 1) + delta))
@@ -925,6 +946,9 @@ function FlyMap({
   const { t } = useTranslation()
   const [over, setOver] = useState<string | null>(null)
   const [drag, setDrag] = useState<{ x: number; y: number; label: string } | null>(null)
+  // Какую цель тащат: цели того же маршрута в другом состоянии — места
+  // для обмена (рабочая ↔ резервная).
+  const [dragFrom, setDragFrom] = useState<{ route: string; id: string; drain: boolean } | null>(null)
   const [privacy] = usePrivacy()
   const ROW = 46
   // Столбцы равной ширины: цели не растягиваются, длинные имена
@@ -938,7 +962,9 @@ function FlyMap({
   // Убранные в черновике — бледными на прежнем месте.
   const targets: { route: FlyRoute; t: FlyTarget; ghost?: boolean }[] = []
   for (const r of doc.routes) {
-    for (const tg of r.targets) targets.push({ route: r, t: tg })
+    // Рабочие цели — сверху, резервные — под ними (порядок описания
+    // внутри групп): видно, куда идёт трафик и чем его заменить.
+    for (const tg of [...r.targets.filter((x) => !x.drain), ...r.targets.filter((x) => x.drain)]) targets.push({ route: r, t: tg })
     for (const g of ghosts ?? []) if (g.route === r.id) targets.push({ route: r, t: g.target, ghost: true })
   }
   const rows = Math.max(gwIDs.length, doc.routes.length, targets.length, 1)
@@ -959,6 +985,10 @@ function FlyMap({
       const p = press.current
       if (!p) return
       if (!p.started && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < 6) return
+      if (!p.started) {
+        const x = targetsRef.current[p.i]
+        if (x) setDragFrom({ route: x.route.id, id: x.t.id, drain: !!x.t.drain })
+      }
       p.started = true
       setDrag({ x: e.clientX, y: e.clientY, label: p.label })
       setOver(dropAt(e.clientX, e.clientY))
@@ -969,6 +999,7 @@ function FlyMap({
       if (!p) return
       const x = targetsRef.current[p.i]
       setDrag(null)
+      setDragFrom(null)
       setOver(null)
       if (!x) return
       if (!p.started) {
@@ -981,6 +1012,7 @@ function FlyMap({
     const cancel = () => {
       press.current = null
       setDrag(null)
+      setDragFrom(null)
       setOver(null)
     }
     // Колесо над целью — вес ±1 (не чаще раза в 120 мс: тачпад шлёт
@@ -1066,13 +1098,16 @@ function FlyMap({
       mark?: OpMark
       busy?: number
       index?: number
+      /** Сюда можно бросить для обмена: ok — та, что встанет в работу,
+       * жива; dead — нет (бросок ничего не сделает). */
+      swap?: 'ok' | 'dead'
       /** Подпись (и вторая строка) — чувствительные: имена, адреса. */
       secret?: boolean
       secretSub?: boolean
     } = {},
   ) => {
     const cy = y(i, n)
-    const right = opts.busy !== undefined ? 56 : opts.mark ? 70 : 0
+    const right = opts.busy !== undefined ? 56 : opts.swap ? 100 : opts.mark ? 70 : 0
     // Сколько знаков помещается: ~7 px на знак при 12 px.
     const max = Math.floor((BW[col] - 34 - right) / 7)
     const hot = !!opts.drop && over === opts.drop
@@ -1111,8 +1146,8 @@ function FlyMap({
           height={34}
           rx={7}
           fill={hot ? 'var(--surface-hover, #e8f0fe)' : 'var(--surface-raised)'}
-          stroke={hot || opts.mark ? 'var(--accent, #1677ff)' : color}
-          strokeWidth={hot ? 3 : 2}
+          stroke={opts.swap === 'ok' ? 'var(--status-good)' : opts.swap === 'dead' ? 'var(--status-critical)' : hot || opts.mark ? 'var(--accent, #1677ff)' : color}
+          strokeWidth={hot || opts.swap ? 3 : 2}
           strokeDasharray={opts.dashed ? '6 4' : undefined}
         />
         <circle cx={12} cy={17} r={5} fill={color} />
@@ -1122,7 +1157,11 @@ function FlyMap({
         <text x={24} y={28} fontSize={10} fill="var(--text-secondary)" className={opts.secretSub ? 'sensitive' : undefined}>
           {midEllipsis(sub, Math.floor((BW[col] - 34 - right) / 6))}
         </text>
-        {opts.busy !== undefined
+        {opts.swap ? (
+          <text x={BW[col] - 8} y={21} fontSize={10} textAnchor="end" fill={opts.swap === 'ok' ? 'var(--status-good)' : 'var(--status-critical)'}>
+            {t(opts.swap === 'ok' ? 'fly.swapHere' : 'fly.swapDead')}
+          </text>
+        ) : opts.busy !== undefined
           ? spinner(col, opts.busy)
           : opts.mark && (
               <text x={BW[col] - 8} y={21} fontSize={10} textAnchor="end" fill="var(--accent, #1677ff)">
@@ -1150,6 +1189,14 @@ function FlyMap({
     const tn = tunnelOf(r, tg.host_id)
     if (tn && tn.state !== 'up' && tn.state !== 'not_applied' && tn.state !== 'unknown') return 'var(--status-critical)'
     return !ts || !ts.checked ? 'var(--text-muted)' : ts.alive ? 'var(--status-good)' : 'var(--status-critical)'
+  }
+  // Цель — место для обмена с той, что тащат: тот же маршрут, другое
+  // состояние; в работу встаёт резервная из пары — она должна быть жива.
+  const swapHint = (x: { route: FlyRoute; t: FlyTarget; ghost?: boolean }): 'ok' | 'dead' | undefined => {
+    if (!dragFrom || x.ghost || x.route.id !== dragFrom.route || x.t.id === dragFrom.id || !!x.t.drain === dragFrom.drain) return undefined
+    const up = dragFrom.drain ? dragFrom.id : x.t.id
+    const st = stats.get(x.route.id)?.targets?.find((s) => s.id === up)
+    return st && st.checked && st.alive ? 'ok' : 'dead'
   }
   const lines: JSX.Element[] = []
   doc.routes.forEach((r, ri) => {
@@ -1218,8 +1265,9 @@ function FlyMap({
               full,
               secret: true,
               onClick: () => onRoute(x.route.id),
-              drop: editing && !x.ghost ? `route:${x.route.id}` : undefined,
+              drop: editing && !x.ghost ? `target:${key}` : undefined,
               route: x.ghost ? undefined : x.route,
+              swap: swapHint(x),
               dashed: !!x.t.drain,
               ghost: x.ghost,
               mark: x.ghost ? 'removed' : marks?.get(key),
@@ -1517,7 +1565,7 @@ function RouteDetails({
           </div>
         )}
         <DataTable<FlyTarget>
-          dataSource={route.targets}
+          dataSource={[...route.targets.filter((x) => !x.drain), ...route.targets.filter((x) => x.drain)]}
           rowKey="id"
           size="small"
           pagination={false}

@@ -4797,7 +4797,10 @@
     "draftKeep": "Keep editing",
     "paletteNone": "No host has targets of this kind",
     "paletteEmptyHidden": "hosts without targets hidden: {{n}} — show",
-    "paletteHideEmpty": "hide empty"
+    "paletteHideEmpty": "hide empty",
+    "swapHere": "↑ switch here",
+    "swapDead": "✗ target down",
+    "opSwapUI": "A swap needs an active and a reserve target of the same route"
   },
   "hostsMap": {
     "toggle": "Map",
