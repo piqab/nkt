@@ -10,6 +10,7 @@ export interface PipelineExample {
   project: string
   readme: string
   site: { service: string; port: number }
+  /** Образы вместо compose-файла; {hubversion} — версия этого хаба. */
   images?: Record<string, string>
   files?: string[]
   /** Публикации вместо compose-файла; {hostip} — адрес выбранного хоста
@@ -24,6 +25,8 @@ export interface PipelineExample {
    * создаст хаб при сохранении; {domain} — имя сайта примера. При
    * сохранении всё уходит в .env конвейера («Секреты»). */
   env?: [string, string][]
+  /** Свой код и образ nkt — без предупреждения о стороннем коде. */
+  own?: boolean
 }
 
 const NKT = 'https://github.com/piqab/nkt'
@@ -154,6 +157,21 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
       ['TSIG_CERT_MANAGER', 'generate:base64-32'],
       ['TSIG_TRANSFER', 'generate:base64-32'],
     ],
+  },
+  {
+    key: 'nkthub',
+    link: `${NKT}/blob/main/deploy/docker-compose.hub.release.yml`,
+    project: 'nkt-hub-test',
+    readme: `${NKT}/tree/main/examples/nkt-hub-test`,
+    site: { service: 'hub', port: 8077 },
+    own: true,
+    // Версия — как у этого хаба: в томе тестового хаба ключ и секреты,
+    // latest сдвинулся бы при следующем релизе.
+    images: { hub: 'ghcr.io/piqab/nkt-hub:{hubversion}' },
+    // Не 8443/8446 — их может держать сам хаб на этой машине.
+    ports: { hub: ['127.0.0.1:18443:8077', '127.0.0.1:18446:8446'] },
+    envKeys: { hub: ['NKT_BOOTSTRAP_ADMIN_PASSWORD'] },
+    env: [['NKT_BOOTSTRAP_ADMIN_PASSWORD', 'generate:password']],
   },
   {
     key: 'plausible',

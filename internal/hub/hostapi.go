@@ -12,6 +12,7 @@ import (
 
 	"github.com/piqab/nkt/internal/msgs"
 
+	"github.com/piqab/nkt/internal/api"
 	"github.com/piqab/nkt/internal/auth"
 )
 
@@ -78,6 +79,7 @@ func (m *Manager) HostAPITimeout(ctx context.Context, hostID int64, method, path
 		return 0, err
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
+	req.Header.Set(api.HubIDHeader, m.instanceID(ctx))
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

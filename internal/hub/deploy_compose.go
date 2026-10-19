@@ -157,6 +157,12 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	if bad := s.composeEngineProblems(ctx, jc, user, targets); len(bad) > 0 {
 		return msgs.Errorf("deploy.composeEngines", strings.Join(bad, "; "))
 	}
+	// Хаб в контейнере не выкладывает стек, в котором работает сам.
+	for _, t := range targets {
+		if p := s.hubStackOn(ctx, user, t.ID); p != "" && p == c.Project {
+			return msgs.Errorf("deploy.selfStack", c.Project, t.Name)
+		}
+	}
 	jc.Log("deploy.composeFiles", len(files), c.Project, len(targets))
 	for _, cf := range cfgs {
 		jc.Log("deploy.configMount", cf.Service, cf.Target, strings.Join(deploy.ConfigVars(cf.Content), ", "))

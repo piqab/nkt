@@ -26,7 +26,7 @@ func TestExamplePipelinesParse(t *testing.T) {
 		if _, err := EnvBlock(text); err != nil {
 			t.Errorf("%s: env: %v", f, err)
 		}
-		if !strings.Contains(f, "hello-app") && !strings.HasPrefix(text, "# WARNING") {
+		if !strings.Contains(f, "hello-app") && !strings.Contains(f, "nkt-hub-test") && !strings.HasPrefix(text, "# WARNING") {
 			t.Errorf("%s: no WARNING on top", f)
 		}
 	}

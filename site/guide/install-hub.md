@@ -88,7 +88,9 @@ journalctl -u netknownsthat-hub -f
 ## Вариант 3. Docker Compose
 
 Готовый образ `ghcr.io/piqab/nkt-hub` публикуется под каждый релиз,
-`docker login` не нужен:
+`docker login` не нужен (если `pull` отвечает «denied» — пакет в GitHub
+ещё закрыт: владелец репозитория открывает его один раз, Packages →
+`nkt-hub` → Package settings → Change visibility → Public):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/piqab/nkt/main/deploy/docker-compose.hub.release.yml

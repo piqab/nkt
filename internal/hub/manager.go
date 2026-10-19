@@ -234,6 +234,9 @@ func (j *installJob) cancelNow() {
 // Manager registers remote hosts, installs nkt on them over SSH, and proxies
 // their own web API through the connections it keeps open (see proxy.go).
 type Manager struct {
+	// instance — идентификатор этого хаба для хостов (instance_id.go).
+	instance     string
+	instanceOnce sync.Once
 	// out — исходящие вебхуки (webhooks_out.go), заводятся при первом событии.
 	out     *outDispatcher
 	outOnce sync.Once

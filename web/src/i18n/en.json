@@ -805,6 +805,9 @@
     "f2bMissing": "fail2ban is not installed",
     "f2bStopped": "fail2ban down",
     "f2bBannedHint": "How many addresses fail2ban keeps banned right now",
+    "otherHub": "Another hub talked to this host ({{min}} min ago). Two hubs over one host get in each other's way: polled deployments, Traffic Fly “Apply”, updates, the narrow sudo key. If one is a test hub, remove the host from one of them.",
+    "otherHubShort": "another hub",
+    "importHostsSecondHub": "The hosts in the file stay under the hub the export came from too. If it keeps running (say this hub is a test one), both will manage the same hosts: polled deployments, Traffic Fly, updates, the narrow sudo key. For a test hub skip hosts, pipelines, Traffic Fly and nkt-edge.",
     "importSection": {
       "hosts": "Hosts",
       "profiles": "Profiles",
@@ -3561,6 +3564,10 @@
         "technitium": {
           "title": "Technitium DNS Server",
           "hint": "Your own name server: zones, DNS-01 checks for certificates (cert-manager), failover records, DoH; the secondary is a second pipeline (README)"
+        },
+        "nkthub": {
+          "title": "Test nkt hub",
+          "hint": "A second hub in Docker next to this one (localhost): its own port 18443, the admin password in \"Secrets\"; do not import the production hosts into it (README)"
         }
     },
     "imagesComment": "pinned image versions",

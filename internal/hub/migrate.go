@@ -247,6 +247,10 @@ func (s *Server) migrateInspect(ctx context.Context, user string, from, to int64
 	if code, err := s.hostCallLong(ctx, user, to, "POST", "/api/migrate/check", raw, &c); err != nil {
 		return p, c, old(code, err, to)
 	}
+	// Хаб в контейнере не переносит стек, в котором работает сам.
+	if hp := s.hubStackOn(ctx, user, from); hp != "" && hp == p.Project {
+		p.Refuse = append(p.Refuse, "migrate.selfStack:"+p.Project)
+	}
 	return p, c, nil
 }
 

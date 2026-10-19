@@ -92,7 +92,9 @@ journalctl -u netknownsthat-hub -f
 ## Option 3. Docker Compose
 
 The `ghcr.io/piqab/nkt-hub` image is published for every release, no
-`docker login` needed:
+`docker login` needed (if `pull` answers "denied", the package is still
+private on GitHub: the repository owner opens it once, Packages →
+`nkt-hub` → Package settings → Change visibility → Public):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/piqab/nkt/main/deploy/docker-compose.hub.release.yml
