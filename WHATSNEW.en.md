@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.56 — 2026-10-19
+
+- **Moving a pipeline's stack** (Forgejo, n8n, WordPress or any other
+  deployed by a pipeline): the move window recognises the pipeline's
+  stack and, with a checkbox (on), switches the pipeline to the new host —
+  the host in the description (a new version), the deployment record and
+  the site (proxy and certificate on the new host, removed from the old
+  one). "Roll back" switches the pipeline back too. Without switching
+  there is a red warning: the next deployment would bring the stack up on
+  the old host.
+- **Many routes on a map tile** — two circles and "+N" (red and blinking
+  if a hidden one has a failing target); the full list is in the tooltip.
+  Before, the marks ran over the container's name.
+
 ## v1.13.55 — 2026-10-19
 
 - **The map after a move — no stale data.** A host refreshes its

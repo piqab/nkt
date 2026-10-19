@@ -263,6 +263,10 @@ Traffic Fly routes and deployment pipelines with links to their tiles.
   pipeline or tile highlights its links and dims the rest; clicking empty
   space clears it. The legend on top has "Traffic Fly" and "Deployments"
   checkboxes and the colour chips.
+- **Marks on a tile**: Traffic Fly route circles and the pipeline square.
+  With more than three routes — two circles and **+N**; if a hidden one has
+  a failing target, +N is red and blinks. The full list (route, active or
+  reserve, alive or not) is in the tooltip over the marks.
 - **Zoom and pan**: the mouse wheel zooms at the cursor, dragging empty
   space pans; buttons **−**, **+**, the percentage (100 %) and **Fit**.
   The view is remembered.
@@ -366,9 +370,22 @@ and the cursor reads `stack <name> · containers: N`.
   goes to reserve; if it is not alive within 90 s the swap happens anyway,
   since the old one is stopped), a reserve stays a reserve. "Roll back"
   swaps them back, "Remove old" also removes the old target from the route.
-- Sites are not switched by the move — set up the proxy on the new host and
-  the DNS A record afterwards. Deployment pipeline stacks are not moved;
-  both hosts need nkt 1.13.44 or newer.
+- **A pipeline's stack.** If the stack was deployed by a pipeline (per the
+  deployment record), the window says "The stack was deployed by pipeline
+  …" and offers the **Switch the pipeline to the new host** checkbox (on).
+  After the move the hub changes the host in the pipeline description (a
+  new version noted "stack move"), the deployment record and the
+  pipeline's site: the proxy and certificate go to the new host, the
+  proxy config is removed from the old one. The certificate is issued once
+  the A record points to the new host; until then the site shows an error
+  in "Sites", with "Retry" there. "Roll back" switches the pipeline back
+  too. Without the checkbox there is a red warning: the next deployment
+  would bring the stack up on the old host — two copies with different
+  data. A pipeline that picks hosts by group is not switched by the move —
+  the window says so ("Apply immediately" then shows the window too).
+- Sites set up by hand (not by a pipeline) are not switched by the move —
+  set up the proxy on the new host and the DNS A record afterwards. Both
+  hosts need nkt 1.13.44 or newer.
 
 
 ## Narrow sudo

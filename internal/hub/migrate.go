@@ -49,6 +49,9 @@ type MigrateParams struct {
 	// CleanLeftovers — move: на новом хосте лежат остатки старой копии
 	// этого же стека (перенос туда и обратно) — убрать их перед переносом.
 	CleanLeftovers bool `json:"clean_leftovers,omitempty"`
+	// SwitchPipeline — move: стек выложен конвейером — хост в его
+	// описании, учёт выкладки и сайт — на новый хост.
+	SwitchPipeline bool `json:"switch_pipeline,omitempty"`
 }
 
 // migrateFlyTarget — цель Traffic Fly, которую затронул перенос.
@@ -127,6 +130,9 @@ type migrateRecord struct {
 	Author   string `json:"author,omitempty"`
 	// Fly — цели Traffic Fly, переключённые переносом (для отката и уборки).
 	Fly []migrateFlyTarget `json:"fly,omitempty"`
+	// Pipeline — конвейер стека, переключённый на новый хост (откат —
+	// обратно).
+	Pipeline *migratePipeline `json:"pipeline,omitempty"`
 }
 
 const migrationsKey = "migrations"
@@ -289,7 +295,8 @@ func (s *Server) handleMigratePreview(w http.ResponseWriter, r *http.Request) {
 			warnings = append(warnings, msgs.Tc(ctx, "migrate.netShared", n.Name, strings.Join(n.Others, ", ")))
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"plan": p.Raw, "check": c, "problems": problems, "warnings": warnings, "fly": s.migrateFlyAffected(ctx, req.From, names), "leftovers": leftovers})
+	writeJSON(w, http.StatusOK, map[string]any{"plan": p.Raw, "check": c, "problems": problems, "warnings": warnings, "fly": s.migrateFlyAffected(ctx, req.From, names), "leftovers": leftovers,
+		"pipeline": s.migratePipelinePreview(ctx, req.From, req.To, p.Project)})
 }
 
 // handleMigrateStart — POST /hub/migrate {from, to, container}: перенос.
@@ -521,6 +528,12 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 			jc.Log("migrate.flyFailed", msgs.Localize(jc.Lang(), ferr))
 		}
 	}
+	var pipe *migratePipeline
+	if p.SwitchPipeline {
+		pipe = s.migratePipelineSwitch(ctx, jc, user, p.From, p.To, plan.Project)
+	} else if pl, ok := s.migratePipelineOf(ctx, p.From, plan.Project); ok {
+		jc.Log("migrate.pipelineNotSwitched", pl.Name, fromName)
+	}
 	jc.StepKey(5, 6, "migrate.stepRecord")
 	var vols, paths []string
 	for _, v := range plan.Volumes {
@@ -530,7 +543,7 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 		paths = append(paths, x.Path)
 	}
 	rec := migrateRecord{ID: id, TS: store.Now(), From: p.From, FromName: fromName, To: p.To, ToName: toName, Project: plan.Project, Kind: plan.Kind,
-		Containers: names, Volumes: vols, Paths: paths, State: "moved", Author: jc.Job.Author, Fly: fly}
+		Containers: names, Volumes: vols, Paths: paths, State: "moved", Author: jc.Job.Author, Fly: fly, Pipeline: pipe}
 	s.updateMigrations(ctx, func(l []migrateRecord) []migrateRecord { return append(l, rec) })
 	jc.StepKey(6, 6, "migrate.stepDone")
 	jc.Log("migrate.done", plan.Project, toName, fromName)
@@ -728,6 +741,7 @@ func (s *Server) migrateAfter(ctx context.Context, jc *jobs.Context, user string
 		}
 		jc.Log("migrate.rolledBack", rec.Project, rec.FromName, rec.ToName)
 		s.migrateFlyRevert(ctx, jc, user, rec.Fly)
+		s.migratePipelineRevert(ctx, jc, user, *rec)
 		state = "rolled_back"
 	case "remove":
 		jc.StepKey(1, 1, "migrate.stepRemoveOld", rec.Project, rec.FromName)

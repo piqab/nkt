@@ -20,3 +20,25 @@ func TestWithoutHosts(t *testing.T) {
 		t.Fatal("группа — не список")
 	}
 }
+
+func TestReplaceHost(t *testing.T) {
+	flow := "action: compose\ncompose:\n  project: shop\n  hosts: [web1, \"web2\"]   # где\n"
+	got, ok := ReplaceHost(flow, "WEB2", "web3")
+	if !ok || got != "action: compose\ncompose:\n  project: shop\n  hosts: [web1, web3]   # где\n" {
+		t.Fatalf("flow: %v %q", ok, got)
+	}
+	if _, ok := ReplaceHost(flow, "web1", "web2"); ok {
+		t.Fatal("to already there")
+	}
+	if _, ok := ReplaceHost(flow, "nope", "web3"); ok {
+		t.Fatal("from missing")
+	}
+	block := "compose:\n  hosts:\n    - web1   # основной\n    - web2\n  project: shop\n"
+	got, ok = ReplaceHost(block, "web1", "web9")
+	if !ok || got != "compose:\n  hosts:\n    - web9 # основной\n    - web2\n  project: shop\n" {
+		t.Fatalf("block: %v %q", ok, got)
+	}
+	if _, ok := ReplaceHost("compose:\n  group: prod\n", "web1", "web2"); ok {
+		t.Fatal("group")
+	}
+}

@@ -549,4 +549,11 @@ var enSitesCatalog = map[string]string{
 	"hub.edgeUp":                      "nkt-edge %s is back online (was away %d min)",
 	"hub.certExpiring":                "the certificate of %s expires in %d days (%s) — check the renewal",
 	"hub.certExpired":                 "the certificate of %s expired on %s — the site opens with an error",
+	"migrate.pipelineNote":            "stack move: %s → %s",
+	"migrate.pipelineSwitched":        "pipeline %s: host %s → %s (description, deployment record)",
+	"migrate.pipelineNoSwitch":        "pipeline %s: host %s cannot be replaced in the description (the stack is chosen by a group or the new host is already there) — edit the description by hand",
+	"migrate.pipelineFailed":          "pipeline %s not switched: %s",
+	"migrate.pipelineSiteFailed":      "site %s on %s not set up: %s — “Retry” in “Sites” once the A record points to the new host",
+	"migrate.pipelineGone":            "pipeline %s no longer exists — nothing to roll back in it",
+	"migrate.pipelineNotSwitched":     "the stack was deployed by pipeline %s, and the pipeline was not switched: the next deployment brings the stack up on %s again",
 }
