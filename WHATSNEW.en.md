@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.50 — 2026-10-19
+
+- **A stack on the map is one block.** Containers of one compose project
+  sit together in a shared frame labelled "stack <name>". While you drag any
+  of them, all the stack's tiles are highlighted and the cursor reads
+  "stack <name> · containers: N": the whole stack moves.
+- **External networks on a move.** The move window lists the stack's
+  external networks; one missing on the new host is an obstacle (before,
+  the stack failed to start). If the network has other containers, a
+  warning says they will not reach the stack after the move. "Remove old"
+  removes the project's networks too.
+- **"+N more" on a collapsed host** shows how many hidden containers are
+  planned or being moved.
+
 ## v1.13.49 — 2026-10-19
 
 - **Moving back works.** After moving a stack to another host and removing

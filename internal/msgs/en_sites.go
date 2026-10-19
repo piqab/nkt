@@ -538,4 +538,6 @@ var enSitesCatalog = map[string]string{
 	"migrate.flyRemoved":              "Traffic Fly: old targets removed: %d",
 	"migrate.leftoversCleaning":       "on %[2]s — leftovers of the old copy of %[1]s (moved %[3]s): removing them, the current data comes from here",
 	"migrate.removePath":              "directory %s",
+	"migrate.netMissing":              "the new host lacks the stack's external networks: %s — create them there (docker network create) or move the related stacks together",
+	"migrate.netShared":               "network %s is shared: on the old host %s are also attached — after the move they lose contact with this stack",
 }

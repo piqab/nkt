@@ -142,6 +142,8 @@ type migrateRemoveArgs struct {
 	Volumes    []string `json:"volumes,omitempty"`
 	// Paths — каталоги старой копии (рабочий каталог, bind-каталоги).
 	Paths []string `json:"paths,omitempty"`
+	// Project — compose-проект: его собственные сети (по метке) — прочь.
+	Project string `json:"project,omitempty"`
 }
 
 func (s *Server) startMigrateJob(ctx context.Context, user, op, titleKey, title string, args any) (int64, error) {
@@ -431,6 +433,13 @@ func (s *Server) migrateRemove(ctx context.Context, jc *jobs.Context, a migrateR
 		if res, err := RunTooling(ctx, "docker", "volume", "inspect", v); err == nil && res.OK() {
 			if err := runLogged(ctx, jc, "docker", "volume", "rm", v); err != nil {
 				return err
+			}
+		}
+	}
+	if a.Project != "" && migrateNameRe.MatchString(a.Project) {
+		if res, err := RunTooling(ctx, "docker", "network", "ls", "-q", "--filter", "label=com.docker.compose.project="+a.Project); err == nil && res.OK() {
+			for _, id := range strings.Fields(res.Stdout) {
+				_ = runLogged(ctx, jc, "docker", "network", "rm", id)
 			}
 		}
 	}

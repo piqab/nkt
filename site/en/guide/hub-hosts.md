@@ -270,8 +270,11 @@ Traffic Fly routes and deployment pipelines with links to their tiles.
   the current filters), the date and legend on top, at twice the screen
   density. In privacy mode host names, IPs and domains in the image are
   replaced by `•••`.
+- **A stack** — containers of one compose project (two or more) — sits
+  together, on a new row, in a shared dashed frame labelled "stack <name>".
 - A host with more than 12 tiles shows the first ones (linked and running
-  first) and **+N more**; **Expand all** shows everything.
+  first) and **+N more**; if some hidden containers are planned or being
+  moved, that tile also reads "moving: k". **Expand all** shows everything.
 - Filters: search by name, image, IP and stack, "running only" (also
   hides offline hosts), "linked only".
 - The hub reads the lists from the hosts through the same calls as the
@@ -288,7 +291,9 @@ The **Move** button above the map (admins) turns on move mode: drag a
 dragging in this mode, and the drop host is highlighted. A plan window
 opens: what moves, the data (volumes and directories with sizes), images
 (which the new host already has), ports and what is in the way; **Move**
-runs a job with a log.
+runs a job with a log. A stack's container moves with the whole stack:
+while it is dragged, all the stack's tiles and its frame are highlighted,
+and the cursor reads "stack <name> · containers: N".
 
 - **What moves.** A compose project container brings the whole project:
   the working directory (compose files, `.env`, directories next to it),
@@ -321,6 +326,13 @@ runs a job with a log.
   stack's directories). After a week, if the old one is still there, an
   "Old stack after a move" alert. Only a **stopped** container counts as
   the old copy: a running one (say, moved back) drags as usual.
+- **Networks.** Compose recreates the project's own networks on the new
+  host. The stack's **external** networks (`external: true`, made by
+  `docker network create` or by another stack) are listed in the window;
+  if such a network is missing on the new host, that is an obstacle (create
+  it there). If on the old host it has containers outside the stack, there
+  is a warning: after the move they will not reach the stack over that
+  network. "Remove old" removes the project's networks too.
 - **Moving back.** If the destination host has leftovers of this same
   stack's old copy (the stopped copy, or one removed without data), the
   window shows them and a **Remove the old copy's leftovers and move**

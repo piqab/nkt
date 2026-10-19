@@ -81,7 +81,11 @@ type migratePlanJSON struct {
 		Path string `json:"path"`
 		Size int64  `json:"size"`
 	} `json:"paths"`
-	Ports   []string `json:"ports"`
+	Ports    []string `json:"ports"`
+	Networks []struct {
+		Name   string   `json:"name"`
+		Others []string `json:"others"`
+	} `json:"networks"`
 	Arch    string   `json:"arch"`
 	Refuse  []string `json:"refuse"`
 	Skipped []string `json:"skipped"`
@@ -97,6 +101,7 @@ type migrateCheckJSON struct {
 	HaveImages    []string `json:"have_images"`
 	FreeBytes     int64    `json:"free_bytes"`
 	ProjectExists bool     `json:"project_exists"`
+	MissingNets   []string `json:"missing_networks"`
 }
 
 // migrateRecord — перенос в учёте хаба (KV): метка на карте, откат,
@@ -197,6 +202,9 @@ func migrateProblems(p migratePlanJSON, c migrateCheckJSON) [][2]string {
 	if c.ProjectExists {
 		out = append(out, [2]string{"migrate.projectExists", p.Project})
 	}
+	if len(c.MissingNets) > 0 {
+		out = append(out, [2]string{"migrate.netMissing", strings.Join(c.MissingNets, ", ")})
+	}
 	var need int64
 	for _, v := range p.Volumes {
 		need += v.Size
@@ -273,7 +281,15 @@ func (s *Server) handleMigratePreview(w http.ResponseWriter, r *http.Request) {
 	for _, c := range p.Containers {
 		names = append(names, c.Name)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"plan": p.Raw, "check": c, "problems": problems, "fly": s.migrateFlyAffected(ctx, req.From, names), "leftovers": leftovers})
+	// Внешняя сеть, к которой на старом хосте подключены и другие: после
+	// переноса они потеряют связь с этим стеком — предупреждение.
+	var warnings []string
+	for _, n := range p.Networks {
+		if len(n.Others) > 0 {
+			warnings = append(warnings, msgs.Tc(ctx, "migrate.netShared", n.Name, strings.Join(n.Others, ", ")))
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plan": p.Raw, "check": c, "problems": problems, "warnings": warnings, "fly": s.migrateFlyAffected(ctx, req.From, names), "leftovers": leftovers})
 }
 
 // handleMigrateStart — POST /hub/migrate {from, to, container}: перенос.
@@ -398,6 +414,11 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 	for _, sk := range plan.Skipped {
 		jc.Log("migrate.skippedPath", sk)
 	}
+	for _, n := range plan.Networks {
+		if len(n.Others) > 0 {
+			jc.Log("migrate.netShared", n.Name, strings.Join(n.Others, ", "))
+		}
+	}
 	var leftover *migrateRecord
 	var lpaths, lvols []string
 	if p.CleanLeftovers {
@@ -425,7 +446,7 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 		// Остатки старой копии на новом хосте — прочь: актуальные данные
 		// едут отсюда.
 		jc.Log("migrate.leftoversCleaning", plan.Project, toName, leftover.TS[:10])
-		body := map[string]any{"containers": leftover.Containers, "volumes": lvols, "paths": lpaths}
+		body := map[string]any{"containers": leftover.Containers, "volumes": lvols, "paths": lpaths, "project": leftover.Project}
 		if err := s.hostJob(ctx, jc, user, p.To, "/api/migrate/remove", body); err != nil {
 			return err
 		}
@@ -704,7 +725,7 @@ func (s *Server) migrateAfter(ctx context.Context, jc *jobs.Context, user string
 		state = "rolled_back"
 	case "remove":
 		jc.StepKey(1, 1, "migrate.stepRemoveOld", rec.Project, rec.FromName)
-		body := map[string]any{"containers": rec.Containers}
+		body := map[string]any{"containers": rec.Containers, "project": rec.Project}
 		if p.Data {
 			body["volumes"] = rec.Volumes
 			body["paths"] = rec.Paths
