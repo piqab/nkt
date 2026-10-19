@@ -43,6 +43,20 @@ type MigrateParams struct {
 	Record string `json:"record,omitempty"`
 	// Data — remove: и тома старого стека.
 	Data bool `json:"data,omitempty"`
+	// SwitchFly — move: цели Traffic Fly из этих контейнеров — на новый
+	// хост с той же ролью (рабочая остаётся рабочей).
+	SwitchFly bool `json:"switch_fly,omitempty"`
+}
+
+// migrateFlyTarget — цель Traffic Fly, которую затронул перенос.
+type migrateFlyTarget struct {
+	Route     string `json:"route"`
+	Title     string `json:"title"`
+	Ref       string `json:"ref"`
+	Port      int    `json:"port"`
+	Old       string `json:"old"`
+	New       string `json:"new,omitempty"`
+	WasActive bool   `json:"was_active"`
 }
 
 // migratePlanJSON — план хоста (то, что нужно хабу).
@@ -99,6 +113,8 @@ type migrateRecord struct {
 	State    string `json:"state"`
 	Reminded bool   `json:"reminded,omitempty"`
 	Author   string `json:"author,omitempty"`
+	// Fly — цели Traffic Fly, переключённые переносом (для отката и уборки).
+	Fly []migrateFlyTarget `json:"fly,omitempty"`
 }
 
 const migrationsKey = "migrations"
@@ -235,7 +251,11 @@ func (s *Server) handleMigratePreview(w http.ResponseWriter, r *http.Request) {
 	for _, pr := range migrateProblems(p, c) {
 		problems = append(problems, msgs.Tc(ctx, pr[0], pr[1]))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"plan": p.Raw, "check": c, "problems": problems})
+	var names []string
+	for _, c := range p.Containers {
+		names = append(names, c.Name)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plan": p.Raw, "check": c, "problems": problems, "fly": s.migrateFlyAffected(ctx, req.From, names)})
 }
 
 // handleMigrateStart — POST /hub/migrate {from, to, container}: перенос.
@@ -424,13 +444,23 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 	if err := s.hostJob(ctx, jc, user, p.To, "/api/migrate/unpack", map[string]any{"id": id}); err != nil {
 		return err
 	}
+	var fly []migrateFlyTarget
+	if p.SwitchFly {
+		jc.StepKey(5, 6, "migrate.stepFly")
+		var ferr error
+		if fly, ferr = s.migrateFlySwitch(ctx, jc, user, p.From, p.To, names); ferr != nil {
+			// Стек уже работает на новом хосте: перенос удался, маршруты
+			// — в журнале и вручную на карте Traffic Fly.
+			jc.Log("migrate.flyFailed", msgs.Localize(jc.Lang(), ferr))
+		}
+	}
 	jc.StepKey(5, 6, "migrate.stepRecord")
 	var vols []string
 	for _, v := range plan.Volumes {
 		vols = append(vols, v.Name)
 	}
 	rec := migrateRecord{ID: id, TS: store.Now(), From: p.From, FromName: fromName, To: p.To, ToName: toName, Project: plan.Project, Kind: plan.Kind,
-		Containers: names, Volumes: vols, State: "moved", Author: jc.Job.Author}
+		Containers: names, Volumes: vols, State: "moved", Author: jc.Job.Author, Fly: fly}
 	s.updateMigrations(ctx, func(l []migrateRecord) []migrateRecord { return append(l, rec) })
 	jc.StepKey(6, 6, "migrate.stepDone")
 	jc.Log("migrate.done", plan.Project, toName, fromName)
@@ -625,6 +655,7 @@ func (s *Server) migrateAfter(ctx context.Context, jc *jobs.Context, user string
 			return err
 		}
 		jc.Log("migrate.rolledBack", rec.Project, rec.FromName, rec.ToName)
+		s.migrateFlyRevert(ctx, jc, user, rec.Fly)
 		state = "rolled_back"
 	case "remove":
 		jc.StepKey(1, 1, "migrate.stepRemoveOld", rec.Project, rec.FromName)
@@ -635,6 +666,7 @@ func (s *Server) migrateAfter(ctx context.Context, jc *jobs.Context, user string
 		if err := s.hostJob(ctx, jc, user, rec.From, "/api/migrate/remove", body); err != nil {
 			return err
 		}
+		s.migrateFlyRemoveOld(ctx, jc, user, rec.Fly)
 		state = "removed"
 	}
 	s.updateMigrations(ctx, func(l []migrateRecord) []migrateRecord {
@@ -685,4 +717,175 @@ func (s *Server) remindMigrations(ctx context.Context, now time.Time) {
 		_, _ = s.db.AddHostEvent(ctx, store.HostEvent{HostID: m.From, HostName: m.FromName, Kind: store.EventMigrationLeftover, Severity: "info",
 			DetailKey: "migrate.reminder", DetailArgs: msgs.EncodeArgs([]any{m.Project, m.ToName, m.TS[:10]})})
 	}
+}
+
+// --- Traffic Fly при переносе ---
+
+// flyStepsAsLines — журнал применения Traffic Fly строками внутри
+// задания переноса (его шаги не сбивают шаги переноса).
+type flyStepsAsLines struct{ jc *jobs.Context }
+
+func (f flyStepsAsLines) Log(key string, args ...any)     { f.jc.Log(key, args...) }
+func (f flyStepsAsLines) Logf(format string, args ...any) { f.jc.Logf(format, args...) }
+func (f flyStepsAsLines) StepKey(_, _ int, key string, args ...any) {
+	f.jc.Log(key, args...)
+}
+
+// migrateFlyAffected — цели Traffic Fly из этих контейнеров старого хоста.
+func (s *Server) migrateFlyAffected(ctx context.Context, from int64, names []string) []migrateFlyTarget {
+	out := []migrateFlyTarget{}
+	for _, r := range s.flyDoc(ctx).Routes {
+		for _, t := range r.Targets {
+			if t.HostID == from && t.Kind == "container" && slicesContains(names, t.Ref) {
+				out = append(out, migrateFlyTarget{Route: r.ID, Title: flyRouteTitle(r), Ref: t.Ref, Port: t.Port, Old: t.ID, WasActive: !t.Drain})
+			}
+		}
+	}
+	return out
+}
+
+func slicesContains(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// flyRouteTitle — маршрут словами для журнала и окна.
+func flyRouteTitle(r FlyRoute) string {
+	if len(r.Names) > 0 {
+		return strings.Join(r.Names, ", ")
+	}
+	return r.Kind + " :" + strconv.Itoa(r.Port)
+}
+
+// migrateFlyOps — операции над целями к текущей версии, новая версия и
+// применение (как задание fly.ops, но внутри задания переноса).
+func (s *Server) migrateFlyOps(ctx context.Context, jc *jobs.Context, user string, ops []FlyOp, note string) ([]FlyRoute, error) {
+	d := s.flyDoc(ctx)
+	routes, err := s.flyApplyOps(ctx, d.Routes, ops, s.flyAliveTargets(ctx))
+	if err != nil {
+		return nil, err
+	}
+	saved, err := s.flySave(ctx, FlyDoc{Gateways: d.Gateways, Routes: routes}, user, note)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.flyApplyRun(ctx, flyStepsAsLines{jc}, user, FlyApplyParams{Revision: saved.Revision}); err != nil {
+		return saved.Routes, err
+	}
+	return saved.Routes, nil
+}
+
+// migrateFlyWait — сколько ждать, пока шлюз увидит новую цель живой.
+var migrateFlyWait = 90 * time.Second
+
+// migrateFlySwitch — цели на новом хосте с той же ролью: новая — резервом,
+// ожидание проверки, у бывшей рабочей — обмен (новая в работу, старая в
+// резерв). Не ожила — обмен всё равно: старая уже остановлена.
+func (s *Server) migrateFlySwitch(ctx context.Context, jc *jobs.Context, user string, from, to int64, names []string) ([]migrateFlyTarget, error) {
+	list := s.migrateFlyAffected(ctx, from, names)
+	if len(list) == 0 {
+		return nil, nil
+	}
+	var ops []FlyOp
+	for _, t := range list {
+		jc.Log("migrate.flyAdd", t.Title, t.Ref)
+		ops = append(ops, FlyOp{Op: "add", Route: t.Route, HostID: to, Kind: "container", Ref: t.Ref, Port: t.Port})
+	}
+	before := map[string]bool{}
+	for _, r := range s.flyDoc(ctx).Routes {
+		for _, t := range r.Targets {
+			before[r.ID+"/"+t.ID] = true
+		}
+	}
+	routes, err := s.migrateFlyOps(ctx, jc, user, ops, msgs.T(jc.Lang(), "migrate.flyNote"))
+	if routes == nil {
+		return nil, err
+	}
+	if err != nil {
+		jc.Log("migrate.flyFailed", msgs.Localize(jc.Lang(), err))
+	}
+	for i, t := range list {
+		for _, r := range routes {
+			if r.ID != t.Route {
+				continue
+			}
+			for _, nt := range r.Targets {
+				if nt.HostID == to && nt.Ref == t.Ref && !before[r.ID+"/"+nt.ID] {
+					list[i].New = nt.ID
+				}
+			}
+		}
+	}
+	var swaps []FlyOp
+	deadline := time.Now().Add(migrateFlyWait)
+	for _, t := range list {
+		if !t.WasActive || t.New == "" {
+			continue
+		}
+		for {
+			if s.flyAliveTargets(ctx)[t.Route+"/"+t.New] {
+				jc.Log("migrate.flyAlive", t.Title, t.Ref)
+				break
+			}
+			if time.Now().After(deadline) {
+				jc.Log("migrate.flyNotAlive", t.Title, t.Ref, int(migrateFlyWait.Seconds()))
+				break
+			}
+			if !sleepCtx(ctx, 3*time.Second) {
+				return list, ctx.Err()
+			}
+		}
+		// Сначала новую в работу, потом старую в резерв: рабочая цель у
+		// маршрута есть всё время.
+		swaps = append(swaps, FlyOp{Op: "active", Route: t.Route, Target: t.New}, FlyOp{Op: "reserve", Route: t.Route, Target: t.Old})
+	}
+	if len(swaps) > 0 {
+		if _, err := s.migrateFlyOps(ctx, jc, user, swaps, msgs.T(jc.Lang(), "migrate.flyNote")); err != nil {
+			return list, err
+		}
+		jc.Log("migrate.flySwitched", len(swaps)/2)
+	}
+	return list, nil
+}
+
+// migrateFlyRevert — откат: у бывших рабочих старая снова в работу,
+// новая — в резерв.
+func (s *Server) migrateFlyRevert(ctx context.Context, jc *jobs.Context, user string, list []migrateFlyTarget) {
+	var ops []FlyOp
+	for _, t := range list {
+		if t.WasActive && t.New != "" {
+			ops = append(ops, FlyOp{Op: "active", Route: t.Route, Target: t.Old}, FlyOp{Op: "reserve", Route: t.Route, Target: t.New})
+		}
+	}
+	if len(ops) == 0 {
+		return
+	}
+	if _, err := s.migrateFlyOps(ctx, jc, user, ops, msgs.T(jc.Lang(), "migrate.flyRevertNote")); err != nil {
+		jc.Log("migrate.flyFailed", msgs.Localize(jc.Lang(), err))
+		return
+	}
+	jc.Log("migrate.flyReverted", len(ops)/2)
+}
+
+// migrateFlyRemoveOld — уборка старого: старые цели (они уже резервные)
+// — из маршрутов.
+func (s *Server) migrateFlyRemoveOld(ctx context.Context, jc *jobs.Context, user string, list []migrateFlyTarget) {
+	var ops []FlyOp
+	for _, t := range list {
+		if t.New != "" {
+			ops = append(ops, FlyOp{Op: "remove", Route: t.Route, Target: t.Old})
+		}
+	}
+	if len(ops) == 0 {
+		return
+	}
+	if _, err := s.migrateFlyOps(ctx, jc, user, ops, msgs.T(jc.Lang(), "migrate.flyRemoveNote")); err != nil {
+		jc.Log("migrate.flyFailed", msgs.Localize(jc.Lang(), err))
+		return
+	}
+	jc.Log("migrate.flyRemoved", len(ops))
 }

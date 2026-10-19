@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.48 — 2026-10-19
+
+- **A container move switches Traffic Fly keeping the role.** If the
+  container was an active route target, it becomes active on the new host
+  (the new target goes in as a reserve, is swapped in after its check, the
+  old one goes to reserve); a reserve stays a reserve. A checkbox in the move
+  window, on by default; "Roll back" and "Remove old" fix the routes too.
+- **The map redraws itself after a move.** A spinner on the moving tile and
+  on the new host; when it ends the hosts are re-read bypassing the cache and
+  the links are rebuilt.
+- **A plan of moves or "Apply immediately"** — as in Traffic Fly: moves pile
+  up and go with "Apply moves (N)", or start right away.
+
 ## v1.13.47 — 2026-10-19
 
 - **Moving a container to (or from) the hub machine no longer hangs.** The

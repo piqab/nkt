@@ -4856,6 +4856,21 @@
     "removeOld": "Remove old",
     "removeWithData": "and the data (volumes: {{list}})",
     "removeConfirm": "Remove the stopped containers of {{name}} from {{host}}? Volumes and directories stay.",
-    "removeConfirmData": "Remove the stopped containers of {{name}} from {{host}} together with their volumes? The data on this host will be deleted."
+    "removeConfirmData": "Remove the stopped containers of {{name}} from {{host}} together with their volumes? The data on this host will be deleted.",
+    "applyNow": "Apply immediately",
+    "applyNowHint": "Off — moves pile up as a plan and start with \"Apply moves\". On — a move starts right after the plan window.",
+    "applyNowDraft": "Apply or discard the plan first",
+    "applyMoves": "Apply moves ({{n}})",
+    "discardMoves": "Discard plan",
+    "sec": "s",
+    "moveFailed": "move #{{id}} failed — log",
+    "movingTo": "⟳ moving → {{host}}",
+    "plannedTo": "→ {{host}} · planned",
+    "incoming": "← moving: {{names}}",
+    "migrateFly": "Traffic Fly route target — switches with the same role:",
+    "flyActive": "active",
+    "flyReserve": "reserve",
+    "switchFly": "Switch the routes to the new host (an active target stays active)",
+    "migratePlanAdd": "Add to plan"
   }
 }

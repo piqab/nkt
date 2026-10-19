@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Input, Space, Tag, Tooltip } from 'antd'
+import { Button, Checkbox, Input, Space, Switch, Tag, Tooltip } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -168,8 +168,66 @@ export function HostsMap({
   const [tileDrag, setTileDrag] = useState<{ x: number; y: number; label: string } | null>(null)
   const [overHost, setOverHost] = useState<number | null>(null)
   const [migrateAsk, setMigrateAsk] = useState<{ from: HubHost; to: HubHost; item: MapItem } | null>(null)
+  // Как у Traffic Fly: план переносов копится и уходит «Применить
+  // переносы (N)», или «Применять сразу» — перенос после окна плана сразу.
+  const [applyNow, setApplyNow] = useState<boolean>(() => store.get('applyNow', false))
+  useEffect(() => store.set('applyNow', applyNow), [applyNow])
+  const [drafts, setDrafts] = useState<DraftMove[]>([])
+  // Переносы в работе: спиннеры на плитках, по завершении — карта заново.
+  const [moving, setMoving] = useState<MovingJob[]>([])
+  const [movesFailed, setMovesFailed] = useState<number[]>([])
+  const [tick, setTick] = useState(0)
   const [recMenu, setRecMenu] = useState<MigrationRecord | null>(null)
   const migrations = useApi<{ migrations: MigrationRecord[] }>('/hub/migrations', 60_000)
+  const movingRef = useRef(moving)
+  movingRef.current = moving
+  const hasMoving = moving.length > 0
+  useEffect(() => {
+    if (!hasMoving) return
+    let n = 0
+    const iv = window.setInterval(() => {
+      setTick((x) => x + 1)
+      if (n++ % 2) return
+      void (async () => {
+        const done: { id: number; ok: boolean }[] = []
+        for (const m of movingRef.current) {
+          const job = await api<{ status: string }>(`/hosts/local/jobs/${m.id}`).catch(() => null)
+          if (job && job.status !== 'queued' && job.status !== 'running') done.push({ id: m.id, ok: job.status === 'succeeded' })
+        }
+        if (done.length === 0) return
+        // Перенос закончился — списки хостов мимо кэша, затем карта,
+        // учёт переносов и маршруты Traffic Fly (они в ответе карты).
+        await api('/hub/map?refresh=1').catch(() => undefined)
+        await Promise.all([data.reload(), migrations.reload()])
+        setMoving((l) => l.filter((m) => !done.some((d) => d.id === m.id)))
+        const bad = done.filter((d) => !d.ok).map((d) => d.id)
+        if (bad.length) setMovesFailed((f) => [...f, ...bad])
+      })()
+    }, 1000)
+    return () => window.clearInterval(iv)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMoving])
+  void tick
+  const startMove = async (d: DraftMove) => {
+    const res = await api<{ job_id: number }>('/hub/migrate', { method: 'POST', body: { from: d.from.id, to: d.to.id, container: d.item.name, switch_fly: d.switchFly } })
+    setMoving((l) => [...l, { id: res.job_id, from: d.from.id, to: d.to.id, names: d.names, title: d.item.name, started: Date.now() }])
+    return res.job_id
+  }
+  const [applyErr, setApplyErr] = useState<string | null>(null)
+  const applyDrafts = async () => {
+    setApplyErr(null)
+    const list = drafts
+    setDrafts([])
+    for (const d of list) {
+      try {
+        await startMove(d)
+      } catch (e) {
+        setApplyErr(e instanceof Error ? e.message : String(e))
+      }
+    }
+  }
+  const movingTile = (hostId: number, name: string) => moving.find((m) => m.from === hostId && m.names.includes(name))
+  const draftTile = (hostId: number, name: string) => drafts.find((d) => d.from.id === hostId && d.names.includes(name))
   const tilePress = useRef<{ from: HubHost; item: MapItem; sx: number; sy: number; started: boolean } | null>(null)
   const hostsRef = useRef(hosts)
   hostsRef.current = hosts
@@ -607,6 +665,34 @@ export function HostsMap({
             </Button>
           </Tooltip>
         )}
+        {moveMode && (
+          <Tooltip title={drafts.length ? t('hostsMap.applyNowDraft') : t('hostsMap.applyNowHint')}>
+            <span className="row small" style={{ gap: '0.3rem', alignItems: 'center' }}>
+              <Switch size="small" checked={applyNow} disabled={drafts.length > 0} onChange={setApplyNow} />
+              {t('hostsMap.applyNow')}
+            </span>
+          </Tooltip>
+        )}
+        {drafts.length > 0 && (
+          <>
+            <Button size="small" type="primary" danger onClick={() => void applyDrafts()}>
+              {t('hostsMap.applyMoves', { n: drafts.length })}
+            </Button>
+            <Button size="small" onClick={() => setDrafts([])}>
+              {t('hostsMap.discardMoves')}
+            </Button>
+          </>
+        )}
+        {moving.map((m) => (
+          <Tag key={m.id} color="processing" style={{ cursor: 'pointer' }} onClick={() => onOpenJob?.(m.id)}>
+            ⟳ {m.title} · {Math.round((Date.now() - m.started) / 1000)} {t('hostsMap.sec')}
+          </Tag>
+        ))}
+        {movesFailed.map((id) => (
+          <Tag key={id} color="error" closable onClose={() => setMovesFailed((f) => f.filter((x) => x !== id))} style={{ cursor: 'pointer' }} onClick={() => onOpenJob?.(id)}>
+            {t('hostsMap.moveFailed', { id })}
+          </Tag>
+        ))}
         <Checkbox checked={onlyLinked} onChange={(e) => setOnlyLinked(e.target.checked)}>
           {t('hostsMap.onlyLinked')}
         </Checkbox>
@@ -730,7 +816,13 @@ export function HostsMap({
                       {midEllipsis(b.host.name, 40)}
                     </text>
                     <text x={b.x + BLOCK_W - 10} y={b.y + 21} fontSize={10} textAnchor="end" fill="var(--text-secondary)">
-                      {b.offline ? t('hostsMap.offline') : b.error ? t('hostsMap.noAnswer') : t('hostsMap.count', { n: b.tiles.length + b.more })}
+                      {moving.some((m) => m.to === b.host.id)
+                        ? t('hostsMap.incoming', { names: moving.filter((m) => m.to === b.host.id).map((m) => m.title).join(', ') })
+                        : b.offline
+                          ? t('hostsMap.offline')
+                          : b.error
+                            ? t('hostsMap.noAnswer')
+                            : t('hostsMap.count', { n: b.tiles.length + b.more })}
                     </text>
                   </g>
                   {!b.offline && !b.error && b.tiles.length === 0 && b.more === 0 && (
@@ -779,14 +871,39 @@ export function HostsMap({
                         {...clickable(() => (mig?.role === 'from' && admin ? setRecMenu(mig.rec) : moveMode ? undefined : onOpenAt(b.host, itemPath(it))))}
                       >
                         {!privacy && <title>{`${it.name}${it.project ? ` · ${t('hostsMap.stack')} ${it.project}` : ''}\n${sub}${it.state ? `\n${it.state}` : ''}`}</title>}
-                        <rect width={TILE_W} height={TILE_H} rx={6} fill="var(--surface-raised)" stroke={stateColor(it.state)} strokeWidth={2} />
+                        <rect
+                          width={TILE_W}
+                          height={TILE_H}
+                          rx={6}
+                          fill="var(--surface-raised)"
+                          stroke={movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name) ? 'var(--accent, #1677ff)' : stateColor(it.state)}
+                          strokeWidth={2}
+                          strokeDasharray={draftTile(b.host.id, it.name) ? '5 3' : undefined}
+                        />
+                        {movingTile(b.host.id, it.name) && (
+                          <g transform={`translate(${TILE_W - 12},${TILE_H - 12})`}>
+                            <circle r={6} fill="none" stroke="var(--border, #ccc)" strokeWidth={2} />
+                            <path d="M0,-6 A6,6 0 0,1 6,0" fill="none" stroke="var(--accent, #1677ff)" strokeWidth={2}>
+                              <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1s" repeatCount="indefinite" />
+                            </path>
+                          </g>
+                        )}
                         <text x={8} y={17} fontSize={9} fill="var(--text-secondary)">
                           {kindLabel}
                         </text>
                         <text x={it.kind === 'container' ? 50 : 32} y={17} fontSize={12} fill="var(--text-primary)">
                           {midEllipsis(it.name, it.kind === 'container' ? 20 : 23)}
                         </text>
-                        {mig ? (
+                        {movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name) ? (
+                          <text x={8} y={35} fontSize={10} fill="var(--accent, #1677ff)">
+                            {midEllipsis(
+                              movingTile(b.host.id, it.name)
+                                ? t('hostsMap.movingTo', { host: hosts.find((h) => h.id === movingTile(b.host.id, it.name)!.to)?.name ?? '' })
+                                : t('hostsMap.plannedTo', { host: draftTile(b.host.id, it.name)!.to.name }),
+                              34,
+                            )}
+                          </text>
+                        ) : mig ? (
                           <text x={8} y={35} fontSize={10} fill={mig.role === 'from' ? 'var(--status-warning)' : 'var(--accent, #1677ff)'}>
                             {midEllipsis(
                               mig.role === 'from'
@@ -831,6 +948,7 @@ export function HostsMap({
           </svg>
         </div>
       )}
+      {applyErr && <Banner kind="error">{applyErr}</Banner>}
       <span className="small muted">{moveMode ? t('hostsMap.moveModeHint') : t('hostsMap.hint')}</span>
       {tileDrag && (
         <div
@@ -854,11 +972,17 @@ export function HostsMap({
       {migrateAsk && (
         <MigrateModal
           ask={migrateAsk}
+          applyNow={applyNow}
           onClose={() => setMigrateAsk(null)}
-          onStarted={(id) => {
+          onConfirm={async (d) => {
+            if (!applyNow) {
+              setDrafts((l) => [...l.filter((x) => !(x.from.id === d.from.id && x.item.name === d.item.name)), d])
+              setMigrateAsk(null)
+              return
+            }
+            const id = await startMove(d)
             setMigrateAsk(null)
             onOpenJob?.(id)
-            window.setTimeout(() => void migrations.reload(), 5000)
           }}
         />
       )}
@@ -869,7 +993,8 @@ export function HostsMap({
           onStarted={(id) => {
             setRecMenu(null)
             onOpenJob?.(id)
-            window.setTimeout(() => void migrations.reload(), 5000)
+            const rec = recMenu
+            setMoving((l) => [...l, { id, from: rec.from, to: rec.to, names: rec.containers, title: rec.project, started: Date.now() }])
           }}
         />
       )}
@@ -905,16 +1030,47 @@ interface MigratePreview {
   }
   check: { have_images?: string[]; free_bytes: number }
   problems?: string[]
+  fly?: { route: string; title: string; ref: string; was_active: boolean }[]
+}
+
+/** Перенос в плане (до «Применить переносы»). */
+interface DraftMove {
+  from: HubHost
+  to: HubHost
+  item: MapItem
+  names: string[]
+  switchFly: boolean
+}
+
+/** Перенос в работе. */
+interface MovingJob {
+  id: number
+  from: number
+  to: number
+  names: string[]
+  title: string
+  started: number
 }
 
 const fmtSize = (n: number) => (n >= 1 << 30 ? `${(n / (1 << 30)).toFixed(1)} GB` : n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`)
 
 /** Окно переноса: что едет, что мешает, «Перенести». */
-function MigrateModal({ ask, onClose, onStarted }: { ask: { from: HubHost; to: HubHost; item: MapItem }; onClose: () => void; onStarted: (jobId: number) => void }) {
+function MigrateModal({
+  ask,
+  applyNow,
+  onClose,
+  onConfirm,
+}: {
+  ask: { from: HubHost; to: HubHost; item: MapItem }
+  applyNow: boolean
+  onClose: () => void
+  onConfirm: (d: DraftMove) => Promise<void>
+}) {
   const { t } = useTranslation()
   const [pv, setPv] = useState<MigratePreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [switchFly, setSwitchFly] = useState(true)
   useEffect(() => {
     api<MigratePreview>('/hub/migrate/preview', { method: 'POST', body: { from: ask.from.id, to: ask.to.id, container: ask.item.name }, timeoutMs: 120_000 })
       .then(setPv)
@@ -927,8 +1083,7 @@ function MigrateModal({ ask, onClose, onStarted }: { ask: { from: HubHost; to: H
     setBusy(true)
     setError(null)
     try {
-      const res = await api<{ job_id: number }>('/hub/migrate', { method: 'POST', body: { from: ask.from.id, to: ask.to.id, container: ask.item.name } })
-      onStarted(res.job_id)
+      await onConfirm({ from: ask.from, to: ask.to, item: ask.item, names: (pv?.plan.containers ?? []).map((c) => c.name), switchFly: switchFly && (pv?.fly ?? []).length > 0 })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -976,6 +1131,21 @@ function MigrateModal({ ask, onClose, onStarted }: { ask: { from: HubHost; to: H
               </div>
             )}
             {(p.skipped ?? []).length > 0 && <Banner kind="warn">{t('hostsMap.migrateSkipped', { list: (p.skipped ?? []).join(', ') })}</Banner>}
+            {(pv?.fly ?? []).length > 0 && (
+              <div>
+                {t('hostsMap.migrateFly')}
+                <ul style={{ margin: '0.2rem 0 0', paddingLeft: '1.2rem' }}>
+                  {(pv?.fly ?? []).map((f) => (
+                    <li key={f.route + f.ref}>
+                      <span className="sensitive">{f.title}</span> — {f.ref} · {f.was_active ? t('hostsMap.flyActive') : t('hostsMap.flyReserve')}
+                    </li>
+                  ))}
+                </ul>
+                <Checkbox checked={switchFly} onChange={(e) => setSwitchFly(e.target.checked)}>
+                  {t('hostsMap.switchFly')}
+                </Checkbox>
+              </div>
+            )}
             <Banner kind="warn">{t('hostsMap.migrateDowntime')}</Banner>
             {(pv?.problems ?? []).length > 0 && (
               <Banner kind="error">
@@ -992,7 +1162,7 @@ function MigrateModal({ ask, onClose, onStarted }: { ask: { from: HubHost; to: H
         {error && <Banner kind="error">{error}</Banner>}
         <Space>
           <Button type="primary" danger loading={busy} disabled={!p || (pv?.problems ?? []).length > 0} onClick={() => void start()}>
-            {t('hostsMap.migrateGo')}
+            {applyNow ? t('hostsMap.migrateGo') : t('hostsMap.migratePlanAdd')}
           </Button>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
         </Space>

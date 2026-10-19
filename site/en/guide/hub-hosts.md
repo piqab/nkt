@@ -319,10 +319,23 @@ runs a job with a log.
   for **Roll back** (stop the new, start the old) or **Remove old**
   (containers; with the checkbox, volumes too). After a week, if the old
   one is still there, an "Old stack after a move" alert.
-- Traffic Fly targets and sites are not switched by the move — do it
-  afterwards (swap targets on the Traffic Fly map; the site on the new host
-  and the DNS A record). Moving deployment pipeline stacks comes in the
-  next version; both hosts need nkt of this version or newer.
+- **Plan or immediately.** As in Traffic Fly: by default "Move" in the
+  window adds the move to a plan — the tile reads "→ host · planned", and on
+  top are **Apply moves (N)** and "Discard plan"; the **Apply immediately**
+  switch starts the move right after the window. While a move runs there is
+  a spinner on the tile, "← moving" on the new host and a job tag (click —
+  log); when it ends the map re-reads the hosts bypassing the cache and
+  redraws the links.
+- **Traffic Fly.** If the container is a route target, the window shows
+  which route and role; the **Switch the routes to the new host** checkbox
+  (on) keeps the role: an active target becomes active on the new host (the
+  new one is added as a reserve, swapped in after its check, the old one
+  goes to reserve; if it is not alive within 90 s the swap happens anyway,
+  since the old one is stopped), a reserve stays a reserve. "Roll back"
+  swaps them back, "Remove old" also removes the old target from the route.
+- Sites are not switched by the move — set up the proxy on the new host and
+  the DNS A record afterwards. Deployment pipeline stacks are not moved;
+  both hosts need nkt 1.13.44 or newer.
 
 
 ## Narrow sudo
