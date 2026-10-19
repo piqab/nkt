@@ -84,6 +84,9 @@ make build-dev && NKT_MODE=fixtures ./nkt     # http://127.0.0.1:8077
 | [Справочник](https://piqab.github.io/nkt/guide/reference-config) | все переменные, [безопасность](https://piqab.github.io/nkt/guide/reference-security), [API](https://piqab.github.io/nkt/guide/reference-api), [ограничения](https://piqab.github.io/nkt/guide/reference-limitations), [решение проблем](https://piqab.github.io/nkt/guide/troubleshooting) |
 | [Разработка](https://piqab.github.io/nkt/guide/development) | сборка, стенд, тесты, устройство кода |
 
+Нашли уязвимость? Сообщите закрыто — см.
+[политику безопасности](.github/SECURITY.md).
+
 Полный список возможностей — в [FEATURES.ru.md](FEATURES.ru.md), что
 менялось — в [WHATSNEW.md](WHATSNEW.md). Исходники сайта — в
 [`site/`](site/), пример выкладки — в
