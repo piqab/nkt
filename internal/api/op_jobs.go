@@ -100,6 +100,9 @@ func (h *hostOpRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
 	s, user := h.s, jc.Job.Author
+	if handled, err := s.runMigrateOp(ctx, jc, p.Op, p.Args); handled {
+		return err
+	}
 	switch p.Op {
 	case "files.extract":
 		var a extractArgs

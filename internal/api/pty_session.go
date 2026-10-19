@@ -85,6 +85,8 @@ var unrestrictedTools = map[string]string{
 	"bash": "bash", "sh": "sh", "dash": "dash", "zsh": "zsh", "fish": "fish", "ksh": "ksh",
 	"env": "env", "sudo": "sudo", "tmux": "tmux", "btop": "btop", "cat": "cat", "echo": "echo",
 	"apt-get": "apt-get", "snap": "snap",
+	// Перенос контейнеров: данные томов и каталогов — tar, размеры — du.
+	"tar": "tar", "du": "du",
 	"docker": "docker", "podman": "podman", "lxc": "lxc", "virsh": "virsh",
 	"kubectl": "kubectl", "k3s": "k3s",
 }

@@ -24,7 +24,7 @@ import {
 import { Trans, useTranslation } from 'react-i18next'
 import { CopyButton } from '../components/CopyButton'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
-import type { HubHost, Job, Severity } from '../types'
+import type { HubHost, Job, Me, Severity } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, Spinner, formatRelative, severityLabel } from '../components/ui'
 import { decryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 import { confirmAction } from '../components/confirm'
@@ -420,6 +420,8 @@ export default function Hosts({
 }) {
   const { t } = useTranslation()
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
+  // Перенос контейнеров на карте — администратору.
+  const meInfo = useApi<Me>('/auth/me')
   // Карта вместо списка — выключена по умолчанию, выбор помнится.
   const [mapOn, setMapOnState] = useState<boolean>(() => {
     try {
@@ -1685,6 +1687,8 @@ export default function Hosts({
             hosts={hosts}
             onOpenHost={(h) => onSelect({ id: h.id, name: h.name })}
             onOpenAt={(h, path) => (onOpenHostAt ? onOpenHostAt(h.id, h.name, path) : onSelect({ id: h.id, name: h.name }))}
+            onOpenJob={(id) => void openHubJob(id)}
+            admin={!!meInfo.data?.is_admin && meInfo.data?.allow_mutations !== false}
           />
         ) : loading && !hosts ? (
           <Loading what={t('hosts.loading')} />

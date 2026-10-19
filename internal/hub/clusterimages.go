@@ -244,3 +244,50 @@ func (m *Manager) DropClusterGroups(ctx context.Context) {
 		}
 	}
 }
+
+// HostAPIDownload — GET с телом ответа потоком (файл переноса на
+// гигабайты): по своему SSH-соединению, без таймаута; соединение
+// закрывается вместе с телом.
+func (m *Manager) HostAPIDownload(ctx context.Context, hostID int64, path string) (io.ReadCloser, int64, error) {
+	dial, channel, closeFn, err := m.dedicatedDialer(ctx, hostID)
+	if err != nil {
+		return nil, 0, err
+	}
+	m.recordChannel(hostID, channel)
+	cookie, err := m.cookieFor(ctx, hostID, dial)
+	if err != nil {
+		closeFn()
+		return nil, 0, err
+	}
+	addr := m.hostAPIAddr(ctx, hostID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+path, nil)
+	if err != nil {
+		closeFn()
+		return nil, 0, err
+	}
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
+	resp, err := tunnelHTTPClientNoTimeout(dial, addr).Do(req)
+	if err != nil {
+		closeFn()
+		return nil, 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		resp.Body.Close()
+		closeFn()
+		return nil, 0, msgs.Errorf("control.code", http.MethodGet, path, resp.StatusCode, hostAPIError(raw))
+	}
+	return &closeWith{ReadCloser: resp.Body, after: closeFn}, resp.ContentLength, nil
+}
+
+// closeWith — тело ответа, после закрытия которого закрывается и канал.
+type closeWith struct {
+	io.ReadCloser
+	after func()
+}
+
+func (c *closeWith) Close() error {
+	err := c.ReadCloser.Close()
+	c.after()
+	return err
+}

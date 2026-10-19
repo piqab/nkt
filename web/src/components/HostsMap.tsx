@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Input, Space, Tooltip } from 'antd'
+import { Button, Checkbox, Input, Space, Tag, Tooltip } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import { Banner, Loading } from './ui'
+import { Banner, Loading, Modal } from './ui'
+import { confirmAction } from './confirm'
 import { usePrivacy } from '../privacy'
 import type { HubHost, OSInfo } from '../types'
 
@@ -131,7 +132,20 @@ interface Link {
   dead?: boolean
 }
 
-export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; onOpenHost: (h: HubHost) => void; onOpenAt: (h: HubHost, path: string) => void }) {
+export function HostsMap({
+  hosts,
+  onOpenHost,
+  onOpenAt,
+  onOpenJob,
+  admin,
+}: {
+  hosts: HubHost[]
+  onOpenHost: (h: HubHost) => void
+  onOpenAt: (h: HubHost, path: string) => void
+  /** Журнал задания (перенос, откат, уборка старого). */
+  onOpenJob?: (id: number) => void
+  admin?: boolean
+}) {
   const { t } = useTranslation()
   const [privacy] = usePrivacy()
   const data = useApi<MapData>('/hub/map', 60_000)
@@ -147,6 +161,59 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
   const [view, setView] = useState<{ x: number; y: number; k: number }>(() => store.get('view', { x: 0, y: 0, k: 1 }))
   const [hover, setHover] = useState<string | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
+  // Перенос контейнера: режим (перетаскивание плитки Docker на другой
+  // хост вместо сдвига карты), что тащат, куда, окно плана, меню
+  // перенесённого.
+  const [moveMode, setMoveMode] = useState(false)
+  const [tileDrag, setTileDrag] = useState<{ x: number; y: number; label: string } | null>(null)
+  const [overHost, setOverHost] = useState<number | null>(null)
+  const [migrateAsk, setMigrateAsk] = useState<{ from: HubHost; to: HubHost; item: MapItem } | null>(null)
+  const [recMenu, setRecMenu] = useState<MigrationRecord | null>(null)
+  const migrations = useApi<{ migrations: MigrationRecord[] }>('/hub/migrations', 60_000)
+  const tilePress = useRef<{ from: HubHost; item: MapItem; sx: number; sy: number; started: boolean } | null>(null)
+  const hostsRef = useRef(hosts)
+  hostsRef.current = hosts
+  useEffect(() => {
+    if (!moveMode) return
+    const hostAt = (x: number, y: number) => {
+      const v = document.elementFromPoint(x, y)?.closest('[data-map-host]')?.getAttribute('data-map-host')
+      return v ? Number(v) : null
+    }
+    const move = (e: PointerEvent) => {
+      const p = tilePress.current
+      if (!p) return
+      if (!p.started && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < 6) return
+      p.started = true
+      setTileDrag({ x: e.clientX, y: e.clientY, label: p.item.name })
+      const h = hostAt(e.clientX, e.clientY)
+      setOverHost(h !== null && h !== p.from.id ? h : null)
+    }
+    const up = (e: PointerEvent) => {
+      const p = tilePress.current
+      tilePress.current = null
+      setTileDrag(null)
+      setOverHost(null)
+      if (!p?.started) return
+      const h = hostAt(e.clientX, e.clientY)
+      const to = hostsRef.current.find((x) => x.id === h)
+      if (to && to.id !== p.from.id && to.status === 'online') setMigrateAsk({ from: p.from, to, item: p.item })
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+  }, [moveMode])
+  // Перенесённое: «здесь остановлен, работает там» или «перенесён сюда».
+  const migratedHere = (hostId: number, name: string): { rec: MigrationRecord; role: 'from' | 'to' } | null => {
+    for (const r of [...(migrations.data?.migrations ?? [])].reverse()) {
+      if (r.state !== 'moved' || !r.containers.includes(name)) continue
+      if (r.from === hostId) return { rec: r, role: 'from' }
+      if (r.to === hostId) return { rec: r, role: 'to' }
+    }
+    return null
+  }
   const boxRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   // Окно карты появляется только после загрузки данных (до того —
@@ -291,7 +358,8 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
 
   // Подсветка: наведённое или закреплённое щелчком — его связи ярко,
   // остальное бледно.
-  const focus = hover ?? pinned
+  // Пока тащат плитку на другой хост — без подсветки связей.
+  const focus = tileDrag ? null : hover ?? pinned
   const related = useMemo(() => {
     if (!focus) return null
     const s = new Set<string>([focus])
@@ -532,6 +600,13 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
         <Checkbox checked={onlyRunning} onChange={(e) => setOnlyRunning(e.target.checked)}>
           {t('hostsMap.onlyRunning')}
         </Checkbox>
+        {admin && (
+          <Tooltip title={t('hostsMap.moveHint')}>
+            <Button size="small" type={moveMode ? 'primary' : 'default'} onClick={() => setMoveMode(!moveMode)}>
+              {t('hostsMap.moveMode')}
+            </Button>
+          </Tooltip>
+        )}
         <Checkbox checked={onlyLinked} onChange={(e) => setOnlyLinked(e.target.checked)}>
           {t('hostsMap.onlyLinked')}
         </Checkbox>
@@ -637,8 +712,18 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
                 </g>
               ))}
               {layout.blocks.map((b) => (
-                <g key={b.host.id} style={{ opacity: dim(`host:${b.host.id}`) < 1 && b.tiles.every((x) => dim(x.key) < 1) ? 0.5 : 1 }}>
-                  <rect x={b.x} y={b.y} width={BLOCK_W} height={b.h} rx={9} fill="var(--wash, rgba(0,0,0,0.03))" stroke={b.offline ? 'var(--text-muted)' : 'var(--border-strong, #bbb)'} strokeDasharray={b.offline ? '6 4' : undefined} />
+                <g key={b.host.id} data-map-host={b.host.id} style={{ opacity: dim(`host:${b.host.id}`) < 1 && b.tiles.every((x) => dim(x.key) < 1) ? 0.5 : 1 }}>
+                  <rect
+                    x={b.x}
+                    y={b.y}
+                    width={BLOCK_W}
+                    height={b.h}
+                    rx={9}
+                    fill={overHost === b.host.id ? 'var(--surface-hover, #e8f0fe)' : 'var(--wash, rgba(0,0,0,0.03))'}
+                    stroke={overHost === b.host.id ? 'var(--accent, #1677ff)' : b.offline ? 'var(--text-muted)' : 'var(--border-strong, #bbb)'}
+                    strokeWidth={overHost === b.host.id ? 3 : 1}
+                    strokeDasharray={b.offline ? '6 4' : undefined}
+                  />
                   <g style={{ cursor: 'pointer' }} {...clickable(() => onOpenHost(b.host))} onMouseEnter={() => setHover(`host:${b.host.id}`)} onMouseLeave={() => setHover(null)}>
                     <circle cx={b.x + 14} cy={b.y + 17} r={5} fill={b.offline ? 'var(--status-critical)' : 'var(--status-good)'} />
                     <text x={b.x + 26} y={b.y + 21} fontSize={13} fontWeight={600} fill="var(--text-primary)" className="sensitive">
@@ -672,14 +757,26 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
                       .filter(Boolean)
                       .join(' · ')
                     const kindLabel = it.kind === 'container' ? 'docker' : it.kind === 'vm' ? 'VM' : 'LXD'
+                    const mig = it.kind === 'container' ? migratedHere(b.host.id, it.name) : null
+                    const movable = moveMode && it.kind === 'container' && !b.offline && mig?.role !== 'from'
                     return (
                       <g
                         key={x.key}
                         transform={`translate(${x.x},${x.y})`}
-                        style={{ cursor: 'pointer', opacity: dim(x.key) }}
+                        style={{ cursor: movable ? 'grab' : 'pointer', opacity: dim(x.key) }}
                         onMouseEnter={() => setHover(x.key)}
                         onMouseLeave={() => setHover(null)}
-                        {...clickable(() => onOpenAt(b.host, itemPath(it)))}
+                        onPointerDown={
+                          movable
+                            ? (e) => {
+                                if (e.button !== 0) return
+                                // Не сдвиг карты: в режиме переноса плитку тащат на хост.
+                                e.stopPropagation()
+                                tilePress.current = { from: b.host, item: it, sx: e.clientX, sy: e.clientY, started: false }
+                              }
+                            : undefined
+                        }
+                        {...clickable(() => (mig?.role === 'from' && admin ? setRecMenu(mig.rec) : moveMode ? undefined : onOpenAt(b.host, itemPath(it))))}
                       >
                         {!privacy && <title>{`${it.name}${it.project ? ` · ${t('hostsMap.stack')} ${it.project}` : ''}\n${sub}${it.state ? `\n${it.state}` : ''}`}</title>}
                         <rect width={TILE_W} height={TILE_H} rx={6} fill="var(--surface-raised)" stroke={stateColor(it.state)} strokeWidth={2} />
@@ -689,9 +786,20 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
                         <text x={it.kind === 'container' ? 50 : 32} y={17} fontSize={12} fill="var(--text-primary)">
                           {midEllipsis(it.name, it.kind === 'container' ? 20 : 23)}
                         </text>
-                        <text x={8} y={35} fontSize={10} fill="var(--text-secondary)" className={it.ip ? 'sensitive' : undefined}>
-                          {midEllipsis(sub, 32)}
-                        </text>
+                        {mig ? (
+                          <text x={8} y={35} fontSize={10} fill={mig.role === 'from' ? 'var(--status-warning)' : 'var(--accent, #1677ff)'}>
+                            {midEllipsis(
+                              mig.role === 'from'
+                                ? t('hostsMap.migratedFrom', { host: mig.rec.to_name, date: mig.rec.ts.slice(0, 10) })
+                                : t('hostsMap.migratedTo', { host: mig.rec.from_name, date: mig.rec.ts.slice(0, 10) }),
+                              34,
+                            )}
+                          </text>
+                        ) : (
+                          <text x={8} y={35} fontSize={10} fill="var(--text-secondary)" className={it.ip ? 'sensitive' : undefined}>
+                            {midEllipsis(sub, 32)}
+                          </text>
+                        )}
                         {/* Метки связей: маршрут Traffic Fly — кружок (пустой — резерв,
                             красный центр — не жива), конвейер — квадрат. */}
                         {flyMarks.map((l, i) => (
@@ -723,7 +831,209 @@ export function HostsMap({ hosts, onOpenHost, onOpenAt }: { hosts: HubHost[]; on
           </svg>
         </div>
       )}
-      <span className="small muted">{t('hostsMap.hint')}</span>
+      <span className="small muted">{moveMode ? t('hostsMap.moveModeHint') : t('hostsMap.hint')}</span>
+      {tileDrag && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tileDrag.x + 12,
+            top: tileDrag.y + 12,
+            pointerEvents: 'none',
+            zIndex: 2000,
+            padding: '4px 10px',
+            borderRadius: 7,
+            fontSize: 12,
+            border: '2px solid var(--accent, #1677ff)',
+            background: 'var(--surface-raised)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          }}
+        >
+          docker · {tileDrag.label}
+        </div>
+      )}
+      {migrateAsk && (
+        <MigrateModal
+          ask={migrateAsk}
+          onClose={() => setMigrateAsk(null)}
+          onStarted={(id) => {
+            setMigrateAsk(null)
+            onOpenJob?.(id)
+            window.setTimeout(() => void migrations.reload(), 5000)
+          }}
+        />
+      )}
+      {recMenu && (
+        <MigrationMenu
+          rec={recMenu}
+          onClose={() => setRecMenu(null)}
+          onStarted={(id) => {
+            setRecMenu(null)
+            onOpenJob?.(id)
+            window.setTimeout(() => void migrations.reload(), 5000)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+/** Перенос в учёте хаба. */
+interface MigrationRecord {
+  id: string
+  ts: string
+  from: number
+  from_name: string
+  to: number
+  to_name: string
+  project: string
+  kind: string
+  containers: string[]
+  volumes?: string[]
+  state: 'moved' | 'rolled_back' | 'removed'
+}
+
+interface MigratePreview {
+  plan: {
+    kind: 'compose' | 'standalone'
+    project: string
+    containers: { name: string; service?: string; image: string; state: string }[]
+    images: string[]
+    volumes: { name: string; size: number }[]
+    paths: { path: string; size: number }[]
+    ports: string[]
+    skipped?: string[]
+  }
+  check: { have_images?: string[]; free_bytes: number }
+  problems?: string[]
+}
+
+const fmtSize = (n: number) => (n >= 1 << 30 ? `${(n / (1 << 30)).toFixed(1)} GB` : n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`)
+
+/** Окно переноса: что едет, что мешает, «Перенести». */
+function MigrateModal({ ask, onClose, onStarted }: { ask: { from: HubHost; to: HubHost; item: MapItem }; onClose: () => void; onStarted: (jobId: number) => void }) {
+  const { t } = useTranslation()
+  const [pv, setPv] = useState<MigratePreview | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    api<MigratePreview>('/hub/migrate/preview', { method: 'POST', body: { from: ask.from.id, to: ask.to.id, container: ask.item.name }, timeoutMs: 120_000 })
+      .then(setPv)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+  }, [ask])
+  const p = pv?.plan
+  const data = (p?.volumes ?? []).reduce((a, v) => a + v.size, 0) + (p?.paths ?? []).reduce((a, x) => a + x.size, 0)
+  const have = new Set(pv?.check.have_images ?? [])
+  const start = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ job_id: number }>('/hub/migrate', { method: 'POST', body: { from: ask.from.id, to: ask.to.id, container: ask.item.name } })
+      onStarted(res.job_id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={t('hostsMap.migrateTitle', { name: ask.item.name, from: ask.from.name, to: ask.to.name })} onClose={onClose} width={640}>
+      <div className="col small" style={{ gap: '0.5rem' }}>
+        {!pv && !error && <Loading what={t('hostsMap.migratePlan')} />}
+        {p && (
+          <>
+            <div>
+              <strong>{p.kind === 'compose' ? t('hostsMap.migrateStack', { name: p.project, n: (p.containers ?? []).length }) : t('hostsMap.migrateSolo', { name: p.project })}</strong>
+              <div className="muted">{(p.containers ?? []).map((c) => c.name).join(', ')}</div>
+            </div>
+            {p.kind === 'standalone' && <span className="muted">{t('hostsMap.migrateSoloHint')}</span>}
+            <div>
+              {t('hostsMap.migrateData', { size: fmtSize(data) })}
+              <ul style={{ margin: '0.2rem 0 0', paddingLeft: '1.2rem' }}>
+                {(p.volumes ?? []).map((v) => (
+                  <li key={v.name}>
+                    {t('hostsMap.migrateVolume')} <span className="mono">{v.name}</span> — {fmtSize(v.size)}
+                  </li>
+                ))}
+                {(p.paths ?? []).map((x) => (
+                  <li key={x.path}>
+                    <span className="mono sensitive">{x.path}</span> — {fmtSize(x.size)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              {t('hostsMap.migrateImages')}{' '}
+              {(p.images ?? []).map((img) => (
+                <Tag key={img} color={have.has(img) ? 'success' : 'default'}>
+                  {img}
+                  {have.has(img) ? ` · ${t('hostsMap.migrateImageHave')}` : ''}
+                </Tag>
+              ))}
+            </div>
+            {(p.ports ?? []).length > 0 && (
+              <div>
+                {t('hostsMap.migratePorts')} <span className="mono">{(p.ports ?? []).join(', ')}</span>
+              </div>
+            )}
+            {(p.skipped ?? []).length > 0 && <Banner kind="warn">{t('hostsMap.migrateSkipped', { list: (p.skipped ?? []).join(', ') })}</Banner>}
+            <Banner kind="warn">{t('hostsMap.migrateDowntime')}</Banner>
+            {(pv?.problems ?? []).length > 0 && (
+              <Banner kind="error">
+                {t('hostsMap.migrateProblems')}
+                <ul style={{ margin: '0.2rem 0 0', paddingLeft: '1.2rem' }}>
+                  {(pv?.problems ?? []).map((x) => (
+                    <li key={x}>{x}</li>
+                  ))}
+                </ul>
+              </Banner>
+            )}
+          </>
+        )}
+        {error && <Banner kind="error">{error}</Banner>}
+        <Space>
+          <Button type="primary" danger loading={busy} disabled={!p || (pv?.problems ?? []).length > 0} onClick={() => void start()}>
+            {t('hostsMap.migrateGo')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </Space>
+      </div>
+    </Modal>
+  )
+}
+
+/** Перенесённый стек на старом хосте: откатить или убрать. */
+function MigrationMenu({ rec, onClose, onStarted }: { rec: MigrationRecord; onClose: () => void; onStarted: (jobId: number) => void }) {
+  const { t } = useTranslation()
+  const [withData, setWithData] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const act = async (action: 'rollback' | 'remove') => {
+    const ok = await confirmAction(
+      action === 'rollback'
+        ? t('hostsMap.rollbackConfirm', { name: rec.project, from: rec.from_name, to: rec.to_name })
+        : t(withData ? 'hostsMap.removeConfirmData' : 'hostsMap.removeConfirm', { name: rec.project, host: rec.from_name }),
+      { okText: action === 'rollback' ? t('hostsMap.rollback') : t('hostsMap.removeOld'), danger: action === 'remove' },
+    )
+    if (!ok) return
+    try {
+      const res = await api<{ job_id: number }>(`/hub/migrations/${rec.id}/${action}`, { method: 'POST', body: { data: withData } })
+      onStarted(res.job_id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  return (
+    <Modal title={t('hostsMap.migratedTitle', { name: rec.project })} onClose={onClose} width={480}>
+      <div className="col small" style={{ gap: '0.5rem' }}>
+        <span>{t('hostsMap.migratedText', { from: rec.from_name, to: rec.to_name, date: rec.ts.slice(0, 16).replace('T', ' ') })}</span>
+        <Button onClick={() => void act('rollback')}>{t('hostsMap.rollback')}</Button>
+        <Checkbox checked={withData} onChange={(e) => setWithData(e.target.checked)}>
+          {t('hostsMap.removeWithData', { list: (rec.volumes ?? []).join(', ') || '—' })}
+        </Checkbox>
+        <Button danger onClick={() => void act('remove')}>
+          {t('hostsMap.removeOld')}
+        </Button>
+        {error && <Banner kind="error">{error}</Banner>}
+      </div>
+    </Modal>
   )
 }

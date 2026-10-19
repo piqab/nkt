@@ -283,6 +283,7 @@ func (s *Server) Handler() http.Handler {
 
 				r.Get("/hub/hosts", s.handleListHosts)
 				r.Get("/hub/map", s.handleHostsMap)
+				r.Get("/hub/migrations", s.handleMigrations)
 				// Журнал оповещений читают все, кто видит список хостов:
 				// это то же состояние, только во времени.
 				r.Get("/hub/events", s.handleEvents)
@@ -383,6 +384,10 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/fly/apply", s.handleFlyApply)
 					r.Post("/hub/fly/routes/{id}/switch", s.handleFlySwitch)
 					r.Post("/hub/fly/ops", s.handleFlyOps)
+					// Перенос контейнера Docker с хоста на хост (карта хостов).
+					r.Post("/hub/migrate/preview", s.handleMigratePreview)
+					r.Post("/hub/migrate", s.handleMigrateStart)
+					r.Post("/hub/migrations/{id}/{action}", s.handleMigrationAction)
 					r.Post("/hub/fly/versions/{n}/restore", s.handleFlyRestore)
 					r.Get("/hub/fly/targets", s.handleFlyTargets)
 					r.Post("/hub/edges", s.handleEdgeSave)

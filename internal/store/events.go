@@ -50,6 +50,9 @@ const (
 	EventFlyPoolEmpty  = "fly-pool-empty"
 	EventFlyTunnelDown = "fly-tunnel-down"
 	EventFlyTunnelUp   = "fly-tunnel-up"
+	// EventMigrationLeftover — старый стек после переноса контейнера
+	// лежит остановленным дольше недели: убрать или откатить.
+	EventMigrationLeftover = "migration-leftover"
 )
 
 // HostEvent — одно оповещение.
