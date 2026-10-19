@@ -536,4 +536,6 @@ var enSitesCatalog = map[string]string{
 	"migrate.flyRemoveNote":           "container move: old targets removed",
 	"migrate.flyReverted":             "Traffic Fly: active targets returned to the old host: %d",
 	"migrate.flyRemoved":              "Traffic Fly: old targets removed: %d",
+	"migrate.leftoversCleaning":       "on %[2]s — leftovers of the old copy of %[1]s (moved %[3]s): removing them, the current data comes from here",
+	"migrate.removePath":              "directory %s",
 }

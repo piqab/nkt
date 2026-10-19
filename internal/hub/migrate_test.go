@@ -185,3 +185,20 @@ func TestMigrateFlyChains(t *testing.T) {
 		t.Fatalf("remove old: %v %+v", err, r4[0].Targets)
 	}
 }
+
+// Перенос обратно: «уже есть» из-за остатков старой копии — не
+// препятствие; чужое с тем же именем — препятствие. Старая запись без
+// каталогов — каталог стека /srv/compose/<имя>.
+func TestMigrateLeftovers(t *testing.T) {
+	c := migrateCheckJSON{Docker: true, ExistingPaths: []string{"/srv/compose/httpbin", "/opt/other"}, ExistingVols: []string{"httpbin_data", "foreign"}, ProjectExists: true, FreeBytes: 100 << 30}
+	rec := &migrateRecord{Project: "httpbin", Volumes: []string{"httpbin_data"}}
+	out, paths, vols := withoutLeftovers(c, rec)
+	if strings.Join(paths, ",") != "/srv/compose/httpbin" || strings.Join(vols, ",") != "httpbin_data" || out.ProjectExists ||
+		strings.Join(out.ExistingPaths, ",") != "/opt/other" || strings.Join(out.ExistingVols, ",") != "foreign" {
+		t.Fatalf("%+v %v %v", out, paths, vols)
+	}
+	rec.Paths = []string{"/opt/other"}
+	if _, paths, _ := withoutLeftovers(c, rec); strings.Join(paths, ",") != "/opt/other" {
+		t.Fatalf("recorded paths: %v", paths)
+	}
+}

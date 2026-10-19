@@ -140,6 +140,8 @@ type migrateIDArgs struct {
 type migrateRemoveArgs struct {
 	Containers []string `json:"containers"`
 	Volumes    []string `json:"volumes,omitempty"`
+	// Paths — каталоги старой копии (рабочий каталог, bind-каталоги).
+	Paths []string `json:"paths,omitempty"`
 }
 
 func (s *Server) startMigrateJob(ctx context.Context, user, op, titleKey, title string, args any) (int64, error) {
@@ -412,13 +414,29 @@ func (s *Server) migrateRemove(ctx context.Context, jc *jobs.Context, a migrateR
 			return msgs.Errorf("migrate.badName", n)
 		}
 	}
+	for _, p := range a.Paths {
+		if !migrateSafePath(p) {
+			return msgs.Errorf("migrate.badPath", p)
+		}
+	}
+	// Уже убранное (повтор, ручная уборка) — не ошибка: остатки ищутся
+	// заново, удаляется то, что есть.
 	if len(a.Containers) > 0 {
-		if err := runLogged(ctx, jc, append([]string{"docker", "rm", "-f"}, a.Containers...)...); err != nil {
+		args := []string{"sh", "-c", `for c in "$@"; do docker rm -f "$c" >/dev/null 2>&1 || true; done`, "_"}
+		if err := runLogged(ctx, jc, append(args, a.Containers...)...); err != nil {
 			return err
 		}
 	}
-	if len(a.Volumes) > 0 {
-		if err := runLogged(ctx, jc, append([]string{"docker", "volume", "rm"}, a.Volumes...)...); err != nil {
+	for _, v := range a.Volumes {
+		if res, err := RunTooling(ctx, "docker", "volume", "inspect", v); err == nil && res.OK() {
+			if err := runLogged(ctx, jc, "docker", "volume", "rm", v); err != nil {
+				return err
+			}
+		}
+	}
+	for _, p := range a.Paths {
+		jc.Log("migrate.removePath", p)
+		if err := runLogged(ctx, jc, "sh", "-c", `rm -rf -- "$1"`, "_", p); err != nil {
 			return err
 		}
 	}

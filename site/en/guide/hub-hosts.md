@@ -317,8 +317,17 @@ runs a job with a log.
 - **After the move** the old stack **stays stopped** — its tile reads
   "→ host · date · stopped", the new one "← from host". Click the old one
   for **Roll back** (stop the new, start the old) or **Remove old**
-  (containers; with the checkbox, volumes too). After a week, if the old
-  one is still there, an "Old stack after a move" alert.
+  (containers; with the "and the data" checkbox, also volumes and the
+  stack's directories). After a week, if the old one is still there, an
+  "Old stack after a move" alert. Only a **stopped** container counts as
+  the old copy: a running one (say, moved back) drags as usual.
+- **Moving back.** If the destination host has leftovers of this same
+  stack's old copy (the stopped copy, or one removed without data), the
+  window shows them and a **Remove the old copy's leftovers and move**
+  checkbox (on): the move removes them itself (only what the records hold;
+  for moves before 1.13.49, the `/srv/compose/<name>` directory), then
+  moves the current data. Foreign directories and volumes of the same name
+  remain an obstacle.
 - **Plan or immediately.** As in Traffic Fly: by default "Move" in the
   window adds the move to a plan — the tile reads "→ host · planned", and on
   top are **Apply moves (N)** and "Discard plan"; the **Apply immediately**

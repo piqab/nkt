@@ -536,4 +536,6 @@ var ruSitesCatalog = map[string]string{
 	"migrate.flyRemoveNote":           "перенос контейнера: старые цели убраны",
 	"migrate.flyReverted":             "Traffic Fly: рабочих целей возвращено на старый хост: %d",
 	"migrate.flyRemoved":              "Traffic Fly: старых целей убрано: %d",
+	"migrate.leftoversCleaning":       "на %[2]s — остатки старой копии %[1]s (перенос %[3]s): убираются, актуальные данные едут отсюда",
+	"migrate.removePath":              "каталог %s",
 }
