@@ -47,11 +47,34 @@ type migrateManifest struct {
 	Files []migrateFile `json:"files"`
 }
 
+// migrateFilePath — путь файла переноса id/name: имена — по образцам, а
+// итоговый путь (очищенный) обязан лежать внутри каталога переносов.
+func (s *Server) migrateFilePath(id, name string) (string, string, error) {
+	if !migrateIDRe.MatchString(id) {
+		return "", "", msgs.Errorf("migrate.badID", id)
+	}
+	if !migrateFileRe.MatchString(name) || filepath.Base(name) != name {
+		return "", "", msgs.Errorf("migrate.badFile", name)
+	}
+	base := filepath.Clean(filepath.Join(s.archiveDir(), "migrate"))
+	dir := filepath.Clean(filepath.Join(base, id))
+	p := filepath.Clean(filepath.Join(dir, name))
+	if !strings.HasPrefix(dir, base+string(filepath.Separator)) || !strings.HasPrefix(p, dir+string(filepath.Separator)) {
+		return "", "", msgs.Errorf("migrate.badFile", name)
+	}
+	return dir, p, nil
+}
+
 func (s *Server) migrateDir(id string) (string, error) {
 	if !migrateIDRe.MatchString(id) {
 		return "", msgs.Errorf("migrate.badID", id)
 	}
-	return filepath.Join(s.archiveDir(), "migrate", id), nil
+	base := filepath.Clean(filepath.Join(s.archiveDir(), "migrate"))
+	dir := filepath.Clean(filepath.Join(base, id))
+	if !strings.HasPrefix(dir, base+string(filepath.Separator)) {
+		return "", msgs.Errorf("migrate.badID", id)
+	}
+	return dir, nil
 }
 
 func (s *Server) readManifest(id string) (migrateManifest, string, error) {
@@ -503,32 +526,24 @@ func (s *Server) handleMigrateStartStop(w http.ResponseWriter, r *http.Request) 
 
 // handleMigrateFileGet — GET /migrate/files/{id}/{name}: файл переноса.
 func (s *Server) handleMigrateFileGet(w http.ResponseWriter, r *http.Request) {
-	dir, err := s.migrateDir(chi.URLParam(r, "id"))
-	name := chi.URLParam(r, "name")
-	if err == nil && !migrateFileRe.MatchString(name) {
-		err = msgs.Errorf("migrate.badFile", name)
-	}
+	_, p, err := s.migrateFilePath(chi.URLParam(r, "id"), chi.URLParam(r, "name"))
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	f, err := os.Open(filepath.Join(dir, name))
+	f, err := os.Open(p)
 	if err != nil {
 		writeErr(w, r, http.StatusNotFound, err)
 		return
 	}
 	defer f.Close()
-	serveDownload(w, r, f, name)
+	serveDownload(w, r, f, filepath.Base(p))
 }
 
 // handleMigrateFilePut — PUT /migrate/files/{id}/{name}: принять файл
 // (потоком; недописанный удаляется).
 func (s *Server) handleMigrateFilePut(w http.ResponseWriter, r *http.Request) {
-	dir, err := s.migrateDir(chi.URLParam(r, "id"))
-	name := chi.URLParam(r, "name")
-	if err == nil && !migrateFileRe.MatchString(name) {
-		err = msgs.Errorf("migrate.badFile", name)
-	}
+	dir, final, err := s.migrateFilePath(chi.URLParam(r, "id"), chi.URLParam(r, "name"))
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
@@ -538,7 +553,7 @@ func (s *Server) handleMigrateFilePut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	tmp := filepath.Join(dir, name+".part")
+	tmp := final + ".part"
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
@@ -549,7 +564,7 @@ func (s *Server) handleMigrateFilePut(w http.ResponseWriter, r *http.Request) {
 		err = cerr
 	}
 	if err == nil {
-		err = os.Rename(tmp, filepath.Join(dir, name))
+		err = os.Rename(tmp, final)
 	}
 	if err != nil {
 		_ = os.Remove(tmp)
