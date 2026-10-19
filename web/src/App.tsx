@@ -619,8 +619,8 @@ function Shell({
                 <HostEvents
                   me={me}
                   onOpenHost={openHostAt}
-                  onOpenFly={() => {
-                    setDeployTab('fly')
+                  onOpenDeploy={(tab) => {
+                    setDeployTab(tab)
                     setHubView('deploy')
                   }}
                 />

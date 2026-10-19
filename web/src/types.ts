@@ -945,7 +945,7 @@ export interface HostEvent {
   /** Имя и адрес на момент события: хост могли переименовать или удалить. */
   host_name: string
   host_addr: string
-  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed' | 'rebooted' | 'bans' | 'forecast' | 'power-lost' | 'power-restored' | 'battery-low' | 'ups-lost' | 'fly-target-down' | 'fly-target-up' | 'fly-pool-empty' | 'fly-tunnel-down' | 'fly-tunnel-up' | 'migration-leftover'
+  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed' | 'rebooted' | 'bans' | 'forecast' | 'power-lost' | 'power-restored' | 'battery-low' | 'ups-lost' | 'fly-target-down' | 'fly-target-up' | 'fly-pool-empty' | 'fly-tunnel-down' | 'fly-tunnel-up' | 'migration-leftover' | 'deploy-failed' | 'deploy-succeeded' | 'edge-down' | 'edge-up' | 'cert-expiring'
   severity?: string
   detail?: string
   /** Раздел хоста с подсветкой (?focus=…); у старых событий нет. */

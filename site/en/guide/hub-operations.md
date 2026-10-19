@@ -13,7 +13,13 @@ The hub notices transitions itself: a host is **down** / **back**,
 **serious findings** appeared / **were fixed**, **a job failed**, fail2ban
 **banned new addresses**, a [“Monitoring”](/en/guide/hub-monitoring) **forecast**, the host's
 UPS: **power lost** / **power restored**, **battery low**, **no link to UPS**
-(see [UPS](/en/guide/system#ups)). An alert
+(see [UPS](/en/guide/system#ups)), Traffic Fly (target down / back, pool
+empty, tunnel down / up), an **old stack after a move** left for a week,
+**deployment failed** (and **succeeded** — not recorded by default),
+**nkt-edge offline** for over two minutes / **back online**, **site
+certificate expiring** — once a day the hub checks the deployment sites
+from outside and alerts 14, 7 and 3 days ahead and when it has expired
+(once per threshold; renewed — the count starts over). An alert
 log with settings for what to record and what to notify about; short
 episodes (“down” → “back” a couple of minutes later) collapse into one
 line “was down for N min”.
@@ -48,8 +54,13 @@ The **“Notify on problems”** switch turns on browser notifications — they
 arrive in any hub section while the tab is open. The unread counter is on
 the menu item.
 
-**Outgoing webhooks**: the hub sends the same events (and deployment
-outcomes) out by itself, to n8n, a chat bot or your own system, with an
+Hub events rather than host ones get a button to the "Deployments" tab:
+a deployment — "Pipelines", a certificate — "Sites", nkt-edge —
+"nkt-edge", Traffic Fly — "Traffic Fly".
+
+**Outgoing webhooks** and the Telegram and Slack bots get **the same
+kinds** as the journal, each recipient with its own choice (nothing
+ticked — all), whether or not the journal records them. Outgoing webhooks: the hub sends the same events out by itself, to n8n, a chat bot or your own system, with an
 HMAC signature. See [Outgoing webhooks](/en/guide/hub-api#outgoing-webhooks).
 
 ## Monitoring

@@ -187,6 +187,11 @@ const KIND_COLOR: Record<string, string> = {
   'fly-tunnel-up': 'success',
   'ups-lost': 'warning',
   'migration-leftover': 'gold',
+  'deploy-failed': 'error',
+  'deploy-succeeded': 'success',
+  'edge-down': 'error',
+  'edge-up': 'success',
+  'cert-expiring': 'warning',
 }
 
 /**
@@ -230,7 +235,16 @@ const KIND_LINK: Record<string, string> = {
   'job-failed': '/jobs',
 }
 
-export default function HostEvents({ me, onOpenHost, onOpenFly }: { me?: Me; onOpenHost?: (id: number, name: string, path: string) => void; onOpenFly?: () => void }) {
+/** События хаба, а не хоста: кнопка ведёт во вкладку «Выкладок». */
+function deployTabOf(kind: string): string | null {
+  if (kind.startsWith('fly-')) return 'fly'
+  if (kind.startsWith('deploy-')) return 'pipelines'
+  if (kind.startsWith('edge-')) return 'edge'
+  if (kind === 'cert-expiring') return 'sites'
+  return null
+}
+
+export default function HostEvents({ me, onOpenHost, onOpenDeploy }: { me?: Me; onOpenHost?: (id: number, name: string, path: string) => void; onOpenDeploy?: (tab: string) => void }) {
   const { t } = useTranslation()
   const [filter, setFilterState] = useState<EventFilter>(loadFilter)
   const [text, setText] = useState(filter.q)
@@ -316,11 +330,11 @@ export default function HostEvents({ me, onOpenHost, onOpenFly }: { me?: Me; onO
               )}
             </span>
             {/* К хосту — сразу в раздел, где это видно, с подсветкой. */}
-            {/* Traffic Fly — настройка хаба, не раздел хоста. */}
-            {e.kind.startsWith('fly-') ? (
-              onOpenFly && (
-                <Button size="small" style={{ marginTop: '0.25rem' }} onClick={onOpenFly}>
-                  {t('events.goTo.fly')}
+            {/* Traffic Fly, выкладки, nkt-edge, сайты — настройки хаба, не раздел хоста. */}
+            {deployTabOf(e.kind) ? (
+              onOpenDeploy && (
+                <Button size="small" style={{ marginTop: '0.25rem' }} onClick={() => onOpenDeploy(deployTabOf(e.kind)!)}>
+                  {t(`events.goTo.${deployTabOf(e.kind)}`)}
                 </Button>
               )
             ) : onOpenHost && !!e.host_id && (

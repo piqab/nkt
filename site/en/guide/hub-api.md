@@ -220,8 +220,11 @@ nothing needs to be exposed.
 
 ![Outgoing webhooks](/screens/en/hub-webhooks.png)
 
-**Events:** unreachable, recovered, new findings, findings resolved, job
-failed, rebooted, new bans, deployment succeeded, deployment failed.
+**Events:** the same kinds as the "Alerts" journal: unreachable,
+recovered, new findings, findings resolved, job failed, rebooted, new
+bans, forecast, UPS, Traffic Fly, old stack after a move, deployment
+succeeded and failed, nkt-edge offline and back online, site certificate
+expiring.
 Webhooks do not depend on the journal: a kind the journal does not record
 still reaches the recipient. A host and group scope limits it to its
 hosts' events; a deployment passes if all its hosts are in scope.

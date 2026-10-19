@@ -301,6 +301,7 @@ func (s *Server) reconcileEdges(ctx context.Context) {
 		c := &edgeClient{sig: edgeSig(st), cancel: cancel}
 		h.clients[id] = c
 		go s.edgeLoop(cctx, st, c)
+		go s.edgeAlerts(cctx, st, c)
 	}
 }
 
@@ -317,6 +318,62 @@ func (s *Server) edgeLoop(ctx context.Context, st EdgeSettings, c *edgeClient) {
 		select {
 		case <-ctx.Done():
 		case <-time.After(backoff):
+		}
+	}
+}
+
+// edgeDownGrace — обрыв связи с edge короче этого не оповещается:
+// переподключение после перезапуска edge или сети — обычное дело.
+var (
+	edgeDownGrace = 2 * time.Minute
+	edgeAlertTick = 30 * time.Second
+)
+
+// edgeAlerts — оповещения «nkt-edge без связи» (дольше edgeDownGrace) и
+// «снова на связи» (только после оповещённого обрыва). Хост события — где
+// edge установлен; edge не из хаба — по его домену или адресу.
+func (s *Server) edgeAlerts(ctx context.Context, st EdgeSettings, c *edgeClient) {
+	t := time.NewTicker(edgeAlertTick)
+	defer t.Stop()
+	var lostAt time.Time
+	reported := false
+	name := st.Domain
+	if name == "" {
+		name = st.Address
+	}
+	host := func() store.Host {
+		if st.HostID != 0 {
+			if h, err := s.db.HostByID(ctx, st.HostID); err == nil {
+				return h
+			}
+		}
+		return store.Host{Name: name}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		c.mu.Lock()
+		up, lastErr := c.connected, c.lastErr
+		c.mu.Unlock()
+		now := time.Now()
+		switch {
+		case up:
+			if reported {
+				s.hub.recordEventLink(ctx, host(), store.EventEdgeUp, "", "", "hub.edgeUp", name, int(now.Sub(lostAt).Round(time.Minute)/time.Minute))
+			}
+			lostAt, reported = time.Time{}, false
+		case lostAt.IsZero():
+			lostAt = now
+		case !reported && now.Sub(lostAt) >= edgeDownGrace:
+			reason := ""
+			if lastErr != nil {
+				reason = msgs.Localize(msgs.FromContext(ctx), lastErr)
+			}
+			s.hub.recordEventLink(ctx, host(), store.EventEdgeDown, "critical", "", "hub.edgeDown", name, reason)
+			reported = true
 		}
 	}
 }

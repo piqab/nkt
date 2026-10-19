@@ -343,7 +343,12 @@ and the cursor reads `stack <name> · containers: N`.
 - **Plan or immediately.** As in Traffic Fly: by default "Move" in the
   window adds the move to a plan — the tile reads "→ host · planned", and on
   top are **Apply moves (N)** and "Discard plan"; the **Apply immediately**
-  switch starts the move right after the window. While a move runs there is
+  switch moves right away, without the window: the hub checks the plan
+  quietly (the tile reads "→ host · checking the plan…") and, with no
+  obstacles or warnings, moves with the defaults (Traffic Fly routes
+  switched, the old copy's leftovers removed) and opens the job log; an
+  obstacle or a warning opens the plan window as without the switch. While
+  a move runs there is
   a spinner on the tile, "← moving" on the new host and a job tag (click —
   log); when it ends the map re-reads the hosts bypassing the cache and
   redraws the links.

@@ -921,7 +921,12 @@
       "fly-pool-empty": "Traffic Fly: no live targets in pool",
       "fly-tunnel-down": "Traffic Fly: tunnel down",
       "fly-tunnel-up": "Traffic Fly: tunnel up",
-      "migration-leftover": "Old stack after a move"
+      "migration-leftover": "Old stack after a move",
+      "deploy-failed": "deployment failed",
+      "deploy-succeeded": "deployment succeeded",
+      "edge-down": "nkt-edge offline",
+      "edge-up": "nkt-edge back online",
+      "cert-expiring": "site certificate expiring"
     },
     "settingsTitle": "What to record and what to notify about",
     "settingsHint": "Shared by the hub, not this browser. “Record” — the event goes to the log; “notify” — it pops up in the browser when its “Notify on problems” switch is on.",
@@ -956,7 +961,10 @@
       "availability": "To host availability",
       "images": "To host images",
       "services": "To host services",
-      "fly": "Open Traffic Fly"
+      "fly": "Open Traffic Fly",
+      "pipelines": "To deployments",
+      "sites": "To sites",
+      "edge": "To nkt-edge"
     }
   },
   "changes": {
@@ -4850,6 +4858,7 @@
     "dragStack": "stack {{name}} · containers: {{n}}",
     "moreMoving": "moving: {{n}}",
     "settling": "Refreshing the map after the move…",
+    "planning": "→ {{host}} · checking the plan…",
     "migratePorts": "Ports:",
     "migrateSkipped": "System paths are not copied — the new host needs its own: {{list}}",
     "migrateDowntime": "The stack on the old host stops while the data moves and stays stopped — for a rollback. If it is a Traffic Fly target or has a site, switch them after the move.",

@@ -951,6 +951,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	server.StartEdge(ctx)
 	server.StartFlyMonitor(ctx)
 	server.StartMigrationReminders(ctx)
+	server.StartCertWatch(ctx)
 	server.StartTelegram(ctx)
 	server.StartSlack()
 

@@ -248,6 +248,41 @@ export function HostsMap({
   const tilePress = useRef<{ from: HubHost; item: MapItem; sx: number; sy: number; started: boolean } | null>(null)
   const hostsRef = useRef(hosts)
   hostsRef.current = hosts
+  // «Применять сразу»: план проверяется молча, препятствий и
+  // предупреждений нет — перенос сразу (по умолчанию: маршруты Traffic Fly
+  // переключить, остатки старой копии убрать); есть — окно плана.
+  const [planning, setPlanning] = useState<{ from: number; name: string; to: string } | null>(null)
+  const askMove = async (ask: { from: HubHost; to: HubHost; item: MapItem }) => {
+    if (!applyNow) {
+      setMigrateAsk(ask)
+      return
+    }
+    setPlanning({ from: ask.from.id, name: ask.item.name, to: ask.to.name })
+    try {
+      const pv = await api<MigratePreview>('/hub/migrate/preview', { method: 'POST', body: { from: ask.from.id, to: ask.to.id, container: ask.item.name }, timeoutMs: 120_000 })
+      const problems = (pv.leftovers ? pv.leftovers.problems : pv.problems) ?? []
+      if (problems.length > 0 || (pv.warnings ?? []).length > 0) {
+        setMigrateAsk(ask)
+        return
+      }
+      const id = await startMove({
+        from: ask.from,
+        to: ask.to,
+        item: ask.item,
+        names: (pv.plan.containers ?? []).map((c) => c.name),
+        switchFly: (pv.fly ?? []).length > 0,
+        cleanLeftovers: !!pv.leftovers,
+      })
+      onOpenJob?.(id)
+    } catch {
+      // Не вышло проверить или запустить — окно плана покажет почему.
+      setMigrateAsk(ask)
+    } finally {
+      setPlanning(null)
+    }
+  }
+  const askRef = useRef(askMove)
+  askRef.current = askMove
   const dataRef = useRef(data.data)
   dataRef.current = data.data
   useEffect(() => {
@@ -282,7 +317,7 @@ export function HostsMap({
       if (!p?.started) return
       const h = hostAt(e.clientX, e.clientY)
       const to = hostsRef.current.find((x) => x.id === h)
-      if (to && to.id !== p.from.id && to.status === 'online') setMigrateAsk({ from: p.from, to, item: p.item })
+      if (to && to.id !== p.from.id && to.status === 'online') askRef.current({ from: p.from, to, item: p.item })
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -978,7 +1013,11 @@ export function HostsMap({
                         <text x={it.kind === 'container' ? 50 : 32} y={17} fontSize={12} fill="var(--text-primary)">
                           {midEllipsis(it.name, it.kind === 'container' ? 20 : 23)}
                         </text>
-                        {movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name) ? (
+                        {planning?.from === b.host.id && planning.name === it.name ? (
+                          <text x={8} y={35} fontSize={10} fill="var(--accent, #1677ff)">
+                            {midEllipsis(t('hostsMap.planning', { host: planning.to }), 34)}
+                          </text>
+                        ) : movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name) ? (
                           <text x={8} y={35} fontSize={10} fill="var(--accent, #1677ff)">
                             {midEllipsis(
                               movingTile(b.host.id, it.name)
