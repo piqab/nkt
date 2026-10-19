@@ -186,6 +186,7 @@ const KIND_COLOR: Record<string, string> = {
   'fly-tunnel-down': 'error',
   'fly-tunnel-up': 'success',
   'ups-lost': 'warning',
+  'migration-leftover': 'gold',
 }
 
 /**
@@ -222,6 +223,7 @@ function loadFilter(): EventFilter {
 
 /** Куда вести с события, если своей ссылки у него нет (старые записи). */
 const KIND_LINK: Record<string, string> = {
+  'migration-leftover': '/containers',
   problems: '/findings',
   resolved: '/findings',
   bans: '/fail2ban',

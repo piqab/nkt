@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.44 — 2026-10-19
+
+- **Moving a Docker container to another host — by dragging on the hosts
+  map.** A Move button above the map; drag a Docker tile onto another
+  host's block; the plan window shows what moves (the whole compose
+  project or a standalone container), volume and directory data with
+  sizes, images, ports and what is in the way. The stack on the old host
+  stops, data and images stream through the hub, the stack starts on the
+  new host; an error rolls back by itself. The old one stays stopped: the
+  map offers "Roll back" and "Remove old", and after a week there is an
+  alert. Both hosts need this nkt version; deployment pipeline stacks come
+  next.
+
 ## v1.13.43 — 2026-10-19
 
 - **Traffic Fly: active targets on top, switching by drag.** On the map

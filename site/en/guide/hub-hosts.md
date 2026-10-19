@@ -281,6 +281,49 @@ Traffic Fly routes and deployment pipelines with links to their tiles.
 
 ![Hosts map](/screens/en/hosts-map.png)
 
+### Moving a container to another host
+
+The **Move** button above the map (admins) turns on move mode: drag a
+**Docker** tile onto another host's block — the map does not pan by
+dragging in this mode, and the drop host is highlighted. A plan window
+opens: what moves, the data (volumes and directories with sizes), images
+(which the new host already has), ports and what is in the way; **Move**
+runs a job with a log.
+
+- **What moves.** A compose project container brings the whole project:
+  the working directory (compose files, `.env`, directories next to it),
+  named volumes, bind mounts outside it, images. A standalone container
+  (`docker run`) moves alone: a compose description is built from
+  `docker inspect` (image, command, ports, volumes, restart, labels), the
+  environment goes into `.env` (mode 0600), and on the new host it is a
+  stack in `/srv/compose/<name>`. System paths (`/etc`,
+  `/var/run/docker.sock` and so on) are not copied — the new host needs
+  its own.
+- **Refused:** host network, `privileged`, devices and GPUs, Swarm and
+  Kubernetes, volumes not on the local driver, a working directory in a
+  system location (or a Windows path — a Docker Desktop stack), a different
+  architecture on the new host, busy ports, directories, volumes or a stack
+  of the same name already there, not enough space.
+- **How it runs:** the stack on the old host is **stopped** (so database
+  data is copied consistently); volume data goes through docker itself
+  (`docker cp`, works with Docker Desktop and rootless), directories via
+  `tar`, images the new host lacks via `docker save`; files stream through
+  the hub without staying there. On the new host: directories, images,
+  `compose up --no-start`, volume data, then start with a readiness wait.
+- **An error after the stop** rolls back by itself: what was created on
+  the new host (stack, volumes, directories) is removed, and the stack on
+  the old host starts again.
+- **After the move** the old stack **stays stopped** — its tile reads
+  "→ host · date · stopped", the new one "← from host". Click the old one
+  for **Roll back** (stop the new, start the old) or **Remove old**
+  (containers; with the checkbox, volumes too). After a week, if the old
+  one is still there, an "Old stack after a move" alert.
+- Traffic Fly targets and sites are not switched by the move — do it
+  afterwards (swap targets on the Traffic Fly map; the site on the new host
+  and the DNS A record). Moving deployment pipeline stacks comes in the
+  next version; both hosts need nkt of this version or newer.
+
+
 ## Narrow sudo
 
 `NOPASSWD: ALL` makes root out of anyone who signs in as that user:

@@ -918,7 +918,8 @@
       "fly-target-up": "Traffic Fly: target back up",
       "fly-pool-empty": "Traffic Fly: no live targets in pool",
       "fly-tunnel-down": "Traffic Fly: tunnel down",
-      "fly-tunnel-up": "Traffic Fly: tunnel up"
+      "fly-tunnel-up": "Traffic Fly: tunnel up",
+      "migration-leftover": "Old stack after a move"
     },
     "settingsTitle": "What to record and what to notify about",
     "settingsHint": "Shared by the hub, not this browser. “Record” — the event goes to the log; “notify” — it pops up in the browser when its “Notify on problems” switch is on.",
@@ -4828,6 +4829,33 @@
       "canceled": "canceled"
     },
     "pngHint": "Download the whole map as a PNG image (with date and legend)",
-    "pngPrivacy": "Download PNG: privacy mode — host names, IPs and domains are replaced by “•••” in the image"
+    "pngPrivacy": "Download PNG: privacy mode — host names, IPs and domains are replaced by “•••” in the image",
+    "moveMode": "Move",
+    "moveHint": "Move mode: drag a Docker tile onto another host — the container (or its whole compose stack) moves there with its data",
+    "moveModeHint": "Move mode: drag a Docker tile onto another host's block. The stack stops during the move and the old one stays stopped for a rollback; click a moved one for \"Roll back\" or \"Remove old\".",
+    "migratedFrom": "→ {{host}} · {{date}} · stopped",
+    "migratedTo": "← from {{host}} · {{date}}",
+    "migrateTitle": "Move {{name}}: {{from}} → {{to}}",
+    "migratePlan": "migration plan",
+    "migrateStack": "The whole stack {{name}} — containers: {{n}}",
+    "migrateSolo": "Container {{name}}",
+    "migrateSoloHint": "A standalone container becomes a compose stack in /srv/compose on the new host — the description is built from docker inspect.",
+    "migrateData": "Data: {{size}}",
+    "migrateVolume": "volume",
+    "migrateImages": "Images:",
+    "migrateImageHave": "already there",
+    "migratePorts": "Ports:",
+    "migrateSkipped": "System paths are not copied — the new host needs its own: {{list}}",
+    "migrateDowntime": "The stack on the old host stops while the data moves and stays stopped — for a rollback. If it is a Traffic Fly target or has a site, switch them after the move.",
+    "migrateProblems": "Cannot move:",
+    "migrateGo": "Move",
+    "migratedTitle": "Moved: {{name}}",
+    "migratedText": "Moved from {{from}} to {{to}} ({{date}}); stopped here.",
+    "rollback": "Roll back",
+    "rollbackConfirm": "Roll back the move of {{name}}: stop it on {{to}} and start it again on {{from}}?",
+    "removeOld": "Remove old",
+    "removeWithData": "and the data (volumes: {{list}})",
+    "removeConfirm": "Remove the stopped containers of {{name}} from {{host}}? Volumes and directories stay.",
+    "removeConfirmData": "Remove the stopped containers of {{name}} from {{host}} together with their volumes? The data on this host will be deleted."
   }
 }
