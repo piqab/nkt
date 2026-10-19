@@ -15,6 +15,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Light, dark and system theme; the sidebar collapses to icons (by button or automatically on narrow screens), the state is remembered.
 - Privacy mode (“hide sensitive data”) for screen sharing and screenshots: addresses, host names, users, keys and domains are blurred across all sections — from hosts and logs to deployments, nkt-edge and the Traffic Fly map, diffs and error messages.
 - Accounts with `admin` and `viewer` roles, argon2id passwords, sessions, brute-force protection, login with a host system account (PAM).
+- Security policy (`.github/SECURITY.md`): report vulnerabilities privately via GitHub "Report a vulnerability"; acknowledgement within 7 days, assessment within 30.
 - Read-only mode (`NKT_ALLOW_MUTATIONS=false`) that disables every change.
 - Audit log: every change is recorded with the user, the outcome and the command output.
 - Runs under systemd in a sandbox (`ProtectSystem=strict`) with a controlled escape for commands that need system access.

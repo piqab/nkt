@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.46 — 2026-10-19
+
+- **Security policy.** The repository has `.github/SECURITY.md`:
+  vulnerabilities are reported privately via "Report a vulnerability" on
+  the GitHub Security tab; acknowledgement within 7 days, assessment and
+  plan within 30, a GitHub Security Advisory after the fix. Linked from
+  the README.
+
 ## v1.13.45 — 2026-10-19
 
 - **Container moves: stricter checks on transfer file paths.** A transfer

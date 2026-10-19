@@ -85,6 +85,9 @@ Everything lives on the site, [piqab.github.io/nkt](https://piqab.github.io/nkt/
 | [Reference](https://piqab.github.io/nkt/en/guide/reference-config) | every variable, [security](https://piqab.github.io/nkt/en/guide/reference-security), [API](https://piqab.github.io/nkt/en/guide/reference-api), [limitations](https://piqab.github.io/nkt/en/guide/reference-limitations), [troubleshooting](https://piqab.github.io/nkt/en/guide/troubleshooting) |
 | [Development](https://piqab.github.io/nkt/en/guide/development) | building, the test stand, tests, code layout |
 
+Found a vulnerability? Report it privately — see the
+[security policy](.github/SECURITY.md).
+
 The full feature list is in [FEATURES.md](FEATURES.md), what changed —
 in [WHATSNEW.en.md](WHATSNEW.en.md). The site sources are in
 [`site/`](site/); a deployment example is in
