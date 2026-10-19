@@ -23,6 +23,12 @@ import (
 // Шаги переноса на хосте: упаковка (старый хост), файлы туда и обратно,
 // распаковка с подъёмом (новый), откат, запуск и уборка старого.
 
+// MigrateHostQueue — очередь шагов переноса на хосте. У задания хаба —
+// своя (hub.migrateHubQueue): на машине хаба менеджер заданий общий, и
+// одна очередь на двоих — взаимная блокировка (задание хаба ждёт шаг,
+// шаг ждёт в очереди за ним).
+const MigrateHostQueue = "migrate"
+
 // migrateMaxBytes — предел одного файла переноса (тома бывают большими).
 const migrateMaxBytes = 500 << 30
 
@@ -143,7 +149,7 @@ func (s *Server) startMigrateJob(ctx context.Context, user, op, titleKey, title 
 	}
 	return s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindHostOp, TitleKey: titleKey, TitleArgs: []any{title},
-		Queue: "migrate", Author: user, Steps: 1,
+		Queue: MigrateHostQueue, Author: user, Steps: 1,
 		Params: HostOpParams{Op: op, Args: raw},
 	})
 }

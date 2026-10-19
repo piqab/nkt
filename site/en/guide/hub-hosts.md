@@ -312,7 +312,8 @@ runs a job with a log.
   `compose up --no-start`, volume data, then start with a readiness wait.
 - **An error after the stop** rolls back by itself: what was created on
   the new host (stack, volumes, directories) is removed, and the stack on
-  the old host starts again.
+  the old host starts again. The same happens when the job is cancelled
+  in Jobs and when a transfer between hosts sits 10 minutes without data.
 - **After the move** the old stack **stays stopped** — its tile reads
   "→ host · date · stopped", the new one "← from host". Click the old one
   for **Roll back** (stop the new, start the old) or **Remove old**

@@ -524,4 +524,5 @@ var ruSitesCatalog = map[string]string{
 	"migrate.stepRemoveOld":           "Удаление старого %s с %s",
 	"migrate.reminder":                "Стек %s перенесён на %s (%s), а старый здесь остановлен уже неделю — убрать или откатить: карта хостов",
 	"migrate.hostOld":                 "nkt на хосте %s не умеет переносить контейнеры — обновите nkt на нём",
+	"migrate.transferStalled":         "Передача %s остановилась: %d мин без данных — канал до хоста оборвался",
 }

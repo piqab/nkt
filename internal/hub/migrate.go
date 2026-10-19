@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -101,6 +102,14 @@ type migrateRecord struct {
 }
 
 const migrationsKey = "migrations"
+
+// migrateHubQueue — очередь заданий переноса на хабе; не та, что у шагов
+// на хостах (api.MigrateHostQueue): на машине хаба менеджер заданий общий.
+const migrateHubQueue = "hub-migrate"
+
+// migrateStallTimeout — передача файла без единого байта столько —
+// обрыв (канал умер, а TCP этого ещё не заметил) и откат.
+var migrateStallTimeout = 10 * time.Minute
 
 var migrationsMu sync.Mutex
 
@@ -280,7 +289,7 @@ func (s *Server) startMigrate(w http.ResponseWriter, r *http.Request, p MigrateP
 	}
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindContainerMigrate, TitleKey: "migrate.title." + p.Action, TitleArgs: []any{title, s.hostName(ctx, p.From), s.hostName(ctx, p.To)},
-		Queue: "migrate", Author: user, Steps: 6, Params: p,
+		Queue: migrateHubQueue, Author: user, Steps: 6, Params: p,
 	})
 	s.db.Audit(ctx, user, "migrate."+p.Action, title, auditOutcome(err), map[string]any{"from": p.From, "to": p.To})
 	if err != nil {
@@ -327,7 +336,13 @@ func (s *Server) hostJob(ctx context.Context, jc *jobs.Context, user string, hos
 	if _, err := s.hostCallLong(ctx, user, hostID, "POST", path, body, &started); err != nil {
 		return err
 	}
-	return s.waitHostJobVia(ctx, jc, user, hostID, started.JobID)
+	err := s.waitHostJobVia(ctx, jc, user, hostID, started.JobID)
+	if err != nil && ctx.Err() != nil {
+		// Перенос отменён — и шаг на хосте тоже: упаковка сама запустит
+		// контейнеры обратно, распаковку откатит задание переноса.
+		_, _ = s.hostCallLong(context.WithoutCancel(ctx), user, hostID, "POST", "/api/jobs/"+strconv.FormatInt(started.JobID, 10)+"/cancel", nil, nil)
+	}
+	return err
 }
 
 func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string, p MigrateParams) (err error) {
@@ -425,6 +440,29 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 // migrateCopy — файл переноса со старого хоста на новый потоком через хаб.
 func (s *Server) migrateCopy(ctx context.Context, jc *jobs.Context, user string, from, to int64, id, name string, size int64) error {
 	path := "/api/migrate/files/" + id + "/" + name
+	// Сторож: нет данных migrateStallTimeout — обрыв передачи.
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var lastByte atomic.Int64
+	lastByte.Store(time.Now().UnixNano())
+	stalled := atomic.Bool{}
+	go func() {
+		t := time.NewTicker(migrateStallTimeout / 10)
+		defer t.Stop()
+		for {
+			select {
+			case <-cctx.Done():
+				return
+			case <-t.C:
+				if time.Since(time.Unix(0, lastByte.Load())) > migrateStallTimeout {
+					stalled.Store(true)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	ctx = cctx
 	src, n, err := s.hostDownload(ctx, user, from, path)
 	if err != nil {
 		return err
@@ -438,6 +476,9 @@ func (s *Server) migrateCopy(ctx context.Context, jc *jobs.Context, user string,
 	last := time.Now()
 	pr := readFunc(func(b []byte) (int, error) {
 		k, err := src.Read(b)
+		if k > 0 {
+			lastByte.Store(time.Now().UnixNano())
+		}
 		done += int64(k)
 		if time.Since(last) >= 5*time.Second && size > 0 {
 			last = time.Now()
@@ -446,6 +487,9 @@ func (s *Server) migrateCopy(ctx context.Context, jc *jobs.Context, user string,
 		return k, err
 	})
 	if err := s.hostUpload(ctx, user, to, path, pr, size); err != nil {
+		if stalled.Load() {
+			return msgs.Errorf("migrate.transferStalled", name, int(migrateStallTimeout.Minutes()))
+		}
 		return err
 	}
 	return nil
