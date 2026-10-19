@@ -1,0 +1,88 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Technitium DNS Server (https://github.com/TechnitiumSoftware/DnsServer) —
+# первичный сервер имён (ns1) для выкладки через хаб nkt: авторитетные
+# зоны, проверка DNS-01 для сертификатов (cert-manager, certbot), failover-
+# записи, DoH за прокси сайта. Вторичный (ns2) —
+# docker-compose.secondary.yml на другом хосте.
+#
+# Свой файл, а не compose из их репозитория: версия закреплена, консоль
+# 5380 — только на 127.0.0.1, порт 53 — на адрес хоста (в конвейере,
+# ports:), рекурсия — только частным сетям (не открытый резолвер), DoH —
+# через прокси сайта, первичная настройка (ключи TSIG, зоны, перенос на
+# вторичный) — разовым сервисом dns-init через API.
+services:
+  dns:
+    # Версия закреплена; новая — правкой тега.
+    image: technitium/dns-server:15.6.2
+    hostname: dns
+    restart: unless-stopped
+    environment:
+      DNS_SERVER_DOMAIN: ${DNS_DOMAIN}
+      # Только при первом запуске (пустой том); дальше пароль — в консоли,
+      # и тогда его же — в .env (по нему входит dns-init).
+      DNS_SERVER_ADMIN_PASSWORD: ${DNS_ADMIN_PASSWORD}
+      # Рекурсия (резолвер для чужих имён) — только частным сетям: иначе
+      # порт 53 — открытый резолвер для DDoS-усиления. Свои сети —
+      # RECURSION=UseSpecifiedNetworkACL и RECURSION_ACL в .env.
+      DNS_SERVER_RECURSION: ${RECURSION:-AllowOnlyForPrivateNetworks}
+      DNS_SERVER_RECURSION_NETWORK_ACL: ${RECURSION_ACL:-}
+      # DNS-over-HTTP без TLS (порт 80 контейнера) — для DoH за прокси
+      # сайта: HTTPS и сертификат — у прокси.
+      DNS_SERVER_OPTIONAL_PROTOCOL_DNS_OVER_HTTP: "true"
+      # Исходящий DNS по UDP закрыт у провайдера — пересылка по DoH:
+      # FORWARDERS=https://cloudflare-dns.com/dns-query (1.1.1.1), FORWARDER_PROTOCOL=Https.
+      DNS_SERVER_FORWARDERS: ${FORWARDERS:-}
+      DNS_SERVER_FORWARDER_PROTOCOL: ${FORWARDER_PROTOCOL:-Udp}
+      DNS_SERVER_LOG_FOLDER_PATH: /var/log/technitium/dns
+    volumes:
+      - config:/etc/dns
+      - logs:/var/log/technitium/dns
+      # DoT/DoQ: каталог с PFX от хука certbot (certbot-dot-hook.sh) —
+      # каталогом, не файлом: подмену файла при продлении видно внутри.
+      # - ./tls:/etc/dns/tls:ro
+    # 53 — DNS (в конвейере ports: публикует его на адрес хоста; здесь
+    # хаб оставил бы 127.0.0.1); 5380 — консоль, только с самого хоста
+    # (ssh -L 5380:127.0.0.1:5380 хост). 80 — DoH: публикует сайт.
+    # DoT/DoQ (853) — см. README и ports: в конвейере.
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "127.0.0.1:5380:5380"
+    expose: ["80"]
+    healthcheck:
+      # Их проверка /api/dnsClient/healthCheck в 15.x требует токен —
+      # проверяем, что консоль отвечает.
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:5380/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    sysctls:
+      - net.ipv4.ip_local_port_range=1024 65535
+
+  # Разовый: ключи TSIG, зоны, перенос на вторичный, Failover — через API
+  # (init.py рядом). Повтор при каждой выкладке ничего не ломает.
+  dns-init:
+    image: python:3.13-alpine
+    restart: "no"
+    command: ["python3", "/init.py"]
+    environment:
+      ROLE: primary
+      DNS_ADMIN_PASSWORD: ${DNS_ADMIN_PASSWORD}
+      ZONES: ${ZONES:-}
+      ACME_ZONE: ${ACME_ZONE:-}
+      SECONDARY_IP: ${SECONDARY_IP:-}
+      SECONDARY_NS: ${SECONDARY_NS:-}
+      TSIG_CERT_MANAGER: ${TSIG_CERT_MANAGER}
+      TSIG_TRANSFER: ${TSIG_TRANSFER}
+      INSTALL_FAILOVER: ${INSTALL_FAILOVER:-true}
+    volumes:
+      - ./init.py:/init.py:ro
+    depends_on:
+      dns:
+        condition: service_healthy
+
+volumes:
+  config:
+  logs:

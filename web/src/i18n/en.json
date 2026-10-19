@@ -3557,7 +3557,11 @@
       "authorizer": {
         "title": "Authorizer + PostgreSQL",
         "hint": "Sign-in and users for your apps (OAuth2/OIDC): settings as flags from .env, a Traffic Fly variant commented out."
-      }
+      },
+        "technitium": {
+          "title": "Technitium DNS Server",
+          "hint": "Your own name server: zones, DNS-01 checks for certificates (cert-manager), failover records, DoH; the secondary is a second pipeline (README)"
+        }
     },
     "imagesComment": "pinned image versions",
     "portsComment": "port publications instead of the file's",

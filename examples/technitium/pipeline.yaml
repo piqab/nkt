@@ -1,0 +1,51 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Technitium DNS Server — первичный сервер имён (ns1) из examples/ репозитория nkt.
+# Вторичный (ns2) — pipeline.secondary.yaml, на другом хосте. Подробно — README.md.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/technitium/deploy/docker-compose.yml
+  project: technitium
+  hosts: [ns1]
+  files: [examples/technitium/deploy/init.py]   # первичная настройка через API (разовый dns-init)
+  wait_timeout: 5m
+  # DNS — наружу на адрес интерфейса хоста (ip -4 addr; за NAT — внутренний
+  # адрес). Не 0.0.0.0: на Ubuntu 127.0.0.53:53 держит systemd-resolved, и
+  # публикация на все адреса упадёт с «адрес занят». Консоль — только
+  # 127.0.0.1. ports: заменяет публикации сервиса целиком.
+  ports:
+    dns:
+      - "203.0.113.10:53:53/udp"
+      - "203.0.113.10:53:53/tcp"
+      - "127.0.0.1:5380:5380"
+      # DoT и DoQ (Android «Частный DNS») — после хука certbot, см. README:
+      # - "203.0.113.10:853:853/tcp"
+      # - "203.0.113.10:853:853/udp"
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера (в описании останется "@secret"), generate: — значение
+  # создаст хаб. Посмотреть — «Секреты» → «.env» → история → «Показать».
+  env:
+    DNS_DOMAIN: ns1.example.com            # имя этого сервера (A-запись — на его IP)
+    DNS_ADMIN_PASSWORD: generate:password  # консоль: пользователь admin
+    ZONES: example.com                     # свои зоны через запятую (failover-записи и прочее)
+    ACME_ZONE: acme.example.com            # подзона для проверок DNS-01 (cert-manager, certbot)
+    SECONDARY_IP: 198.51.100.20            # IP вторичного (ns2): перенос зон и NOTIFY — только ему
+    SECONDARY_NS: ns2.example.com
+    TSIG_CERT_MANAGER: generate:base64-32  # ключ cert-manager — динамические обновления ACME_ZONE
+    TSIG_TRANSFER: generate:base64-32      # ключ переноса зон — тот же во втором конвейере
+    # Исходящий DNS по UDP закрыт — пересылка по DoH:
+    # FORWARDERS: https://cloudflare-dns.com/dns-query (1.1.1.1)
+    # FORWARDER_PROTOCOL: Https
+    # Резолвер для своих сетей (DoH/DoT с телефона и т. п.), не для всех:
+    # RECURSION: UseSpecifiedNetworkACL
+    # RECURSION_ACL: 203.0.113.0/24, 2001:db8::/32
+  # Сайт: DoH https://dns.example.com/dns-query — прокси с сертификатом
+  # Let's Encrypt перед DNS-over-HTTP (порт 80 контейнера). A-запись
+  # dns.example.com — на этот хост.
+  site:
+    domains: [dns.example.com]
+    service: dns
+    port: 80

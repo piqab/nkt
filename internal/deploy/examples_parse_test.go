@@ -10,7 +10,7 @@ import (
 // Все примеры из examples/ — правильные описания; блок env читается,
 // начало — предупреждение о стороннем коде.
 func TestExamplePipelinesParse(t *testing.T) {
-	files, _ := filepath.Glob("../../examples/*/pipeline.yaml")
+	files, _ := filepath.Glob("../../examples/*/pipeline*.yaml")
 	more, _ := filepath.Glob("../../examples/*/deploy/pipeline.yaml")
 	files = append(files, more...)
 	if len(files) < 8 {

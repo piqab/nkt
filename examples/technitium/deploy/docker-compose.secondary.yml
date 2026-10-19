@@ -1,0 +1,55 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Technitium DNS Server — вторичный сервер имён (ns2) на другом хосте:
+# зоны получает переносом с первичного (ключ TSIG zone-transfer), сам их
+# не правит. Без сайта и без DoH; консоль — только с самого хоста.
+services:
+  dns:
+    image: technitium/dns-server:15.6.2
+    hostname: dns
+    restart: unless-stopped
+    environment:
+      DNS_SERVER_DOMAIN: ${DNS_DOMAIN}
+      DNS_SERVER_ADMIN_PASSWORD: ${DNS_ADMIN_PASSWORD}
+      DNS_SERVER_RECURSION: ${RECURSION:-AllowOnlyForPrivateNetworks}
+      DNS_SERVER_RECURSION_NETWORK_ACL: ${RECURSION_ACL:-}
+      DNS_SERVER_FORWARDERS: ${FORWARDERS:-}
+      DNS_SERVER_FORWARDER_PROTOCOL: ${FORWARDER_PROTOCOL:-Udp}
+      DNS_SERVER_LOG_FOLDER_PATH: /var/log/technitium/dns
+    volumes:
+      - config:/etc/dns
+      - logs:/var/log/technitium/dns
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "127.0.0.1:5380:5380"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:5380/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    sysctls:
+      - net.ipv4.ip_local_port_range=1024 65535
+
+  dns-init:
+    image: python:3.13-alpine
+    restart: "no"
+    command: ["python3", "/init.py"]
+    environment:
+      ROLE: secondary
+      DNS_ADMIN_PASSWORD: ${DNS_ADMIN_PASSWORD}
+      ZONES: ${ZONES:-}
+      ACME_ZONE: ${ACME_ZONE:-}
+      PRIMARY_IP: ${PRIMARY_IP}
+      TSIG_TRANSFER: ${TSIG_TRANSFER}
+      INSTALL_FAILOVER: ${INSTALL_FAILOVER:-true}
+    volumes:
+      - ./init.py:/init.py:ro
+    depends_on:
+      dns:
+        condition: service_healthy
+
+volumes:
+  config:
+  logs:

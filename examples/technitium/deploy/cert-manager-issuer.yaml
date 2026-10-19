@@ -1,0 +1,48 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# cert-manager: сертификаты Let's Encrypt с проверкой DNS-01 через
+# Technitium (RFC 2136, ключ TSIG cert-manager). Подзона проверок —
+# acme.example.com (делегирована на ns1/ns2), в основной зоне у
+# регистратора — CNAME _acme-challenge.<имя> → <имя>.acme.example.com.
+#
+# Секрет ключа — TSIG_CERT_MANAGER из секретов конвейера («Секреты» →
+# «.env» → «Показать»), в Secret — как есть (base64 от Technitium):
+#   kubectl -n cert-manager create secret generic technitium-tsig \
+#     --from-literal=secret='<TSIG_CERT_MANAGER>'
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-technitium
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Для проб — staging: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-technitium-account
+    solvers:
+      - dns01:
+          # Идти по CNAME _acme-challenge в подзону acme.example.com.
+          cnameStrategy: Follow
+          rfc2136:
+            nameserver: "203.0.113.10:53"   # IP первичного (ns1); поды должны доходить до него по 53/tcp и udp
+            tsigKeyName: cert-manager
+            tsigAlgorithm: HMACSHA256
+            tsigSecretSecretRef:
+              name: technitium-tsig
+              key: secret
+---
+# Пример сертификата: имя и wildcard.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: app-example-com
+  namespace: default
+spec:
+  secretName: app-example-com-tls
+  issuerRef:
+    name: letsencrypt-technitium
+    kind: ClusterIssuer
+  dnsNames:
+    - app.example.com
+    - "*.app.example.com"

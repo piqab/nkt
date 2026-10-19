@@ -12,6 +12,8 @@ export interface PipelineExample {
   site: { service: string; port: number }
   images?: Record<string, string>
   files?: string[]
+  /** Публикации вместо compose-файла; {hostip} — адрес выбранного хоста
+   * (IPv4 из «Хостов»), иначе заглушка 203.0.113.10 — поправить. */
   ports?: Record<string, string[]>
   envKeys?: Record<string, string[]>
   waitTimeout?: string
@@ -130,6 +132,27 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
       ['JWT_SECRET', 'generate:hex32'],
       ['ENCRYPTION_KEY', 'generate:hex32'],
       ['POSTGRES_PASSWORD', 'generate:password'],
+    ],
+  },
+  {
+    key: 'technitium',
+    link: `${NKT}/blob/main/examples/technitium/deploy/docker-compose.yml`,
+    project: 'technitium',
+    readme: `${NKT}/tree/main/examples/technitium`,
+    // DoH: прокси сайта перед DNS-over-HTTP (порт 80 контейнера).
+    site: { service: 'dns', port: 80 },
+    files: ['examples/technitium/deploy/init.py'],
+    // DNS — на адрес хоста, не 0.0.0.0 (127.0.0.53:53 у systemd-resolved).
+    ports: { dns: ['{hostip}:53:53/udp', '{hostip}:53:53/tcp', '127.0.0.1:5380:5380'] },
+    env: [
+      ['DNS_DOMAIN', 'ns1.example.com'],
+      ['DNS_ADMIN_PASSWORD', 'generate:password'],
+      ['ZONES', 'example.com'],
+      ['ACME_ZONE', 'acme.example.com'],
+      ['SECONDARY_IP', ''],
+      ['SECONDARY_NS', 'ns2.example.com'],
+      ['TSIG_CERT_MANAGER', 'generate:base64-32'],
+      ['TSIG_TRANSFER', 'generate:base64-32'],
     ],
   },
   {
