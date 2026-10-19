@@ -3565,7 +3565,11 @@
       "authorizer": {
         "title": "Authorizer + PostgreSQL",
         "hint": "Вход и пользователи для своих приложений (OAuth2/OIDC): настройки — флагами из .env, вариант через Traffic Fly — закомментирован."
-      }
+      },
+        "technitium": {
+          "title": "Technitium DNS Server",
+          "hint": "Свой сервер имён: зоны, проверка DNS-01 для сертификатов (cert-manager), failover-записи, DoH; вторичный — вторым конвейером (README)"
+        }
     },
     "imagesComment": "закреплённые версии образов",
     "portsComment": "публикации портов вместо тех, что в файле",

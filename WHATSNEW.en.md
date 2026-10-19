@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.54 — 2026-10-19
+
+- **"Technitium DNS Server" example** — your own name server: a primary
+  and a secondary on different hosts (zone transfer with a TSIG key,
+  changes arrive in ~10 s), DNS-01 validation for Let's Encrypt
+  certificates through cert-manager (RFC 2136; the key can change only TXT
+  and only in the validation subzone), failover records (live addresses
+  only), DoH behind the site proxy, DoT with a certbot hook. Initial setup
+  is a one-shot service through the API on every deployment; recursion for
+  private networks only (not an open resolver). In the "Examples" menu the
+  selected host's address for port 53 is filled in. Tested on docker:
+  updates with and without the key, transfer and NOTIFY, Failover on both
+  servers, DoH, DoT with certificate reload.
+
 ## v1.13.53 — 2026-10-19
 
 - **TUI: you can see work in progress.** While a long action runs (saving

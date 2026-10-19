@@ -872,11 +872,14 @@ function ComposeFromLink({
   function linkOnlyYaml(p: { repo: string; ref: string; file: string; name: string }, proj: string, ex: PipelineExample | undefined, src: string): string {
     // Сервисов чужого compose хаб не знает — заглушка явная.
     const site = ex?.site ?? { service: t('deploy.fromLinkSiteService'), port: t('deploy.fromLinkSitePort') }
+    // {hostip} в публикациях примера — адрес выбранного хоста (IPv4).
+    const hostAddr = (hosts.data ?? []).find((h) => h.name === picked[0])?.addr ?? ''
+    const hostIP = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostAddr) ? hostAddr : '203.0.113.10'
     const block = (name: string, rec: Record<string, string | string[]> | undefined, comment: string) =>
       rec
         ? `  ${name}:${comment ? '                          '.slice(name.length) + '# ' + comment : ''}\n` +
           Object.entries(rec)
-            .map(([svc, v]) => `    ${svc}: ${Array.isArray(v) ? `[${v.map((x) => (x.includes(':') ? `"${x}"` : x)).join(', ')}]` : v}\n`)
+            .map(([svc, v]) => `    ${svc}: ${Array.isArray(v) ? `[${v.map((x) => x.replaceAll('{hostip}', hostIP)).map((x) => (x.includes(':') ? `"${x}"` : x)).join(', ')}]` : v}\n`)
             .join('')
         : ''
     const files = ex?.files ? `  files: [${ex.files.join(', ')}]              # ${t('deploy.fromLinkFilesComment')}\n` : ''

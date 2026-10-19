@@ -312,6 +312,7 @@ Codeberg/Gitea/Forgejo `…/src/branch/…`, их raw-варианты), выб�
 | WordPress + MariaDB | сайт за HTTPS-прокси (`X-Forwarded-Proto`) |
 | Plausible | три сервиса с ClickHouse, каталог конфигов (`files`) |
 | Authorizer + PostgreSQL | настройки только флагами запуска — из `.env` в `command:`; закомментированный вариант входа через Traffic Fly (`fly:`) |
+| Technitium DNS Server | свой сервер имён: DNS 53/udp и tcp на адрес хоста (`ports:`; адрес выбранного хоста подставляется сам), разовая настройка через API (`dns-init`, `files`), DoH за прокси сайта; вторичный сервер — вторым конвейером; DNS-01 для cert-manager (RFC 2136, TSIG), failover-записи, DoT — в [README](https://github.com/piqab/nkt/tree/main/examples/technitium) |
 
 Каждый пример начинается строками `# WARNING:` (на русском и английском):
 он берёт сторонний репозиторий и образы, их безопасность и стабильность не

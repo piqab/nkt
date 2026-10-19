@@ -1,0 +1,30 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Technitium DNS Server — вторичный сервер имён (ns2): зоны — переносом с
+# первичного (pipeline.yaml). Другой хост, чем у первичного. Подробно — README.md.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/technitium/deploy/docker-compose.secondary.yml
+  project: technitium
+  hosts: [ns2]
+  files: [examples/technitium/deploy/init.py]
+  wait_timeout: 5m
+  ports:
+    dns:
+      - "198.51.100.20:53:53/udp"
+      - "198.51.100.20:53:53/tcp"
+      - "127.0.0.1:5380:5380"
+  env:
+    DNS_DOMAIN: ns2.example.com
+    DNS_ADMIN_PASSWORD: generate:password
+    ZONES: example.com                    # те же, что у первичного
+    ACME_ZONE: acme.example.com
+    PRIMARY_IP: 203.0.113.10              # IP первичного (ns1)
+    # Тот же ключ, что TSIG_TRANSFER первичного: скопируйте из его
+    # секретов («Секреты» → «.env» → «Показать») вместо этой строки.
+    TSIG_TRANSFER: <TSIG_TRANSFER первичного>
+    # FORWARDERS: https://cloudflare-dns.com/dns-query (1.1.1.1)
+    # FORWARDER_PROTOCOL: Https
