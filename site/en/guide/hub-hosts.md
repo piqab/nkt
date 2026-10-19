@@ -271,7 +271,7 @@ Traffic Fly routes and deployment pipelines with links to their tiles.
   density. In privacy mode host names, IPs and domains in the image are
   replaced by `•••`.
 - **A stack** — containers of one compose project (two or more) — sits
-  together, on a new row, in a shared dashed frame labelled "stack <name>".
+  together, on a new row, in a shared dashed frame labelled `stack <name>`.
 - A host with more than 12 tiles shows the first ones (linked and running
   first) and **+N more**; if some hidden containers are planned or being
   moved, that tile also reads "moving: k". **Expand all** shows everything.
@@ -293,7 +293,7 @@ opens: what moves, the data (volumes and directories with sizes), images
 (which the new host already has), ports and what is in the way; **Move**
 runs a job with a log. A stack's container moves with the whole stack:
 while it is dragged, all the stack's tiles and its frame are highlighted,
-and the cursor reads "stack <name> · containers: N".
+and the cursor reads `stack <name> · containers: N`.
 
 - **What moves.** A compose project container brings the whole project:
   the working directory (compose files, `.env`, directories next to it),
