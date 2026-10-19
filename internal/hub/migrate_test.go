@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/api"
+	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -128,5 +129,59 @@ func TestMigrateQueuesNoDeadlock(t *testing.T) {
 	// Проверка самой проверки: в одной очереди — блокировка.
 	if run(api.MigrateHostQueue) {
 		t.Fatal("same-queue case did not block — the test does not catch the bug")
+	}
+}
+
+// Перенос и Traffic Fly: затронуты только цели-контейнеры этого хоста;
+// цепочки операций сохраняют роль (рабочая → рабочая на новом хосте),
+// откат меняет обратно, уборка убирает старую резервную.
+func TestMigrateFlyChains(t *testing.T) {
+	s, gw, host := flyTestServer(t)
+	ctx := context.Background()
+	other, _ := s.db.CreateHost(ctx, "web-2", "192.0.2.6", 22, "root", store.HostAuthKey, []byte("x"))
+	routes := []FlyRoute{
+		{ID: "app", Gateway: gw, Kind: fly.KindHTTPS, Names: []string{"app.example.com"}, Port: 443, Algorithm: fly.AlgoLeastConn, Check: fly.Check{Kind: fly.CheckTCP},
+			Targets: []FlyTarget{{ID: "a", HostID: host, Kind: "container", Ref: "shop-web-1", Port: 8080}, {ID: "r", HostID: host, Kind: "container", Ref: "shop-api-1", Port: 9000, Drain: true}, {ID: "x", HostID: host, Kind: "container", Ref: "other", Port: 1}}},
+	}
+	if _, err := s.flySave(ctx, FlyDoc{Routes: routes}, "admin", ""); err != nil {
+		t.Fatal(err)
+	}
+	aff := s.migrateFlyAffected(ctx, host, []string{"shop-web-1", "shop-api-1"})
+	if len(aff) != 2 || !aff[0].WasActive || aff[1].WasActive || aff[0].Title != "app.example.com" {
+		t.Fatalf("affected: %+v", aff)
+	}
+	// Как в migrateFlySwitch: новые резервом, затем у рабочей — обмен.
+	add := []FlyOp{
+		{Op: "add", Route: "app", HostID: other, Kind: "container", Ref: "shop-web-1", Port: 8080},
+		{Op: "add", Route: "app", HostID: other, Kind: "container", Ref: "shop-api-1", Port: 9000},
+	}
+	r1, err := s.flyApplyOps(ctx, s.flyDoc(ctx).Routes, add, map[string]bool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newWeb := r1[0].Targets[3].ID
+	r2, err := s.flyApplyOps(ctx, r1, []FlyOp{{Op: "active", Route: "app", Target: newWeb}, {Op: "reserve", Route: "app", Target: "a"}}, map[string]bool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := func(rs []FlyRoute, id string) bool {
+		for _, t := range rs[0].Targets {
+			if t.ID == id {
+				return !t.Drain
+			}
+		}
+		return false
+	}
+	if !role(r2, newWeb) || role(r2, "a") || role(r2, r1[0].Targets[4].ID) {
+		t.Fatalf("switch roles: %+v", r2[0].Targets)
+	}
+	// Откат и уборка.
+	r3, err := s.flyApplyOps(ctx, r2, []FlyOp{{Op: "active", Route: "app", Target: "a"}, {Op: "reserve", Route: "app", Target: newWeb}}, map[string]bool{})
+	if err != nil || !role(r3, "a") || role(r3, newWeb) {
+		t.Fatalf("revert: %v %+v", err, r3[0].Targets)
+	}
+	r4, err := s.flyApplyOps(ctx, r2, []FlyOp{{Op: "remove", Route: "app", Target: "a"}, {Op: "remove", Route: "app", Target: "r"}}, map[string]bool{})
+	if err != nil || len(r4[0].Targets) != 3 {
+		t.Fatalf("remove old: %v %+v", err, r4[0].Targets)
 	}
 }
