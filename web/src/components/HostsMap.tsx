@@ -209,7 +209,7 @@ export function HostsMap({
   }, [hasMoving])
   void tick
   const startMove = async (d: DraftMove) => {
-    const res = await api<{ job_id: number }>('/hub/migrate', { method: 'POST', body: { from: d.from.id, to: d.to.id, container: d.item.name, switch_fly: d.switchFly } })
+    const res = await api<{ job_id: number }>('/hub/migrate', { method: 'POST', body: { from: d.from.id, to: d.to.id, container: d.item.name, switch_fly: d.switchFly, clean_leftovers: d.cleanLeftovers } })
     setMoving((l) => [...l, { id: res.job_id, from: d.from.id, to: d.to.id, names: d.names, title: d.item.name, started: Date.now() }])
     return res.job_id
   }
@@ -264,12 +264,15 @@ export function HostsMap({
     }
   }, [moveMode])
   // Перенесённое: «здесь остановлен, работает там» или «перенесён сюда».
-  const migratedHere = (hostId: number, name: string): { rec: MigrationRecord; role: 'from' | 'to' } | null => {
-    for (const r of [...(migrations.data?.migrations ?? [])].reverse()) {
-      if (r.state !== 'moved' || !r.containers.includes(name)) continue
-      if (r.from === hostId) return { rec: r, role: 'from' }
-      if (r.to === hostId) return { rec: r, role: 'to' }
-    }
+  // Старая копия — только неработающий контейнер: тот же стек переносят
+  // туда и обратно с теми же именами, и работающий не должен считаться
+  // старым (иначе его не перетащить).
+  const migratedHere = (hostId: number, name: string, state?: string): { rec: MigrationRecord; role: 'from' | 'to' } | null => {
+    const list = [...(migrations.data?.migrations ?? [])].reverse().filter((r) => r.state === 'moved' && r.containers.includes(name))
+    const to = list.find((r) => r.to === hostId)
+    const from = list.find((r) => r.from === hostId)
+    if (from && (state ?? '').toLowerCase() !== 'running') return { rec: from, role: 'from' }
+    if (to) return { rec: to, role: 'to' }
     return null
   }
   const boxRef = useRef<HTMLDivElement | null>(null)
@@ -849,7 +852,7 @@ export function HostsMap({
                       .filter(Boolean)
                       .join(' · ')
                     const kindLabel = it.kind === 'container' ? 'docker' : it.kind === 'vm' ? 'VM' : 'LXD'
-                    const mig = it.kind === 'container' ? migratedHere(b.host.id, it.name) : null
+                    const mig = it.kind === 'container' ? migratedHere(b.host.id, it.name, it.state) : null
                     const movable = moveMode && it.kind === 'container' && !b.offline && mig?.role !== 'from'
                     return (
                       <g
@@ -859,7 +862,9 @@ export function HostsMap({
                         onMouseEnter={() => setHover(x.key)}
                         onMouseLeave={() => setHover(null)}
                         onPointerDown={
-                          movable
+                          moveMode && mig?.role === 'from'
+                            ? (e) => e.stopPropagation() // старая копия: щелчок — меню, не сдвиг карты
+                            : movable
                             ? (e) => {
                                 if (e.button !== 0) return
                                 // Не сдвиг карты: в режиме переноса плитку тащат на хост.
@@ -1014,7 +1019,8 @@ interface MigrationRecord {
   kind: string
   containers: string[]
   volumes?: string[]
-  state: 'moved' | 'rolled_back' | 'removed'
+  paths?: string[]
+  state: 'moved' | 'rolled_back' | 'removed' | 'returned'
 }
 
 interface MigratePreview {
@@ -1031,6 +1037,8 @@ interface MigratePreview {
   check: { have_images?: string[]; free_bytes: number }
   problems?: string[]
   fly?: { route: string; title: string; ref: string; was_active: boolean }[]
+  /** Перенос обратно: остатки старой копии на новом хосте. */
+  leftovers?: { record: string; host: string; ts: string; containers: string[]; paths?: string[]; volumes?: string[]; problems?: string[] }
 }
 
 /** Перенос в плане (до «Применить переносы»). */
@@ -1040,6 +1048,7 @@ interface DraftMove {
   item: MapItem
   names: string[]
   switchFly: boolean
+  cleanLeftovers: boolean
 }
 
 /** Перенос в работе. */
@@ -1071,19 +1080,29 @@ function MigrateModal({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [switchFly, setSwitchFly] = useState(true)
+  const [clean, setClean] = useState(true)
   useEffect(() => {
     api<MigratePreview>('/hub/migrate/preview', { method: 'POST', body: { from: ask.from.id, to: ask.to.id, container: ask.item.name }, timeoutMs: 120_000 })
       .then(setPv)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }, [ask])
   const p = pv?.plan
+  // С галочкой «убрать остатки» — препятствия без них.
+  const problems = (pv?.leftovers && clean ? pv.leftovers.problems : pv?.problems) ?? []
   const data = (p?.volumes ?? []).reduce((a, v) => a + v.size, 0) + (p?.paths ?? []).reduce((a, x) => a + x.size, 0)
   const have = new Set(pv?.check.have_images ?? [])
   const start = async () => {
     setBusy(true)
     setError(null)
     try {
-      await onConfirm({ from: ask.from, to: ask.to, item: ask.item, names: (pv?.plan.containers ?? []).map((c) => c.name), switchFly: switchFly && (pv?.fly ?? []).length > 0 })
+      await onConfirm({
+        from: ask.from,
+        to: ask.to,
+        item: ask.item,
+        names: (pv?.plan.containers ?? []).map((c) => c.name),
+        switchFly: switchFly && (pv?.fly ?? []).length > 0,
+        cleanLeftovers: clean && !!pv?.leftovers,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -1147,11 +1166,20 @@ function MigrateModal({
               </div>
             )}
             <Banner kind="warn">{t('hostsMap.migrateDowntime')}</Banner>
-            {(pv?.problems ?? []).length > 0 && (
+            {pv?.leftovers && (
+              <Banner kind="warn">
+                {t('hostsMap.leftovers', { host: ask.to.name, date: pv.leftovers.ts.slice(0, 10) })}
+                <div className="mono small sensitive">{[...(pv.leftovers.paths ?? []), ...(pv.leftovers.volumes ?? []), ...pv.leftovers.containers].join(', ')}</div>
+                <Checkbox checked={clean} onChange={(e) => setClean(e.target.checked)}>
+                  {t('hostsMap.leftoversClean')}
+                </Checkbox>
+              </Banner>
+            )}
+            {problems.length > 0 && (
               <Banner kind="error">
                 {t('hostsMap.migrateProblems')}
                 <ul style={{ margin: '0.2rem 0 0', paddingLeft: '1.2rem' }}>
-                  {(pv?.problems ?? []).map((x) => (
+                  {problems.map((x) => (
                     <li key={x}>{x}</li>
                   ))}
                 </ul>
@@ -1161,7 +1189,7 @@ function MigrateModal({
         )}
         {error && <Banner kind="error">{error}</Banner>}
         <Space>
-          <Button type="primary" danger loading={busy} disabled={!p || (pv?.problems ?? []).length > 0} onClick={() => void start()}>
+          <Button type="primary" danger loading={busy} disabled={!p || problems.length > 0} onClick={() => void start()}>
             {applyNow ? t('hostsMap.migrateGo') : t('hostsMap.migratePlanAdd')}
           </Button>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
@@ -1197,8 +1225,9 @@ function MigrationMenu({ rec, onClose, onStarted }: { rec: MigrationRecord; onCl
         <span>{t('hostsMap.migratedText', { from: rec.from_name, to: rec.to_name, date: rec.ts.slice(0, 16).replace('T', ' ') })}</span>
         <Button onClick={() => void act('rollback')}>{t('hostsMap.rollback')}</Button>
         <Checkbox checked={withData} onChange={(e) => setWithData(e.target.checked)}>
-          {t('hostsMap.removeWithData', { list: (rec.volumes ?? []).join(', ') || '—' })}
+          {t('hostsMap.removeWithData', { list: [...(rec.volumes ?? []), ...(rec.paths ?? [])].join(', ') || '—' })}
         </Checkbox>
+        {!withData && <span className="muted">{t('hostsMap.removeKeepWarn', { host: rec.from_name })}</span>}
         <Button danger onClick={() => void act('remove')}>
           {t('hostsMap.removeOld')}
         </Button>

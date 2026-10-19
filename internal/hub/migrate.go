@@ -46,6 +46,9 @@ type MigrateParams struct {
 	// SwitchFly — move: цели Traffic Fly из этих контейнеров — на новый
 	// хост с той же ролью (рабочая остаётся рабочей).
 	SwitchFly bool `json:"switch_fly,omitempty"`
+	// CleanLeftovers — move: на новом хосте лежат остатки старой копии
+	// этого же стека (перенос туда и обратно) — убрать их перед переносом.
+	CleanLeftovers bool `json:"clean_leftovers,omitempty"`
 }
 
 // migrateFlyTarget — цель Traffic Fly, которую затронул перенос.
@@ -109,7 +112,11 @@ type migrateRecord struct {
 	Kind       string   `json:"kind"`
 	Containers []string `json:"containers"`
 	Volumes    []string `json:"volumes,omitempty"`
-	// State — moved (старый остановлен), rolled_back, removed.
+	// Paths — каталоги стека на старом хосте (уборка «и данные»,
+	// остатки при переносе обратно).
+	Paths []string `json:"paths,omitempty"`
+	// State — moved (старый остановлен), rolled_back, removed, returned
+	// (перенесён обратно — остатки старой копии убраны).
 	State    string `json:"state"`
 	Reminded bool   `json:"reminded,omitempty"`
 	Author   string `json:"author,omitempty"`
@@ -251,11 +258,22 @@ func (s *Server) handleMigratePreview(w http.ResponseWriter, r *http.Request) {
 	for _, pr := range migrateProblems(p, c) {
 		problems = append(problems, msgs.Tc(ctx, pr[0], pr[1]))
 	}
+	// Перенос обратно: «уже есть» из-за остатков старой копии — не
+	// препятствие, если их убрать (галочка в окне).
+	var leftovers map[string]any
+	if rec := s.migrateLeftovers(ctx, req.From, req.To, p.Project); rec != nil {
+		cl, paths, vols := withoutLeftovers(c, rec)
+		var clean []string
+		for _, pr := range migrateProblems(p, cl) {
+			clean = append(clean, msgs.Tc(ctx, pr[0], pr[1]))
+		}
+		leftovers = map[string]any{"record": rec.ID, "host": rec.FromName, "ts": rec.TS, "containers": rec.Containers, "paths": paths, "volumes": vols, "problems": clean}
+	}
 	var names []string
 	for _, c := range p.Containers {
 		names = append(names, c.Name)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"plan": p.Raw, "check": c, "problems": problems, "fly": s.migrateFlyAffected(ctx, req.From, names)})
+	writeJSON(w, http.StatusOK, map[string]any{"plan": p.Raw, "check": c, "problems": problems, "fly": s.migrateFlyAffected(ctx, req.From, names), "leftovers": leftovers})
 }
 
 // handleMigrateStart — POST /hub/migrate {from, to, container}: перенос.
@@ -380,6 +398,13 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 	for _, sk := range plan.Skipped {
 		jc.Log("migrate.skippedPath", sk)
 	}
+	var leftover *migrateRecord
+	var lpaths, lvols []string
+	if p.CleanLeftovers {
+		if leftover = s.migrateLeftovers(ctx, p.From, p.To, plan.Project); leftover != nil {
+			check, lpaths, lvols = withoutLeftovers(check, leftover)
+		}
+	}
 	if probs := migrateProblems(plan, check); len(probs) > 0 {
 		for _, pr := range probs {
 			jc.Log(pr[0], pr[1])
@@ -395,6 +420,23 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 		if !have[img] {
 			save = append(save, img)
 		}
+	}
+	if leftover != nil {
+		// Остатки старой копии на новом хосте — прочь: актуальные данные
+		// едут отсюда.
+		jc.Log("migrate.leftoversCleaning", plan.Project, toName, leftover.TS[:10])
+		body := map[string]any{"containers": leftover.Containers, "volumes": lvols, "paths": lpaths}
+		if err := s.hostJob(ctx, jc, user, p.To, "/api/migrate/remove", body); err != nil {
+			return err
+		}
+		s.updateMigrations(ctx, func(l []migrateRecord) []migrateRecord {
+			for i := range l {
+				if l[i].ID == leftover.ID {
+					l[i].State = "returned"
+				}
+			}
+			return l
+		})
 	}
 	id := newMigrateID()
 	jc.StepKey(2, 6, "migrate.hubPack", plan.Project, fromName)
@@ -455,12 +497,15 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 		}
 	}
 	jc.StepKey(5, 6, "migrate.stepRecord")
-	var vols []string
+	var vols, paths []string
 	for _, v := range plan.Volumes {
 		vols = append(vols, v.Name)
 	}
+	for _, x := range plan.Paths {
+		paths = append(paths, x.Path)
+	}
 	rec := migrateRecord{ID: id, TS: store.Now(), From: p.From, FromName: fromName, To: p.To, ToName: toName, Project: plan.Project, Kind: plan.Kind,
-		Containers: names, Volumes: vols, State: "moved", Author: jc.Job.Author, Fly: fly}
+		Containers: names, Volumes: vols, Paths: paths, State: "moved", Author: jc.Job.Author, Fly: fly}
 	s.updateMigrations(ctx, func(l []migrateRecord) []migrateRecord { return append(l, rec) })
 	jc.StepKey(6, 6, "migrate.stepDone")
 	jc.Log("migrate.done", plan.Project, toName, fromName)
@@ -662,6 +707,7 @@ func (s *Server) migrateAfter(ctx context.Context, jc *jobs.Context, user string
 		body := map[string]any{"containers": rec.Containers}
 		if p.Data {
 			body["volumes"] = rec.Volumes
+			body["paths"] = rec.Paths
 		}
 		if err := s.hostJob(ctx, jc, user, rec.From, "/api/migrate/remove", body); err != nil {
 			return err
@@ -888,4 +934,52 @@ func (s *Server) migrateFlyRemoveOld(ctx context.Context, jc *jobs.Context, user
 		return
 	}
 	jc.Log("migrate.flyRemoved", len(ops))
+}
+
+// migrateLeftovers — запись переноса, чья старая копия лежит на хосте to:
+// тот же стек переносили с to на from (и он там «перенесён» или убран без
+// данных). Тогда «уже есть» на to — это её остатки.
+func (s *Server) migrateLeftovers(ctx context.Context, from, to int64, project string) *migrateRecord {
+	list := s.loadMigrations(ctx)
+	for i := len(list) - 1; i >= 0; i-- {
+		r := list[i]
+		if r.From == to && r.To == from && r.Project == project && (r.State == "moved" || r.State == "removed") {
+			return &r
+		}
+	}
+	return nil
+}
+
+// withoutLeftovers — препятствия проверки без тех, что объясняются
+// остатками старой копии rec; второе — что именно из остатков есть.
+func withoutLeftovers(c migrateCheckJSON, rec *migrateRecord) (migrateCheckJSON, []string, []string) {
+	if rec == nil {
+		return c, nil, nil
+	}
+	in := func(list []string, v string) bool { return slicesContains(list, v) }
+	known := rec.Paths
+	if len(known) == 0 {
+		// Запись до 1.13.49 каталогов не помнит: каталог стека nkt.
+		known = []string{"/srv/compose/" + rec.Project}
+	}
+	var paths, vols []string
+	out := c
+	out.ExistingPaths, out.ExistingVols = nil, nil
+	for _, p := range c.ExistingPaths {
+		if in(known, p) {
+			paths = append(paths, p)
+		} else {
+			out.ExistingPaths = append(out.ExistingPaths, p)
+		}
+	}
+	for _, v := range c.ExistingVols {
+		if in(rec.Volumes, v) {
+			vols = append(vols, v)
+		} else {
+			out.ExistingVols = append(out.ExistingVols, v)
+		}
+	}
+	// Стек с тем же именем — это сама старая копия (её контейнеры).
+	out.ProjectExists = false
+	return out, paths, vols
 }

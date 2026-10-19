@@ -119,4 +119,19 @@ func TestMigrateRealDocker(t *testing.T) {
 	if _, err := os.Stat(wd); !os.IsNotExist(err) {
 		t.Fatalf("workdir left after undo: %v", err)
 	}
+	// «Убрать старый» с данными: контейнеры, тома и каталоги; повтор по
+	// уже убранному — не ошибка.
+	run("migrate.unpack", migrateIDArgs{ID: id})
+	rm := migrateRemoveArgs{Containers: []string{"nktmig-web-1"}, Volumes: []string{"nktmig_data"}, Paths: []string{wd}}
+	run("migrate.remove", rm)
+	if err := exec.Command("docker", "inspect", "nktmig-web-1").Run(); err == nil {
+		t.Fatal("container left after remove")
+	}
+	if err := exec.Command("docker", "volume", "inspect", "nktmig_data").Run(); err == nil {
+		t.Fatal("volume left after remove")
+	}
+	if _, err := os.Stat(wd); !os.IsNotExist(err) {
+		t.Fatalf("workdir left after remove: %v", err)
+	}
+	run("migrate.remove", rm)
 }

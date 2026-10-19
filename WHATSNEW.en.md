@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.49 — 2026-10-19
+
+- **Moving back works.** After moving a stack to another host and removing
+  the old one, moving it back used to hit "already there" (the old copy's
+  stack directory and volumes stayed). Now the move window shows the old
+  copy's leftovers and removes them itself (a checkbox, on), then moves the
+  current data.
+- **"Remove old" with data also removes the stack's directories**, not just
+  containers and volumes; without the checkbox there is a warning that the
+  leftovers will block moving back.
+- **A moved container can be dragged again.** A running container is no
+  longer mistaken for the "old copy" (that made the whole map pan when
+  grabbing it); in move mode the old copy opens its menu instead of panning.
+
 ## v1.13.48 — 2026-10-19
 
 - **A container move switches Traffic Fly keeping the role.** If the
