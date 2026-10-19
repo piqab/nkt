@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -85,8 +86,20 @@ type App struct {
 	actor string
 	// editing suppresses global single-key shortcuts while text is being typed.
 	editing bool
-	// busy counts operations in flight, for the header indicator.
-	busy int
+	// busy counts operations in flight, for the header indicator;
+	// busyText and busySince — the latest one, shown with a spinner and
+	// elapsed seconds on the status line until it ends.
+	busy      int
+	busyText  string
+	busySince time.Time
+	spinFrame int
+	// spinning mirrors busy > 0 for the spinner goroutine (busy itself
+	// lives on the UI thread).
+	spinning atomic.Bool
+	// modals — open windows and their wanted size: each is clamped to the
+	// terminal before every draw, so a small terminal still shows the
+	// border, the field row and the key hints.
+	modals map[string]*modalSlot
 	// bootstrapping is true from the moment the "loading host state" status
 	// line is first set until the first refreshAll actually completes —
 	// replaces a substring check against that status line's own (now
@@ -161,6 +174,13 @@ func Run(ctx context.Context, deps Deps) error {
 		a.tv.SetScreen(deps.Screen)
 	}
 	a.tv.SetRoot(root, true).EnableMouse(true).SetInputCapture(a.onKey)
+	a.tv.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		a.fitModals(screen)
+		return false
+	})
+	spinCtx, stopSpin := context.WithCancel(ctx)
+	defer stopSpin()
+	go a.spin(spinCtx)
 
 	a.renderHeader()
 	if langKnown {
@@ -346,7 +366,7 @@ func (a *App) renderHeader() {
 			dim(" · "+a.T("tui.scanLabel")+" ") + shortTime(snap.TS)
 	}
 	if a.busy > 0 {
-		left += tag(hexWarning, "  ● "+a.T("tui.working"))
+		left += tag(hexWarning, "  "+spinnerFrames[a.spinFrame%len(spinnerFrames)]+" "+a.T("tui.working"))
 	}
 	if !a.canMutate() {
 		left += tag(hexWarning, "  ● "+a.T("tui.readOnly"))
@@ -374,9 +394,7 @@ func (a *App) runAsync(what string, needsMutation bool, fn func(ctx context.Cont
 		a.setStatus(hexWarning, a.T("tui.mutationsDisabled"))
 		return
 	}
-	a.busy++
-	a.setStatus(hexMuted, what+"…")
-	a.renderHeader()
+	a.beginBusy(what)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -384,7 +402,7 @@ func (a *App) runAsync(what string, needsMutation bool, fn func(ctx context.Cont
 		msg, err := fn(ctx)
 
 		a.queue(func() {
-			a.busy--
+			a.endBusy()
 			if err != nil {
 				a.setStatus(hexCritical, "✖ "+err.Error())
 			} else {
@@ -417,21 +435,68 @@ func (a *App) confirm(question string, onYes func()) {
 	a.tv.SetFocus(modal)
 }
 
-// showModal puts an arbitrary primitive on top, centred, closed with Escape.
+// modalSlot — an open window: its column and wanted size.
+type modalSlot struct {
+	outer, column *tview.Flex
+	p             tview.Primitive
+	width, height int
+}
+
+// choose — вопрос с несколькими кнопками; fn получает номер нажатой
+// (0 — первая; Esc — тоже 0).
+func (a *App) choose(question string, buttons []string, fn func(index int)) {
+	modal := tview.NewModal().
+		SetText(question).
+		AddButtons(buttons).
+		SetDoneFunc(func(index int, _ string) {
+			a.pages.RemovePage("modal-choose")
+			if index < 0 {
+				index = 0
+			}
+			if top := a.topModal(); top != nil {
+				a.tv.SetFocus(top)
+			} else {
+				a.tv.SetFocus(a.screens[a.current].focus())
+			}
+			fn(index)
+		})
+	a.pages.AddPage("modal-choose", modal, true, true)
+	a.tv.SetFocus(modal)
+}
+
+// topModal — окно, открытое последним (nil — окон нет).
+func (a *App) topModal() tview.Primitive {
+	for _, name := range []string{"diff", "versions", "editor"} {
+		if m, ok := a.modals[name]; ok {
+			return m.p
+		}
+	}
+	return nil
+}
+
+// showModal puts an arbitrary primitive on top, centred, closed with
+// Escape. width and height are what it wants; a smaller terminal gets it
+// smaller (fitModals), never cut off.
 func (a *App) showModal(name string, p tview.Primitive, width, height int) {
+	column := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(p, height, 0, true).
+		AddItem(nil, 0, 1, false)
 	wrapper := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(p, height, 0, true).
-			AddItem(nil, 0, 1, false), width, 0, true).
+		AddItem(column, width, 0, true).
 		AddItem(nil, 0, 1, false)
+	if a.modals == nil {
+		a.modals = map[string]*modalSlot{}
+	}
+	a.modals[name] = &modalSlot{outer: wrapper, column: column, p: p, width: width, height: height}
 
 	a.pages.AddPage("modal-"+name, wrapper, true, true)
 	a.tv.SetFocus(p)
 }
 
 func (a *App) closeModal(name string) {
+	delete(a.modals, name)
 	a.pages.RemovePage("modal-" + name)
 	a.editing = false
 	a.tv.SetFocus(a.screens[a.current].focus())
@@ -496,16 +561,12 @@ func (a *App) refreshAll(ctx context.Context) {
 }
 
 func (a *App) rescan(ctx context.Context) {
-	a.queue(func() {
-		a.busy++
-		a.setStatus(hexMuted, a.T("tui.scanningHost"))
-		a.renderHeader()
-	})
+	a.queue(func() { a.beginBusy(a.T("tui.scanningHost")) })
 
 	snap, err := a.Scanner.Scan(ctx)
 
 	a.queue(func() {
-		a.busy--
+		a.endBusy()
 		if err != nil {
 			a.setStatus(hexCritical, "✖ "+a.T("tui.scanFailed", err.Error()))
 		} else {
@@ -626,4 +687,67 @@ func since(d time.Duration) string {
 func tzOffsetMinutes() int {
 	_, offset := time.Now().Zone()
 	return offset / 60
+}
+
+// fitModals clamps every open window to the area between the header and
+// the status line, one cell of margin on each side.
+func (a *App) fitModals(screen tcell.Screen) {
+	sw, sh := screen.Size()
+	maxW, maxH := max(sw-2, 10), max(sh-3-2, 5)
+	for _, m := range a.modals {
+		m.outer.ResizeItem(m.column, min(m.width, maxW), 0)
+		m.column.ResizeItem(m.p, min(m.height, maxH), 0)
+	}
+}
+
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// beginBusy / endBusy — an operation starts and ends (UI thread): while any
+// runs, the status line spins with its text and elapsed seconds.
+func (a *App) beginBusy(what string) {
+	a.busy++
+	a.spinning.Store(true)
+	a.busyText, a.busySince = what, time.Now()
+	a.renderBusy()
+}
+
+func (a *App) endBusy() {
+	if a.busy > 0 {
+		a.busy--
+	}
+	a.spinning.Store(a.busy > 0)
+	a.renderHeader()
+}
+
+func (a *App) renderBusy() {
+	frame := spinnerFrames[a.spinFrame%len(spinnerFrames)]
+	text := frame + " " + a.busyText + "…"
+	if secs := int(time.Since(a.busySince).Seconds()); secs >= 1 {
+		text += " " + a.T("tui.elapsed", secs)
+	}
+	a.setStatus(hexMuted, text)
+	a.renderHeader()
+}
+
+// spin turns the spinner while something runs.
+func (a *App) spin(ctx context.Context) {
+	t := time.NewTicker(120 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if !a.spinning.Load() {
+			continue
+		}
+		a.queue(func() {
+			if a.busy == 0 {
+				return
+			}
+			a.spinFrame++
+			a.renderBusy()
+		})
+	}
 }

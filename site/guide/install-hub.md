@@ -182,18 +182,39 @@ kubectl port-forward -n netknownsthat svc/nkt-hub 8443:8077
 
 ## Остановить и удалить
 
-```bash
-# systemd
-sudo systemctl disable --now netknownsthat-hub
+Хаб и nkt на хостах удаляются **по отдельности**: удаление хаба хосты не
+трогает — nkt на них продолжит работать обычной службой. Убрать nkt с
+хостов — до удаления хаба, «Опасной зоной» в «О системе» (все сразу) или
+«Удалить» в строке хоста; вручную — [на самом хосте](/guide/getting-started#_7-удаление).
 
-# Docker
+Перед удалением сохраните экспорт («Хосты» → «экспорт»), если хаб может
+понадобиться снова. Секреты безвозвратно — `sudo nkt hub delete` (ниже),
+затем по варианту установки:
+
+```bash
+# Вариант 1 — systemd из бинарника
+sudo systemctl disable --now netknownsthat-hub
+sudo rm -f /etc/systemd/system/netknownsthat-hub.service
+sudo systemctl daemon-reload
+sudo rm -rf /var/lib/netknownsthat-hub /etc/netknownsthat/hub.env
+sudo rmdir /etc/netknownsthat 2>/dev/null   # пустой — если nkt хоста тут нет
+sudo rm -f /usr/local/bin/nkt               # не удаляйте, если на машине стоит и nkt хоста
+
+# Вариант 2 — из исходников: то же, плюс клон
+sudo rm -rf /opt/netknownsthat
+
+# Вариант 3 — Docker
 docker compose -f docker-compose.hub.release.yml down      # том остаётся
 docker compose -f docker-compose.hub.release.yml down -v   # стереть данные хаба
+docker image rm ghcr.io/piqab/nkt-hub                      # образ (все теги — docker images)
+
+# Вариант 4 — Kubernetes (Namespace вместе с томом)
+kubectl delete -f https://raw.githubusercontent.com/piqab/nkt/main/deploy/k8s/hub.yaml
 ```
 
-Остановка хаба не трогает nkt на хостах: он продолжит работать как
-обычная служба; убрать его — `systemctl disable --now netknownsthat` на
-самом хосте.
+Сертификаты Let's Encrypt, выпущенные хабом для сайтов, лежат в
+`/etc/letsencrypt` и при удалении хаба остаются — их убирают `certbot
+delete`, если не нужны.
 
 `down -v` удаляет файлы, но их остатки можно восстановить с диска или
 снапшота. Для безвозвратного удаления ключа шифрования и секретов всех

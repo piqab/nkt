@@ -301,6 +301,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 
 - The same data in a terminal: overview, findings, resource map as a tree, services, containers, certificates, configs, availability and load.
 - Service and container control, certificate renewal, config rollback.
+- A config editor with key hints and an unsaved-changes mark; version history in one window (`v` or `F2` from the editor): diff, rollback with or without a service reload; a spinner with seconds for long actions; windows fit the terminal size.
 - In Russian and English.
 
 ## Command line

@@ -190,18 +190,40 @@ outdated host is opened or with the "update all" button.
 
 ## Stop and remove
 
-```bash
-# systemd
-sudo systemctl disable --now netknownsthat-hub
+The hub and nkt on the hosts are removed **separately**: removing the
+hub leaves the hosts alone — nkt keeps running there as a regular service.
+Remove nkt from the hosts before removing the hub, with the "Danger zone"
+in "About" (all at once) or "Delete" on the host's row; by hand — [on the
+host itself](/en/guide/getting-started#_7-removal).
 
-# Docker
+Before removing, save an export ("Hosts" → "export") if the hub may be
+needed again. Secrets for good — `sudo nkt hub delete` (below), then by
+installation option:
+
+```bash
+# Option 1 — systemd from the binary
+sudo systemctl disable --now netknownsthat-hub
+sudo rm -f /etc/systemd/system/netknownsthat-hub.service
+sudo systemctl daemon-reload
+sudo rm -rf /var/lib/netknownsthat-hub /etc/netknownsthat/hub.env
+sudo rmdir /etc/netknownsthat 2>/dev/null   # empty — if there is no host nkt here
+sudo rm -f /usr/local/bin/nkt               # keep it if host nkt runs on this machine too
+
+# Option 2 — from source: the same, plus the clone
+sudo rm -rf /opt/netknownsthat
+
+# Option 3 — Docker
 docker compose -f docker-compose.hub.release.yml down      # the volume stays
 docker compose -f docker-compose.hub.release.yml down -v   # wipe hub data
+docker image rm ghcr.io/piqab/nkt-hub                      # the image (all tags — docker images)
+
+# Option 4 — Kubernetes (the Namespace together with the volume)
+kubectl delete -f https://raw.githubusercontent.com/piqab/nkt/main/deploy/k8s/hub.yaml
 ```
 
-Stopping the hub does not touch nkt on the hosts: it keeps running as a
-regular service; remove it with `systemctl disable --now netknownsthat`
-on the host itself.
+Let's Encrypt certificates the hub issued for sites live in
+`/etc/letsencrypt` and stay after the hub is removed — remove them with
+`certbot delete` if not needed.
 
 `down -v` deletes files, but their remains can be recovered from the disk
 or a snapshot. To irreversibly remove the encryption key and the secrets

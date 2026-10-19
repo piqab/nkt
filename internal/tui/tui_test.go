@@ -300,3 +300,46 @@ func TestGenerateSelfSignedFromCertsScreen(t *testing.T) {
 	sim.InjectKey(tcell.KeyRune, 'q', tcell.ModNone)
 	<-done
 }
+
+// TestEditorFitsSmallTerminal: в маленьком терминале окно редактора не
+// обрезается — видны строка полей и подсказки клавиш; правка помечается в
+// заголовке; история версий открывается из редактора (F2), откат — из неё.
+func TestEditorFitsSmallTerminal(t *testing.T) {
+	sim := newWideScreen(t)
+	deps := fixtureDepsWritable(t, sim)
+	done := make(chan error, 1)
+	go func() { done <- Run(context.Background(), deps) }()
+
+	waitFor(t, sim, "NetKnownsThat")
+	sim.SetSize(220, 60)
+	waitFor(t, sim, "edge-01")
+	sim.InjectKey(tcell.KeyRune, '6', tcell.ModNone)
+	waitFor(t, sim, "nginx.conf")
+	sim.SetSize(80, 24)
+	sim.InjectKey(tcell.KeyRune, 'e', tcell.ModNone)
+	frame := waitFor(t, sim, "F2 ")
+	if !strings.Contains(frame, "Комментарий к правке") {
+		t.Fatalf("строка полей не видна:\n%s", frame)
+	}
+	sim.InjectKey(tcell.KeyRune, '#', tcell.ModNone)
+	waitFor(t, sim, "изменено")
+	sim.InjectKey(tcell.KeyCtrlS, 0, tcell.ModCtrl)
+	waitFor(t, sim, "версия #")
+
+	sim.InjectKey(tcell.KeyRune, 'e', tcell.ModNone)
+	waitFor(t, sim, "F2 ")
+	sim.InjectKey(tcell.KeyF2, 0, tcell.ModNone)
+	frame = waitFor(t, sim, "r откатить к версии")
+	if !strings.Contains(frame, "История версий") {
+		t.Fatalf("история не открылась:\n%s", frame)
+	}
+	sim.InjectKey(tcell.KeyRune, 'r', tcell.ModNone)
+	waitFor(t, sim, "Откатить и перезагрузить")
+	// Кнопки: «Отмена», «Откатить», «Откатить и перезагрузить сервис».
+	sim.InjectKey(tcell.KeyTab, 0, tcell.ModNone)
+	sim.InjectKey(tcell.KeyEnter, 0, tcell.ModNone)
+	waitFor(t, sim, "возвращён к версии")
+
+	sim.InjectKey(tcell.KeyRune, 'q', tcell.ModNone)
+	<-done
+}

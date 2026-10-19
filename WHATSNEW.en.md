@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.53 — 2026-10-19
+
+- **TUI: you can see work in progress.** While a long action runs (saving
+  a config with validation, rollback, rescan), a spinner with seconds
+  turns on the status line.
+- **TUI: windows fit the terminal.** The editor, history and forms shrink
+  to the window size — the border, fields and hints stay visible even at
+  80×24.
+- **TUI: edit history in one window.** `v` in "Configs" or `F2` right in
+  the editor: `Enter` shows the diff with the current file, `r` rolls back
+  to a version (just write it, or write and reload the service). The
+  editor has a hint line and "● modified" while edits are unsaved.
+- **Guide: removal.** "Host installation" gets a "Removal" section (from
+  the hub and by hand in one block), "Hub installation" covers removal for
+  each option (systemd, from source, Docker, Kubernetes); the hub and nkt
+  on the hosts are removed separately.
+
 ## v1.13.52 — 2026-10-19
 
 - **"Apply immediately" on the map — no window.** Drop a tile on another
