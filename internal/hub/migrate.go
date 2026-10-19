@@ -787,8 +787,12 @@ func (s *Server) remindMigrations(ctx context.Context, now time.Time) {
 		return l
 	})
 	for _, m := range due {
-		_, _ = s.db.AddHostEvent(ctx, store.HostEvent{HostID: m.From, HostName: m.FromName, Kind: store.EventMigrationLeftover, Severity: "info",
-			DetailKey: "migrate.reminder", DetailArgs: msgs.EncodeArgs([]any{m.Project, m.ToName, m.TS[:10]})})
+		// Общим путём: по настройке вида в журнал, и ботам с вебхуками.
+		host := store.Host{ID: m.From, Name: m.FromName}
+		if h, err := s.db.HostByID(ctx, m.From); err == nil {
+			host = h
+		}
+		s.hub.recordEventLink(ctx, host, store.EventMigrationLeftover, "info", "", "migrate.reminder", m.Project, m.ToName, m.TS[:10])
 	}
 }
 

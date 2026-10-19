@@ -32,8 +32,8 @@ Sections in the order they appear in the hub menu:
   availability and findings of all hosts, groups, a fallback channel for
   when SSH fails, machines inside hosts, export and import.
 - **[Alerts](/en/guide/hub-operations)** — a host unreachable or back,
-  rebooted, new findings, failed jobs, new bans, forecasts; each event
-  links straight to the host's section; model analysis and privacy mode
+  rebooted, new findings, failed jobs, new bans, forecasts, deployments,
+  nkt-edge offline, expiring site certificates; each event links straight to the host's section; model analysis and privacy mode
   are on the same page.
 - **[Monitoring](/en/guide/hub-monitoring)** — availability and load of
   all hosts from the hub history, containers, machines, pods and

@@ -57,18 +57,21 @@ func eventLink(path string, focus []string) string {
 }
 
 func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, severity, detail, key, args, link string) {
-	// Исходящие вебхуки — независимо от записи в журнал (выбор событий у
-	// адресата свой).
-	var eventID int64
-	defer func() {
-		m.emitOut(outFromHostEvent(host, hostAddrLabel(ctx, host), kind, severity, detail, key, args, eventID))
-	}()
+	// Исходящие вебхуки и боты — независимо от записи в журнал (выбор
+	// событий у адресата свой).
+	eventID := m.journalEvent(ctx, host, kind, severity, detail, key, args, link)
+	m.emitOut(outFromHostEvent(host, hostAddrLabel(ctx, host), kind, severity, detail, key, args, eventID))
+}
+
+// journalEvent — только запись в журнал (по настройке вида), без
+// исходящих: для событий, которые уходят адресатам своим путём.
+func (m *Manager) journalEvent(ctx context.Context, host store.Host, kind, severity, detail, key, args, link string) (eventID int64) {
 	settings := m.EventSettings(ctx)
 	if !settings.Record[kind] {
-		return
+		return 0
 	}
 	if kind == store.EventRecovered && settings.CollapseMinutes > 0 && m.collapseOutage(ctx, host, settings.CollapseMinutes) {
-		return
+		return 0
 	}
 	id, err := m.db.AddHostEvent(ctx, store.HostEvent{
 		HostID: host.ID, HostName: host.Name, HostAddr: hostAddrLabel(ctx, host),
@@ -76,12 +79,12 @@ func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, sev
 	})
 	if err != nil {
 		m.log.Warn("could not record alert", "host", host.Name, "kind", kind, "err", err)
-		return
+		return 0
 	}
-	eventID = id
 	if err := m.db.PruneHostEvents(ctx, eventKeep); err != nil {
 		m.log.Warn("could not prune the alert journal", "err", err)
 	}
+	return id
 }
 
 // collapseOutage сворачивает короткий эпизод: если последнее событие
@@ -401,7 +404,8 @@ type EventSettings struct {
 // EventKinds — все виды в порядке показа.
 var EventKinds = []string{store.EventUnreachable, store.EventRecovered, store.EventProblems, store.EventResolved, store.EventJobFailed, store.EventRebooted, store.EventBans, store.EventForecast,
 	store.EventPowerLost, store.EventPowerRestored, store.EventBatteryLow, store.EventUPSLost,
-	store.EventFlyTargetDown, store.EventFlyTargetUp, store.EventFlyPoolEmpty, store.EventFlyTunnelDown, store.EventFlyTunnelUp}
+	store.EventFlyTargetDown, store.EventFlyTargetUp, store.EventFlyPoolEmpty, store.EventFlyTunnelDown, store.EventFlyTunnelUp,
+	store.EventMigrationLeftover, store.EventDeployFailed, store.EventDeploySucceeded, store.EventEdgeDown, store.EventEdgeUp, store.EventCertExpiring}
 
 // defaultEventSettings — всё записывается; будят недоступностью,
 // проблемами и провалом задания, но не возвратами.
@@ -421,6 +425,12 @@ func defaultEventSettings() EventSettings {
 	s.Notify[store.EventFlyTargetDown] = true
 	s.Notify[store.EventFlyPoolEmpty] = true
 	s.Notify[store.EventFlyTunnelDown] = true
+	s.Notify[store.EventDeployFailed] = true
+	s.Notify[store.EventEdgeDown] = true
+	s.Notify[store.EventCertExpiring] = true
+	// Удачные выкладки — не в журнал по умолчанию: их много, а действия
+	// они не требуют (ботам и вебхукам уходят по их выбору).
+	s.Record[store.EventDeploySucceeded] = false
 	return s
 }
 

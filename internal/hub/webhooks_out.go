@@ -37,15 +37,16 @@ import (
 
 const outHooksKey = "hub.webhooks.out"
 
-// Виды событий исходящих вебхуков сверх оповещений хостов.
+// Виды событий выкладки (они же — в журнале) и проверка адресата.
 const (
-	OutDeploySucceeded = "deploy-succeeded"
-	OutDeployFailed    = "deploy-failed"
+	OutDeploySucceeded = store.EventDeploySucceeded
+	OutDeployFailed    = store.EventDeployFailed
 	OutTest            = "test"
 )
 
-// OutKinds — все виды, которые можно выбрать у адресата.
-var OutKinds = append(slices.Clone(EventKinds), OutDeploySucceeded, OutDeployFailed)
+// OutKinds — все виды, которые можно выбрать у адресата: те же, что в
+// журнале оповещений.
+var OutKinds = slices.Clone(EventKinds)
 
 // outRetries — паузы перед повторами неудачной доставки.
 var outRetries = []time.Duration{10 * time.Second, time.Minute, 5 * time.Minute}
@@ -346,6 +347,15 @@ func (s *Server) emitDeploy(ctx context.Context, pl store.Pipeline, d store.Depl
 		ev.Key, ev.Args = "hub.outDeployFailed", msgs.EncodeArgs([]any{pl.Name, what, ev.Error})
 	}
 	s.hub.emitOut(ev)
+	// В журнал — у первого хоста выкладки (без хостов — у машины хаба);
+	// адресатам событие уже ушло выше.
+	host := store.Host{ID: LocalHostID, Name: localHostName}
+	if len(ev.HostIDs) > 0 {
+		if h, err := s.db.HostByID(ctx, ev.HostIDs[0]); err == nil {
+			host = h
+		}
+	}
+	s.hub.journalEvent(ctx, host, ev.Kind, ev.Severity, "", ev.Key, ev.Args, "")
 }
 
 // pipelineHostIDs — хосты compose-конвейера (прочие виды — без хостов).

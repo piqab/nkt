@@ -53,6 +53,16 @@ const (
 	// EventMigrationLeftover — старый стек после переноса контейнера
 	// лежит остановленным дольше недели: убрать или откатить.
 	EventMigrationLeftover = "migration-leftover"
+	// EventDeploySucceeded / EventDeployFailed — выкладка конвейера
+	// закончилась (в журнал — у первого хоста выкладки).
+	EventDeploySucceeded = "deploy-succeeded"
+	EventDeployFailed    = "deploy-failed"
+	// EventEdgeDown / EventEdgeUp — nkt-edge без связи с хабом дольше
+	// пары минут и снова на связи.
+	EventEdgeDown = "edge-down"
+	EventEdgeUp   = "edge-up"
+	// EventCertExpiring — сертификат сайта выкладок истекает (или истёк).
+	EventCertExpiring = "cert-expiring"
 )
 
 // HostEvent — одно оповещение.

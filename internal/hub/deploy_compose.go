@@ -440,6 +440,15 @@ func httpsCheck(ctx context.Context, domain string) HTTPSCheck {
 			out.WrongCert = true
 			out.CertNames = certNames(he.Certificate)
 			out.CertNotAfter = he.Certificate.NotAfter.UTC().Format(time.RFC3339)
+			out.CertDaysLeft = int(time.Until(he.Certificate.NotAfter).Hours() / 24)
+		}
+		// Истёкший (или ещё не действующий) сертификат — тоже с датой:
+		// по ней оповещение «сертификат истёк».
+		var ce x509.CertificateInvalidError
+		if errors.As(err, &ce) && ce.Cert != nil {
+			out.CertNotAfter = ce.Cert.NotAfter.UTC().Format(time.RFC3339)
+			out.CertDaysLeft = int(time.Until(ce.Cert.NotAfter).Hours() / 24)
+			out.CertNames = certNames(ce.Cert)
 		}
 		return out
 	}

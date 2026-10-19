@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.52 — 2026-10-19
+
+- **"Apply immediately" on the map — no window.** Drop a tile on another
+  host and the hub checks the plan quietly; with no obstacles or warnings
+  it moves right away (Traffic Fly routes switched, the old copy's
+  leftovers removed) and opens the job log. An obstacle or a warning opens
+  the plan window as before.
+- **New alerts:** nkt-edge out of touch with the hub for over two minutes
+  and back online; a deployment site's certificate expiring — once a day
+  the hub checks the sites from outside and alerts 14, 7 and 3 days ahead
+  and when it has expired; "deployment failed" now also goes to the
+  journal ("succeeded" is optional and not recorded by default).
+- **"Old stack after a move"** is now in the journal settings and in the
+  event choice of bots and webhooks — it was missing, and a bot with
+  selected kinds never got this reminder.
+- **Telegram and Slack bots and outgoing webhooks** get the same kinds as
+  the journal (forecast, UPS, Traffic Fly, moves, deployments, nkt-edge,
+  certificates); hub events in the journal get a button to the right
+  "Deployments" tab.
+
 ## v1.13.51 — 2026-10-19
 
 - **The map shows the result after a move.** While the map re-reads the
