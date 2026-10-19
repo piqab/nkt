@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.45 — 2026-10-19
+
+- **Container moves: stricter checks on transfer file paths.** A transfer
+  file on the host is only opened and written inside the transfers
+  directory — after CodeQL findings.
+
 ## v1.13.44 — 2026-10-19
 
 - **Moving a Docker container to another host — by dragging on the hosts
