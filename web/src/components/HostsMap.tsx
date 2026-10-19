@@ -72,6 +72,8 @@ const GAP = 8
 const COLS = 3
 const COLLAPSED = 12
 const HEAD_H = 34
+/** Подпись над рамкой стека. */
+const STACK_H = 16
 const BLOCK_W = COLS * TILE_W + (COLS + 1) * GAP
 const LEFT_W = 250
 const LEFT_X = 10
@@ -165,7 +167,8 @@ export function HostsMap({
   // хост вместо сдвига карты), что тащат, куда, окно плана, меню
   // перенесённого.
   const [moveMode, setMoveMode] = useState(false)
-  const [tileDrag, setTileDrag] = useState<{ x: number; y: number; label: string } | null>(null)
+  // Тащат плитку — подсвечивается весь её стек (project), он и переносится.
+  const [tileDrag, setTileDrag] = useState<{ x: number; y: number; label: string; host: number; name: string; project?: string } | null>(null)
   const [overHost, setOverHost] = useState<number | null>(null)
   const [migrateAsk, setMigrateAsk] = useState<{ from: HubHost; to: HubHost; item: MapItem } | null>(null)
   // Как у Traffic Fly: план переносов копится и уходит «Применить
@@ -231,6 +234,8 @@ export function HostsMap({
   const tilePress = useRef<{ from: HubHost; item: MapItem; sx: number; sy: number; started: boolean } | null>(null)
   const hostsRef = useRef(hosts)
   hostsRef.current = hosts
+  const dataRef = useRef(data.data)
+  dataRef.current = data.data
   useEffect(() => {
     if (!moveMode) return
     const hostAt = (x: number, y: number) => {
@@ -242,7 +247,16 @@ export function HostsMap({
       if (!p) return
       if (!p.started && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < 6) return
       p.started = true
-      setTileDrag({ x: e.clientX, y: e.clientY, label: p.item.name })
+      const it = p.item
+      const stackN = it.project ? (dataRef.current?.hosts[String(p.from.id)]?.items ?? []).filter((x) => x.kind === 'container' && x.project === it.project).length : 1
+      setTileDrag({
+        x: e.clientX,
+        y: e.clientY,
+        label: stackN >= 2 ? t('hostsMap.dragStack', { name: it.project, n: stackN }) : `docker · ${it.name}`,
+        host: p.from.id,
+        name: it.name,
+        project: stackN >= 2 ? it.project : undefined,
+      })
       const h = hostAt(e.clientX, e.clientY)
       setOverHost(h !== null && h !== p.from.id ? h : null)
     }
@@ -262,7 +276,7 @@ export function HostsMap({
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
-  }, [moveMode])
+  }, [moveMode, t])
   // Перенесённое: «здесь остановлен, работает там» или «перенесён сюда».
   // Старая копия — только неработающий контейнер: тот же стек переносят
   // туда и обратно с теми же именами, и работающий не должен считаться
@@ -356,7 +370,9 @@ export function HostsMap({
       y: number
       h: number
       tiles: { item: MapItem; key: string; x: number; y: number }[]
+      stacks: { project: string; x: number; y: number; w: number; h: number }[]
       more: number
+      hidden: MapItem[]
       moreAt?: { x: number; y: number }
       error?: string
       offline: boolean
@@ -384,32 +400,69 @@ export function HostsMap({
         const rb = (b.state ?? '').toLowerCase() === 'running' ? 0 : 1
         return la - lb || ra - rb || a.name.localeCompare(b.name)
       })
+      // Стек (compose-проект от двух контейнеров) — подряд, на месте
+      // первого своего контейнера.
+      const projN = new Map<string, number>()
+      for (const it of items) if (it.kind === 'container' && it.project) projN.set(it.project, (projN.get(it.project) ?? 0) + 1)
+      const gkey = (it: MapItem) => (it.kind === 'container' && it.project && (projN.get(it.project) ?? 0) >= 2 ? `p:${it.project}` : `i:${it.kind}:${it.name}`)
+      const first = new Map<string, number>()
+      items.forEach((it, i) => {
+        if (!first.has(gkey(it))) first.set(gkey(it), i)
+      })
+      items = items
+        .map((it, i) => ({ it, i }))
+        .sort((a, b) => first.get(gkey(a.it))! - first.get(gkey(b.it))! || a.i - b.i)
+        .map((x) => x.it)
       const open = expandAll || expanded.has(h.id)
       const shown = open || items.length <= COLLAPSED ? items : items.slice(0, COLLAPSED - 1)
       const more = items.length - shown.length
       const cells = shown.length + (more > 0 ? 1 : 0)
-      const rows = Math.max(1, Math.ceil(cells / COLS))
-      const bh = HEAD_H + (offline || hd?.error || cells === 0 ? 30 : rows * (TILE_H + GAP) + GAP)
       const col = colY[0] <= colY[1] ? 0 : 1
       const bx = HOSTS_X + col * (BLOCK_W + 30)
       const by = colY[col]
-      colY[col] += bh + 20
-      const tiles = shown.map((item, i) => {
-        const x = bx + GAP + (i % COLS) * (TILE_W + GAP)
-        const y = by + HEAD_H + Math.floor(i / COLS) * (TILE_H + GAP)
+      // Сетка по COLS; стек — с новой строки, под рамкой с подписью, и
+      // после стека — тоже с новой строки.
+      const stacks: { project: string; x: number; y: number; w: number; h: number }[] = []
+      let ci = 0
+      let rowY = by + HEAD_H
+      let prev = ''
+      const place = (g: string) => {
+        const stack = g.startsWith('p:')
+        if (ci === COLS || (g !== prev && ci > 0 && (stack || prev.startsWith('p:')))) {
+          rowY += TILE_H + GAP
+          ci = 0
+        }
+        if (g !== prev && stack) {
+          rowY += STACK_H
+          stacks.push({ project: g.slice(2), x: bx + GAP - 4, y: rowY - STACK_H, w: 0, h: 0 })
+        }
+        const at = { x: bx + GAP + ci * (TILE_W + GAP), y: rowY }
+        if (stack) {
+          const f = stacks[stacks.length - 1]
+          f.w = Math.max(f.w, at.x + TILE_W + 4 - f.x)
+          f.h = at.y + TILE_H + 4 - f.y
+        }
+        ci++
+        prev = g
+        return at
+      }
+      const tiles = shown.map((item) => {
+        const { x, y } = place(gkey(item))
         const key = tileKey(h.id, item.kind, item.name)
         tilePos.set(key, { x, y })
         return { item, key, x, y }
       })
       let moreAt: { x: number; y: number } | undefined
+      const hidden = items.slice(shown.length)
       if (more > 0) {
-        const i = shown.length
-        moreAt = { x: bx + GAP + (i % COLS) * (TILE_W + GAP), y: by + HEAD_H + Math.floor(i / COLS) * (TILE_H + GAP) }
+        moreAt = place('more')
         // Скрытые плитки — связи ведут на «+N ещё».
-        for (const it of items.slice(shown.length)) tilePos.set(tileKey(h.id, it.kind, it.name), moreAt)
+        for (const it of hidden) tilePos.set(tileKey(h.id, it.kind, it.name), moreAt)
       }
+      const bh = offline || hd?.error || cells === 0 ? HEAD_H + 30 : rowY + TILE_H + 2 * GAP - by
+      colY[col] += bh + 20
       hostPos.set(h.id, { x: bx, y: by })
-      blocks.push({ host: h, x: bx, y: by, h: bh, tiles, more, moreAt, error: hd?.error, offline })
+      blocks.push({ host: h, x: bx, y: by, h: bh, tiles, stacks, more, hidden, moreAt, error: hd?.error, offline })
     }
     const width = HOSTS_X + 2 * BLOCK_W + 60
     const height = Math.max(ly, colY[0], colY[1]) + 10
@@ -838,6 +891,17 @@ export function HostsMap({
                       {midEllipsis(b.error, 90)}
                     </text>
                   )}
+                  {b.stacks.map((f) => {
+                    const hot = tileDrag?.host === b.host.id && tileDrag.project === f.project
+                    return (
+                      <g key={`s:${f.project}`}>
+                        <rect x={f.x} y={f.y} width={f.w} height={f.h} rx={8} fill="none" stroke={hot ? 'var(--accent, #1677ff)' : 'var(--border-strong, #bbb)'} strokeWidth={hot ? 2 : 1} strokeDasharray={hot ? undefined : '4 3'} />
+                        <text x={f.x + 8} y={f.y + 12} fontSize={10} fill={hot ? 'var(--accent, #1677ff)' : 'var(--text-secondary)'}>
+                          {midEllipsis(`${t('hostsMap.stack')} ${f.project}`, 60)}
+                        </text>
+                      </g>
+                    )
+                  })}
                   {b.tiles.map((x) => {
                     const it = x.item
                     const flyMarks = visibleLinks.filter((l) => l.to === x.key && l.from.startsWith('route:'))
@@ -854,6 +918,7 @@ export function HostsMap({
                     const kindLabel = it.kind === 'container' ? 'docker' : it.kind === 'vm' ? 'VM' : 'LXD'
                     const mig = it.kind === 'container' ? migratedHere(b.host.id, it.name, it.state) : null
                     const movable = moveMode && it.kind === 'container' && !b.offline && mig?.role !== 'from'
+                    const dragged = tileDrag?.host === b.host.id && (tileDrag.project ? it.kind === 'container' && it.project === tileDrag.project : it.name === tileDrag.name)
                     return (
                       <g
                         key={x.key}
@@ -881,8 +946,8 @@ export function HostsMap({
                           height={TILE_H}
                           rx={6}
                           fill="var(--surface-raised)"
-                          stroke={movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name) ? 'var(--accent, #1677ff)' : stateColor(it.state)}
-                          strokeWidth={2}
+                          stroke={dragged || movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name) ? 'var(--accent, #1677ff)' : stateColor(it.state)}
+                          strokeWidth={dragged ? 3 : 2}
                           strokeDasharray={draftTile(b.host.id, it.name) ? '5 3' : undefined}
                         />
                         {movingTile(b.host.id, it.name) && (
@@ -942,9 +1007,22 @@ export function HostsMap({
                       {...clickable(() => setExpanded((s) => new Set([...s, b.host.id])))}
                     >
                       <rect width={TILE_W} height={TILE_H} rx={6} fill="var(--surface-raised)" stroke="var(--border-strong, #bbb)" strokeDasharray="5 4" />
-                      <text x={TILE_W / 2} y={28} fontSize={12} textAnchor="middle" fill="var(--accent, #1677ff)">
-                        {t('hostsMap.more', { n: b.more })}
-                      </text>
+                      {(() => {
+                        // Скрытые в плане или переносе — видно и на свёрнутом хосте.
+                        const k = b.hidden.filter((it) => movingTile(b.host.id, it.name) || draftTile(b.host.id, it.name)).length
+                        return (
+                          <>
+                            <text x={TILE_W / 2} y={k ? 22 : 28} fontSize={12} textAnchor="middle" fill="var(--accent, #1677ff)">
+                              {t('hostsMap.more', { n: b.more })}
+                            </text>
+                            {k > 0 && (
+                              <text x={TILE_W / 2} y={37} fontSize={10} textAnchor="middle" fill="var(--accent, #1677ff)">
+                                {t('hostsMap.moreMoving', { n: k })}
+                              </text>
+                            )}
+                          </>
+                        )
+                      })()}
                     </g>
                   )}
                 </g>
@@ -971,7 +1049,7 @@ export function HostsMap({
             boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
           }}
         >
-          docker · {tileDrag.label}
+          {tileDrag.label}
         </div>
       )}
       {migrateAsk && (
@@ -1033,9 +1111,12 @@ interface MigratePreview {
     paths: { path: string; size: number }[]
     ports: string[]
     skipped?: string[]
+    /** Внешние сети стека; others — контейнеры вне стека в них. */
+    networks?: { name: string; others?: string[] }[]
   }
   check: { have_images?: string[]; free_bytes: number }
   problems?: string[]
+  warnings?: string[]
   fly?: { route: string; title: string; ref: string; was_active: boolean }[]
   /** Перенос обратно: остатки старой копии на новом хосте. */
   leftovers?: { record: string; host: string; ts: string; containers: string[]; paths?: string[]; volumes?: string[]; problems?: string[] }
@@ -1149,6 +1230,11 @@ function MigrateModal({
                 {t('hostsMap.migratePorts')} <span className="mono">{(p.ports ?? []).join(', ')}</span>
               </div>
             )}
+            {(p.networks ?? []).length > 0 && (
+              <div>
+                {t('hostsMap.migrateNetworks')} <span className="mono">{(p.networks ?? []).map((n) => n.name).join(', ')}</span>
+              </div>
+            )}
             {(p.skipped ?? []).length > 0 && <Banner kind="warn">{t('hostsMap.migrateSkipped', { list: (p.skipped ?? []).join(', ') })}</Banner>}
             {(pv?.fly ?? []).length > 0 && (
               <div>
@@ -1165,6 +1251,11 @@ function MigrateModal({
                 </Checkbox>
               </div>
             )}
+            {(pv?.warnings ?? []).map((w) => (
+              <Banner key={w} kind="warn">
+                {w}
+              </Banner>
+            ))}
             <Banner kind="warn">{t('hostsMap.migrateDowntime')}</Banner>
             {pv?.leftovers && (
               <Banner kind="warn">

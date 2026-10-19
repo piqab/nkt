@@ -538,4 +538,6 @@ var ruSitesCatalog = map[string]string{
 	"migrate.flyRemoved":              "Traffic Fly: старых целей убрано: %d",
 	"migrate.leftoversCleaning":       "на %[2]s — остатки старой копии %[1]s (перенос %[3]s): убираются, актуальные данные едут отсюда",
 	"migrate.removePath":              "каталог %s",
+	"migrate.netMissing":              "на новом хосте нет внешних сетей стека: %s — создайте их там (docker network create) или переносите связанные стеки вместе",
+	"migrate.netShared":               "сеть %s общая: на старом хосте к ней подключены ещё %s — после переноса они потеряют связь с этим стеком",
 }

@@ -69,6 +69,7 @@ type MigratePlan struct {
 	Volumes     []MigrateVolume    `json:"volumes"`
 	Paths       []MigratePath      `json:"paths"`
 	Ports       []string           `json:"ports"`
+	Networks    []MigrateNetwork   `json:"networks"`
 	Arch        string             `json:"arch,omitempty"`
 	// Refuse — почему перенести нельзя (ключи каталога с аргументом);
 	// Skipped — системные bind-тома, которые не копируются.
@@ -119,6 +120,18 @@ type migrateInspect struct {
 	State struct {
 		Status string `json:"Status"`
 	} `json:"State"`
+	NetworkSettings struct {
+		Networks map[string]struct{} `json:"Networks"`
+	} `json:"NetworkSettings"`
+}
+
+// MigrateNetwork — сеть docker, к которой подключён стек, не его
+// собственная (внешняя или чужого проекта): на новом хосте её может не
+// быть, а на старом к ней подключены другие.
+type MigrateNetwork struct {
+	Name string `json:"name"`
+	// Others — контейнеры не этого стека в той же сети (на старом хосте).
+	Others []string `json:"others,omitempty"`
 }
 
 // migrateSystemPrefixes — пути хоста, которые не копируются и не
@@ -162,7 +175,7 @@ func dockerInspectAll(ctx context.Context, names ...string) ([]migrateInspect, e
 // migratePlan — план переноса контейнера name (и его compose-проекта).
 func (s *Server) migratePlan(ctx context.Context, name string) (MigratePlan, error) {
 	// Пустые списки — [], не null: интерфейс их перебирает.
-	p := MigratePlan{Containers: []MigrateContainer{}, Images: []string{}, ImageIDs: []string{}, Volumes: []MigrateVolume{}, Paths: []MigratePath{}, Ports: []string{}}
+	p := MigratePlan{Containers: []MigrateContainer{}, Images: []string{}, ImageIDs: []string{}, Volumes: []MigrateVolume{}, Paths: []MigratePath{}, Ports: []string{}, Networks: []MigrateNetwork{}}
 	if !migrateNameRe.MatchString(name) {
 		return p, msgs.Errorf("migrate.badName", name)
 	}
@@ -278,6 +291,7 @@ func (s *Server) migratePlan(ctx context.Context, name string) (MigratePlan, err
 		}
 	}
 	sort.Strings(p.Ports)
+	p.Networks = migrateNetworks(ctx, p.Project, all)
 	// Метки и драйвер томов — чтобы compose на новом хосте признал их своими.
 	for i, v := range p.Volumes {
 		if res, err := RunTooling(ctx, "docker", "volume", "inspect", v.Name); err == nil && res.OK() {
@@ -507,6 +521,8 @@ type MigrateCheck struct {
 	HaveImages    []string `json:"have_images,omitempty"`
 	FreeBytes     int64    `json:"free_bytes"`
 	ProjectExists bool     `json:"project_exists,omitempty"`
+	// MissingNetworks — внешних сетей стека здесь нет: compose не поднимет.
+	MissingNetworks []string `json:"missing_networks,omitempty"`
 }
 
 // handleMigrateCheck — POST /migrate/check {plan}: новый хост.
@@ -547,6 +563,14 @@ func (s *Server) handleMigrateCheck(w http.ResponseWriter, r *http.Request) {
 				out.ProjectExists = true
 			}
 		}
+		for _, n := range p.Networks {
+			if !migrateNameRe.MatchString(n.Name) {
+				continue
+			}
+			if res, err := RunTooling(ctx, "docker", "network", "inspect", n.Name); err != nil || !res.OK() {
+				out.MissingNetworks = append(out.MissingNetworks, n.Name)
+			}
+		}
 	}
 	listen := map[string]bool{}
 	if res, err := c.RunTimeout(ctx, 10*time.Second, "ss", "-Hltnu"); err == nil {
@@ -579,4 +603,50 @@ func (s *Server) handleMigrateCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// migrateNetworks — внешние для стека сети: не bridge/host/none и не
+// созданные этим compose-проектом; кто ещё к ним подключён.
+func migrateNetworks(ctx context.Context, project string, cs []migrateInspect) []MigrateNetwork {
+	mine := map[string]bool{}
+	for _, c := range cs {
+		mine[strings.TrimPrefix(c.Name, "/")] = true
+	}
+	seen := map[string]bool{}
+	out := []MigrateNetwork{}
+	for _, c := range cs {
+		for name := range c.NetworkSettings.Networks {
+			if seen[name] || name == "bridge" || name == "host" || name == "none" || !migrateNameRe.MatchString(name) {
+				continue
+			}
+			seen[name] = true
+			res, err := RunTooling(ctx, "docker", "network", "inspect", name)
+			if err != nil || !res.OK() {
+				continue
+			}
+			var ni []struct {
+				Labels     map[string]string `json:"Labels"`
+				Containers map[string]struct {
+					Name string `json:"Name"`
+				} `json:"Containers"`
+			}
+			if json.Unmarshal([]byte(res.Stdout), &ni) != nil || len(ni) == 0 {
+				continue
+			}
+			// Своя сеть проекта — compose создаст её на новом хосте сам.
+			if project != "" && ni[0].Labels["com.docker.compose.project"] == project {
+				continue
+			}
+			n := MigrateNetwork{Name: name}
+			for _, x := range ni[0].Containers {
+				if !mine[x.Name] {
+					n.Others = append(n.Others, x.Name)
+				}
+			}
+			sort.Strings(n.Others)
+			out = append(out, n)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }

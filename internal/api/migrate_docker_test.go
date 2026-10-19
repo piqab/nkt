@@ -33,7 +33,10 @@ func TestMigrateRealDocker(t *testing.T) {
 	wd := filepath.Join(base, "proj")
 	_ = os.MkdirAll(filepath.Join(wd, "conf"), 0o755)
 	_ = os.WriteFile(filepath.Join(wd, "conf", "a.txt"), []byte("conf-1\n"), 0o644)
-	compose := "services:\n  web:\n    image: httpd:2.4-alpine\n    command: [\"sh\", \"-c\", \"test -f /data/x || echo hi > /data/x; sleep 3600\"]\n    volumes:\n      - data:/data\n      - ./conf:/conf\nvolumes:\n  data:\n"
+	compose := "services:\n  web:\n    image: httpd:2.4-alpine\n    command: [\"sh\", \"-c\", \"test -f /data/x || echo hi > /data/x; sleep 3600\"]\n    volumes:\n      - data:/data\n      - ./conf:/conf\n    networks: [default, ext]\nvolumes:\n  data:\nnetworks:\n  ext:\n    external: true\n    name: nktmig-ext\n"
+	// Внешняя сеть, к которой подключён и чужой контейнер.
+	_ = exec.Command("docker", "network", "create", "nktmig-ext").Run()
+	_ = exec.Command("docker", "run", "-d", "--name", "nktmig-other", "--network", "nktmig-ext", "httpd:2.4-alpine", "sleep", "3600").Run()
 	_ = os.WriteFile(filepath.Join(wd, "compose.yml"), []byte(compose), 0o644)
 	dc := func(args ...string) {
 		t.Helper()
@@ -46,6 +49,8 @@ func TestMigrateRealDocker(t *testing.T) {
 	t.Cleanup(func() {
 		_ = exec.Command("docker", "rm", "-f", "nktmig-web-1").Run()
 		_ = exec.Command("docker", "volume", "rm", "nktmig_data").Run()
+		_ = exec.Command("docker", "rm", "-f", "nktmig-other").Run()
+		_ = exec.Command("docker", "network", "rm", "nktmig-ext").Run()
 		_ = os.RemoveAll(base)
 	})
 	time.Sleep(2 * time.Second)
@@ -67,6 +72,9 @@ func TestMigrateRealDocker(t *testing.T) {
 	plan, err := s.migratePlan(ctx, "nktmig-web-1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(plan.Networks) != 1 || plan.Networks[0].Name != "nktmig-ext" || strings.Join(plan.Networks[0].Others, ",") != "nktmig-other" {
+		t.Fatalf("networks: %+v", plan.Networks)
 	}
 	if plan.Kind != "compose" || plan.Project != "nktmig" || len(plan.Volumes) != 1 || plan.Volumes[0].Name != "nktmig_data" || len(plan.Paths) != 1 || plan.Paths[0].Path != wd || len(plan.Refuse) > 0 {
 		t.Fatalf("plan: %+v", plan)
@@ -122,7 +130,7 @@ func TestMigrateRealDocker(t *testing.T) {
 	// «Убрать старый» с данными: контейнеры, тома и каталоги; повтор по
 	// уже убранному — не ошибка.
 	run("migrate.unpack", migrateIDArgs{ID: id})
-	rm := migrateRemoveArgs{Containers: []string{"nktmig-web-1"}, Volumes: []string{"nktmig_data"}, Paths: []string{wd}}
+	rm := migrateRemoveArgs{Containers: []string{"nktmig-web-1"}, Volumes: []string{"nktmig_data"}, Paths: []string{wd}, Project: "nktmig"}
 	run("migrate.remove", rm)
 	if err := exec.Command("docker", "inspect", "nktmig-web-1").Run(); err == nil {
 		t.Fatal("container left after remove")
@@ -132,6 +140,9 @@ func TestMigrateRealDocker(t *testing.T) {
 	}
 	if _, err := os.Stat(wd); !os.IsNotExist(err) {
 		t.Fatalf("workdir left after remove: %v", err)
+	}
+	if err := exec.Command("docker", "network", "inspect", "nktmig_default").Run(); err == nil {
+		t.Fatal("project network left after remove")
 	}
 	run("migrate.remove", rm)
 }
