@@ -222,10 +222,11 @@ loopback, а TLS остаётся у вашего сервера.
 
 ```bash
 V=$(curl -fsSL https://api.github.com/repos/piqab/nkt/releases/latest | sed -n 's/.*"tag_name": *"\(.*\)".*/\1/p')
-curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-edge-linux-amd64
+A=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[67]l/arm/')
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-edge-linux-$A
 curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
-sudo install -m 0755 nkt-edge-linux-amd64 /usr/local/bin/nkt-edge
+sudo install -m 0755 nkt-edge-linux-$A /usr/local/bin/nkt-edge
 sudo useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin nkt-edge
 
 sudo install -d -m 0750 -g nkt-edge /etc/nkt-edge /etc/nkt-edge/tls
@@ -236,7 +237,7 @@ curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/nkt-edge-cert
 curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/nkt-edge.service \
   | sudo install -m 0644 /dev/stdin /etc/systemd/system/nkt-edge.service
 openssl rand -base64 33                   # токен → EDGE_TOKEN
-sudo $EDITOR /etc/nkt-edge/edge.env       # EDGE_DOMAIN, EDGE_TOKEN
+sudo nano /etc/nkt-edge/edge.env       # EDGE_DOMAIN, EDGE_TOKEN
 
 sudo apt-get install -y certbot
 sudo certbot certonly --standalone -d hooks.example.com --cert-name hooks.example.com \

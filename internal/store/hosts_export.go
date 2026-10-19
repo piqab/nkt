@@ -225,6 +225,11 @@ type HubExport struct {
 	// Monitoring — история «Мониторинга» (только по отдельной галочке:
 	// файл с ней заметно больше).
 	Monitoring []MonHostExport `json:"monitoring,omitempty"`
+	// Fly — Traffic Fly (маршруты, история, раздача адресов) в виде хаба,
+	// с именами хостов и адресами шлюзов для пересчёта номеров.
+	Fly json.RawMessage `json:"fly,omitempty"`
+	// Migrations — учёт переносов контейнеров (хосты — по именам).
+	Migrations json.RawMessage `json:"migrations,omitempty"`
 }
 
 func hostToExport(h Host) HostExport {
@@ -408,6 +413,10 @@ const (
 	// SectionMonitoring — история «Мониторинга»: «заменить» здесь значит
 	// «дополнить» — недостающие часы добавляются, имеющиеся не трогаются.
 	SectionMonitoring = "monitoring"
+	// SectionFly — маршруты Traffic Fly (по одному, по id маршрута).
+	SectionFly = "fly"
+	// SectionMigrations — учёт переносов контейнеров.
+	SectionMigrations = "migrations"
 )
 
 // ImportResolutions — что делать с тем, что в этом хабе уже есть под тем

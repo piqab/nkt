@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox, Input, Space, Switch, Tag, Tooltip } from 'antd'
-import { ReloadOutlined } from '@ant-design/icons'
+import { LoadingOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Loading, Modal } from './ui'
@@ -179,6 +179,7 @@ export function HostsMap({
   // Переносы в работе: спиннеры на плитках, по завершении — карта заново.
   const [moving, setMoving] = useState<MovingJob[]>([])
   const [movesFailed, setMovesFailed] = useState<number[]>([])
+  const [settling, setSettling] = useState(false)
   const [tick, setTick] = useState(0)
   const [recMenu, setRecMenu] = useState<MigrationRecord | null>(null)
   const migrations = useApi<{ migrations: MigrationRecord[] }>('/hub/migrations', 60_000)
@@ -198,10 +199,23 @@ export function HostsMap({
           if (job && job.status !== 'queued' && job.status !== 'running') done.push({ id: m.id, ok: job.status === 'succeeded' })
         }
         if (done.length === 0) return
-        // Перенос закончился — списки хостов мимо кэша, затем карта,
-        // учёт переносов и маршруты Traffic Fly (они в ответе карты).
-        await api('/hub/map?refresh=1').catch(() => undefined)
-        await Promise.all([data.reload(), migrations.reload()])
+        // Перенос закончился — списки хостов мимо кэша (пока карта
+        // перечитывается — пелена «Обновляю карту…»), затем карта, учёт
+        // переносов и маршруты Traffic Fly (они в ответе карты). Удачный
+        // перенос, а контейнера на новом хосте ещё нет — ещё раз, до трёх.
+        setSettling(true)
+        try {
+          const okMoves = movingRef.current.filter((m) => done.some((d) => d.id === m.id && d.ok))
+          for (let i = 0; i < 3; i++) {
+            const fresh = await api<MapData>('/hub/map?refresh=1').catch(() => null)
+            const arrived = okMoves.every((m) => m.names.every((n) => (fresh?.hosts[String(m.to)]?.items ?? []).some((it) => it.kind === 'container' && it.name === n)))
+            if (!fresh || arrived) break
+            await new Promise((r) => window.setTimeout(r, 2000))
+          }
+          await Promise.all([data.reload(), migrations.reload()])
+        } finally {
+          setSettling(false)
+        }
         setMoving((l) => l.filter((m) => !done.some((d) => d.id === m.id)))
         const bad = done.filter((d) => !d.ok).map((d) => d.id)
         if (bad.length) setMovesFailed((f) => [...f, ...bad])
@@ -1029,6 +1043,13 @@ export function HostsMap({
               ))}
             </g>
           </svg>
+          {settling && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--surface) 65%, transparent)', pointerEvents: 'none' }}>
+              <span style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface-raised)', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+                <LoadingOutlined /> {t('hostsMap.settling')}
+              </span>
+            </div>
+          )}
         </div>
       )}
       {applyErr && <Banner kind="error">{applyErr}</Banner>}

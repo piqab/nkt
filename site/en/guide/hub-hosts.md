@@ -532,7 +532,8 @@ machine-to-host links, Kubernetes clusters (nodes, API address,
 kubeconfig, WireGuard plan), profiles and scripts with history, machine
 templates, **deployment pipelines** with their revision history, secrets
 (webhook signature, git and registry tokens), webhook address, the
-selected dry run checks and the `.env` history, deployment **sites**
+selected dry run checks, the `.env` history and where the stack is
+deployed now (plus old stacks not yet removed), deployment **sites**
 (domains, proxy, stack or address, firewall, state; the host and the
 pipeline go by name: a site whose host is missing is not imported, and a
 site without its pipeline becomes a manual one), **fail2ban templates** with version history, every **nkt-edge** with its
@@ -543,7 +544,9 @@ in a scope go by name, and a token or recipient whose host is missing is
 not imported), hub settings
 (alerts, package cache, model analysis with the API key and every edited
 instruction, beta channel, the help site address with its history, the hub and host menu layouts), saved cluster form presets, fallback channel
-switches and tokens. With the "Web interface user accounts" checkbox it
+switches and tokens, **Traffic Fly routes** with their version history
+and the tunnel address and port allocation, **container move records**
+(map marks, "Roll back" and "Remove old"). With the "Web interface user accounts" checkbox it
 also carries logins, roles and password hashes. The file is JSON version
 5; versions 1 to 4 import too.
 
@@ -569,6 +572,17 @@ also carries logins, roles and password hashes. The file is JSON version
   log and bindings stay; for a user account, the password hash, role and
   lock. Clusters with a taken name are only skipped. After the import
   comes a report by section: added, replaced, skipped, errors.
+- **Host and gateway numbers are remapped.** On another hub hosts and
+  nkt-edge have other numbers: Traffic Fly, the deployment state and the
+  move records keep their names and edge tunnel addresses in the file, and
+  the import finds them here. A route target on a host missing here is
+  skipped, as is a route without its gateway and a move record with a
+  missing host; the report names each one. Routes appear in the plan by
+  id, and a match can be replaced. Tunnel addresses and host ports come
+  from the file where they are free here — after the import press
+  **Apply** in Traffic Fly and the nodes get the same settings. The
+  Traffic Fly version history comes from the file only if this hub had
+  none yet.
 - **A pipeline's webhook address is kept**, so webhooks in GitHub, GitLab
   and Gitea keep working on the new hub. If the address is already used
   by another pipeline on the receiving hub, a new one is issued and the

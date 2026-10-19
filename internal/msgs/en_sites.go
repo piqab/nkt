@@ -540,4 +540,9 @@ var enSitesCatalog = map[string]string{
 	"migrate.removePath":              "directory %s",
 	"migrate.netMissing":              "the new host lacks the stack's external networks: %s — create them there (docker network create) or move the related stacks together",
 	"migrate.netShared":               "network %s is shared: on the old host %s are also attached — after the move they lose contact with this stack",
+	"hub.importFlyNoHost": "Traffic Fly, route %s: target %s skipped — host %s is not in this hub",
+	"hub.importFlyNoGateway": "Traffic Fly, route %s skipped — gateway %s (nkt-edge) is not in this hub",
+	"hub.importFlyApply": "Traffic Fly imported — open it and press “Apply” to lay the routes out on the gateways and hosts",
+	"hub.importDeployedNoHost": "pipeline %s: host %s is not in this hub — skipped in the deployment state",
+	"hub.importMigrationNoHost": "move %s: host %s is not in this hub — record skipped",
 }

@@ -23,13 +23,14 @@ Windows и macOS рабочий режим не запускается — та�
 [Releases](https://github.com/piqab/nkt/releases) вместе с `SHA256SUMS`:
 
 ```bash
-# подставьте свою архитектуру; V — последняя версия
+# V — последняя версия, A — архитектура этой машины (amd64, arm64, arm)
 V=$(curl -fsSL https://api.github.com/repos/piqab/nkt/releases/latest | sed -n 's/.*"tag_name": *"\(.*\)".*/\1/p')
-curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-linux-amd64
+A=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[67]l/arm/')
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-linux-$A
 curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
-chmod +x nkt-linux-amd64
-sudo mv nkt-linux-amd64 /usr/local/bin/nkt
+chmod +x nkt-linux-$A
+sudo mv nkt-linux-$A /usr/local/bin/nkt
 ```
 
 **Из исходников** нужен только `make`: он сам решает, собирать в Docker
@@ -70,7 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/nkt.env.examp
   | sudo install -m 0640 /dev/stdin /etc/netknownsthat/nkt.env
 curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat.service \
   | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat.service
-sudo $EDITOR /etc/netknownsthat/nkt.env
+sudo nano /etc/netknownsthat/nkt.env     # или любой редактор
 sudo systemctl daemon-reload
 sudo systemctl enable --now netknownsthat
 sudo journalctl -u netknownsthat -n 30     # здесь будет пароль администратора

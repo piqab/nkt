@@ -25,13 +25,14 @@ Prebuilt binaries for `linux/amd64`, `linux/arm64` and `linux/arm` are in
 `SHA256SUMS`:
 
 ```bash
-# substitute your architecture; V is the latest version
+# V is the latest version, A is this machine's architecture (amd64, arm64, arm)
 V=$(curl -fsSL https://api.github.com/repos/piqab/nkt/releases/latest | sed -n 's/.*"tag_name": *"\(.*\)".*/\1/p')
-curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-linux-amd64
+A=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/;s/armv[67]l/arm/')
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-linux-$A
 curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
-chmod +x nkt-linux-amd64
-sudo mv nkt-linux-amd64 /usr/local/bin/nkt
+chmod +x nkt-linux-$A
+sudo mv nkt-linux-$A /usr/local/bin/nkt
 ```
 
 **From source** you only need `make`: it decides whether to build in
@@ -72,7 +73,7 @@ curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/nkt.env.examp
   | sudo install -m 0640 /dev/stdin /etc/netknownsthat/nkt.env
 curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat.service \
   | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat.service
-sudo $EDITOR /etc/netknownsthat/nkt.env
+sudo nano /etc/netknownsthat/nkt.env     # or any editor
 sudo systemctl daemon-reload
 sudo systemctl enable --now netknownsthat
 sudo journalctl -u netknownsthat -n 30     # the admin password is here

@@ -406,10 +406,25 @@ type flyTargetItem struct {
 // flyTargetsCache — списки целей по хосту и виду на flyTargetsTTL:
 // редактор маршрута открывают и закрывают, а хост каждый раз заново
 // перечислять контейнеры и машины не обязан.
+// gen — поколение ключа: сброс (перенос, refresh) его увеличивает, и
+// ответ хоста, запрошенный до сброса, свежий список уже не перезапишет.
 var flyTargetsCache = struct {
 	sync.Mutex
-	m map[string]flyTargetsEntry
-}{m: map[string]flyTargetsEntry{}}
+	m   map[string]flyTargetsEntry
+	gen map[string]uint64
+}{m: map[string]flyTargetsEntry{}, gen: map[string]uint64{}}
+
+// flyTargetsForget — сбросить списки хоста (все виды): содержимое
+// хоста изменилось, следующий запрос пойдёт на хост.
+func flyTargetsForget(id int64) {
+	flyTargetsCache.Lock()
+	defer flyTargetsCache.Unlock()
+	for _, k := range []string{"container", "vm", "lxd"} {
+		key := fmt.Sprintf("%d/%s", id, k)
+		delete(flyTargetsCache.m, key)
+		flyTargetsCache.gen[key]++
+	}
+}
 
 type flyTargetsEntry struct {
 	at    time.Time
@@ -457,6 +472,10 @@ func (s *Server) flyTargetsCached(ctx context.Context, user string, id int64, ki
 		key := fmt.Sprintf("%d/%s", id, k)
 		flyTargetsCache.Lock()
 		e, ok := flyTargetsCache.m[key]
+		if refresh {
+			flyTargetsCache.gen[key]++
+		}
+		gen := flyTargetsCache.gen[key]
 		flyTargetsCache.Unlock()
 		if ok && !refresh && time.Since(e.at) < flyTargetsTTL {
 			lists[i] = e.items
@@ -471,7 +490,9 @@ func (s *Server) flyTargetsCached(ctx context.Context, user string, id int64, ki
 			lists[i], errs[i] = items, err
 			if err == nil {
 				flyTargetsCache.Lock()
-				flyTargetsCache.m[key] = flyTargetsEntry{at: time.Now(), items: items}
+				if flyTargetsCache.gen[key] == gen {
+					flyTargetsCache.m[key] = flyTargetsEntry{at: time.Now(), items: items}
+				}
 				flyTargetsCache.Unlock()
 			}
 		}()

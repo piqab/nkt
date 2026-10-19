@@ -821,7 +821,9 @@
       "webhooks": "Outgoing webhooks",
       "bots": "Bots",
       "sites": "Sites",
-      "monitoring": "\"Monitoring\" history"
+      "monitoring": "\"Monitoring\" history",
+      "fly": "Traffic Fly routes",
+      "migrations": "Container move records"
     },
     "importPlanTitle": "Import: what the file contains",
     "importPlanHint": "A version {{version}} file from {{date}}. Items whose name already exists on this hub are skipped by default; “replace” is chosen per item or for a whole section.",
@@ -4847,6 +4849,7 @@
     "migrateNetworks": "External networks:",
     "dragStack": "stack {{name}} · containers: {{n}}",
     "moreMoving": "moving: {{n}}",
+    "settling": "Refreshing the map after the move…",
     "migratePorts": "Ports:",
     "migrateSkipped": "System paths are not copied — the new host needs its own: {{list}}",
     "migrateDowntime": "The stack on the old host stops while the data moves and stays stopped — for a rollback. If it is a Traffic Fly target or has a site, switch them after the move.",
