@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.57 — 2026-10-19
+
+- **"Test nkt hub" example** — a second hub in Docker on this hub's
+  machine (`localhost`): the image of the same version, its own ports
+  `127.0.0.1:18443` and `18446`, the admin password created by the hub
+  ("Secrets" → ".env"). The README covers logging in, updating, and why
+  not to import the production hosts into it.
+- **"Another hub" on a host.** A hub passes the host its identifier (not
+  carried by an export), the host remembers hubs for 15 minutes — if a
+  second hub talks to the host, it gets an orange icon in "Hosts". The
+  import plan reminds in the "Hosts" section that the hosts stay under the
+  source hub too.
+- **A hub in a container does not deploy or move its own stack** — a
+  refusal with an explanation instead of a job that would stop the hub.
+- Guide: if `docker pull` of the hub image answers "denied", the package
+  is still private on GitHub — how to open it.
+
 ## v1.13.56 — 2026-10-19
 
 - **Moving a pipeline's stack** (Forgejo, n8n, WordPress or any other

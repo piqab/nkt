@@ -508,6 +508,10 @@ type hostWithOverview struct {
 	// since every page keeps working, just without whatever the new
 	// version added.
 	RunningVersion string `json:"running_version,omitempty"`
+	// OtherHubAgoS — к хосту обращался ещё один хаб столько секунд назад
+	// (нет поля — не обращался): два хаба над одним хостом мешают друг
+	// другу.
+	OtherHubAgoS *int64 `json:"other_hub_ago_s,omitempty"`
 	// OSInfo — ОС хоста для значка перед именем (из опроса хоста; у
 	// машины без своего nkt — из списка доменов её хоста).
 	OSInfo *model.OSInfo `json:"os_info,omitempty"`
@@ -630,6 +634,10 @@ func (s *Server) hostRows(ctx context.Context) ([]hostWithOverview, error) {
 			reachable := ov.Reachable
 			row.Reachable = &reachable
 			row.RunningVersion = ov.Version
+			if ov.OtherHubAgoS >= 0 {
+				ago := ov.OtherHubAgoS
+				row.OtherHubAgoS = &ago
+			}
 			row.Channel = ov.Channel
 			row.OSInfo = ov.OS
 			row.UPS = s.hub.HostUPS(h.ID)

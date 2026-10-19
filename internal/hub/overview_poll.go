@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/piqab/nkt/internal/api"
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -67,8 +68,14 @@ type hostOverview struct {
 	vmExtra map[string]vmExtra
 	// ups — состояние ИБП хоста на этом опросе (для событий); upsList —
 	// как есть, для мониторинга хаба.
-	ups     map[string]upsSeen
-	upsList []model.UPS
+	ups map[string]upsSeen
+	// otherHubAgo — к хосту ходил другой хаб столько секунд назад (-1 —
+	// нет): тестовый хаб с импортом рабочего и т. п.
+	otherHubAgo int64
+	// otherHubKnown — otherHubAgo из удачного опроса (у записи о
+	// недоступности его нет, и ноль там — не «только что»).
+	otherHubKnown bool
+	upsList       []model.UPS
 	// f2b — сводка fail2ban (баны сейчас); nil — хост старой версии.
 	f2b *f2bSummary
 }
@@ -176,6 +183,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		return
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
+	req.Header.Set(api.HubIDHeader, m.instanceID(ctx))
 
 	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
@@ -211,6 +219,8 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		// какие ниже порогов хоста.
 		UPS    []model.UPS `json:"ups"`
 		UPSLow []string    `json:"ups_low"`
+		// HubsSeen — хабы, обращавшиеся к хосту (nil — старый хост).
+		HubsSeen []api.HubSeen `json:"hubs_seen"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		m.recordUnreachable(ctx, hostID, err)
@@ -271,6 +281,8 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		ups:           upsSnapshot(body.UPS, body.UPSLow),
 		upsList:       body.UPS,
 		f2b:           body.Fail2ban,
+		otherHubAgo:   otherHubAgo(body.HubsSeen, m.instanceID(ctx)),
+		otherHubKnown: true,
 	}
 	m.overviewMu.Unlock()
 }
@@ -462,6 +474,7 @@ func (m *Manager) Overview(hostID int64) (HostOverview, bool) {
 		LastPolledAt: cur.lastPolledAt,
 		Channel:      cur.channel,
 		OS:           m.hostOS[hostID],
+		OtherHubAgoS: otherHubOr(cur),
 	}, true
 }
 
@@ -483,6 +496,9 @@ type HostOverview struct {
 	Channel string
 	// OS — ОС хоста по последнему удачному опросу (значок перед именем).
 	OS *model.OSInfo
+	// OtherHubAgoS — к хосту обращался ещё один хаб столько секунд назад
+	// (-1 — нет).
+	OtherHubAgoS int64
 }
 
 // setVMState правит состояние домена в кэше сразу после действия — до
@@ -523,4 +539,11 @@ func (m *Manager) awaitVMAddress(host store.Host) {
 		case <-time.After(5 * time.Second):
 		}
 	}
+}
+
+func otherHubOr(cur hostOverview) int64 {
+	if !cur.otherHubKnown {
+		return -1
+	}
+	return cur.otherHubAgo
 }

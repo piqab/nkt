@@ -163,6 +163,7 @@ export function ImportPlanModal({ jsonText, onClose, onDone }: { jsonText: strin
                     </>
                   )}
                 </div>
+                {s.section === 'hosts' && <Banner kind="warn">{t('hosts.importHostsSecondHub')}</Banner>}
                 {conflicts.length > 0 && (
                   <div className="col" style={{ gap: '0.2rem', marginTop: '0.3rem' }}>
                     {conflicts.map((i) => (

@@ -32,6 +32,9 @@ import (
 
 // Server holds everything the handlers need.
 type Server struct {
+	// hubsSeen — хабы, обращавшиеся к хосту (hubs_seen.go).
+	hubsMu   sync.Mutex
+	hubsSeen map[string]time.Time
 	// transfers — идущие передачи файлов с компьютера (upload_jobs.go):
 	// по токену и по номеру задания.
 	transfersMu  sync.Mutex
@@ -187,6 +190,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(auth.SameOrigin(s.cfg.CORSOrigins, func(p string) bool { return strings.Contains(p, "/k8s/pf/") }))
 	r.Use(securityHeaders)
 	r.Use(msgs.LangMiddleware)
+	r.Use(s.noteHub)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", s.handleHealth)

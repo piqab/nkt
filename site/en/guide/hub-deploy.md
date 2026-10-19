@@ -327,6 +327,7 @@ placeholders `<service from compose>` and `<container port>` in `site:`:
 | WordPress + MariaDB | a site behind the HTTPS proxy (`X-Forwarded-Proto`) |
 | Plausible | three services with ClickHouse, a config directory (`files`) |
 | Authorizer + PostgreSQL | configuration by startup flags only — from `.env` in `command:`; a commented-out variant entering through Traffic Fly (`fly:`) |
+| Test nkt hub | a second hub in Docker on this hub's machine (`localhost`): the image of this hub's version (`images`), its own ports `127.0.0.1:18443`/`18446` (`ports`), the admin password from `.env` (`env_keys`); don't import the production hosts into it — [README](https://github.com/piqab/nkt/tree/main/examples/nkt-hub-test) |
 | Technitium DNS Server | your own name server: DNS 53/udp and tcp on the host's address (`ports:`; the selected host's address is filled in), one-shot setup through the API (`dns-init`, `files`), DoH behind the site proxy; the secondary server is a second pipeline; DNS-01 for cert-manager (RFC 2136, TSIG), failover records, DoT — in the [README](https://github.com/piqab/nkt/tree/main/examples/technitium) |
 
 Every example starts with `# WARNING:` lines (in Russian and English): it

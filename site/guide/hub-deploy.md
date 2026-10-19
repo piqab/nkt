@@ -312,6 +312,7 @@ Codeberg/Gitea/Forgejo `…/src/branch/…`, их raw-варианты), выб�
 | WordPress + MariaDB | сайт за HTTPS-прокси (`X-Forwarded-Proto`) |
 | Plausible | три сервиса с ClickHouse, каталог конфигов (`files`) |
 | Authorizer + PostgreSQL | настройки только флагами запуска — из `.env` в `command:`; закомментированный вариант входа через Traffic Fly (`fly:`) |
+| Тестовый хаб nkt | второй хаб в Docker на машине этого хаба (`localhost`): образ версии этого хаба (`images`), свои порты `127.0.0.1:18443`/`18446` (`ports`), пароль администратора из `.env` (`env_keys`); не импортируйте в него хосты рабочего — [README](https://github.com/piqab/nkt/tree/main/examples/nkt-hub-test) |
 | Technitium DNS Server | свой сервер имён: DNS 53/udp и tcp на адрес хоста (`ports:`; адрес выбранного хоста подставляется сам), разовая настройка через API (`dns-init`, `files`), DoH за прокси сайта; вторичный сервер — вторым конвейером; DNS-01 для cert-manager (RFC 2136, TSIG), failover-записи, DoT — в [README](https://github.com/piqab/nkt/tree/main/examples/technitium) |
 
 Каждый пример начинается строками `# WARNING:` (на русском и английском):

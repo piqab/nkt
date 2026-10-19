@@ -556,4 +556,6 @@ var enSitesCatalog = map[string]string{
 	"migrate.pipelineSiteFailed":      "site %s on %s not set up: %s — “Retry” in “Sites” once the A record points to the new host",
 	"migrate.pipelineGone":            "pipeline %s no longer exists — nothing to roll back in it",
 	"migrate.pipelineNotSwitched":     "the stack was deployed by pipeline %s, and the pipeline was not switched: the next deployment brings the stack up on %s again",
+	"deploy.selfStack":                "stack %s on %s is the one this hub runs in: deploying would stop the hub itself mid-job. Update it from another hub or on the machine: docker compose pull && docker compose up -d",
+	"migrate.selfStack":               "stack %s is the one this hub runs in: moving it would stop the hub itself; move it from another hub (export and import)",
 }

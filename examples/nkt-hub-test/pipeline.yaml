@@ -1,0 +1,28 @@
+# Тестовый хаб nkt — второй хаб в Docker на машине этого хаба (localhost).
+# Подробно — README.md: не импортируйте в него хосты рабочего хаба.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: deploy/docker-compose.hub.release.yml
+  project: nkt-hub-test
+  hosts: [localhost]
+  # Версия — как у рабочего хаба (не latest: в томе ключ шифрования и секреты).
+  images:
+    hub: ghcr.io/piqab/nkt-hub:1.13.57
+  # Не 8443/8446 — их может держать рабочий хаб. Только 127.0.0.1:
+  # снаружи — ssh -L 18443:127.0.0.1:18443 или site: ниже.
+  ports:
+    hub: ["127.0.0.1:18443:8077", "127.0.0.1:18446:8446"]
+  # Пароль администратора — из .env, а не из журнала контейнера
+  # («Секреты» → «.env» → «Показать»). Применяется при первом запуске.
+  env_keys:
+    hub: [NKT_BOOTSTRAP_ADMIN_PASSWORD]
+  env:
+    NKT_BOOTSTRAP_ADMIN_PASSWORD: generate:password
+  # Доступ снаружи с HTTPS (A-запись имени — на этот хост):
+  # site:
+  #   domains: [hub-test.example.com]
+  #   service: hub
+  #   port: 8077

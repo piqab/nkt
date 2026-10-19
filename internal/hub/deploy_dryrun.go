@@ -275,6 +275,10 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 		if on("version") {
 			problems += s.dryHostVersion(ctx, jc, t)
 		}
+		if p := s.hubStackOn(ctx, user, t.ID); p != "" && p == c.Project {
+			jc.Log("deploy.selfStack", c.Project, t.Name)
+			problems++
+		}
 		if c.Site.Managed() && res.SiteChecked && on("site_host") {
 			n, port := logSitePort(ctx, jc, c, res, registryHTTP)
 			problems += n

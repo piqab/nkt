@@ -111,6 +111,9 @@ export interface HubHost {
    * working, just without whatever the newer version added. Absent until
    * the first successful poll. */
   running_version?: string
+  /** К хосту обращался ещё один хаб столько секунд назад (нет — не
+   * обращался): два хаба над одним хостом мешают друг другу. */
+  other_hub_ago_s?: number
   /** Версия хаба на момент ответа — с ней сравнивается nkt_version;
    * свежее, чем hub_version из /auth/me, загруженного при открытии вкладки. */
   hub_version?: string

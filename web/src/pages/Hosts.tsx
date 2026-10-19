@@ -236,6 +236,20 @@ function HostStatusIcon({ host, onRecheck }: { host: HubHost; onRecheck?: () => 
  * host's tunnel listener yet (freshly installed, or the host itself
  * offline/unreachable on that port).
  */
+/** Ещё один хаб обращался к хосту (тестовый хаб с импортом рабочего):
+ * оба управляют одними стеками, маршрутами и обновлениями. */
+function OtherHubBadge({ host }: { host: HubHost }) {
+  const { t } = useTranslation()
+  if (host.other_hub_ago_s === undefined) return null
+  return (
+    <Tooltip title={t('hosts.otherHub', { min: Math.max(1, Math.round(host.other_hub_ago_s / 60)) })}>
+      <span aria-label={t('hosts.otherHubShort')} style={{ marginLeft: '0.35rem' }}>
+        <ClusterOutlined style={{ color: 'var(--status-warning)' }} />
+      </span>
+    </Tooltip>
+  )
+}
+
 /** Кэш пакетов хаба: включён ли на хосте и держится ли проброс сейчас. */
 function AptProxyBadge({ host }: { host: HubHost }) {
   const { t } = useTranslation()
@@ -1370,6 +1384,7 @@ export default function Hosts({
           <span className="row row-nowrap" style={{ gap: 0 }}>
             <TunnelChannelBadge host={h} />
             <AptProxyBadge host={h} />
+            <OtherHubBadge host={h} />
           </span>
         ),
     },

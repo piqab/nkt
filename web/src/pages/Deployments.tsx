@@ -875,11 +875,16 @@ function ComposeFromLink({
     // {hostip} в публикациях примера — адрес выбранного хоста (IPv4).
     const hostAddr = (hosts.data ?? []).find((h) => h.name === picked[0])?.addr ?? ''
     const hostIP = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostAddr) ? hostAddr : '203.0.113.10'
+    // {hubversion} в образах примера — версия этого хаба (сборка не из
+    // релиза — latest).
+    const hubVer = (hosts.data ?? []).find((h) => h.hub_version)?.hub_version ?? ''
+    const hubVersion = /^\d+\.\d+\.\d+$/.test(hubVer) ? hubVer : 'latest'
+    const fill = (x: string) => x.replaceAll('{hostip}', hostIP).replaceAll('{hubversion}', hubVersion)
     const block = (name: string, rec: Record<string, string | string[]> | undefined, comment: string) =>
       rec
         ? `  ${name}:${comment ? '                          '.slice(name.length) + '# ' + comment : ''}\n` +
           Object.entries(rec)
-            .map(([svc, v]) => `    ${svc}: ${Array.isArray(v) ? `[${v.map((x) => x.replaceAll('{hostip}', hostIP)).map((x) => (x.includes(':') ? `"${x}"` : x)).join(', ')}]` : v}\n`)
+            .map(([svc, v]) => `    ${svc}: ${Array.isArray(v) ? `[${v.map(fill).map((x) => (x.includes(':') ? `"${x}"` : x)).join(', ')}]` : fill(v)}\n`)
             .join('')
         : ''
     const files = ex?.files ? `  files: [${ex.files.join(', ')}]              # ${t('deploy.fromLinkFilesComment')}\n` : ''
@@ -904,7 +909,7 @@ function ComposeFromLink({
       `  #   ${site.service}: ["127.0.0.1:${hostPort}:${site.port}"]\n`
     // Примеры — чужие репозитории и образы: предупреждение сверху, на
     // обоих языках (файл один для всех читателей), красным в редакторе.
-    const warning = ex ? EXAMPLE_WARNING.map((l) => `${l}\n`).join('') : ''
+    const warning = ex && !ex.own ? EXAMPLE_WARNING.map((l) => `${l}\n`).join('') : ''
     const yaml =
       warning +
       (ex ? `# ${t('deploy.exampleComment')}: ${ex.readme}\n` : '') +

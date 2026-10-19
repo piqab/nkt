@@ -167,6 +167,12 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   polls the host right away instead of waiting for the timer (the icon
   spins while polling); it changes nothing on the host, so read-only users
   can do it too.
+- **"Another hub"** — an orange icon by the name: another hub talked to
+  the host in the last 15 minutes (every hub passes the host its own
+  identifier, which is not carried by an export). Two hubs over one host
+  get in each other's way — polled deployments, Traffic Fly "Apply",
+  updates, the narrow sudo key; remove the host from one of them. It
+  usually happens with a test hub that got the production hub imported.
 - **OS icon** right before the name — the host's distribution from its
   `/etc/os-release` (Ubuntu, Debian, Alpine…; the tooltip gives the full
   name); the hub learns it on polling, an unreachable host keeps the last
@@ -383,6 +389,9 @@ and the cursor reads `stack <name> · containers: N`.
   would bring the stack up on the old host — two copies with different
   data. A pipeline that picks hosts by group is not switched by the move —
   the window says so ("Apply immediately" then shows the window too).
+- **A hub in a container** does not move the stack it runs in (the move
+  would stop it midway) — an obstacle in the plan window; deployment and
+  the dry run refuse the same way.
 - Sites set up by hand (not by a pipeline) are not switched by the move —
   set up the proxy on the new host and the DNS A record afterwards. Both
   hosts need nkt 1.13.44 or newer.
@@ -612,6 +621,9 @@ also carries logins, roles and password hashes. The file is JSON version
   **Apply** in Traffic Fly and the nodes get the same settings. The
   Traffic Fly version history comes from the file only if this hub had
   none yet.
+- **The hosts in the file stay under the source hub too.** The import plan
+  reminds you in the "Hosts" section: if the source hub keeps running (this
+  hub is a test one), skip hosts, pipelines, Traffic Fly and nkt-edge.
 - **A pipeline's webhook address is kept**, so webhooks in GitHub, GitLab
   and Gitea keep working on the new hub. If the address is already used
   by another pipeline on the receiving hub, a new one is issued and the
