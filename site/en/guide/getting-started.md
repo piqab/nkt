@@ -164,6 +164,17 @@ validation and automatic rollback), services, firewall, certificates,
 audit log. Screens — digits `1`…`9`, `0` or `Tab`; `F5` refreshes, `r`
 rescans, `?` help, `q` quit.
 
+- **Configs:** `e` opens the editor (key hints at the bottom, "● modified"
+  in the title while edits are unsaved; the "Reload the service" checkbox
+  applies right away); `v` (or `F2` right in the editor) opens the version
+  history: `Enter` shows the diff with the current file, `r` rolls back to
+  the selected version (just write it, or write and reload the service),
+  `Esc` goes back.
+- **Long actions** (saving with validation, rollback, rescan) spin an
+  indicator with seconds on the status line — the interface is not stuck.
+- Windows fit the terminal: the border, fields and hints stay visible in a
+  small one too (80×24 and up).
+
 The TUI does not collect history itself: probes and metrics come from the
 `netknownsthat` service; without it the availability and usage screens
 are empty. There is no password login — you are already root; actions go
@@ -181,6 +192,43 @@ The unit in `deploy/` changes now and then (new directories in
 `ReadWritePaths`, capabilities). After a major update reinstall it too —
 step 3 or `sudo make install`; a host under a hub gets the new unit with
 every update automatically.
+
+## 7. Removal
+
+**A host under a hub** — from the hub: "Hosts" → the host's row →
+"Delete"; the window has checkboxes for what to remove on the server
+itself:
+
+- the service, binary and configuration;
+- data and logs (the database, config version history, image archives);
+- the hub's access traces — the rule in `/etc/sudoers.d` and the hub's
+  key line in `authorized_keys`, other keys stay;
+- restoring password login if the auto-setup turned it off;
+- optionally the account the hub logged in as (not root).
+
+All hosts at once — the "Danger zone" in "About" (see [Hub
+updates](/en/guide/hub-updates#danger-zone)).
+
+**By hand** — the same in one block:
+
+```bash
+sudo systemctl disable --now netknownsthat
+sudo rm -f /etc/systemd/system/netknownsthat.service
+sudo systemctl daemon-reload
+sudo rm -rf /etc/netknownsthat /var/lib/netknownsthat /var/log/netknownsthat
+sudo rm -f /usr/local/bin/nkt          # keep it if the hub runs on this machine too
+# hub traces (if the host was under a hub):
+sudo rm -f /etc/sudoers.d/nkt-hub
+sudo rm -rf /var/lib/nkt-hub-sudo      # narrow sudo, if enabled
+sudo nano ~/.ssh/authorized_keys       # the hub's key line (or any editor)
+# password login, if the hub's auto-setup turned it off:
+sudo rm -f /etc/ssh/sshd_config.d/99-nkt-no-password.conf && sudo sshd -t && sudo systemctl reload ssh
+```
+
+`/var/lib/netknownsthat` holds the config version history and image
+archives: once it is removed, edits can no longer be rolled back. The
+configs themselves (nginx, haproxy, firewall) stay as they are — nkt only
+edited them.
 
 ## What next
 

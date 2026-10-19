@@ -61,11 +61,10 @@ func (s *configsScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 	case 'e', 'E':
 		s.openEditor()
 		return nil
-	case 'v', 'V':
-		s.showVersions(false)
-		return nil
-	case 'u', 'U':
-		s.showVersions(true)
+	case 'v', 'V', 'u', 'U':
+		if f, ok := s.selected(); ok {
+			s.showVersions(f.Path)
+		}
 		return nil
 	}
 	return event
@@ -142,6 +141,15 @@ func (s *configsScreen) openEditor() {
 	area := tview.NewTextArea().SetText(file.Content, false)
 	area.SetBorder(true).SetBorderColor(colorAccent).
 		SetTitle(" " + s.app.T("tui.configs.editorTitle", file.Path) + " ")
+	// Несохранённые правки — пометка в заголовке.
+	area.SetChangedFunc(func() {
+		title := " " + s.app.T("tui.configs.editorTitle", file.Path) + " "
+		if area.GetText() != file.Content {
+			title += tag(hexWarning, "● "+s.app.T("tui.configs.modified")) + " "
+		}
+		area.SetTitle(title)
+	})
+	hints := tview.NewTextView().SetDynamicColors(true).SetText(" " + dim(s.app.T("tui.configs.editorHints")))
 
 	note := tview.NewInputField().SetLabel(" " + s.app.T("tui.configs.noteLabel") + ": ").SetFieldWidth(50)
 	apply := tview.NewCheckbox().SetLabel(" " + s.app.T("tui.configs.applyLabel") + ": ")
@@ -152,7 +160,8 @@ func (s *configsScreen) openEditor() {
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(area, 0, 1, true).
-		AddItem(bar, 1, 0, false)
+		AddItem(bar, 1, 0, false).
+		AddItem(hints, 1, 0, false)
 
 	save := func() {
 		content := area.GetText()
@@ -190,6 +199,14 @@ func (s *configsScreen) openEditor() {
 		case tcell.KeyEsc:
 			s.app.confirmDiscard(area.GetText() != file.Content, func() { s.app.closeModal("editor") })
 			return nil
+		case tcell.KeyF2:
+			// История — вместо редактора: откат меняет файл, и открытый
+			// текст был бы уже не тем.
+			s.app.confirmDiscard(area.GetText() != file.Content, func() {
+				s.app.closeModal("editor")
+				s.showVersions(file.Path)
+			})
+			return nil
 		case tcell.KeyTab:
 			// Inside the editor Tab moves between the field row and the text.
 			if area.HasFocus() {
@@ -221,15 +238,11 @@ func (a *App) confirmDiscard(dirty bool, discard func()) {
 	a.confirm(a.T("tui.configs.confirmDiscard"), discard)
 }
 
-// showVersions lists the stored revisions of the selected file. In rollback
-// mode Enter restores the chosen version; otherwise it shows the difference
-// between that version and what is on disk now.
-func (s *configsScreen) showVersions(rollback bool) {
-	target, ok := s.selected()
-	if !ok {
-		return
-	}
-	versions, err := s.app.Configs.Versions(context.Background(), target.Path, 100)
+// showVersions — история версий файла в одном окне: Enter — различия с
+// текущим файлом, r — откатить к выбранной (с выбором, перезагрузить ли
+// сервис), Esc — закрыть.
+func (s *configsScreen) showVersions(path string) {
+	versions, err := s.app.Configs.Versions(context.Background(), path, 100)
 	if err != nil {
 		s.app.setStatus(hexCritical, err.Error())
 		return
@@ -241,11 +254,7 @@ func (s *configsScreen) showVersions(rollback bool) {
 
 	table := newTable(s.app.T("tui.configs.colVersion"), s.app.T("tui.configs.colWhen"), s.app.T("tui.configs.colWho"),
 		s.app.T("tui.configs.colEvent"), s.app.T("tui.configs.colSize"), s.app.T("tui.configs.colNote"))
-	title := " " + s.app.T("tui.configs.versionsTitle") + " "
-	if rollback {
-		title = " " + s.app.T("tui.configs.rollbackTitle") + " "
-	}
-	table.SetTitle(title).SetBorderColor(colorAccent)
+	table.SetTitle(" " + s.app.T("tui.configs.versionsTitle", path) + " ").SetBorderColor(colorAccent)
 
 	for i, v := range versions {
 		row := i + 1
@@ -256,32 +265,44 @@ func (s *configsScreen) showVersions(rollback bool) {
 		table.SetCell(row, 4, cellRight(formatBytes(s.app.Lang, float64(v.Size))))
 		table.SetCell(row, 5, cellDim(truncate(v.Note, 40)))
 	}
+	current := func() (store.ConfigVersion, bool) {
+		row, _ := table.GetSelection()
+		if row-1 < 0 || row-1 >= len(versions) {
+			return store.ConfigVersion{}, false
+		}
+		return versions[row-1], true
+	}
+	hints := tview.NewTextView().SetDynamicColors(true).SetText(" " + dim(s.app.T("tui.configs.versionsHints")))
+	layout := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(table, 0, 1, true).
+		AddItem(hints, 1, 0, false)
 
 	table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1
-		if idx < 0 || idx >= len(versions) {
-			return
+		if v, ok := current(); ok {
+			s.showDiff(path, v)
 		}
-		v := versions[idx]
-		s.app.closeModal("versions")
-		if rollback {
-			s.confirmRollback(v)
-			return
-		}
-		s.showDiff(v)
 	})
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc {
 			s.app.closeModal("versions")
 			return nil
 		}
+		if event.Rune() == 'r' || event.Rune() == 'R' {
+			if v, ok := current(); ok {
+				s.confirmRollback(v)
+			}
+			return nil
+		}
 		return event
 	})
 
-	s.app.showModal("versions", table, 108, 24)
+	s.app.showModal("versions", layout, 108, 26)
+	s.app.tv.SetFocus(table)
 }
 
-func (s *configsScreen) showDiff(v store.ConfigVersion) {
+// showDiff — различия версии с текущим файлом поверх истории: Esc — назад
+// к истории, r — откатить к этой версии.
+func (s *configsScreen) showDiff(path string, v store.ConfigVersion) {
 	diff, err := s.app.Configs.Diff(context.Background(), v.ID)
 	if err != nil {
 		s.app.setStatus(hexCritical, err.Error())
@@ -291,20 +312,59 @@ func (s *configsScreen) showDiff(v store.ConfigVersion) {
 		s.app.setStatus(hexMuted, s.app.T("tui.configs.versionMatchesCurrent", v.ID))
 		return
 	}
-	s.app.showText("diff", s.app.T("tui.configs.diffTitle", v.ID), colorizeDiff(diff))
+	view := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetScrollable(true)
+	view.SetText(colorizeDiff(diff))
+	view.SetBorder(true).SetTitle(" " + s.app.T("tui.configs.diffTitle", v.ID) + " ").SetBorderColor(colorBorder)
+	hints := tview.NewTextView().SetDynamicColors(true).SetText(" " + dim(s.app.T("tui.configs.diffHints")))
+	layout := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(view, 0, 1, true).
+		AddItem(hints, 1, 0, false)
+	view.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEsc || event.Rune() == 'q':
+			s.app.closeModal("diff")
+			s.app.tv.SetFocus(s.app.modals["versions"].p)
+			return nil
+		case event.Rune() == 'r' || event.Rune() == 'R':
+			s.confirmRollback(v)
+			return nil
+		}
+		return event
+	})
+	s.app.showModal("diff", layout, 100, 30)
+	s.app.tv.SetFocus(view)
 }
 
+// confirmRollback — откатить к версии: просто записать её или записать и
+// перезагрузить сервис.
 func (s *configsScreen) confirmRollback(v store.ConfigVersion) {
-	s.app.confirm(s.app.T("tui.configs.confirmRollback", v.ID, shortTime(v.TS)), func() {
-		s.app.runAsync(s.app.T("tui.configs.rollingBack", v.ID), true,
-			func(ctx context.Context) (string, error) {
-				res, err := s.app.Configs.Rollback(ctx, s.app.Lang, s.app.actor, v.ID, false)
-				if err != nil {
-					return "", err
-				}
-				return res.Message, nil
-			})
-	})
+	s.app.choose(s.app.T("tui.configs.confirmRollback", v.ID, shortTime(v.TS)),
+		[]string{s.app.T("tui.cancel"), s.app.T("tui.configs.rollbackOnly"), s.app.T("tui.configs.rollbackApply")},
+		func(index int) {
+			if index == 0 {
+				return
+			}
+			apply := index == 2
+			s.app.closeModal("diff")
+			s.app.closeModal("versions")
+			s.app.runAsync(s.app.T("tui.configs.rollingBack", v.ID), true,
+				func(ctx context.Context) (string, error) {
+					res, err := s.app.Configs.Rollback(ctx, s.app.Lang, s.app.actor, v.ID, apply)
+					if err != nil {
+						return "", err
+					}
+					msg := s.app.T("tui.configs.rolledBackTo", v.ID, res.VersionID)
+					switch {
+					case res.Applied:
+						msg += s.app.T("tui.configs.appliedSuffix")
+					case apply:
+						msg += s.app.T("tui.configs.notAppliedSuffix")
+					default:
+						msg += s.app.T("tui.configs.notReloadedSuffix")
+					}
+					return msg, nil
+				})
+		})
 }
 
 // colorizeDiff paints a unified diff. Added and removed lines carry a sign as
