@@ -4863,6 +4863,7 @@
     "moreMoving": "moving: {{n}}",
     "settling": "Refreshing the map after the move…",
     "planning": "→ {{host}} · checking the plan…",
+    "flyOldCopy": "Traffic Fly: reserve — the old copy after a move, stopped",
     "migratePorts": "Ports:",
     "migrateSkipped": "System paths are not copied — the new host needs its own: {{list}}",
     "migrateDowntime": "The stack on the old host stops while the data moves and stays stopped — for a rollback. If it is a Traffic Fly target or has a site, switch them after the move.",

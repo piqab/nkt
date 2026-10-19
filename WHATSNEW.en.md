@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.55 — 2026-10-19
+
+- **The map after a move — no stale data.** A host refreshes its
+  container list right after every move step (stop, unpack, rollback,
+  "Remove old") — before, the old host showed a stopped container as
+  running for up to five minutes. The map waits until the containers
+  appear on the new host and stop on the old one.
+- **The old copy is visible at once:** grey and dashed, it does not drag
+  and does not open the host's section (a click opens "Roll back / Remove
+  old"). The map recognises it by the latest move record, not by state.
+- **Traffic Fly marks on the old copy** are grey and do not blink: a
+  reserve stopped on purpose; only targets that failed unexpectedly blink.
+- **While the map re-reads after a move,** it cannot be rearranged: the
+  overlay catches clicks and drags, the move buttons are disabled.
+
 ## v1.13.54 — 2026-10-19
 
 - **"Technitium DNS Server" example** — your own name server: a primary
