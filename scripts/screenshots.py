@@ -243,7 +243,7 @@ def main():
         # Язык и тема — из localStorage, как их хранит интерфейс; ставятся до
         # загрузки страницы, чтобы не ловить перерисовку.
         pre = ws.cmd('Page.addScriptToEvaluateOnNewDocument', {
-            'source': f"localStorage.setItem('nkt-lang', {lang!r}); localStorage.setItem('nkt-theme', 'light'); localStorage.setItem('nkt-sidebar-collapsed', '0'); localStorage.setItem('nkt-hostsmap-on', '0'); localStorage.removeItem('nkt-hostsmap-view'); localStorage.removeItem('nkt-hub-host');"})
+            'source': f"localStorage.setItem('nkt-lang', {lang!r}); localStorage.setItem('nkt-theme', 'light'); localStorage.setItem('nkt-sidebar-collapsed', '0'); localStorage.setItem('nkt-hostsmap-on', '0'); localStorage.removeItem('nkt-hostsmap-view'); localStorage.removeItem('nkt-hostsmap-cols'); localStorage.removeItem('nkt-hub-host');"})
         outdir = os.path.join(args.out, lang)
         os.makedirs(outdir, exist_ok=True)
         for name, where, path, action in SCREENS:

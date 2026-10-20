@@ -281,6 +281,9 @@ Traffic Fly routes and deployment pipelines with links to their tiles.
 - **Zoom and pan**: the mouse wheel zooms at the cursor, dragging empty
   space pans; buttons **−**, **+**, the percentage (100 %) and **Fit**.
   The view is remembered.
+- **Columns**: "auto" shows up to 5 hosts in one column (the map is
+  narrower and larger) and more in two; "1" and "2" always do so. Hosts
+  are counted after search and filters. The choice is remembered.
 - **PNG** — the whole map as an image (regardless of zoom and pan, with
   the current filters), the date and legend on top, at twice the screen
   density. In privacy mode host names, IPs and domains in the image are
@@ -377,11 +380,29 @@ and the cursor reads `stack <name> · containers: N`.
   obstacle or a warning opens the plan window as without the switch. While
   a move runs there is
   a spinner on the tile, "← moving" on the new host and a job tag (click —
-  log); when it ends the map re-reads the hosts bypassing the cache and
-  redraws the links: the hosts refresh their container lists right after
-  every move step, and the map waits until the containers appear on the
-  new host and stop on the old one. While it re-reads, it is covered with
-  "Refreshing the map…" and cannot be rearranged.
+  log), and the map shows it **live** (every second, including moves
+  started elsewhere — by another administrator or from a container menu):
+  - a **ghost** tile on the new host (dashed, blinking): "moving from …",
+    with a percentage while copying;
+  - the **data** runs as dots along an arc from the old tile to the ghost,
+    labelled "packing…", "copying 42%", "starting on the new host…";
+  - **Traffic Fly**: a line is drawn from the route to the new tile; while
+    the gateway checks the new target it is a running dash, once it
+    answers it turns solid; dots running along the active line are the
+    traffic; after the swap they move to the new line and the old one
+    fades (it becomes the reserve);
+  - **pipeline**: when the move switches it, the line to the old tiles
+    fades and the one to the new tiles is drawn; the pipeline's site gets
+    a "site …: setting up… / ready / error" label;
+  - if the move fails, the new lines turn red and fade, the ghost goes away.
+
+  With "reduce motion" on in the system there is no movement, only the
+  final look of the lines. When the move ends the map re-reads the hosts
+  bypassing the cache and redraws the links: the hosts refresh their
+  container lists right after every move step, and the map waits until
+  the containers appear on the new host and stop on the old one. While it
+  re-reads, "Refreshing the map…" shows in the corner and tiles cannot be
+  dragged.
 - **Traffic Fly.** If the container is a route target, the window shows
   which route and role; the **Switch the routes to the new host** checkbox
   (on) keeps the role: an active target becomes active on the new host (the

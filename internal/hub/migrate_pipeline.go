@@ -117,6 +117,10 @@ func (s *Server) migratePipelineMove(ctx context.Context, jc *jobs.Context, user
 	if err != nil || spec.Compose == nil || spec.Compose.Site == nil || len(spec.Compose.Hosts) != 1 {
 		return true
 	}
+	liveSet(jc, func(l *migrateLive) {
+		l.Stage, l.SiteState = liveStageSite, "setup"
+		l.Site = slices.Clone(spec.Compose.Site.Domains)
+	})
 	t, err := s.siteTarget(ctx, to)
 	if err == nil {
 		err = s.pipelineSite(ctx, jc, user, pl, spec.Compose, t)
@@ -124,5 +128,11 @@ func (s *Server) migratePipelineMove(ctx context.Context, jc *jobs.Context, user
 	if err != nil {
 		jc.Log("migrate.pipelineSiteFailed", spec.Compose.Site.Domains[0], toName, msgs.Localize(jc.Lang(), err))
 	}
+	liveSet(jc, func(l *migrateLive) {
+		l.SiteState = "ok"
+		if err != nil {
+			l.SiteState = "failed"
+		}
+	})
 	return true
 }
