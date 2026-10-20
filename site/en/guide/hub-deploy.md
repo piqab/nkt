@@ -328,6 +328,7 @@ placeholders `<service from compose>` and `<container port>` in `site:`:
 | Plausible | three services with ClickHouse, a config directory (`files`) |
 | Authorizer + PostgreSQL | configuration by startup flags only — from `.env` in `command:`; a commented-out variant entering through Traffic Fly (`fly:`) |
 | Test nkt hub | a second hub in Docker on this hub's machine (`localhost`): the image of this hub's version (`images`), its own ports `127.0.0.1:18443`/`18446` (`ports`), the admin password from `.env` (`env_keys`); don't import the production hosts into it — [README](https://github.com/piqab/nkt/tree/main/examples/nkt-hub-test) |
+| Garage (S3 storage) | your own single-node S3: `garage.toml` from a template in the repository with secrets from `.env` (`configs:`), the bucket and access key created by the one-shot `garage-init` through the admin API (`files`, the key is `generate:hex12`), the S3 API behind a site with no size limit (`max_body: "0"`), the garage-webui admin panel on `127.0.0.1:3909` only; web access to files for clients (Filestash) is commented out, [README](https://github.com/piqab/nkt/tree/main/examples/garage) |
 | Technitium DNS Server | your own name server: DNS 53/udp and tcp on the host's address (`ports:`; the selected host's address is filled in), one-shot setup through the API (`dns-init`, `files`), DoH behind the site proxy; the secondary server is a second pipeline; DNS-01 for cert-manager (RFC 2136, TSIG), failover records, DoT — in the [README](https://github.com/piqab/nkt/tree/main/examples/technitium) |
 
 Every example starts with `# WARNING:` lines (in Russian and English): it
@@ -459,7 +460,7 @@ compose:
   description keeps `"@secret"` in their place. The values are not in the
   description database, its version history or the audit log. After
   saving, a notice on the page says what was moved, created or left as is.
-- **`generate:kind`** — the hub creates the value, once: `hex16`, `hex32`,
+- **`generate:kind`** — the hub creates the value, once: `hex12`, `hex16`, `hex32`,
   `base64-32`, `base64-48`, `password` (24 letters and digits, nothing
   that breaks a database URL). For an already set key `generate:` is
   skipped — saving again does not change a database password. To see a
@@ -545,6 +546,8 @@ Encrypt certificate:
    next to the stack (deployments and profiles take it into account), so
    the service is reachable from outside only through the proxy. A port
    already published on all addresses is used as is, with a warning.
+   **"Request body limit"** (nginx): empty means 64m, `0` means no limit
+   and streaming (large uploads, S3), otherwise a number with k, m, g.
 4. **"Set up"** is a hub job: DNS and ports, the proxy (installed if
    needed), then a host job: open 80/443 in ufw/firewalld (if ticked),
    publish the service, the **certificate** (one valid for more than 20
@@ -590,7 +593,15 @@ compose:
     proxy: nginx                 # optional: otherwise whichever the host has, with none — nginx
     firewall: true               # open 80/443 (yes by default)
     cert: manual                 # certificate: manual (default), auto or /path to your own file
+    max_body: 512m               # nginx request body limit: 64m by default, "0" — no limit
 ```
+
+- **`max_body`** is nginx's request size limit (`client_max_body_size`):
+  `64m` without it; a number with `k`, `m`, `g` (`512m`, `2g`); `"0"` means
+  no limit and no request buffering at the proxy (`proxy_request_buffering
+  off`): uploads stream to the service — for S3, file sharing, image
+  registries. HAProxy and Caddy do not limit the size. The same field is "Request body
+  limit" in the site window on the "Sites" tab.
 
 - **First deployment:** the stack, then the site, the same way as "Set up"
   in the wizard (DNS and ports from outside, proxy, publishing on

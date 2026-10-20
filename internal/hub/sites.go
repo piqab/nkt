@@ -274,6 +274,8 @@ type siteRequest struct {
 	Upstream      string   `json:"upstream"`
 	OpenFirewall  bool     `json:"open_firewall"`
 	InstallProxy  bool     `json:"install_proxy"`
+	// MaxBody — предел тела запроса у прокси ("" — 64m, "0" — без предела).
+	MaxBody string `json:"max_body"`
 }
 
 // handleSiteSave — POST /hub/sites (новый) и PUT /hub/sites/{id}:
@@ -304,6 +306,10 @@ func (s *Server) handleSiteSave(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	if !site.ValidMaxBody(req.MaxBody) {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("site.badMaxBody", req.MaxBody))
+		return
+	}
 	if _, err := s.siteTarget(ctx, req.HostID); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
@@ -332,7 +338,7 @@ func (s *Server) handleSiteSave(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(ctx)
 	id, err = s.db.SaveSite(ctx, store.Site{ID: id, Domains: domains, HostID: req.HostID, Proxy: req.Proxy, Stack: req.Stack,
-		Service: req.Service, ContainerPort: req.ContainerPort, Upstream: req.Upstream, OpenFirewall: req.OpenFirewall, PipelineID: pipelineID, Author: user})
+		Service: req.Service, ContainerPort: req.ContainerPort, Upstream: req.Upstream, OpenFirewall: req.OpenFirewall, MaxBody: req.MaxBody, PipelineID: pipelineID, Author: user})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
@@ -597,6 +603,9 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 		"container_port": st.ContainerPort, "upstream": st.Upstream, "open_firewall": st.OpenFirewall, "force": force}
 	if st.Cert != "" {
 		body["cert"], body["cert_key"] = st.Cert, st.CertKey
+	}
+	if st.MaxBody != "" {
+		body["max_body"] = st.MaxBody
 	}
 	code, err := s.hostCall(ctx, user, t.ID, "POST", "/api/sites/apply", body, &started)
 	if err != nil && code == http.StatusBadRequest && st.Cert != "" && strings.Contains(msgs.Localize(msgs.EN, err), "unknown field") {

@@ -82,7 +82,7 @@ func (s *Server) pipelineSiteFor(ctx context.Context, pl store.Pipeline, domains
 func sameSite(a, b store.Site) bool {
 	return slices.Equal(a.Domains, b.Domains) && a.HostID == b.HostID && a.Proxy == b.Proxy && a.Stack == b.Stack &&
 		a.Service == b.Service && a.ContainerPort == b.ContainerPort && a.OpenFirewall == b.OpenFirewall && a.Upstream == "" &&
-		siteCert(a) == siteCert(b) && a.CertKey == b.CertKey
+		siteCert(a) == siteCert(b) && a.CertKey == b.CertKey && a.MaxBody == b.MaxBody
 }
 
 // siteCert — режим сертификата сайта выкладки: пустой (сайт заведён до
@@ -122,7 +122,7 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 	}
 	want := store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy, Stack: c.Project, Service: sp.Service,
 		ContainerPort: port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID, Author: user,
-		Cert: sp.CertMode(), CertKey: sp.CertKey}
+		Cert: sp.CertMode(), CertKey: sp.CertKey, MaxBody: sp.MaxBody}
 	if cur != nil {
 		want.ID = cur.ID
 		// Настроен (или прокси настроен вручную) и ничего не поменялось —

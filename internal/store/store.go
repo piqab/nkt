@@ -620,6 +620,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	// dry_skip — снятые галочки проверок сухого прогона (JSON-список).
 	{"pipelines", "dry_skip", `ALTER TABLE pipelines ADD COLUMN dry_skip TEXT NOT NULL DEFAULT ''`},
 	{"api_tokens", "via_edge", `ALTER TABLE api_tokens ADD COLUMN via_edge INTEGER NOT NULL DEFAULT 0`},
+	// max_body — предел тела запроса у прокси сайта ("" — 64m, "0" — без).
+	{"sites", "max_body", `ALTER TABLE sites ADD COLUMN max_body TEXT NOT NULL DEFAULT ''`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

@@ -76,6 +76,7 @@ type SiteExport struct {
 	Pipeline      string   `json:"pipeline,omitempty"`
 	Cert          string   `json:"cert,omitempty"`
 	CertKey       string   `json:"cert_key,omitempty"`
+	MaxBody       string   `json:"max_body,omitempty"`
 	Status        string   `json:"status,omitempty"`
 	Error         string   `json:"error,omitempty"`
 	Author        string   `json:"author,omitempty"`

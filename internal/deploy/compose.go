@@ -53,6 +53,9 @@ type SiteSpec struct {
 	// (CertKey — ключ, пусто — в том же файле).
 	Cert    string `yaml:"cert"`
 	CertKey string `yaml:"cert_key"`
+	// MaxBody — предел тела запроса у прокси: пусто — 64m, "0" — без
+	// предела (S3, большие загрузки), иначе число с k/m/g.
+	MaxBody string `yaml:"max_body"`
 }
 
 // certPathRe — свой файл сертификата: абсолютный путь без пробелов и «..».
@@ -74,7 +77,7 @@ func (s *SiteSpec) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.MappingNode {
 		return msgs.Errorf("deploy.specBad", "compose.site", n.Value)
 	}
-	known := map[string]bool{"domains": true, "service": true, "port": true, "proxy": true, "firewall": true, "cert": true, "cert_key": true}
+	known := map[string]bool{"domains": true, "service": true, "port": true, "proxy": true, "firewall": true, "cert": true, "cert_key": true, "max_body": true}
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		if k := n.Content[i].Value; !known[k] {
 			return msgs.Errorf("deploy.specBad", "compose.site."+k, n.Content[i+1].Value)
@@ -147,6 +150,9 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 	}
 	if s.Proxy != "" && !slices.Contains(site.Proxies, s.Proxy) {
 		return msgs.Errorf("deploy.specBad", "compose.site.proxy", s.Proxy)
+	}
+	if !site.ValidMaxBody(s.MaxBody) {
+		return msgs.Errorf("deploy.specBad", "compose.site.max_body", s.MaxBody)
 	}
 	switch c := s.Cert; {
 	case c == "" || c == "manual" || c == "auto":

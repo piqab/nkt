@@ -886,6 +886,16 @@ function ComposeFromLink({
             .join('')
         : ''
     const files = ex?.files ? `  files: [${ex.files.join(', ')}]              # ${t('deploy.fromLinkFilesComment')}\n` : ''
+    const configs = ex?.configs
+      ? `  configs:                         # ${t('deploy.configsComment')}\n` +
+        Object.entries(ex.configs)
+          .map(
+            ([svc, list]) =>
+              `    ${svc}:\n` +
+              list.map((c) => `      - target: ${c.target}\n        file: ${c.file}\n` + (c.mode ? `        mode: "${c.mode}"\n` : '')).join(''),
+          )
+          .join('')
+      : ''
     const envKeys = ex?.envKeys
       ? `  env_keys:                        # ${t('deploy.envKeysComment')}\n` +
         Object.entries(ex.envKeys)
@@ -920,12 +930,14 @@ function ComposeFromLink({
       block('images', ex?.images, t('deploy.imagesComment')) +
       block('ports', ex?.ports, t('deploy.portsComment')) +
       (ex?.ports ? '' : ports) +
+      configs +
       envKeys +
       env +
       `  # site:                          # ${t('deploy.fromLinkSiteComment')}\n` +
       `  #   domains: [${domain}]\n` +
       `  #   service: ${site.service}\n` +
       `  #   port: ${site.port}\n` +
+      (ex?.site.maxBody ? `  #   max_body: "${ex.site.maxBody}"   # ${t('deploy.maxBodyComment')}\n` : '') +
       `  #   cert: manual   # ${t('deploy.fromLinkCertComment')}\n` +
       (ex?.flyCheckPath
         ? `  # ${t('deploy.fromLinkFlyComment')}\n` +
