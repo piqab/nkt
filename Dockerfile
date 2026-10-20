@@ -36,5 +36,5 @@ VOLUME ["/var/lib/netknownsthat"]
 EXPOSE 8077
 # Без USER намеренно: одиночный nkt читает /etc, systemd и сокет Docker
 # хоста — ему нужен root (см. README, «Безопасность»).
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD wget -qO- http://127.0.0.1:8077/api/health >/dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD ["/usr/local/bin/nkt", "health"]
 ENTRYPOINT ["/usr/local/bin/nkt"]

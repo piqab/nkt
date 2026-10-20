@@ -5,14 +5,14 @@ import { Button, Segmented, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useFocusRow } from '../focus'
 import { useHostRescan } from '../rescan'
-import { api, qs, useApi } from '../api'
+import { api, qs, useApi, hostScope } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, StateBadge, shortImageRef } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import BlockTree from '../components/BlockTree'
 import { VersionHistory } from '../components/VersionHistory'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
-import { confirmAction } from '../components/confirm'
+import { confirmAction, confirmWithOption } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { ContainerInspectModal } from '../components/ContainerInspectModal'
@@ -247,22 +247,66 @@ export default function Docker({ me }: { me: Me }) {
     const question = running
       ? t('docker.confirmDeleteRunning', { name: c.name })
       : t('common.confirmDelete', { what: t('docker.container'), name: c.name })
-    if (!(await confirmAction(question))) return
+    // На хабе: контейнер — цель маршрутов Traffic Fly? Тогда галочка
+    // «убрать цель» (иначе маршрут остаётся с неживой целью).
+    const fly = await flyTargetsOf([c.name])
+    let dropFly = false
+    if (fly.length > 0) {
+      const res = await confirmWithOption(question, t('docker.removeFlyTargets', { list: fly.map((f) => f.title).join(', ') }), {
+        defaultChecked: true,
+        optionHint: fly.some((f) => f.only) ? t('docker.removeFlyOnlyTarget') : undefined,
+      })
+      if (!res) return
+      dropFly = res.checked
+    } else if (!(await confirmAction(question))) return
     setNotice(null)
     try {
       await dels.remove([delItem(c)], legacyDelete)
+      if (dropFly) await dropFlyTargets(fly)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  // Цели Traffic Fly (только на хабе) из этих контейнеров этого хоста.
+  async function flyTargetsOf(names: string[]): Promise<{ route: string; target: string; title: string; only: boolean }[]> {
+    if (hostScope.id === null) return []
+    try {
+      const d = await api<{ doc: { routes: { id: string; label?: string; names?: string[]; targets: { id: string; host_id: number; kind: string; ref?: string; drain?: boolean }[] }[] } }>('/hub/fly')
+      return d.doc.routes.flatMap((r) =>
+        r.targets
+          .filter((tg) => tg.host_id === hostScope.id && tg.kind === 'container' && names.includes(tg.ref ?? ''))
+          .map((tg) => ({ route: r.id, target: tg.id, title: r.label || (r.names ?? []).join(', ') || r.id, only: r.targets.length === 1 })),
+      )
+    } catch {
+      return []
+    }
+  }
+
+  async function dropFlyTargets(list: { route: string; target: string }[]) {
+    try {
+      await api('/hub/fly/ops', { method: 'POST', body: { ops: list.map((f) => ({ op: 'remove', route: f.route, target: f.target })), note: 'container removed' } })
+      setNotice({ kind: 'info', text: t('docker.flyTargetsRemoved', { count: list.length }) })
+    } catch (err) {
+      setNotice({ kind: 'error', text: t('docker.flyTargetsFailed', { error: err instanceof Error ? err.message : String(err) }) })
     }
   }
 
   async function delSelected() {
     const list = (docker.data?.containers ?? []).filter((c) => selected.includes(c.name) && !dels.isDeleting(delItem(c)))
     if (list.length === 0) return
-    if (!(await confirmAction(t('bulk.confirmDelete', { count: list.length, names: list.map((c) => c.name).join(', ') })))) return
+    const question = t('bulk.confirmDelete', { count: list.length, names: list.map((c) => c.name).join(', ') })
+    const fly = await flyTargetsOf(list.map((c) => c.name))
+    let dropFly = false
+    if (fly.length > 0) {
+      const res = await confirmWithOption(question, t('docker.removeFlyTargets', { list: [...new Set(fly.map((f) => f.title))].join(', ') }), { defaultChecked: true })
+      if (!res) return
+      dropFly = res.checked
+    } else if (!(await confirmAction(question))) return
     setNotice(null)
     try {
       await dels.remove(list.map(delItem), legacyDelete)
+      if (dropFly) await dropFlyTargets(fly)
       setSelected([])
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })

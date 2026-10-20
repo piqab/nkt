@@ -233,7 +233,8 @@ func (s *Server) handleFlyStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"gateways": list, "hosts": names, "tunnels": s.flyTunnels(ctx, auth.Username(ctx), list),
-		"revision": s.flyDoc(ctx).Revision, "applied": s.flyAppliedState(ctx).Revision, "now": time.Now().Unix()})
+		"revision": s.flyDoc(ctx).Revision, "applied": s.flyAppliedState(ctx).Revision, "now": time.Now().Unix(),
+		"missing": s.flyMissingTargets(ctx, auth.Username(ctx))})
 }
 
 // flyTunnelJSON — туннель «шлюз — хост» и почему он не жив.
@@ -640,4 +641,42 @@ func (s *Server) handleFlySwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": jid})
+}
+
+// flyMissingTargets — цели-контейнеры, которых на хосте нет (удалили мимо
+// хаба): «маршрут/цель». Списки — из кэша целей (30 с), хост не на связи
+// — не проверяется (нет ответа — не значит «удалён»).
+func (s *Server) flyMissingTargets(ctx context.Context, user string) []string {
+	out := []string{}
+	online := map[int64]bool{localHostID: s.local != nil}
+	if hosts, err := s.db.ListHosts(ctx); err == nil {
+		for _, h := range hosts {
+			online[h.ID] = h.Status == store.HostStatusOnline
+		}
+	}
+	lists := map[int64]map[string]bool{}
+	for _, r := range s.flyDoc(ctx).Routes {
+		for _, t := range r.Targets {
+			if t.Kind != "container" || !online[t.HostID] {
+				continue
+			}
+			names, ok := lists[t.HostID]
+			if !ok {
+				items, err := s.flyTargetsCached(ctx, user, t.HostID, []string{"container"}, false)
+				if err != nil {
+					lists[t.HostID] = nil
+					continue
+				}
+				names = map[string]bool{}
+				for _, it := range items {
+					names[it.Name] = true
+				}
+				lists[t.HostID] = names
+			}
+			if names != nil && !names[t.Ref] {
+				out = append(out, r.ID+"/"+t.ID)
+			}
+		}
+	}
+	return out
 }

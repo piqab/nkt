@@ -8,6 +8,32 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.59 — 2026-10-20
+
+- **Traffic Fly is its own menu section** (it was a Deployments tab): map,
+  routes, gateways, history, apply.
+- **Deleting a container removes it from routes.** In the host's
+  "Containers", if the container is a Traffic Fly target, a "remove the
+  target" checkbox (on). Deleted bypassing the hub — "no such container on
+  the host" and "remove the target" in the route window.
+- **Rolling a move back without the new host.** The new host does not
+  answer — "Roll back without the new host": the old stack starts, routes
+  and the pipeline switch back; once the host is back — "Stop the second
+  copy".
+- **Deleting a host takes along what refers to it:** sites, the host in
+  pipeline descriptions, Traffic Fly targets, move records (checkboxes,
+  on). A site of a host deleted earlier — "host deleted" and "Forget".
+- **"Use the hub package cache"** in "About" — off by default (on if the
+  cache is already in use); switching runs a job that removes or restores
+  the apt proxy on the hosts.
+- **The background operations button stands out** — accent colour; a job
+  that failed while you were elsewhere turns it red for a minute.
+- **Hub and nkt image health check — `nkt health`:** understands HTTPS too
+  (`NKT_TLS_ENABLED`), a hub deployment with TLS no longer fails the health
+  check (in the image from the next release).
+- "Edit" in "Experimental features" instead of `common.edit`; a test
+  checks that UI keys exist in both dictionaries.
+
 ## v1.13.58 — 2026-10-20
 
 - **The Traffic Fly gateway comes up on Ubuntu 26.04.** AppArmor there

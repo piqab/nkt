@@ -30,6 +30,7 @@
   "hub:profiles": { "page": "profiles" },
   "hub:clusters": { "page": "hub-clusters" },
   "hub:deploy": { "page": "hub-deploy" },
+  "hub:fly": { "page": "traffic-fly" },
   "hub:about": { "page": "hub-updates" },
   "hub:api": { "page": "hub-api" },
   "hub:webhooks": { "page": "hub-api", "ru": "Исходящие вебхуки", "en": "Outgoing webhooks" },

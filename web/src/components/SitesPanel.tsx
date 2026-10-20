@@ -10,7 +10,7 @@ import { ComposeEngineStatus } from './ComposeEngineStatus'
 import { HelpButton } from './Docs'
 import { Banner, Card, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { DataTable } from './DataTable'
-import { confirmWithOption } from './confirm'
+import { confirmAction, confirmWithOption } from './confirm'
 
 /**
  * «Сайты» в «Выкладках»: домен → проверка DNS и портов с хаба (снаружи) →
@@ -63,6 +63,8 @@ interface Site {
   domains: string[]
   host_id: number
   host_name: string
+  /** Хоста больше нет в хабе — только «Забыть». */
+  host_gone?: boolean
   proxy: string
   stack?: string
   service?: string
@@ -131,6 +133,16 @@ export function SitesPanel({ me }: { me: Me }) {
     }
   }
 
+  async function forget(s: Site) {
+    if (!(await confirmAction(t('sites.forgetConfirm', { name: s.domains[0] })))) return
+    try {
+      await api(`/hub/sites/${s.id}`, { method: 'DELETE' })
+      list.reload()
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+
   const sites = list.data?.sites ?? []
   return (
     <Card
@@ -171,7 +183,11 @@ export function SitesPanel({ me }: { me: Me }) {
                   </div>
                 ),
               },
-              { title: t('sites.colHost'), key: 'host', render: (_, s) => <Sensitive>{s.host_name}</Sensitive> },
+              {
+                title: t('sites.colHost'),
+                key: 'host',
+                render: (_, s) => (s.host_gone ? <Tag color="error">{t('sites.hostGone')}</Tag> : <Sensitive>{s.host_name}</Sensitive>),
+              },
               {
                 title: t('sites.colTarget'),
                 key: 'target',
@@ -239,7 +255,15 @@ export function SitesPanel({ me }: { me: Me }) {
               {
                 title: '',
                 key: 'actions',
-                render: (_, s) => (
+                render: (_, s) =>
+                  s.host_gone ? (
+                    // Хост удалён: проверять и настраивать не на чем — забыть запись.
+                    me.is_admin && (
+                      <Button size="small" danger onClick={() => void forget(s)}>
+                        {t('sites.forget')}
+                      </Button>
+                    )
+                  ) : (
                   <Space size={4} wrap>
                     <Button size="small" loading={busy === s.id} onClick={() => void act(s, 'check')}>
                       {t('sites.check')}
@@ -263,7 +287,7 @@ export function SitesPanel({ me }: { me: Me }) {
                       </>
                     )}
                   </Space>
-                ),
+                  ),
               },
             ]}
           />

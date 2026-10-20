@@ -54,5 +54,7 @@ ENV NKT_MODE=hub \
 
 VOLUME ["/var/lib/netknownsthat"]
 EXPOSE 8077
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD wget -qO- http://127.0.0.1:8077/api/health >/dev/null || exit 1
+# nkt health — и HTTP, и HTTPS (NKT_TLS_ENABLED): wget по http падал у
+# хаба со своим TLS, и выкладка ждала здоровья напрасно.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD ["/go/bin/nkt", "health"]
 ENTRYPOINT ["/go/bin/nkt", "hub"]

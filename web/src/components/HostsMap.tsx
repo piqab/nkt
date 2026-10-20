@@ -346,12 +346,15 @@ export function HostsMap({
   // не состояние: список хоста после переноса может быть ещё старым
   // («работает»). Перенос обратно — новая запись в обратную сторону, и
   // вернувшийся контейнер снова обычный.
-  const migratedHere = (hostId: number, name: string): { rec: MigrationRecord; role: 'from' | 'to' } | null => {
+  const migratedHere = (hostId: number, name: string): { rec: MigrationRecord; role: 'from' | 'to' | 'second' } | null => {
     const last = [...(migrations.data?.migrations ?? [])]
       .filter((r) => r.containers.includes(name) && (r.from === hostId || r.to === hostId))
       .sort((a, b) => a.ts.localeCompare(b.ts))
       .pop()
-    if (!last || last.state !== 'moved') return null
+    if (!last) return null
+    // Откачен без нового хоста — на нём вторая копия, её надо остановить.
+    if (last.state === 'rolled_back' && last.new_not_stopped && last.to === hostId) return { rec: last, role: 'second' }
+    if (last.state !== 'moved') return null
     return { rec: last, role: last.from === hostId ? 'from' : 'to' }
   }
   const boxRef = useRef<HTMLDivElement | null>(null)
@@ -1004,7 +1007,7 @@ export function HostsMap({
                               }
                             : undefined
                         }
-                        {...clickable(() => (mig?.role === 'from' ? (admin ? setRecMenu(mig.rec) : undefined) : moveMode ? undefined : onOpenAt(b.host, itemPath(it))))}
+                        {...clickable(() => (mig?.role === 'from' || mig?.role === 'second' ? (admin ? setRecMenu(mig.rec) : undefined) : moveMode ? undefined : onOpenAt(b.host, itemPath(it))))}
                       >
                         {!privacy && <title>{`${it.name}${it.project ? ` · ${t('hostsMap.stack')} ${it.project}` : ''}\n${sub}${it.state ? `\n${it.state}` : ''}`}</title>}
                         <rect
@@ -1050,11 +1053,13 @@ export function HostsMap({
                             )}
                           </text>
                         ) : mig ? (
-                          <text x={8} y={35} fontSize={10} fill={mig.role === 'from' ? 'var(--status-warning)' : 'var(--accent, #1677ff)'}>
+                          <text x={8} y={35} fontSize={10} fill={mig.role === 'to' ? 'var(--accent, #1677ff)' : mig.role === 'second' ? 'var(--status-critical)' : 'var(--status-warning)'}>
                             {midEllipsis(
                               mig.role === 'from'
                                 ? t('hostsMap.migratedFrom', { host: mig.rec.to_name, date: mig.rec.ts.slice(0, 10) })
-                                : t('hostsMap.migratedTo', { host: mig.rec.from_name, date: mig.rec.ts.slice(0, 10) }),
+                                : mig.role === 'second'
+                                  ? t('hostsMap.secondCopy', { host: mig.rec.from_name })
+                                  : t('hostsMap.migratedTo', { host: mig.rec.from_name, date: mig.rec.ts.slice(0, 10) }),
                               34,
                             )}
                           </text>
@@ -1198,6 +1203,7 @@ export function HostsMap({
       {recMenu && (
         <MigrationMenu
           rec={recMenu}
+          newOnline={hosts.find((h) => h.id === recMenu.to)?.status === 'online'}
           onClose={() => setRecMenu(null)}
           onStarted={(id) => {
             setRecMenu(null)
@@ -1225,6 +1231,8 @@ interface MigrationRecord {
   volumes?: string[]
   paths?: string[]
   state: 'moved' | 'rolled_back' | 'removed' | 'returned'
+  /** Откачен без нового хоста — там может работать вторая копия. */
+  new_not_stopped?: boolean
 }
 
 interface MigratePreview {
@@ -1444,30 +1452,56 @@ function MigrateModal({
 }
 
 /** Перенесённый стек на старом хосте: откатить или убрать. */
-function MigrationMenu({ rec, onClose, onStarted }: { rec: MigrationRecord; onClose: () => void; onStarted: (jobId: number) => void }) {
+function MigrationMenu({ rec, newOnline, onClose, onStarted }: { rec: MigrationRecord; newOnline: boolean; onClose: () => void; onStarted: (jobId: number) => void }) {
   const { t } = useTranslation()
   const [withData, setWithData] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const act = async (action: 'rollback' | 'remove') => {
+  const act = async (action: 'rollback' | 'remove' | 'stopnew', skipNew = false) => {
     const ok = await confirmAction(
-      action === 'rollback'
-        ? t('hostsMap.rollbackConfirm', { name: rec.project, from: rec.from_name, to: rec.to_name })
-        : t(withData ? 'hostsMap.removeConfirmData' : 'hostsMap.removeConfirm', { name: rec.project, host: rec.from_name }),
-      { okText: action === 'rollback' ? t('hostsMap.rollback') : t('hostsMap.removeOld'), danger: action === 'remove' },
+      action === 'stopnew'
+        ? t('hostsMap.stopSecondConfirm', { name: rec.project, host: rec.to_name })
+        : action === 'rollback'
+          ? t(skipNew ? 'hostsMap.rollbackSkipConfirm' : 'hostsMap.rollbackConfirm', { name: rec.project, from: rec.from_name, to: rec.to_name })
+          : t(withData ? 'hostsMap.removeConfirmData' : 'hostsMap.removeConfirm', { name: rec.project, host: rec.from_name }),
+      { okText: action === 'stopnew' ? t('hostsMap.stopSecond') : action === 'rollback' ? t('hostsMap.rollback') : t('hostsMap.removeOld'), danger: action !== 'rollback' || skipNew },
     )
     if (!ok) return
     try {
-      const res = await api<{ job_id: number }>(`/hub/migrations/${rec.id}/${action}`, { method: 'POST', body: { data: withData } })
+      const res = await api<{ job_id: number }>(`/hub/migrations/${rec.id}/${action}`, { method: 'POST', body: { data: withData, skip_new: skipNew } })
       onStarted(res.job_id)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
+  if (rec.state === 'rolled_back') {
+    // Вторая копия после отката без нового хоста.
+    return (
+      <Modal title={t('hostsMap.migratedTitle', { name: rec.project })} onClose={onClose} width={480}>
+        <div className="col small" style={{ gap: '0.5rem' }}>
+          <Banner kind="warn">{t('hostsMap.secondCopyText', { name: rec.project, host: rec.to_name, from: rec.from_name })}</Banner>
+          <Button danger disabled={!newOnline} onClick={() => void act('stopnew')}>
+            {t('hostsMap.stopSecond')}
+          </Button>
+          {!newOnline && <span className="muted">{t('hostsMap.newOffline', { host: rec.to_name })}</span>}
+          {error && <Banner kind="error">{error}</Banner>}
+        </div>
+      </Modal>
+    )
+  }
   return (
     <Modal title={t('hostsMap.migratedTitle', { name: rec.project })} onClose={onClose} width={480}>
       <div className="col small" style={{ gap: '0.5rem' }}>
         <span>{t('hostsMap.migratedText', { from: rec.from_name, to: rec.to_name, date: rec.ts.slice(0, 16).replace('T', ' ') })}</span>
-        <Button onClick={() => void act('rollback')}>{t('hostsMap.rollback')}</Button>
+        {newOnline ? (
+          <Button onClick={() => void act('rollback')}>{t('hostsMap.rollback')}</Button>
+        ) : (
+          <>
+            <Banner kind="warn">{t('hostsMap.newOffline', { host: rec.to_name })}</Banner>
+            <Button danger onClick={() => void act('rollback', true)}>
+              {t('hostsMap.rollbackSkip')}
+            </Button>
+          </>
+        )}
         <Checkbox checked={withData} onChange={(e) => setWithData(e.target.checked)}>
           {t('hostsMap.removeWithData', { list: [...(rec.volumes ?? []), ...(rec.paths ?? [])].join(', ') || '—' })}
         </Checkbox>

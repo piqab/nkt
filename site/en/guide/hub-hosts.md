@@ -345,6 +345,14 @@ and the cursor reads `stack <name> · containers: N`.
   opens the menu rather than the host's section. Its Traffic Fly marks are
   grey and do not blink (a reserve, stopped on purpose). Moving back is a
   new record, and the returned container is ordinary again.
+- **The new host is unreachable.** A normal rollback stops the copy on the
+  new host first and cannot pass without it. If the new host is offline,
+  the old copy's menu offers **Roll back without the new host**: the old
+  stack starts, Traffic Fly routes and the pipeline switch back, and the
+  record is marked. The copy's tile on the new host reads "second copy —
+  move rolled back"; once the host is back, click it for **Stop the second
+  copy**. By hand on the old host: `cd /srv/compose/<project> && docker
+  compose start`.
 - **Networks.** Compose recreates the project's own networks on the new
   host. The stack's **external** networks (`external: true`, made by
   `docker network create` or by another stack) are listed in the window;

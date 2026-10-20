@@ -139,6 +139,9 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 	case "version":
 		fmt.Printf("netknownsthat %s\n", version)
 		return nil
+	case "health":
+		// Проверка здоровья контейнера: HTTP или HTTPS (NKT_TLS_ENABLED).
+		return runHealth()
 	case "help", "-h", "--help":
 		fmt.Fprintf(os.Stderr, usage(), version)
 		return nil
@@ -908,6 +911,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// «Заданиях», отмена, след после перезапуска.
 	manager.SetJobs(r.jobs)
 	r.jobs.Register(hub.KindHostInstall, hub.NewHostInstallRunner(manager))
+	r.jobs.Register(hub.KindAptCacheToggle, hub.NewAptCacheToggleRunner(manager))
 	r.jobs.Register(hub.KindGroupApply, hub.NewGroupApplyRunner(manager))
 	// Создание машины на управляемом хосте с записью её в список — тоже
 	// задание хаба: одну половину делает хост, вторую он сам.

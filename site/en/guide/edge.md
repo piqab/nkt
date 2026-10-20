@@ -237,7 +237,7 @@ requirements:
 | Combines with | each other and checks | everything | checks only |
 | Kernel | any | any | **with WireGuard**: a KVM VPS (not openvz/lxc), kernel 5.6+ or the `wireguard` module |
 
-**Installed from the hub only:** "Deployments" → "Traffic Fly" → **"Add
+**Installed from the hub only:** the "Traffic Fly" section → **"Add
 gateway"** (or here, "Install on a host" with the `fly` role). The VPS is
 added to the hub as a regular host; nkt on it is optional. While the hub
 checks the host (SSH, sudo, ports) the window says "checking the

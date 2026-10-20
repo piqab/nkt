@@ -204,7 +204,11 @@ itself:
 - the hub's access traces — the rule in `/etc/sudoers.d` and the hub's
   key line in `authorized_keys`, other keys stay;
 - restoring password login if the auto-setup turned it off;
-- optionally the account the hub logged in as (not root).
+- optionally the account the hub logged in as (not root);
+- what else refers to the host — deployment sites (forget), the host in
+  pipeline descriptions (remove), Traffic Fly targets (remove by a job),
+  move records (close); all ticked by default. A site left over from a
+  host deleted earlier is marked "host deleted" in "Sites" — "Forget".
 
 All hosts at once — the "Danger zone" in "About" (see [Hub
 updates](/en/guide/hub-updates#danger-zone)).

@@ -57,7 +57,8 @@
     "toContainer": "Go to container {{name}}",
     "toSection": "Open: {{name}}",
     "toFirewall": "Firewall",
-    "monitoring": "Monitoring"
+    "monitoring": "Monitoring",
+    "fly": "Traffic Fly"
   },
   "about": {
     "title": "About",
@@ -125,7 +126,9 @@
     "expDesc": {
       "map": "The \"Map\" switch above the host list: Traffic Fly and deployment links, moving containers by dragging.",
       "clusters": "The \"Clusters\" card in the host list, \"New cluster\" on a host's row and the \"Clusters\" menu item."
-    }
+    },
+    "aptCacheEnabled": "Use the hub package cache",
+    "aptCacheEnabledHint": "The hub serves apt packages from its cache to hosts marked \"packages via the hub\" — through the tunnel, no internet on the host. Off — an apt proxy job removes it from those hosts; the marks stay and work again once turned on."
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",
@@ -192,7 +195,9 @@
     "uptimeH": "{{h}}h",
     "uptimeM": "{{m}}m",
     "saved": "saved",
-    "savedShort": "saved"
+    "savedShort": "saved",
+    "edit": "Edit",
+    "refresh": "Refresh"
   },
   "containers": {
     "vms": "Libvirt"
@@ -503,7 +508,11 @@
     "inspectMounts": "Volumes and mounts",
     "inspectNetworks": "Networks",
     "inspectGateway": "gateway",
-    "inspectLabels": "Labels ({{count}})"
+    "inspectLabels": "Labels ({{count}})",
+    "removeFlyTargets": "Remove the target from the Traffic Fly routes: {{list}}",
+    "removeFlyOnlyTarget": "It is the route's only target — the route will be left without targets and accept no connections.",
+    "flyTargetsRemoved": "Traffic Fly targets removed: {{count}} — the routes are applied by a job.",
+    "flyTargetsFailed": "The container is deleted, but the Traffic Fly targets could not be removed: {{error}}"
   },
   "virt": {
     "colName": "Name",
@@ -907,7 +916,16 @@
     "sudoAskHint": "The hub grants full sudo only for the installation; afterwards narrow or full as chosen, and the previous rule if the installation fails.",
     "sudoAskCommand": "Or run this on the host yourself and press Install with an empty password:",
     "sudoAskInstall": "Install",
-    "sudoAskCancel": "Cancel"
+    "sudoAskCancel": "Cancel",
+    "refsTitle": "What else refers to this host — remove along with it:",
+    "refs": {
+      "sites": "Deployment sites — forget (the proxy config on the host itself is untouched)",
+      "pipelines": "Pipelines — remove the host from the description (hosts:)",
+      "fly": "Traffic Fly targets — remove from the routes (by a job)",
+      "migrations": "Container moves — close the records"
+    },
+    "refsPipelineLast": "Where it is the only host, the description is untouched — fix the hosts yourself.",
+    "refProblems": "The host is removed, but not everything could be cleaned up: {{list}}"
   },
   "events": {
     "title": "Alerts",
@@ -2433,7 +2451,8 @@
       "nat": "This is how «default» works: machines get addresses from libvirt and reach out through the host. They are not visible from outside.",
       "bridge": "The machine joins an already configured bridge and lives on the same network as the host: its own address from the shared DHCP, visible to neighbours.",
       "isolated": "Machines see each other and the host, with no way out. Good for a test bench."
-    }
+    },
+    "delete": "Delete the network"
   },
   "probe": {
     "open": "probe port {{port}}",
@@ -4059,7 +4078,10 @@
     "certbotWillInstall": "certbot is not on the host; a job installs it before issuing the certificate.",
     "viaEdge": "checked from outside via nkt-edge {{name}}",
     "viaHub": "checked from the hub (no edge with the outside checks role is connected)",
-    "viaEdgeShort": "via edge"
+    "viaEdgeShort": "via edge",
+    "hostGone": "host deleted",
+    "forget": "Forget",
+    "forgetConfirm": "Forget the site {{name}}? The host is no longer in the hub — nothing on the server is touched."
   },
   "composeEngine": {
     "checking": "checking…",
@@ -4527,7 +4549,8 @@
     "count_one": "{{count}} operation",
     "count_other": "{{count}} operations",
     "queued": "queued",
-    "running": "running"
+    "running": "running",
+    "failed": "Failed — open the log"
   },
   "upload": {
     "oldHost": "nkt on this host is older than the hub and cannot upload as a job: the file goes in one request, with no job until the transfer ends. Update nkt on the host to the hub's version."
@@ -4841,7 +4864,11 @@
     "paletteHideEmpty": "hide empty",
     "swapHere": "↑ switch here",
     "swapDead": "✗ target down",
-    "opSwapUI": "A swap needs an active and a reserve target of the same route"
+    "opSwapUI": "A swap needs an active and a reserve target of the same route",
+    "pageHint": "Entry from the internet through a VPS: routes by name and port, gateways, WireGuard tunnels to the hosts.",
+    "targetMissing": "no such container on the host",
+    "removeTarget": "remove the target",
+    "mapCard": "Map and apply"
   },
   "hostsMap": {
     "toggle": "Map",
@@ -4926,6 +4953,13 @@
     "migratePlanAdd": "Add to plan",
     "leftovers": "{{host}} has leftovers of this stack's old copy (moved {{date}}) — they cause \"already there\". The current data comes from here.",
     "leftoversClean": "Remove the old copy's leftovers and move",
-    "removeKeepWarn": "Volumes and directories stay on {{host}} — moving the stack back there will then need these leftovers removed (the move window offers it)."
+    "removeKeepWarn": "Volumes and directories stay on {{host}} — moving the stack back there will then need these leftovers removed (the move window offers it).",
+    "secondCopy": "second copy — move rolled back to {{host}}",
+    "secondCopyText": "The move of {{name}} was rolled back without {{host}} (it did not answer): the stack runs on {{from}} again, and a second copy with different data may be running here. Stop it.",
+    "stopSecond": "Stop the second copy",
+    "stopSecondConfirm": "Stop {{name}} on {{host}}? The working copy is on the old host.",
+    "newOffline": "{{host}} is offline right now.",
+    "rollbackSkip": "Roll back without the new host",
+    "rollbackSkipConfirm": "{{to}} does not answer. Start {{name}} on {{from}} and switch routes and the pipeline back without stopping the copy on {{to}}? When {{to}} is back, stop the second copy there — the map will remind you."
   }
 }

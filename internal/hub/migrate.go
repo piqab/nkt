@@ -52,6 +52,9 @@ type MigrateParams struct {
 	// SwitchPipeline — move: стек выложен конвейером — хост в его
 	// описании, учёт выкладки и сайт — на новый хост.
 	SwitchPipeline bool `json:"switch_pipeline,omitempty"`
+	// SkipNew — rollback: новый хост не отвечает — не останавливать там
+	// (откат без него); вторая копия на нём помечается в записи.
+	SkipNew bool `json:"skip_new,omitempty"`
 }
 
 // migrateFlyTarget — цель Traffic Fly, которую затронул перенос.
@@ -133,6 +136,9 @@ type migrateRecord struct {
 	// Pipeline — конвейер стека, переключённый на новый хост (откат —
 	// обратно).
 	Pipeline *migratePipeline `json:"pipeline,omitempty"`
+	// NewNotStopped — откачен без нового хоста (он не отвечал): там может
+	// работать вторая копия — «Остановить вторую копию» на карте.
+	NewNotStopped bool `json:"new_not_stopped,omitempty"`
 }
 
 const migrationsKey = "migrations"
@@ -319,7 +325,8 @@ func (s *Server) handleMigrateStart(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMigrationAction(w http.ResponseWriter, r *http.Request) {
 	id, action := chi.URLParam(r, "id"), chi.URLParam(r, "action")
 	var body struct {
-		Data bool `json:"data"`
+		Data    bool `json:"data"`
+		SkipNew bool `json:"skip_new"`
 	}
 	_ = decodeJSON(r, &body)
 	var rec *migrateRecord
@@ -329,11 +336,14 @@ func (s *Server) handleMigrationAction(w http.ResponseWriter, r *http.Request) {
 			rec = &mm
 		}
 	}
-	if rec == nil || rec.State != "moved" || (action != "rollback" && action != "remove") {
+	// stopnew — остановить вторую копию после отката без нового хоста.
+	okState := rec != nil && ((rec.State == "moved" && (action == "rollback" || action == "remove")) ||
+		(rec.State == "rolled_back" && rec.NewNotStopped && action == "stopnew"))
+	if !okState {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "migrate.badRequest"))
 		return
 	}
-	s.startMigrate(w, r, MigrateParams{Action: action, From: rec.From, To: rec.To, Record: id, Data: body.Data}, rec.Project)
+	s.startMigrate(w, r, MigrateParams{Action: action, From: rec.From, To: rec.To, Record: id, Data: body.Data, SkipNew: body.SkipNew}, rec.Project)
 }
 
 // handleMigrations — GET /hub/migrations: учёт переносов (для карты).
@@ -387,6 +397,8 @@ func (r *MigrateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return s.migrateMove(ctx, jc, user, p)
 	case "rollback", "remove":
 		return s.migrateAfter(ctx, jc, user, p)
+	case "stopnew":
+		return s.migrateStopNew(ctx, jc, user, p)
 	}
 	return msgs.Errorf("migrate.badRequest")
 }
@@ -736,8 +748,12 @@ func (s *Server) migrateAfter(ctx context.Context, jc *jobs.Context, user string
 	switch p.Action {
 	case "rollback":
 		jc.StepKey(1, 2, "migrate.stepRollbackStop", rec.Project, rec.ToName)
-		if _, err := s.hostCallLong(ctx, user, rec.To, "POST", "/api/migrate/stop", map[string]any{"containers": rec.Containers}, nil); err != nil {
-			return err
+		if p.SkipNew {
+			// Новый хост не отвечает: старый поднимается без него; вторая
+			// копия на новом — отмечена, остановить, когда он вернётся.
+			jc.Log("migrate.rollbackSkipNew", rec.ToName)
+		} else if _, err := s.hostCallLong(ctx, user, rec.To, "POST", "/api/migrate/stop", map[string]any{"containers": rec.Containers}, nil); err != nil {
+			return msgs.Errorf("migrate.rollbackNewDown", rec.ToName, msgs.Localize(jc.Lang(), err))
 		}
 		jc.StepKey(2, 2, "migrate.stepRollbackStart", rec.Project, rec.FromName)
 		if _, err := s.hostCallLong(ctx, user, rec.From, "POST", "/api/migrate/start", map[string]any{"containers": rec.Containers}, nil); err != nil {
@@ -764,6 +780,37 @@ func (s *Server) migrateAfter(ctx context.Context, jc *jobs.Context, user string
 		for i := range l {
 			if l[i].ID == rec.ID {
 				l[i].State = state
+				l[i].NewNotStopped = state == "rolled_back" && p.SkipNew
+			}
+		}
+		return l
+	})
+	return nil
+}
+
+// migrateStopNew — остановить вторую копию на новом хосте после отката
+// без него (он не отвечал, теперь вернулся).
+func (s *Server) migrateStopNew(ctx context.Context, jc *jobs.Context, user string, p MigrateParams) error {
+	var rec *migrateRecord
+	for _, m := range s.loadMigrations(ctx) {
+		if m.ID == p.Record {
+			mm := m
+			rec = &mm
+		}
+	}
+	if rec == nil || !rec.NewNotStopped {
+		return msgs.Errorf("migrate.badRequest")
+	}
+	defer flyTargetsForget(rec.To)
+	jc.StepKey(1, 1, "migrate.stepRollbackStop", rec.Project, rec.ToName)
+	if _, err := s.hostCallLong(ctx, user, rec.To, "POST", "/api/migrate/stop", map[string]any{"containers": rec.Containers}, nil); err != nil {
+		return err
+	}
+	jc.Log("migrate.newStopped", rec.Project, rec.ToName)
+	s.updateMigrations(ctx, func(l []migrateRecord) []migrateRecord {
+		for i := range l {
+			if l[i].ID == rec.ID {
+				l[i].NewNotStopped = false
 			}
 		}
 		return l

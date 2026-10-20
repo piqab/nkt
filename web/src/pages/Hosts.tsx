@@ -251,9 +251,9 @@ function OtherHubBadge({ host }: { host: HubHost }) {
 }
 
 /** Кэш пакетов хаба: включён ли на хосте и держится ли проброс сейчас. */
-function AptProxyBadge({ host }: { host: HubHost }) {
+function AptProxyBadge({ host, enabled }: { host: HubHost; enabled: boolean }) {
   const { t } = useTranslation()
-  if (!host.apt_via_hub) return null
+  if (!host.apt_via_hub || !enabled) return null
   return (
     <Tooltip title={t(host.apt_proxy_connected ? 'hosts.aptProxyConnected' : 'hosts.aptProxyWaiting')}>
       <span aria-label="apt" style={{ marginLeft: '0.35rem' }}>
@@ -439,6 +439,8 @@ export default function Hosts({
   // Экспериментальное («О системе»): карта и кластеры — только если включены.
   const showMap = !!meInfo.data?.experimental?.map
   const showClusters = !!meInfo.data?.experimental?.clusters
+  // Кэш пакетов хаба выключен в «О системе» — его значков и переключателя нет.
+  const aptCacheOn = !!useApi<{ enabled?: boolean }>('/hub/aptcache', 60_000).data?.enabled
   // Карта вместо списка — выключена по умолчанию, выбор помнится.
   const [mapOn, setMapOnState] = useState<boolean>(() => {
     try {
@@ -1041,12 +1043,15 @@ export default function Hosts({
   // другую сторону.
   async function remove(host: HubHost, purge: PurgeOptions) {
     try {
-      const res = await api<{ purge?: PurgeResult; job_id?: number }>(`/hub/hosts/${host.id}`, {
+      const res = await api<{ purge?: PurgeResult; job_id?: number; ref_problems?: string[] }>(`/hub/hosts/${host.id}`, {
         method: 'DELETE',
         body: purge,
       })
       setRemovingHost(null)
       reload()
+      if ((res.ref_problems ?? []).length > 0) {
+        setNotice({ kind: 'error', text: tx('hosts.refProblems', { list: res.ref_problems!.join('; ') }) })
+      }
       // С очисткой — задание хаба: ход и итог в его журнале.
       if (typeof res.job_id === 'number') {
         await openHubJob(res.job_id)
@@ -1386,7 +1391,7 @@ export default function Hosts({
         ) : (
           <span className="row row-nowrap" style={{ gap: 0 }}>
             <TunnelChannelBadge host={h} />
-            <AptProxyBadge host={h} />
+            <AptProxyBadge host={h} enabled={aptCacheOn} />
             <OtherHubBadge host={h} />
           </span>
         ),
@@ -2210,6 +2215,16 @@ export interface PurgeOptions {
   vm: boolean
   /** Вместе с дисками этой машины. */
   vm_disks: boolean
+  /** Что убрать вместе с хостом: сайты, хост в конвейерах, цели Traffic
+   * Fly, записи переносов. */
+  refs?: { sites: boolean; pipelines: boolean; fly: boolean; migrations: boolean }
+}
+
+interface HostRefs {
+  sites: { id: string; name: string }[]
+  pipelines: { id: string; name: string; last?: boolean }[]
+  fly: { id: string; name: string }[]
+  migrations: { id: string; name: string }[]
 }
 
 interface PurgeResult {
@@ -2301,6 +2316,8 @@ function HostForm({
   ) => void
 }) {
   const { t } = useTranslation()
+  // Кэш пакетов хаба выключен — переключателя «пакеты через хаб» нет.
+  const aptCacheOn = !!useApi<{ enabled?: boolean }>('/hub/aptcache', 60_000).data?.enabled
   const editing = initial !== undefined
   const [form] = Form.useForm<HostFormValues>()
   const [hostKeyFP, setHostKeyFP] = useState(initial?.host_key_fp ?? '')
@@ -2695,7 +2712,7 @@ function HostForm({
           </div>
         </Checkbox>
       </Form.Item>
-      <Form.Item name="apt_via_hub" valuePropName="checked" style={{ marginBottom: '0.4rem' }}>
+      <Form.Item name="apt_via_hub" valuePropName="checked" style={{ marginBottom: '0.4rem' }} hidden={!aptCacheOn}>
         <Checkbox>
           {t('hosts.aptViaHub')}
           <div className="small muted" style={{ fontWeight: 400 }}>
@@ -2773,8 +2790,13 @@ function RemoveHostModal({
     vm_disks: false,
   })
   const [busy, setBusy] = useState(false)
+  // Что ещё ссылается на хост — убрать вместе с ним (по умолчанию да).
+  const refs = useApi<HostRefs>(`/hub/hosts/${host.id}/refs`)
+  const [refOpts, setRefOpts] = useState({ sites: true, pipelines: true, fly: true, migrations: true })
+  const refList = (k: keyof HostRefs) => refs.data?.[k] ?? []
+  const anyRefs = (['sites', 'pipelines', 'fly', 'migrations'] as const).some((k) => refList(k).length > 0)
 
-  const item = (key: keyof PurgeOptions, label: ReactNode, hint: string, disabled = false) => (
+  const item = (key: keyof Omit<PurgeOptions, 'refs'>, label: ReactNode, hint: string, disabled = false) => (
     <label style={{ display: 'block', marginBottom: '0.5rem', opacity: disabled ? 0.5 : 1 }}>
       <Checkbox
         checked={purge[key]}
@@ -2805,6 +2827,24 @@ function RemoveHostModal({
         host.ssh_user === 'root' || (isVM && purge.vm),
       )}
       {isVM && purge.vm && <p className="small muted">{t('hosts.purgeVMOnly')}</p>}
+      {anyRefs && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <strong className="small">{t('hosts.refsTitle')}</strong>
+          {(['sites', 'pipelines', 'fly', 'migrations'] as const)
+            .filter((k) => refList(k).length > 0)
+            .map((k) => (
+              <label key={k} style={{ display: 'block', margin: '0.3rem 0' }}>
+                <Checkbox checked={refOpts[k]} onChange={(e) => setRefOpts((p) => ({ ...p, [k]: e.target.checked }))}>
+                  {t(`hosts.refs.${k}`)}
+                </Checkbox>
+                <div className="small muted" style={{ marginLeft: '1.5rem' }}>
+                  <Sensitive>{refList(k).map((x) => x.name).join(', ')}</Sensitive>
+                  {k === 'pipelines' && refList('pipelines').some((x) => 'last' in x && x.last) && <div>{t('hosts.refsPipelineLast')}</div>}
+                </div>
+              </label>
+            ))}
+        </div>
+      )}
       <p className="small muted">{t('hosts.removeUnreachable')}</p>
       <div className="row" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
         <Button
@@ -2813,7 +2853,7 @@ function RemoveHostModal({
           loading={busy}
           onClick={() => {
             setBusy(true)
-            onConfirm(purge)
+            onConfirm({ ...purge, refs: refOpts })
           }}
         >
           {t('hosts.delete')}

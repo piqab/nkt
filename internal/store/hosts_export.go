@@ -262,6 +262,8 @@ var ExportedSettingKeys = []string{
 	"ui.nav.hub", "ui.nav.hub.history", "ui.nav.host", "ui.nav.host.history",
 	// Экспериментальные функции в интерфейсе («О системе») с историей.
 	"ui.experimental", "ui.experimental.history",
+	// Кэш пакетов хаба включён («О системе»).
+	"aptcache.enabled",
 }
 
 // ExportHosts returns every managed host in the shape GET /hub/export sends

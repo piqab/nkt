@@ -27,8 +27,7 @@ import {
   TeamOutlined,
   ToolOutlined,
   UserOutlined,
-  WifiOutlined,
-} from '@ant-design/icons'
+  WifiOutlined, ApiOutlined } from '@ant-design/icons'
 
 /**
  * Разделы бокового меню хоста и хаба — порядок по умолчанию. Раскладку
@@ -95,5 +94,6 @@ export const HUB_NAV: { key: string; labelKey: string; icon: ReactNode }[] = [
   { key: 'profiles', labelKey: 'nav.profiles', icon: <ProfileOutlined /> },
   { key: 'clusters', labelKey: 'nav.clusters', icon: <ClusterOutlined /> },
   { key: 'deploy', labelKey: 'nav.deploy', icon: <RocketOutlined /> },
+  { key: 'fly', labelKey: 'nav.fly', icon: <ApiOutlined /> },
   { key: 'about', labelKey: 'nav.about', icon: <InfoCircleOutlined /> },
 ]
