@@ -1165,7 +1165,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// Кэш пакетов хаба: конфиг apt кладётся тем же соединением. Ошибка
 	// здесь не роняет установку — nkt уже работает, а без прокси apt
 	// просто ходит напрямую.
-	if host.AptViaHub {
+	if host.AptViaHub && m.AptCacheEnabled(ctx) {
 		if err := m.configureAptProxyAny(client, host.SSHUser, narrow, true); err != nil {
 			report("hub.aptProxyConfigureWarn", err)
 		} else {

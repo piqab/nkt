@@ -125,7 +125,11 @@ internet doesn't need to reach ClamAV mirrors.
 
 ## Package cache
 
-Size, hits, limit and clearing — in the same place; how it works — on the
+The **Use the hub package cache** checkbox is off by default (turned on by
+itself if any host already uses the cache). Off — the hub serves no
+packages, hosts have no "packages via the hub" switch, and an apt proxy
+job removes the proxy from marked hosts; the marks stay and work again
+once turned on. Size, hits, limit and clearing — in the same place; how it works — on the
 [Package cache](/en/guide/hub-cache) page.
 
 ## Model analysis and privacy mode

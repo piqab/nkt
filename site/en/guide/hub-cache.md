@@ -5,7 +5,8 @@ title: Package cache
 # Package cache and hosts without internet
 
 Hosts download packages through the hub, and each `.deb` goes to the
-internet once for all hosts. The hub needs no public address, and the
+internet once for all hosts. It is turned on in "About" → "Package cache"
+with "Use the hub package cache" (off by default). The hub needs no public address, and the
 hosts get no new open ports.
 
 ## How it works

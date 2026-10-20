@@ -190,6 +190,9 @@ func (s *Server) siteTarget(ctx context.Context, hostID int64) (targetHost, erro
 type siteJSON struct {
 	store.Site
 	HostName string `json:"host_name"`
+	// HostGone — хоста больше нет в хабе (удалили, а сайт остался):
+	// «Проверить» и «Повторить» не к кому — только «Забыть».
+	HostGone bool `json:"host_gone,omitempty"`
 	// PipelineName — конвейер, чей блок site: описывает сайт.
 	PipelineName string `json:"pipeline_name,omitempty"`
 }
@@ -215,7 +218,7 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 				name = "#" + strconv.FormatInt(st.HostID, 10)
 			}
 		}
-		item := siteJSON{Site: st, HostName: name}
+		item := siteJSON{Site: st, HostName: name, HostGone: strings.HasPrefix(name, "#")}
 		if st.PipelineID > 0 {
 			if pl, err := s.db.PipelineByID(r.Context(), st.PipelineID); err == nil {
 				item.PipelineName = pl.Name

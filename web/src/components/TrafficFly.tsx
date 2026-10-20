@@ -5,7 +5,6 @@ import { DeleteOutlined } from '@ant-design/icons'
 import { api, fetchHubJob, useApi } from '../api'
 import { Banner, Card, DiffView, Loading, Modal } from './ui'
 import { DataTable } from './DataTable'
-import { HelpButton } from './Docs'
 import { formatBytes } from './charts'
 import { unifiedDiff } from './textDiff'
 import { InstallModal } from './EdgeCard'
@@ -189,7 +188,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   const { t } = useTranslation()
   const admin = me.is_admin
   const fly = useApi<{ doc: FlyDoc; text: string; gateways: FlyGatewayInfo[]; applied: number }>('/hub/fly')
-  const status = useApi<{ gateways: GatewayStatus[]; hosts: Record<string, string>; tunnels?: FlyTunnel[]; revision?: number; applied?: number; now: number }>('/hub/fly/status', 5_000)
+  const status = useApi<{ gateways: GatewayStatus[]; hosts: Record<string, string>; tunnels?: FlyTunnel[]; revision?: number; applied?: number; now: number; missing?: string[] }>('/hub/fly/status', 5_000)
   const [edit, setEdit] = useState<FlyRoute | 'new' | null>(null)
   const [openRoute, setOpenRoute] = useState<string | null>(null)
   const [history, setHistory] = useState(false)
@@ -415,7 +414,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
       <Card
         title={
           <span>
-            Traffic Fly <HelpButton docKey="deploy:fly" isHub admin={admin} compact />
+            {t('fly.mapCard')}
           </span>
         }
         subtitle={t('fly.subtitle')}
@@ -872,6 +871,14 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
           certs={status.data?.gateways.find((g) => g.edge_id === doc.routes.find((r) => r.id === openRoute)?.gateway)?.status?.certs}
           hostNames={hostNames}
           admin={admin}
+          missing={new Set(status.data?.missing ?? [])}
+          onRemoveTarget={async (target) => {
+            // Контейнера на хосте нет — цель из маршрута долой (заданием,
+            // как любая правка Traffic Fly).
+            const res = await api<{ job_id: number }>('/hub/fly/ops', { method: 'POST', body: { ops: [{ op: 'remove', route: openRoute, target }], note: 'target removed' } })
+            onOpenJob(res.job_id)
+            void fly.reload()
+          }}
           onClose={() => setOpenRoute(null)}
         />
       )}
@@ -1555,6 +1562,8 @@ function RouteDetails({
   certs,
   hostNames,
   admin,
+  missing,
+  onRemoveTarget,
   onClose,
 }: {
   route: FlyRoute
@@ -1562,6 +1571,9 @@ function RouteDetails({
   certs?: CertStatus[]
   hostNames: Record<string, string>
   admin: boolean
+  /** «маршрут/цель», чьего контейнера на хосте нет. */
+  missing: Set<string>
+  onRemoveTarget: (target: string) => Promise<void>
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -1625,6 +1637,19 @@ function RouteDetails({
               key: 's',
               render: (_, x) => {
                 const ts = stats?.targets?.find((s) => s.id === x.id)
+                if (missing.has(`${route.id}/${x.id}`)) {
+                  // Удалён мимо хаба: не «недоступен», а нет вовсе.
+                  return (
+                    <Space size={4}>
+                      <Tag color="error">{t('fly.targetMissing')}</Tag>
+                      {admin && (
+                        <Button size="small" type="link" danger onClick={() => void onRemoveTarget(x.id)}>
+                          {t('fly.removeTarget')}
+                        </Button>
+                      )}
+                    </Space>
+                  )
+                }
                 if (x.drain) return <Tag color="warning">{t('fly.drain')}</Tag>
                 if (!ts) return '—'
                 if (!ts.checked) return <Tag>{t('fly.checking')}</Tag>

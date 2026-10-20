@@ -16,8 +16,7 @@ import {
   PlayCircleOutlined,
   ProfileOutlined,
   SecurityScanOutlined,
-  LineChartOutlined,
-} from '@ant-design/icons'
+  LineChartOutlined, ApiOutlined } from '@ant-design/icons'
 import { notifyNewEvents } from './notifications'
 import { NAV_ITEMS } from './navItems'
 import { applyNavLayout, type NavLayout } from './navLayout'
@@ -47,6 +46,7 @@ import JobsPage from './pages/Jobs'
 import HostEvents from './pages/HostEvents'
 import ClustersPage from './pages/ClustersPage'
 import Deployments from './pages/Deployments'
+import TrafficFlyPage from './pages/TrafficFlyPage'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -372,7 +372,7 @@ function Shell({
   // depends on the address bar staying whatever it was from a previous
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
-  const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'fly' | 'about'>('hosts')
   // Вкладка «Выкладок», которую открыть (события Traffic Fly ведут в неё).
   const [deployTab, setDeployTab] = useState<string | undefined>(undefined)
   // Polled independently of whichever section is actually showing, so the
@@ -432,7 +432,7 @@ function Shell({
   // бы в API хаба, где раздела заданий нет вовсе.
   // Задания и профили хаба — это задания и профили его собственной машины:
   // раздел работает через /hosts/local без выбранного хоста.
-  if (isHub && !selectedHost && (hubView === 'jobs' || hubView === 'profiles' || hubView === 'clusters' || hubView === 'deploy')) hostScope.id = LOCAL_HOST_ID
+  if (isHub && !selectedHost && (hubView === 'jobs' || hubView === 'profiles' || hubView === 'clusters' || hubView === 'deploy' || hubView === 'fly')) hostScope.id = LOCAL_HOST_ID
 
   /** Открыть хост сразу на нужном разделе (подсказки «Мониторинга»). */
   function openHostAt(id: number, name: string, path: string) {
@@ -570,6 +570,7 @@ function Shell({
       // Кластеры — экспериментальное: пункт меню только по галочке в «О системе».
       ...(me.experimental?.clusters ? [{ key: 'clusters', icon: <ClusterOutlined />, label: t('nav.clusters') }] : []),
       { key: 'deploy', icon: <RocketOutlined />, label: t('nav.deploy') },
+      { key: 'fly', icon: <ApiOutlined />, label: 'Traffic Fly' },
       {
         key: 'about',
         icon: navIcon(<InfoCircleOutlined />, hubUpdate.data?.update_available ? 1 : 0, false, collapsed),
@@ -621,6 +622,11 @@ function Shell({
                   me={me}
                   onOpenHost={openHostAt}
                   onOpenDeploy={(tab) => {
+                    // Traffic Fly — свой раздел, остальное — вкладки «Выкладок».
+                    if (tab === 'fly') {
+                      setHubView('fly')
+                      return
+                    }
                     setDeployTab(tab)
                     setHubView('deploy')
                   }}
@@ -642,6 +648,8 @@ function Shell({
                 <ClustersPage me={me} />
               ) : hubView === 'deploy' ? (
                 <Deployments me={me} initialTab={deployTab} />
+              ) : hubView === 'fly' ? (
+                <TrafficFlyPage me={me} />
               ) : (
                 <About admin={me.is_admin} />
               )}

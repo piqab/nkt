@@ -1198,6 +1198,21 @@ span.vm-toggle {
   z-index: 900;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
+/* Заметная на любом фоне: цвет акцента, белый текст (и в тёмной теме). */
+.active-jobs-button.ant-btn,
+.active-jobs-button.ant-btn:not(:disabled):hover {
+  background: var(--accent, #1677ff);
+  border-color: var(--accent, #1677ff);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 3px 12px rgba(22, 119, 255, 0.45);
+}
+.active-jobs-button.active-jobs-failed.ant-btn,
+.active-jobs-button.active-jobs-failed.ant-btn:not(:disabled):hover {
+  background: var(--status-critical, #d4380d);
+  border-color: var(--status-critical, #d4380d);
+  box-shadow: 0 3px 12px rgba(212, 56, 13, 0.45);
+}
 .active-jobs-list { display: flex; flex-direction: column; gap: 0.3rem; width: min(26rem, 80vw); max-height: 60vh; overflow: auto; }
 .active-jobs-item { display: flex; flex-direction: column; align-items: stretch; gap: 0.1rem; text-align: left; padding: 0.4rem 0.5rem; border-radius: 6px; width: 100%; }
 .active-jobs-item:hover { background: var(--wash); }

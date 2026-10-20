@@ -14,7 +14,6 @@ import { unifiedDiff } from '../components/textDiff'
 import { JobLogModal } from './Jobs'
 import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
-import { TrafficFly } from '../components/TrafficFly'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TitleHelp } from '../components/Docs'
 import { EXAMPLE_WARNING, PIPELINE_EXAMPLES, type PipelineExample } from '../pipelineExamples'
@@ -320,7 +319,6 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
           // nkt-edge — своя вкладка: им пользуются и вебхуки конвейеров, и
           // шлюзы Traffic Fly, и API снаружи.
           ...(me.is_admin ? [{ key: 'edge', label: 'nkt-edge', children: <EdgeCard onOpenJob={(id) => void openJob(id)} /> }] : []),
-          { key: 'fly', label: 'Traffic Fly', children: <TrafficFly me={me} onOpenJob={(id) => void openJob(id)} /> },
         ]}
       />
       {edit && (

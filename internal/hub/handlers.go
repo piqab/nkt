@@ -235,7 +235,9 @@ func (s *Server) handleHubVulnDBRefresh(w http.ResponseWriter, r *http.Request) 
 // Кэш пакетов (см. aptproxy.go): состояние, лимит, очистка и
 // включение на хосте.
 func (s *Server) handleHubAptCacheStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.hub.aptCacheStatsJSON())
+	out := s.hub.aptCacheStatsJSON()
+	out["enabled"] = s.hub.AptCacheEnabled(r.Context())
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleHubVersionSettings — галочка «использовать бета-версии»: после
@@ -258,18 +260,41 @@ func (s *Server) handleHubVersionSettings(w http.ResponseWriter, r *http.Request
 
 func (s *Server) handleHubAptCacheSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		MaxGB int `json:"max_gb"`
+		MaxGB   *int  `json:"max_gb"`
+		Enabled *bool `json:"enabled"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.hub.SetAptCacheMaxGB(r.Context(), req.MaxGB); err != nil {
-		writeErr(w, r, http.StatusBadRequest, err)
-		return
+	ctx := r.Context()
+	if req.MaxGB != nil {
+		if err := s.hub.SetAptCacheMaxGB(ctx, *req.MaxGB); err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		s.db.Audit(ctx, auth.Username(ctx), "aptcache.limit", strconv.Itoa(*req.MaxGB), "ok", "")
 	}
-	s.db.Audit(r.Context(), auth.Username(r.Context()), "aptcache.limit", strconv.Itoa(req.MaxGB), "ok", "")
-	writeJSON(w, http.StatusOK, s.hub.aptCacheStatsJSON())
+	out := s.hub.aptCacheStatsJSON()
+	if req.Enabled != nil && *req.Enabled != s.hub.AptCacheEnabled(ctx) {
+		v := "0"
+		if *req.Enabled {
+			v = "1"
+		}
+		if err := s.db.KVSet(ctx, aptCacheEnabledKey, v); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		s.db.Audit(ctx, auth.Username(ctx), "aptcache.enabled", v, "ok", "")
+		// Хосты с отметкой — заданием: снять или вернуть прокси apt.
+		id, err := s.jobs.Start(ctx, jobs.Spec{Kind: KindAptCacheToggle, TitleKey: "hub.aptToggleTitle", TitleArgs: []any{v == "1"},
+			Author: auth.Username(ctx), Params: AptCacheToggleParams{Enabled: *req.Enabled}})
+		if err == nil {
+			out["job_id"] = id
+		}
+	}
+	out["enabled"] = s.hub.AptCacheEnabled(ctx)
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleHubAptCacheClear(w http.ResponseWriter, r *http.Request) {
@@ -1424,9 +1449,19 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Тело необязательно: удаление без очистки приходит без него.
-	var opts PurgeOptions
+	var body struct {
+		PurgeOptions
+		// Refs — что убрать вместе с хостом: сайты, хост в конвейерах, цели
+		// Traffic Fly, записи переносов.
+		Refs HostRefOptions `json:"refs"`
+	}
 	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&opts)
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	opts := body.PurgeOptions
+	var refProblems []string
+	if h, err := s.db.HostByID(r.Context(), id); err == nil {
+		refProblems = s.cleanHostRefs(r.Context(), h, body.Refs)
 	}
 
 	var purge PurgeResult
@@ -1447,7 +1482,7 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.db.Audit(r.Context(), user, "host.delete", host.Name, "ok", map[string]any{"job_id": jobID, "purge": opts})
-		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "job_id": jobID})
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "job_id": jobID, "ref_problems": refProblems})
 		return
 	}
 	if opts.Any() {
@@ -1465,7 +1500,7 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	// сервер мог быть уже погашен, и оставлять его в списке навсегда —
 	// худший исход, чем не убранный с него бинарник. Что именно осталось,
 	// сказано в ответе.
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "purge": purge})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "purge": purge, "ref_problems": refProblems})
 }
 
 // handleBootstrapDefaults отдаёт и сохраняет набор по умолчанию для

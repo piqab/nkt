@@ -103,7 +103,7 @@ func (m *Manager) maintainAptProxies(ctx context.Context) {
 		if hosts, err := m.db.ListHosts(ctx); err == nil {
 			want := map[int64]bool{}
 			for _, h := range hosts {
-				if h.AptViaHub && h.Status == store.HostStatusOnline {
+				if h.AptViaHub && h.Status == store.HostStatusOnline && m.AptCacheEnabled(ctx) {
 					want[h.ID] = true
 					if _, ok := running[h.ID]; !ok {
 						hctx, cancel := context.WithCancel(ctx)
@@ -210,6 +210,19 @@ const aptProxyConf = hubsudo.AptProxyConfText
 // ApplyAptProxy включает или выключает apt через хаб на хосте: кладёт или
 // убирает конфиг и запоминает флаг.
 func (m *Manager) ApplyAptProxy(ctx context.Context, hostID int64, enabled bool) error {
+	// Кэш выключен целиком — на хосте прокси не ставится, отметка
+	// запоминается и сработает после включения.
+	if enabled && !m.AptCacheEnabled(ctx) {
+		return m.db.SetHostAptViaHub(ctx, hostID, true)
+	}
+	if err := m.applyAptProxyHost(ctx, hostID, enabled); err != nil {
+		return err
+	}
+	return m.db.SetHostAptViaHub(ctx, hostID, enabled)
+}
+
+// applyAptProxyHost — настройка apt на самом хосте, без отметки в базе.
+func (m *Manager) applyAptProxyHost(ctx context.Context, hostID int64, enabled bool) error {
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
 		return err
@@ -220,10 +233,7 @@ func (m *Manager) ApplyAptProxy(ctx context.Context, hostID int64, enabled bool)
 	}
 	defer link.Close()
 	narrow := host.SSHUser != "root" && m.hasHubKey(link.client)
-	if err := m.configureAptProxyAny(link.client, host.SSHUser, narrow, enabled); err != nil {
-		return err
-	}
-	return m.db.SetHostAptViaHub(ctx, hostID, enabled)
+	return m.configureAptProxyAny(link.client, host.SSHUser, narrow, enabled)
 }
 
 // configureAptProxyAny — через hub-sudo на хосте с узким sudo, иначе как

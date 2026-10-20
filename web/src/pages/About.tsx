@@ -24,6 +24,8 @@ interface AptCacheInfo {
   bytes_served: number
   bytes_fetched: number
   connected_hosts: number
+  /** Общая галочка «использовать кэш пакетов хаба». */
+  enabled?: boolean
 }
 import { Banner, Card, ErrorNote, Loading, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction, confirmWithOption } from '../components/confirm'
@@ -86,6 +88,10 @@ export default function About({ admin = false }: { admin?: boolean }) {
   useEffect(() => {
     setClamDBFast(!!clamdb.data?.refreshing)
   }, [clamdb.data?.refreshing])
+  // Включение и выключение кэша — заданием: прокси apt на хостах с
+  // отметкой ставится или снимается.
+  const aptJob = useJobLauncher(() => void aptcache.reload(), '/hosts/local')
+  const [aptToggleBusy, setAptToggleBusy] = useState(false)
   const dbJob = useJobLauncher(() => {
     void vulndb.reload()
     void clamdb.reload()
@@ -302,6 +308,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
 
       <ErrorNote error={version.error} />
       {dbJob.modal}
+      {aptJob.modal}
       {selfJob && <JobLogModal job={selfJob} scope="/hosts/local" onClose={() => setSelfJob(null)} onDone={onSelfUpdateDone} />}
       {notice && (
         <Banner kind={notice.kind} onClose={() => setNotice(null)}>
@@ -482,9 +489,31 @@ export default function About({ admin = false }: { admin?: boolean }) {
       </Card>
 
       <Card title={t('about.aptCacheTitle')} subtitle={t('about.aptCacheHint')}>
+        {aptcache.data && (
+          <div style={{ marginBottom: '0.6rem' }}>
+            <Checkbox
+              checked={!!aptcache.data.enabled}
+              disabled={!admin || aptToggleBusy}
+              onChange={async (e) => {
+                setAptToggleBusy(true)
+                try {
+                  await aptJob.start('/hub/aptcache/settings', { enabled: e.target.checked })
+                  await aptcache.reload()
+                } finally {
+                  setAptToggleBusy(false)
+                }
+              }}
+            >
+              {t('about.aptCacheEnabled')}
+            </Checkbox>
+            <div className="small muted" style={{ paddingLeft: '1.5rem' }}>
+              {t('about.aptCacheEnabledHint')}
+            </div>
+          </div>
+        )}
         {aptcache.loading && !aptcache.data ? (
           <Loading what={t('about.aptCacheTitle')} />
-        ) : !aptcache.data?.available ? (
+        ) : !aptcache.data?.enabled ? null : !aptcache.data?.available ? (
           <p className="small muted">{t('about.aptCacheUnavailable')}</p>
         ) : (
           <>

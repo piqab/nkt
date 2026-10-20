@@ -308,6 +308,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/scripts/{id}/export", s.handleScriptExport)
 				r.Get("/hub/scripts/{id}/versions", s.handleScriptVersions)
 				r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
+				r.Get("/hub/hosts/{id}/refs", s.handleHostRefs)
 				r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
 				// Задание хаба по номеру — для токенов: выкладка, запущенная
 				// токеном без доступа к машине хаба, всё равно видна ему.
