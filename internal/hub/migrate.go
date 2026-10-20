@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -394,7 +395,10 @@ func (r *MigrateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	defer flyTargetsForget(p.To)
 	switch p.Action {
 	case "move":
-		return s.migrateMove(ctx, jc, user, p)
+		liveBegin(jc, p.From, p.To)
+		err := s.migrateMove(ctx, jc, user, p)
+		liveEnd(jc, err)
+		return err
 	case "rollback", "remove":
 		return s.migrateAfter(ctx, jc, user, p)
 	case "stopnew":
@@ -438,6 +442,12 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 		names = append(names, c.Name)
 	}
 	jc.Log("migrate.planLine", plan.Project, strings.Join(names, ", "), len(plan.Volumes), len(plan.Paths))
+	liveSet(jc, func(l *migrateLive) { l.Project, l.Containers = plan.Project, slices.Clone(names) })
+	if p.SwitchPipeline {
+		if pl, ok := s.migratePipelineOf(ctx, p.From, plan.Project); ok {
+			liveSet(jc, func(l *migrateLive) { l.Pipeline, l.PipelineName = pl.ID, pl.Name })
+		}
+	}
 	for _, sk := range plan.Skipped {
 		jc.Log("migrate.skippedPath", sk)
 	}
@@ -488,6 +498,7 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 	}
 	id := newMigrateID()
 	jc.StepKey(2, 6, "migrate.hubPack", plan.Project, fromName)
+	liveStage(jc, liveStagePack)
 	if err := s.hostJob(ctx, jc, user, p.From, "/api/migrate/pack", map[string]any{"id": id, "container": p.Container, "save_images": save}); err != nil {
 		return err
 	}
@@ -522,15 +533,29 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 	if err := json.Unmarshal(manRaw, &manifest); err != nil {
 		return err
 	}
+	// Доля для карты — по всем файлам вместе.
+	var total, sent int64
 	for _, f := range manifest.Files {
-		if err := s.migrateCopy(ctx, jc, user, p.From, p.To, id, f.Name, f.Size); err != nil {
+		total += f.Size
+	}
+	liveStage(jc, liveStageCopy)
+	for _, f := range manifest.Files {
+		base := sent
+		prog := func(done int64) {
+			if total > 0 {
+				liveSet(jc, func(l *migrateLive) { l.Percent = int(min(100, (base+done)*100/total)) })
+			}
+		}
+		if err := s.migrateCopy(ctx, jc, user, p.From, p.To, id, f.Name, f.Size, prog); err != nil {
 			return err
 		}
+		sent += f.Size
 	}
-	if err := s.migrateCopy(ctx, jc, user, p.From, p.To, id, "manifest.json", int64(len(manRaw))); err != nil {
+	if err := s.migrateCopy(ctx, jc, user, p.From, p.To, id, "manifest.json", int64(len(manRaw)), nil); err != nil {
 		return err
 	}
 	jc.StepKey(4, 6, "migrate.hubUnpack", plan.Project, toName)
+	liveSet(jc, func(l *migrateLive) { l.Stage, l.Percent = liveStageUnpack, 100 })
 	if err := s.hostJob(ctx, jc, user, p.To, "/api/migrate/unpack", map[string]any{"id": id}); err != nil {
 		return err
 	}
@@ -546,6 +571,7 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 	}
 	var pipe *migratePipeline
 	if p.SwitchPipeline {
+		liveStage(jc, liveStagePipeline)
 		pipe = s.migratePipelineSwitch(ctx, jc, user, p.From, p.To, plan.Project)
 	} else if pl, ok := s.migratePipelineOf(ctx, p.From, plan.Project); ok {
 		jc.Log("migrate.pipelineNotSwitched", pl.Name, fromName)
@@ -567,7 +593,8 @@ func (s *Server) migrateMove(ctx context.Context, jc *jobs.Context, user string,
 }
 
 // migrateCopy — файл переноса со старого хоста на новый потоком через хаб.
-func (s *Server) migrateCopy(ctx context.Context, jc *jobs.Context, user string, from, to int64, id, name string, size int64) error {
+// progress (может быть nil) — сколько байт файла уже передано.
+func (s *Server) migrateCopy(ctx context.Context, jc *jobs.Context, user string, from, to int64, id, name string, size int64, progress func(int64)) error {
 	path := "/api/migrate/files/" + id + "/" + name
 	// Сторож: нет данных migrateStallTimeout — обрыв передачи.
 	cctx, cancel := context.WithCancel(ctx)
@@ -603,12 +630,17 @@ func (s *Server) migrateCopy(ctx context.Context, jc *jobs.Context, user string,
 	jc.Log("migrate.copying", name, float64(size)/(1<<20))
 	var done int64
 	last := time.Now()
+	lastLive := time.Now()
 	pr := readFunc(func(b []byte) (int, error) {
 		k, err := src.Read(b)
 		if k > 0 {
 			lastByte.Store(time.Now().UnixNano())
 		}
 		done += int64(k)
+		if progress != nil && (time.Since(lastLive) >= 500*time.Millisecond || err != nil) {
+			lastLive = time.Now()
+			progress(done)
+		}
 		if time.Since(last) >= 5*time.Second && size > 0 {
 			last = time.Now()
 			jc.Log("migrate.copyProgress", name, done*100/size)
@@ -932,6 +964,13 @@ func (s *Server) migrateFlySwitch(ctx context.Context, jc *jobs.Context, user st
 	if len(list) == 0 {
 		return nil, nil
 	}
+	liveSet(jc, func(l *migrateLive) {
+		l.Stage = liveStageFlyAdd
+		l.Fly = nil
+		for _, t := range list {
+			l.Fly = append(l.Fly, migrateLiveFly{Route: t.Route, Ref: t.Ref, Old: t.Old, WasActive: t.WasActive})
+		}
+	})
 	var ops []FlyOp
 	for _, t := range list {
 		jc.Log("migrate.flyAdd", t.Title, t.Ref)
@@ -962,6 +1001,14 @@ func (s *Server) migrateFlySwitch(ctx context.Context, jc *jobs.Context, user st
 			}
 		}
 	}
+	liveSet(jc, func(l *migrateLive) {
+		l.Stage = liveStageFlyWait
+		for i := range l.Fly {
+			if i < len(list) {
+				l.Fly[i].New = list[i].New
+			}
+		}
+	})
 	var swaps []FlyOp
 	deadline := time.Now().Add(migrateFlyWait)
 	for _, t := range list {
@@ -970,6 +1017,13 @@ func (s *Server) migrateFlySwitch(ctx context.Context, jc *jobs.Context, user st
 		}
 		for {
 			if s.flyAliveTargets(ctx)[t.Route+"/"+t.New] {
+				liveSet(jc, func(l *migrateLive) {
+					for i := range l.Fly {
+						if l.Fly[i].Route == t.Route && l.Fly[i].New == t.New {
+							l.Fly[i].Alive = true
+						}
+					}
+				})
 				jc.Log("migrate.flyAlive", t.Title, t.Ref)
 				break
 			}
@@ -991,6 +1045,7 @@ func (s *Server) migrateFlySwitch(ctx context.Context, jc *jobs.Context, user st
 		}
 		jc.Log("migrate.flySwitched", len(swaps)/2)
 	}
+	liveStage(jc, liveStageSwitched)
 	return list, nil
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Input, Space, Switch, Tag, Tooltip } from 'antd'
+import { Button, Checkbox, Input, Segmented, Space, Switch, Tag, Tooltip } from 'antd'
 import { LoadingOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -27,6 +27,8 @@ interface MapItem {
   cpus?: number
   mem_bytes?: number
   lxd_type?: string
+  /** Призрак: переезжает сюда (задание переноса), на хосте его ещё нет. */
+  ghost?: number
 }
 
 interface MapTarget {
@@ -81,6 +83,8 @@ const LEFT_W = 250
 const LEFT_X = 10
 const HOSTS_X = LEFT_X + LEFT_W + 120
 const NODE_H = 38
+/** Хостов не больше — карта одним столбцом (при «Колонки: авто»). */
+const ONE_COLUMN_MAX = 5
 
 const store = {
   get<T>(k: string, def: T): T {
@@ -162,6 +166,8 @@ export function HostsMap({
   const [onlyLinked, setOnlyLinked] = useState<boolean>(() => store.get('linked', false))
   const [showFly, setShowFly] = useState<boolean>(() => store.get('fly', true))
   const [showDeploy, setShowDeploy] = useState<boolean>(() => store.get('deploy', true))
+  const [cols, setCols] = useState<'auto' | '1' | '2'>(() => store.get('cols', 'auto'))
+  useEffect(() => store.set('cols', cols), [cols])
   const [view, setView] = useState<{ x: number; y: number; k: number }>(() => store.get('view', { x: 0, y: 0, k: 1 }))
   const [hover, setHover] = useState<string | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
@@ -188,6 +194,49 @@ export function HostsMap({
   const movingRef = useRef(moving)
   movingRef.current = moving
   const hasMoving = moving.length > 0
+  // Ход переносов с хаба — и начатых не здесь: раз в секунду, пока что-то
+  // переносится, иначе раз в 15 секунд (заметить чужой перенос).
+  const [live, setLive] = useState<MigrateLive[]>([])
+  const liveSeen = useRef(new Set<number>())
+  const liveFast = useRef(false)
+  liveFast.current = hasMoving || live.length > 0
+  useEffect(() => {
+    let stop = false
+    let timer = 0
+    const poll = async () => {
+      const res = await api<{ live: MigrateLive[] }>('/hub/migrate/live').catch(() => null)
+      if (stop) return
+      if (res) {
+        setLive(res.live)
+        setMoving((ms) => {
+          let out = ms.map((m) => {
+            const l = res.live.find((x) => x.job === m.id)
+            return l && m.names.length === 0 && (l.containers ?? []).length ? { ...m, names: l.containers!, title: l.project || m.title } : m
+          })
+          for (const l of res.live) {
+            if (l.stage === 'done' || l.stage === 'failed' || liveSeen.current.has(l.job) || out.some((m) => m.id === l.job)) continue
+            liveSeen.current.add(l.job)
+            out = [...out, { id: l.job, from: l.from, to: l.to, names: l.containers ?? [], title: l.project || (l.containers ?? [])[0] || `#${l.job}`, started: Date.parse(l.started) || Date.now() }]
+          }
+          return out
+        })
+      }
+      // Только что появился — уже часто (liveFast обновится лишь с отрисовкой).
+      timer = window.setTimeout(() => void poll(), liveFast.current || (res?.live.length ?? 0) > 0 ? 1000 : 15000)
+    }
+    void poll()
+    return () => {
+      stop = true
+      window.clearTimeout(timer)
+    }
+  }, [])
+  const reduceMotion = useMemo(() => {
+    try {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    } catch {
+      return false
+    }
+  }, [])
   useEffect(() => {
     if (!hasMoving) return
     let n = 0
@@ -237,6 +286,7 @@ export function HostsMap({
   void tick
   const startMove = async (d: DraftMove) => {
     const res = await api<{ job_id: number }>('/hub/migrate', { method: 'POST', body: { from: d.from.id, to: d.to.id, container: d.item.name, switch_fly: d.switchFly, clean_leftovers: d.cleanLeftovers, switch_pipeline: d.switchPipeline } })
+    liveSeen.current.add(res.job_id)
     setMoving((l) => [...l, { id: res.job_id, from: d.from.id, to: d.to.id, names: d.names, title: d.item.name, started: Date.now() }])
     return res.job_id
   }
@@ -448,12 +498,23 @@ export function HostsMap({
     }[] = []
     const tilePos = new Map<string, { x: number; y: number }>()
     const hostPos = new Map<number, { x: number; y: number }>()
+    // Сначала — какие хосты и плитки видны (по ним — число столбцов),
+    // потом раскладка.
+    const prepared: { h: HubHost; hd: MapData['hosts'][string] | undefined; offline: boolean; items: MapItem[]; gkey: (it: MapItem) => string }[] = []
     for (const h of hosts) {
       const hd = data.data?.hosts[String(h.id)]
       const offline = h.status !== 'online'
       // «Только запущенные» — и без хостов, которые не на связи.
       if (onlyRunning && (offline || hd?.error)) continue
-      let items = (hd?.items ?? []).filter((it) => {
+      // Переезжающие сюда — призраками, пока их нет в списке хоста.
+      const real = hd?.items ?? []
+      const ghosts: MapItem[] = []
+      for (const l of live)
+        if (l.to === h.id && l.stage !== 'failed')
+          for (const name of l.containers ?? [])
+            if (!real.some((it) => it.kind === 'container' && it.name === name)) ghosts.push({ kind: 'container', name, project: l.project, ghost: l.job })
+      let items = [...real, ...ghosts].filter((it) => {
+        if (it.ghost) return true
         if (onlyRunning && (it.state ?? '').toLowerCase() !== 'running') return false
         if (onlyLinked && !linkedTiles.has(tileKey(h.id, it.kind, it.name))) return false
         if (ql && !`${it.name} ${it.image ?? ''} ${it.ip ?? ''} ${it.project ?? ''}`.toLowerCase().includes(ql) && !h.name.toLowerCase().includes(ql)) return false
@@ -482,11 +543,16 @@ export function HostsMap({
         .map((it, i) => ({ it, i }))
         .sort((a, b) => first.get(gkey(a.it))! - first.get(gkey(b.it))! || a.i - b.i)
         .map((x) => x.it)
+      prepared.push({ h, hd, offline, items, gkey })
+    }
+    // Хостов немного — одним столбцом: карта уже и крупнее.
+    const ncols = cols === 'auto' ? (prepared.length <= ONE_COLUMN_MAX ? 1 : 2) : Number(cols)
+    for (const { h, hd, offline, items, gkey } of prepared) {
       const open = expandAll || expanded.has(h.id)
       const shown = open || items.length <= COLLAPSED ? items : items.slice(0, COLLAPSED - 1)
       const more = items.length - shown.length
       const cells = shown.length + (more > 0 ? 1 : 0)
-      const col = colY[0] <= colY[1] ? 0 : 1
+      const col = ncols === 1 || colY[0] <= colY[1] ? 0 : 1
       const bx = HOSTS_X + col * (BLOCK_W + 30)
       const by = colY[col]
       // Сетка по COLS; стек — с новой строки, под рамкой с подписью, и
@@ -533,11 +599,11 @@ export function HostsMap({
       hostPos.set(h.id, { x: bx, y: by })
       blocks.push({ host: h, x: bx, y: by, h: bh, tiles, stacks, more, hidden, moreAt, error: hd?.error, offline })
     }
-    const width = HOSTS_X + 2 * BLOCK_W + 60
+    const width = HOSTS_X + ncols * BLOCK_W + (ncols - 1) * 30 + 30
     const height = Math.max(ly, colY[0], colY[1]) + 10
     return { left, blocks, tilePos, hostPos, width, height }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.data, hosts, expandAll, expanded, q, onlyRunning, onlyLinked, showFly, showDeploy, routeColor, pipeColor, t])
+  }, [data.data, hosts, expandAll, expanded, q, onlyRunning, onlyLinked, showFly, showDeploy, routeColor, pipeColor, t, cols, live])
 
   // Подсветка: наведённое или закреплённое щелчком — его связи ярко,
   // остальное бледно.
@@ -606,6 +672,105 @@ export function HostsMap({
     const mx = (x1 + x2) / 2
     return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`
   }
+
+  // Живой перенос поверх связей: данные бегут со старой плитки на
+  // призрак, у маршрутов Traffic Fly новая цель прорисовывается, ждёт
+  // проверки и забирает трафик, старая бледнеет; у конвейера — так же,
+  // когда он переключается (и сайт — подписью). Связи, которые перенос
+  // рисует сам, из обычных убираются.
+  const liveOverlay = useMemo(() => {
+    const lines: { key: string; d: string; color: string; mode: LiveMode }[] = []
+    const transfers: { key: string; d: string; x: number; y: number; label: string }[] = []
+    const labels: { key: string; x: number; y: number; text: string; color: string }[] = []
+    const suppress = new Set<string>()
+    const path = (from: string, to: string) => linkPath({ from, to, color: '' })
+    for (const l of live) {
+      const st = liveAt(l.stage)
+      const failed = l.stage === 'failed'
+      const names = l.containers ?? []
+      // Данные: со старой плитки на призрак.
+      if (!failed && (l.stage === 'pack' || l.stage === 'copy' || l.stage === 'unpack') && names.length) {
+        const a = layout.tilePos.get(tileKey(l.from, 'container', names[0]))
+        const b = layout.tilePos.get(tileKey(l.to, 'container', names[0]))
+        if (a && b) {
+          const ay = a.y + TILE_H / 2
+          const by = b.y + TILE_H / 2
+          let d: string
+          let x: number
+          let y: number
+          const fx = layout.hostPos.get(l.from)?.x ?? a.x
+          const tx = layout.hostPos.get(l.to)?.x ?? b.x
+          if (Math.abs(fx - tx) < BLOCK_W / 2) {
+            // Один столбец: дугой справа от блоков, от края блока на
+            // уровне плитки — не поперёк соседних плиток.
+            const ex = Math.max(fx, tx) + BLOCK_W
+            const cx = ex + 40 + Math.min(200, Math.abs(by - ay) / 4)
+            d = `M${ex},${ay} C${cx},${ay} ${cx},${by} ${ex},${by}`
+            x = ex + 8 + (cx - ex) * 0.75
+            y = (ay + by) / 2
+          } else {
+            const [p, q] = a.x < b.x ? [{ x: a.x + TILE_W, y: ay }, { x: b.x, y: by }] : [{ x: a.x, y: ay }, { x: b.x + TILE_W, y: by }]
+            const mx = (p.x + q.x) / 2
+            d = `M${p.x},${p.y} C${mx},${p.y} ${mx},${q.y} ${q.x},${q.y}`
+            x = mx
+            y = (p.y + q.y) / 2
+          }
+          const label = l.stage === 'copy' ? t('hostsMap.live.copy', { p: l.percent }) : t(l.stage === 'pack' ? 'hostsMap.live.pack' : 'hostsMap.live.unpack')
+          transfers.push({ key: `t${l.job}`, d, x, y, label })
+        }
+      }
+      // Traffic Fly.
+      if (showFly)
+        for (const f of l.fly ?? []) {
+          const from = `route:${f.route}`
+          const oldKey = tileKey(l.from, 'container', f.ref)
+          const newKey = tileKey(l.to, 'container', f.ref)
+          suppress.add(`${from}|${oldKey}`)
+          suppress.add(`${from}|${newKey}`)
+          const color = routeColor.get(f.route) ?? 'var(--accent, #1677ff)'
+          const switched = !failed && st >= liveAt('fly-switched')
+          const od = path(from, oldKey)
+          if (od) lines.push({ key: `fo${l.job}${f.route}${f.ref}`, d: od, color, mode: switched ? 'fade' : f.was_active ? 'flow' : 'dashed' })
+          const nd = path(from, newKey)
+          if (nd && (failed ? !!f.new : st >= liveAt('fly-add')))
+            lines.push({
+              key: `fn${l.job}${f.route}${f.ref}`,
+              d: nd,
+              color,
+              mode: failed ? 'fail' : switched ? (f.was_active ? 'flow' : 'dashed') : f.alive ? 'solid' : l.stage === 'fly-add' ? 'draw' : 'wait',
+            })
+        }
+      // Конвейер (и сайт) — когда перенос его переключает.
+      if (showDeploy && l.pipeline && !failed && st >= liveAt('pipeline')) {
+        const from = `pipe:${l.pipeline}`
+        const color = pipeColor.get(l.pipeline) ?? 'var(--accent, #1677ff)'
+        for (const n of names) {
+          const oldKey = tileKey(l.from, 'container', n)
+          const newKey = tileKey(l.to, 'container', n)
+          suppress.add(`${from}|${oldKey}`)
+          suppress.add(`${from}|${newKey}`)
+          const od = path(from, oldKey)
+          if (od) lines.push({ key: `po${l.job}${n}`, d: od, color, mode: 'fade' })
+          const nd = path(from, newKey)
+          if (nd) lines.push({ key: `pn${l.job}${n}`, d: nd, color, mode: l.stage === 'pipeline' ? 'draw' : 'solid' })
+        }
+        const b = names.length ? layout.tilePos.get(tileKey(l.to, 'container', names[0])) : undefined
+        if (b && (l.site ?? []).length && l.site_state) {
+          labels.push({
+            key: `s${l.job}`,
+            x: b.x - 8,
+            y: b.y - 4,
+            text: t(`hostsMap.live.site.${l.site_state}`, { name: l.site![0] }),
+            color: l.site_state === 'failed' ? 'var(--status-critical)' : l.site_state === 'ok' ? 'var(--status-good)' : 'var(--accent, #1677ff)',
+          })
+        }
+      }
+    }
+    return { lines, transfers, labels, suppress }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, layout, showFly, showDeploy, routeColor, pipeColor, t])
+  const liveOf = (hostId: number, name: string, side: 'from' | 'to') =>
+    live.find((l) => (side === 'from' ? l.from : l.to) === hostId && (l.containers ?? []).includes(name))
 
   // PNG всей карты: копия SVG без сдвига и масштаба, цвета темы —
   // значениями, сверху дата и легенда; в приватном режиме чувствительное
@@ -692,7 +857,7 @@ export function HostsMap({
       }
       const g = (src.querySelector(':scope > g') as SVGGElement).cloneNode(true) as SVGGElement
       g.setAttribute('transform', `translate(${PAD},${headH})`)
-      g.querySelectorAll('title, animate').forEach((el) => el.remove())
+      g.querySelectorAll('title, animate, animateMotion, animateTransform').forEach((el) => el.remove())
       for (const el of [g, ...Array.from(g.querySelectorAll('*'))] as Element[]) {
         for (const a of ['fill', 'stroke']) {
           const v = el.getAttribute(a)
@@ -776,6 +941,21 @@ export function HostsMap({
         <Button size="small" onClick={fit}>
           {t('hostsMap.fit')}
         </Button>
+        <Tooltip title={t('hostsMap.colsHint', { n: ONE_COLUMN_MAX })}>
+          <span className="row small" style={{ gap: '0.3rem', alignItems: 'center' }}>
+            {t('hostsMap.cols')}
+            <Segmented
+              size="small"
+              value={cols}
+              onChange={(v) => setCols(v as 'auto' | '1' | '2')}
+              options={[
+                { value: 'auto', label: t('hostsMap.colsAuto') },
+                { value: '1', label: '1' },
+                { value: '2', label: '2' },
+              ]}
+            />
+          </span>
+        </Tooltip>
         <Checkbox checked={expandAll} onChange={(e) => setExpandAll(e.target.checked)}>
           {t('hostsMap.expandAll')}
         </Checkbox>
@@ -887,6 +1067,7 @@ export function HostsMap({
           <svg ref={svgRef} width="100%" height="100%" role="img" aria-label={t('hostsMap.title')}>
             <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
               {visibleLinks.map((l, i) => {
+                if (liveOverlay.suppress.has(`${l.from}|${l.to}`)) return null
                 const d = linkPath(l)
                 if (!d) return null
                 const on = related ? related.has(l.from) && related.has(l.to) : true
@@ -902,6 +1083,24 @@ export function HostsMap({
                   />
                 )
               })}
+              {liveOverlay.lines.map((x) => (
+                <LiveLine key={x.key} d={x.d} color={x.color} mode={x.mode} still={reduceMotion} />
+              ))}
+              {liveOverlay.transfers.map((x) => (
+                <g key={x.key} pointerEvents="none">
+                  <path d={x.d} fill="none" stroke="var(--accent, #1677ff)" strokeWidth={2} strokeDasharray="4 4" opacity={0.7} />
+                  {!reduceMotion &&
+                    [0, 0.4, 0.8].map((b) => (
+                      <circle key={b} r={4} fill="var(--accent, #1677ff)">
+                        <animateMotion dur="1.2s" begin={`${b}s`} repeatCount="indefinite" path={x.d} />
+                      </circle>
+                    ))}
+                  <rect x={x.x - 6} y={x.y - 11} width={x.label.length * 7 + 14} height={18} rx={9} fill="var(--surface-raised)" stroke="var(--accent, #1677ff)" />
+                  <text x={x.x} y={x.y + 2} fontSize={11} fill="var(--accent, #1677ff)">
+                    {x.label}
+                  </text>
+                </g>
+              ))}
               {layout.left.map((n) => (
                 <g
                   key={n.key}
@@ -973,6 +1172,34 @@ export function HostsMap({
                   })}
                   {b.tiles.map((x) => {
                     const it = x.item
+                    if (it.ghost) {
+                      // Призрак: стек переезжает сюда, на хосте его ещё нет.
+                      const l = live.find((v) => v.job === it.ghost)
+                      const fromName = hosts.find((h) => h.id === l?.from)?.name ?? ''
+                      return (
+                        <g key={x.key} transform={`translate(${x.x},${x.y})`} pointerEvents="none">
+                          <rect width={TILE_W} height={TILE_H} rx={6} fill="var(--surface-raised)" stroke="var(--accent, #1677ff)" strokeWidth={2} strokeDasharray="6 4" opacity={0.85}>
+                            {!reduceMotion && <animate attributeName="opacity" values="0.45;0.95;0.45" dur="1.6s" repeatCount="indefinite" />}
+                          </rect>
+                          <text x={8} y={17} fontSize={9} fill="var(--text-secondary)">
+                            docker
+                          </text>
+                          <text x={50} y={17} fontSize={12} fill="var(--text-secondary)">
+                            {midEllipsis(it.name, 20)}
+                          </text>
+                          <text x={8} y={35} fontSize={10} fill="var(--accent, #1677ff)">
+                            {midEllipsis(
+                              l?.stage === 'copy'
+                                ? t('hostsMap.live.ghostCopy', { host: fromName, p: l.percent })
+                                : l?.stage === 'unpack'
+                                  ? t('hostsMap.live.ghostStart')
+                                  : t('hostsMap.live.ghost', { host: fromName }),
+                              34,
+                            )}
+                          </text>
+                        </g>
+                      )
+                    }
                     const flyMarks = visibleLinks.filter((l) => l.to === x.key && l.from.startsWith('route:'))
                     const pipeMarks = visibleLinks.filter((l) => l.to === x.key && l.from.startsWith('pipe:'))
                     const sub = [
@@ -986,7 +1213,7 @@ export function HostsMap({
                       .join(' · ')
                     const kindLabel = it.kind === 'container' ? 'docker' : it.kind === 'vm' ? 'VM' : 'LXD'
                     const mig = it.kind === 'container' ? migratedHere(b.host.id, it.name) : null
-                    const movable = moveMode && it.kind === 'container' && !b.offline && mig?.role !== 'from'
+                    const movable = moveMode && !settling && it.kind === 'container' && !b.offline && mig?.role !== 'from'
                     const dragged = tileDrag?.host === b.host.id && (tileDrag.project ? it.kind === 'container' && it.project === tileDrag.project : it.name === tileDrag.name)
                     return (
                       <g
@@ -1047,7 +1274,8 @@ export function HostsMap({
                           <text x={8} y={35} fontSize={10} fill="var(--accent, #1677ff)">
                             {midEllipsis(
                               movingTile(b.host.id, it.name)
-                                ? t('hostsMap.movingTo', { host: hosts.find((h) => h.id === movingTile(b.host.id, it.name)!.to)?.name ?? '' })
+                                ? t('hostsMap.movingTo', { host: hosts.find((h) => h.id === movingTile(b.host.id, it.name)!.to)?.name ?? '' }) +
+                                    (liveOf(b.host.id, it.name, 'from')?.stage === 'copy' ? ` · ${liveOf(b.host.id, it.name, 'from')!.percent}%` : '')
                                 : t('hostsMap.plannedTo', { host: draftTile(b.host.id, it.name)!.to.name }),
                               34,
                             )}
@@ -1145,20 +1373,22 @@ export function HostsMap({
                   )}
                 </g>
               ))}
+              {liveOverlay.labels.map((x) => (
+                <text key={x.key} x={x.x} y={x.y} fontSize={11} textAnchor="end" fill={x.color} pointerEvents="none" className="sensitive">
+                  {x.text}
+                </text>
+              ))}
             </g>
           </svg>
           {settling && (
-            // Перехватывает щелчки и перетаскивание: пока карта
-            // перечитывается, её не перестраивают (колесо масштаба — можно).
-            <div
-              style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--surface) 65%, transparent)', cursor: 'progress' }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
+            // Карта перечитывается: видно, как перенос дорисовывается, но
+            // плитки в это время не перетаскивают (movable).
+            <span
+              className="small"
+              style={{ position: 'absolute', top: 8, right: 8, pointerEvents: 'none', padding: '4px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface-raised)', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
             >
-              <span style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface-raised)', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
-                <LoadingOutlined /> {t('hostsMap.settling')}
-              </span>
-            </div>
+              <LoadingOutlined /> {t('hostsMap.settling')}
+            </span>
           )}
         </div>
       )}
@@ -1270,6 +1500,60 @@ interface DraftMove {
 }
 
 /** Перенос в работе. */
+/** Линия маршрута или конвейера в живом переносе. still — без движения
+ * (prefers-reduced-motion): только итоговый вид. */
+function LiveLine({ d, color, mode, still }: { d: string; color: string; mode: LiveMode; still: boolean }) {
+  const stroke = mode === 'fail' ? 'var(--status-critical)' : color
+  const dash = mode === 'dashed' || mode === 'wait' || mode === 'fade' || mode === 'fail' ? '6 4' : undefined
+  if (still)
+    return <path d={d} fill="none" stroke={stroke} strokeWidth={2} strokeDasharray={dash} opacity={mode === 'fade' || mode === 'fail' ? 0.25 : 0.9} pointerEvents="none" />
+  if (mode === 'draw')
+    return (
+      <path d={d} fill="none" stroke={stroke} strokeWidth={2.5} pathLength={1} strokeDasharray="1 1" strokeDashoffset={1} pointerEvents="none">
+        <animate attributeName="stroke-dashoffset" from="1" to="0" dur="1.2s" fill="freeze" />
+      </path>
+    )
+  return (
+    <g pointerEvents="none">
+      <path d={d} fill="none" stroke={stroke} strokeWidth={mode === 'flow' || mode === 'solid' ? 2.5 : 2} strokeDasharray={dash} opacity={0.9}>
+        {mode === 'wait' && <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.8s" repeatCount="indefinite" />}
+        {mode === 'fade' && <animate attributeName="opacity" from="0.9" to="0.2" dur="1.5s" fill="freeze" />}
+        {mode === 'fail' && <animate attributeName="opacity" from="0.9" to="0" dur="3s" fill="freeze" />}
+      </path>
+      {mode === 'flow' &&
+        [0, 0.8].map((b) => (
+          <circle key={b} r={3.5} fill={stroke}>
+            <animateMotion dur="1.6s" begin={`${b}s`} repeatCount="indefinite" path={d} />
+          </circle>
+        ))}
+    </g>
+  )
+}
+
+/** Ход переноса с хаба (GET /hub/migrate/live). */
+interface MigrateLive {
+  job: number
+  from: number
+  to: number
+  project?: string
+  containers?: string[]
+  stage: string
+  percent: number
+  fly?: { route: string; ref: string; old: string; new?: string; was_active: boolean; alive?: boolean }[]
+  pipeline?: number
+  pipeline_name?: string
+  site?: string[]
+  site_state?: string
+  started: string
+}
+
+/** Порядок шагов переноса (для «шаг уже пройден»). */
+const LIVE_ORDER = ['plan', 'pack', 'copy', 'unpack', 'fly-add', 'fly-wait', 'fly-switched', 'pipeline', 'site', 'done']
+const liveAt = (stage: string) => LIVE_ORDER.indexOf(stage)
+
+/** Линия живого переноса: как рисовать. */
+type LiveMode = 'flow' | 'solid' | 'dashed' | 'draw' | 'wait' | 'fade' | 'fail'
+
 interface MovingJob {
   id: number
   from: number

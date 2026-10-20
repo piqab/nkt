@@ -4968,6 +4968,22 @@
     "stopSecondConfirm": "Stop {{name}} on {{host}}? The working copy is on the old host.",
     "newOffline": "{{host}} is offline right now.",
     "rollbackSkip": "Roll back without the new host",
-    "rollbackSkipConfirm": "{{to}} does not answer. Start {{name}} on {{from}} and switch routes and the pipeline back without stopping the copy on {{to}}? When {{to}} is back, stop the second copy there — the map will remind you."
+    "rollbackSkipConfirm": "{{to}} does not answer. Start {{name}} on {{from}} and switch routes and the pipeline back without stopping the copy on {{to}}? When {{to}} is back, stop the second copy there — the map will remind you.",
+    "cols": "Columns",
+    "colsAuto": "auto",
+    "colsHint": "“auto”: up to {{n}} hosts in one column, more in two",
+    "live": {
+      "pack": "packing…",
+      "copy": "copying {{p}}%",
+      "unpack": "starting on the new host…",
+      "ghost": "moving from {{host}}",
+      "ghostCopy": "from {{host}}: {{p}}%",
+      "ghostStart": "starting…",
+      "site": {
+        "setup": "site {{name}}: setting up…",
+        "ok": "site {{name}}: ready",
+        "failed": "site {{name}}: error (see the log)"
+      }
+    }
   }
 }

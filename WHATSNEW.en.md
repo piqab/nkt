@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.61 — 2026-10-20
+
+- **A container move is shown live on the hosts map.** A ghost tile on
+  the new host with data running to it and a percentage; for Traffic Fly
+  routes a line to the new target is drawn, waits for the gateway check
+  and takes the traffic while the old one fades; the pipeline and its
+  site switch the same way, with a "site …: setting up / ready" label.
+  Moves started elsewhere are shown too. The "Refreshing the map…" veil no
+  longer covers the map — it is a label in the corner. With "reduce
+  motion" on in the system there is no movement.
+- **The map in one column** with up to five hosts: narrower and larger.
+  "Columns: auto / 1 / 2" to choose yourself.
+
 ## v1.13.60 — 2026-10-20
 
 - **Garage deployment example — your own S3 storage.** "Deployments" →
