@@ -96,14 +96,22 @@ if ip link show "$1" >/dev/null 2>&1; then
   ip rule del fwmark "$4" table "$5" 2>/dev/null || true
   ip rule add fwmark "$4" table "$5" priority "$5"
   ip route replace default via "$6" dev "$1" onlink table "$5"
+  # Поднятый прежним nkt (sysctl и nft в PostUp) — теперь со службой.
+  systemctl enable "nkt-fly-rules@$1" >/dev/null 2>&1 || true
+  systemctl start "nkt-fly-rules@$1" >/dev/null 2>&1 || true
   echo "updated"
 else
+  systemctl enable "nkt-fly-rules@$1" >/dev/null
   systemctl enable --now "wg-quick@$1" || { journalctl -u "wg-quick@$1" -n 8 --no-pager -o cat 2>/dev/null | tr '\n' ' '; exit 1; }
+  # Пересылка и правила nft — служба вслед за туннелем (AppArmor
+  # wg-quick их не пускает); не встала — туннель без правил бесполезен.
+  systemctl start "nkt-fly-rules@$1" || { journalctl -u "nkt-fly-rules@$1" -n 8 --no-pager -o cat 2>/dev/null | tr '\n' ' '; exit 1; }
   echo "started"
 fi`
 
 // flyHostRemove — снять туннель. $1 iface.
-const flyHostRemove = `systemctl disable --now "wg-quick@$1" 2>/dev/null || true
+const flyHostRemove = `systemctl disable --now "nkt-fly-rules@$1" 2>/dev/null || true
+systemctl disable --now "wg-quick@$1" 2>/dev/null || true
 rm -f "/etc/wireguard/$1.conf" "/etc/wireguard/$1.key" "/etc/wireguard/$1.nft"
 echo "removed"`
 
@@ -117,6 +125,19 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 	res, err := RunUnrestricted(ctx, "sh", "-c", aptcache.WrapScript("have() { command -v wg >/dev/null && command -v wg-quick >/dev/null && command -v nft >/dev/null; }; have || { DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables; have; }"))
 	if err != nil || !res.OK() {
 		return log, fmt.Errorf("wireguard-tools/nftables: %s", strings.TrimSpace(res.Output()+" "+errText(err)))
+	}
+	// Служба пересылки и правил туннеля и постоянный sysctl (см.
+	// fly.RulesUnit).
+	if len(cfg.Ifaces) > 0 {
+		if err := flyInstallFile(ctx, fly.RulesUnitPath, []byte(fly.RulesUnit)); err != nil {
+			return log, err
+		}
+		if err := flyInstallFile(ctx, fly.SysctlPath, []byte(fly.SysctlConf(false))); err != nil {
+			return log, err
+		}
+		if res, err := RunUnrestricted(ctx, "systemctl", "daemon-reload"); err != nil || !res.OK() {
+			return log, fmt.Errorf("systemctl daemon-reload: %s", strings.TrimSpace(res.Output()+" "+errText(err)))
+		}
 	}
 	want := map[string]bool{}
 	for _, i := range cfg.Ifaces {
@@ -148,7 +169,7 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 			return log, fmt.Errorf("%s: %v", i.Name, err)
 		}
 		key, nftFile = fly.WGFile(i.Name, ".key"), fly.WGFile(i.Name, ".nft")
-		conf := fly.HostWG(i, key, nftFile)
+		conf := fly.HostWG(i, key)
 		res, err := RunUnrestrictedInput(ctx, []byte(conf), "sh", "-c", `umask 077; mkdir -p /etc/wireguard && cat > "$1.tmp" && mv "$1.tmp" "$1"`, "sh", "/etc/wireguard/"+i.Name+".conf")
 		if err != nil || !res.OK() {
 			return log, fmt.Errorf("%s: wireguard config: %s", i.Name, strings.TrimSpace(res.Output()+" "+errText(err)))
@@ -178,6 +199,13 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 			}
 		}
 		log = append(log, i.Name+": removed")
+	}
+	// Туннелей не осталось — и постоянного sysctl Traffic Fly (пересылку
+	// сейчас не выключаем: ею может пользоваться Docker).
+	// Шлюз nkt-edge на той же машине пользуется тем же файлом — тогда
+	// его туннель ещё включён.
+	if len(cfg.Ifaces) == 0 {
+		_, _ = RunUnrestricted(ctx, "sh", "-c", `ls /etc/systemd/system/wg-quick@*.service.wants/nkt-fly-rules@*.service >/dev/null 2>&1 || rm -f "$1"`, "sh", fly.SysctlPath)
 	}
 	raw, _ := json.MarshalIndent(cfg, "", "  ")
 	if err := os.WriteFile(filepath.Join(s.flyDir(), "host.json"), raw, 0o600); err != nil {
@@ -405,6 +433,15 @@ func (s *Server) handleFlyRefresh(w http.ResponseWriter, r *http.Request) {
 
 // flyWGInstall — файл в /etc/wireguard (0600, root): каталог вне песочницы
 // службы — через выход из неё, как и сама конфигурация wg-quick.
+// flyInstallFile — файл системы (служба, sysctl.d) от root, 0644.
+func flyInstallFile(ctx context.Context, path string, data []byte) error {
+	res, err := RunUnrestrictedInput(ctx, data, "sh", "-c", `umask 022; mkdir -p "$(dirname "$1")" && cat > "$1.tmp" && mv "$1.tmp" "$1"`, "sh", path)
+	if err != nil || !res.OK() {
+		return fmt.Errorf("%s: %s", path, strings.TrimSpace(res.Output()+" "+errText(err)))
+	}
+	return nil
+}
+
 func flyWGInstall(ctx context.Context, path string, data []byte) error {
 	res, err := RunUnrestrictedInput(ctx, data, "sh", "-c", `umask 077; mkdir -p /etc/wireguard && cat > "$1.tmp" && mv "$1.tmp" "$1"`, "sh", path)
 	if err != nil || !res.OK() {

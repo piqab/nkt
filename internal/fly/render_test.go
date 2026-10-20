@@ -109,7 +109,7 @@ func TestHost(t *testing.T) {
 		}
 	}
 	nftLoads(t, nft)
-	wg := HostWG(h, "/etc/nkt/fly/nkt-fly1.key", "/etc/nkt/fly/nkt-fly1.nft")
+	wg := HostWG(h, "/etc/wireguard/nkt-fly1.key")
 	for _, want := range []string{"AllowedIPs = 0.0.0.0/0", "Table = off", "Endpoint = 203.0.113.10:51820", "ip rule add fwmark 0x464c0001 table 7701", "PersistentKeepalive = 25"} {
 		if !strings.Contains(wg, want) {
 			t.Errorf("нет %q в\n%s", want, wg)
@@ -121,6 +121,34 @@ func TestHost(t *testing.T) {
 	gw := GatewayWG(sampleGateway(), "/etc/nkt-edge/fly/wg.key")
 	if !strings.Contains(gw, "AllowedIPs = 10.77.1.2/32") || strings.Contains(gw, "PrivateKey") {
 		t.Errorf("%s", gw)
+	}
+	// AppArmor wg-quick (Ubuntu 26.04+) не пускает sysctl и nft -f из
+	// PostUp — они в службе nkt-fly-rules@.
+	for _, conf := range []string{wg, gw} {
+		for _, bad := range []string{"sysctl", "nft -f"} {
+			if strings.Contains(conf, bad) {
+				t.Errorf("%q в PostUp:\n%s", bad, conf)
+			}
+		}
+	}
+}
+
+// Служба пересылки и правил: вслед за wg-quick того же интерфейса, правила
+// — из /etc/wireguard; постоянный sysctl — у шлюза со счётчиками.
+func TestRulesUnit(t *testing.T) {
+	for _, want := range []string{
+		"After=wg-quick@%i.service", "BindsTo=wg-quick@%i.service", "WantedBy=wg-quick@%i.service",
+		"net.ipv4.ip_forward=1 net.ipv4.conf.%i.rp_filter=2", "nft -f /etc/wireguard/%i.nft", "RemainAfterExit=yes",
+	} {
+		if !strings.Contains(RulesUnit, want) {
+			t.Errorf("нет %q в\n%s", want, RulesUnit)
+		}
+	}
+	if RulesUnitName("nkt-fly1") != "nkt-fly-rules@nkt-fly1.service" {
+		t.Error(RulesUnitName("nkt-fly1"))
+	}
+	if strings.Contains(SysctlConf(false), "conntrack") || !strings.Contains(SysctlConf(true), "nf_conntrack_acct = 1") || !strings.Contains(SysctlConf(false), "ip_forward = 1") {
+		t.Errorf("%s / %s", SysctlConf(false), SysctlConf(true))
 	}
 }
 

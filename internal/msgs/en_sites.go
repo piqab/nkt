@@ -558,6 +558,7 @@ var enSitesCatalog = map[string]string{
 	"migrate.pipelineNotSwitched":     "the stack was deployed by pipeline %s, and the pipeline was not switched: the next deployment brings the stack up on %s again",
 	"deploy.selfStack":                "stack %s on %s is the one this hub runs in: deploying would stop the hub itself mid-job. Update it from another hub or on the machine: docker compose pull && docker compose up -d",
 	"migrate.selfStack":               "stack %s is the one this hub runs in: moving it would stop the hub itself; move it from another hub (export and import)",
+	"fly.wgHintAppArmorOld":           "%v — AppArmor (Ubuntu 26.04+) keeps sysctl and nft from running under wg-quick: update nkt on the host and nkt-edge on the gateway (“Reinstall”) to 1.13.62 and press “Apply” — forwarding and rules move to the nkt-fly-rules@ service, the keys stay the same",
 	"fly.wgHintAppArmor":              "%v — AppArmor kept wg from reading the key (Ubuntu 26.04+): update nkt-edge (“Reinstall” the gateway) and nkt on the hosts to 1.13.58 and press “Apply” — the keys move to /etc/wireguard",
 	"fly.wgHintKernel":                "%v — the kernel does not support WireGuard: on a container VPS (openvz, lxc — systemd-detect-virt) it cannot be enabled, you need a KVM VPS; on KVM — apt install wireguard and reboot",
 	"fly.wgHintPort":                  "%v — the WireGuard port is taken by another service (another WireGuard?): free the port or change the gateway port",

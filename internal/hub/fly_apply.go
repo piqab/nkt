@@ -506,6 +506,8 @@ func flyWGHint(err error) error {
 	switch fly.WGFailure(msgs.Localize(msgs.EN, err)) {
 	case "apparmor":
 		return msgs.Errorf("fly.wgHintAppArmor", err)
+	case "apparmor-old":
+		return msgs.Errorf("fly.wgHintAppArmorOld", err)
 	case "kernel":
 		return msgs.Errorf("fly.wgHintKernel", err)
 	case "port":

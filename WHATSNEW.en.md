@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.62 — 2026-10-20
+
+- **Traffic Fly on Ubuntu 26.04: the host tunnel did not come up** —
+  "sysctl: permission denied on key net.ipv4.ip_forward", "nft -f
+  /etc/wireguard/….nft: Permission denied". The "wg-quick" AppArmor
+  profile runs `sysctl` and `nft` in narrow sub-profiles: `nft` cannot read
+  files and `sysctl` cannot turn on forwarding. Forwarding and the `nft`
+  rules are now set by the `nkt-fly-rules@<tunnel>` service right after
+  `wg-quick@<tunnel>` (and after a reboot), and forwarding stays on
+  through `/etc/sysctl.d/90-nkt-fly.conf`; the PostUp keeps only what the
+  profile allows. The same on the gateway, where forwarding was silently
+  not turned on. Update nkt on the hosts, "Reinstall" the gateway and
+  "Apply" — the keys stay the same. The hub recognizes this error from
+  older versions and says what to do.
+
 ## v1.13.61 — 2026-10-20
 
 - **A container move is shown live on the hosts map.** A ghost tile on

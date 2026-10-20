@@ -36,12 +36,12 @@ func HostMark(index int) uint32 {
 // GatewayWG — /etc/wireguard/<iface>.conf шлюза. Закрытый ключ в файл не
 // пишется: PostUp берёт его из keyFile (0600, создаётся на самом шлюзе).
 // Table = off — wg-quick не трогает маршруты. FORWARD в iptables открыт
-// для туннеля: ufw и Docker держат политику DROP.
+// для туннеля: ufw и Docker держат политику DROP. Пересылка пакетов — не
+// здесь, а службой RulesUnit (AppArmor wg-quick, см. rules_unit.go).
 func GatewayWG(c GatewayConfig, keyFile string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# nkt Traffic Fly — шлюз; файл пишет nkt-fly, правки руками затрутся\n[Interface]\nAddress = %s\nListenPort = %d\nTable = off\n", c.Address, c.ListenPort)
 	fmt.Fprintf(&b, "PostUp = wg set %%i private-key %s\n", keyFile)
-	b.WriteString("PostUp = sysctl -qw net.ipv4.ip_forward=1 net.ipv4.conf.%i.rp_filter=2; sysctl -qw net.netfilter.nf_conntrack_acct=1 || true\n")
 	b.WriteString("PostUp = iptables -I FORWARD 1 -i %i -j ACCEPT || true; iptables -I FORWARD 1 -o %i -j ACCEPT || true\n")
 	b.WriteString("PostDown = iptables -D FORWARD -i %i -j ACCEPT || true; iptables -D FORWARD -o %i -j ACCEPT || true\n")
 	// Вход на порт WireGuard — для VPS с политикой INPUT DROP без ufw.
@@ -133,12 +133,12 @@ func dnatTarget(algo string, ts []Target) string {
 // туннеля приходят пакеты с адресами клиентов (Table = off — маршрут по
 // умолчанию хоста не меняется). Ответы с меткой туннеля уходят по своей
 // таблице назад в туннель. Закрытый ключ — keyFile на самом хосте.
-func HostWG(i HostIface, keyFile, nftFile string) string {
+// Пересылка и правила nft (WGFile(i.Name, ".nft")) — службой RulesUnit:
+// из PostUp их не пускает AppArmor wg-quick (rules_unit.go).
+func HostWG(i HostIface, keyFile string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# nkt Traffic Fly — туннель к шлюзу; файл пишет nkt, правки руками затрутся\n[Interface]\nAddress = %s\nTable = off\n", i.Address)
 	fmt.Fprintf(&b, "PostUp = wg set %%i private-key %s\n", keyFile)
-	b.WriteString("PostUp = sysctl -qw net.ipv4.ip_forward=1 net.ipv4.conf.%i.rp_filter=2\n")
-	fmt.Fprintf(&b, "PostUp = nft -f %s\n", nftFile)
 	fmt.Fprintf(&b, "PostUp = ip rule del fwmark 0x%x table %d 2>/dev/null || true; ip rule add fwmark 0x%x table %d priority %d\n", i.Mark, i.Table, i.Mark, i.Table, i.Table)
 	// Шлюз указан явно: без него ядро считает адрес клиента соседним и
 	// ищет его ARP-запросом (WireGuard это не нужно, но так верно везде).
