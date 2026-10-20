@@ -252,6 +252,11 @@ does not light it.
 
 ## Hosts map
 
+::: tip Experimental feature
+The "Map" switch shows when "Hosts map" is on in "About" → "Experimental
+features".
+:::
+
 The **Map** switch on the right of the button row above the list (off by
 default, remembered in the browser) shows a map instead of the list: each
 host's containers, virtual machines and LXD as tiles, and on the left the

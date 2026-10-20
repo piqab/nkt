@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Input, InputNumber, Select, Space, Switch, Tag, Tooltip } from 'antd'
+import { Button, Checkbox, Input, InputNumber, Select, Space, Spin, Switch, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { DeleteOutlined } from '@ant-design/icons'
-import { api, useApi } from '../api'
+import { api, fetchHubJob, useApi } from '../api'
 import { Banner, Card, DiffView, Loading, Modal } from './ui'
 import { DataTable } from './DataTable'
 import { HelpButton } from './Docs'
@@ -194,6 +194,30 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
   const [openRoute, setOpenRoute] = useState<string | null>(null)
   const [history, setHistory] = useState(false)
   const [addGateway, setAddGateway] = useState(false)
+  // Установка шлюза идёт заданием хаба: пока оно идёт — строка
+  // «устанавливается…» в «Шлюзах» (и после перезагрузки страницы — по
+  // списку идущих заданий), не удалось — строка с причиной и журналом.
+  const activeJobs = useApi<{ jobs: { job: Job }[] }>('/hub/jobs/active', 5_000)
+  const installing = (activeJobs.data?.jobs ?? []).map((a) => a.job).filter((j) => j.kind === 'edge.install')
+  const [lastInstall, setLastInstall] = useState<Job | null>(null)
+  const lastInstallID = lastInstall?.id
+  const lastInstallDone = lastInstall ? lastInstall.status !== 'queued' && lastInstall.status !== 'running' : true
+  useEffect(() => {
+    if (lastInstallID === undefined || lastInstallDone) return
+    const iv = window.setInterval(() => {
+      void fetchHubJob<Job>(lastInstallID)
+        .then((j) => {
+          setLastInstall(j)
+          if (j.status !== 'queued' && j.status !== 'running') {
+            void fly.reload()
+            void status.reload()
+          }
+        })
+        .catch(() => undefined)
+    }, 3000)
+    return () => window.clearInterval(iv)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastInstallID, lastInstallDone])
   const [error, setError] = useState<string | null>(null)
   // Правка карты: черновик операций (одна версия и одно задание по
   // «Применить изменения») или «применять сразу» (задание на действие).
@@ -619,8 +643,29 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
           )
         }
       >
+        {[...installing, ...(lastInstall && !lastInstallDone && !installing.some((j) => j.id === lastInstall.id) ? [lastInstall] : [])].map((j) => (
+          <div key={`inst${j.id}`} className="row small" style={{ gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem' }}>
+            <Spin size="small" />
+            <span>{t('fly.gwInstalling', { title: j.title })}</span>
+            <Button size="small" type="link" onClick={() => onOpenJob(j.id)}>
+              {t('fly.openLog')}
+            </Button>
+          </div>
+        ))}
+        {lastInstall && lastInstallDone && lastInstall.status !== 'succeeded' && (
+          <div className="row small" style={{ gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem' }}>
+            <Tag color="error">{t('fly.gwInstallFailed')}</Tag>
+            <span className="muted">{lastInstall.title}</span>
+            <Button size="small" type="link" onClick={() => onOpenJob(lastInstall.id)}>
+              {t('fly.openLog')}
+            </Button>
+            <Button size="small" type="link" onClick={() => setLastInstall(null)}>
+              {t('common.close')}
+            </Button>
+          </div>
+        )}
         {gateways.length === 0 ? (
-          <p className="small muted">{t('fly.noGateways')}</p>
+          installing.length === 0 && <p className="small muted">{t('fly.noGateways')}</p>
         ) : (
           <div className="col" style={{ gap: '0.4rem' }}>
             {gateways.map((g) => {
@@ -858,6 +903,8 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
           onClose={() => setAddGateway(false)}
           onStarted={(id) => {
             setAddGateway(false)
+            setLastInstall({ id, status: 'running', kind: 'edge.install', title: '' } as Job)
+            void activeJobs.reload()
             onOpenJob(id)
           }}
         />

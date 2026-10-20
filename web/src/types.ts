@@ -15,6 +15,9 @@ export interface Me {
   /** Hub only: the hub's own build version, for comparing against each
    * host's nkt_version to tell "переустановить" and "обновить" apart. */
   hub_version?: string
+  /** Hub only: что из экспериментального показывать («О системе»). Только
+   * интерфейс — сами функции работают. */
+  experimental?: { map: boolean; clusters: boolean }
 }
 
 /** GET/POST /hub/version's shape (internal/hub/handlers.go's versionInfoJSON). */

@@ -135,3 +135,32 @@ func PublicKey(priv string) (string, error) {
 	}
 	return base64.StdEncoding.EncodeToString(pub), nil
 }
+
+// WGDir — каталог конфигураций WireGuard. Ключ и правила, которые читают
+// wg и PostUp, лежат здесь, а не в каталоге данных nkt: на Ubuntu 26.04+
+// профили AppArmor «wg» и «wg-quick» пускают только сюда (иначе «fopen:
+// Permission denied» даже у root). Исходные файлы остаются в каталоге
+// данных, здесь — рабочие копии, которые пишутся при каждом применении.
+const WGDir = "/etc/wireguard"
+
+// WGFile — файл интерфейса iface (уже проверенного ValidIface или
+// "nkt-fly") в WGDir: ".key" или ".nft".
+func WGFile(iface, ext string) string { return WGDir + "/" + iface + ext }
+
+// WGFailure — вид сбоя wg-quick по его выводу и журналу: "apparmor" —
+// профиль AppArmor не дал прочитать ключ, "kernel" — ядро без WireGuard
+// (виртуализация openvz/lxc, нет модуля), "port" — порт занят, "" — не
+// распознан.
+func WGFailure(text string) string {
+	t := strings.ToLower(text)
+	switch {
+	case strings.Contains(t, "fopen: permission denied") || strings.Contains(t, `apparmor="denied"`):
+		return "apparmor"
+	case strings.Contains(t, "unknown device type") || strings.Contains(t, "operation not supported") ||
+		strings.Contains(t, "missing wireguard kernel module") || strings.Contains(t, "module wireguard not found"):
+		return "kernel"
+	case strings.Contains(t, "address already in use"):
+		return "port"
+	}
+	return ""
+}

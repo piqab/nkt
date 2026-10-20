@@ -254,6 +254,14 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 				return msgs.Errorf("fly.toolsFailed", strings.TrimSpace(lastLines(out, 5)))
 			}
 		}
+		// Ядро умеет WireGuard? Пробный интерфейс — до установки службы:
+		// на VPS-контейнере (openvz, lxc) шлюз иначе встал бы и падал на
+		// первом «Применить».
+		if out, err := runRemote(client, sudo+"sh -c "+shellQuote(flyWGProbe)); err != nil {
+			virt, _ := runRemote(client, "systemd-detect-virt 2>/dev/null")
+			return msgs.Errorf("fly.wgUnsupported", strings.TrimSpace(virt), strings.TrimSpace(lastLines(out, 3)))
+		}
+		jc.Log("fly.wgSupported")
 	}
 	for _, f := range files {
 		if err := uploadBytes(sc, f.data, stage+"/"+f.name, 0o600); err != nil {
@@ -745,7 +753,7 @@ func (r *EdgeUninstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	script := sudo + "systemctl disable --now nkt-edge 2>/dev/null; " +
 		// Шлюз Traffic Fly: служба, туннель и правила.
 		sudo + "systemctl disable --now nkt-fly wg-quick@nkt-fly 2>/dev/null; " + sudo + "nft delete table ip nkt_fly 2>/dev/null; " +
-		sudo + "rm -f /etc/systemd/system/nkt-fly.service /etc/wireguard/nkt-fly.conf; " +
+		sudo + "rm -f /etc/systemd/system/nkt-fly.service /etc/wireguard/nkt-fly.conf /etc/wireguard/nkt-fly.key; " +
 		sudo + "rm -f /usr/local/bin/nkt-edge /etc/systemd/system/nkt-edge.service && " +
 		sudo + "rm -rf /etc/nkt-edge /var/lib/nkt-edge /var/lib/private/nkt-edge && " +
 		sudo + "systemctl daemon-reload && " + sudo + "systemctl reset-failed nkt-edge 2>/dev/null; " +
@@ -769,6 +777,9 @@ func (r *EdgeUninstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 
 // flyToolsCheck — команды, ради которых ставятся пакеты Traffic Fly.
 const flyToolsCheck = "command -v wg && command -v wg-quick && command -v nft && command -v conntrack"
+
+// flyWGProbe — пробный интерфейс WireGuard (модуль подгружается сам).
+const flyWGProbe = "modprobe wireguard 2>/dev/null; ip link add nktwgprobe type wireguard && ip link del nktwgprobe"
 
 // aptBrokenPackages — пакеты из «Errors were encountered while processing:»
 // в выводе apt/dpkg.

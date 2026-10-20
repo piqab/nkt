@@ -7,6 +7,7 @@ import { usePrivacy } from '../privacy'
 import { AISettingsCard } from '../components/AISettingsCard'
 import { ApiTokensCard } from '../components/ApiTokensCard'
 import { NavLayoutCard } from '../components/NavLayoutModal'
+import { ExperimentalCard } from '../components/ExperimentalCard'
 import { DangerZoneCard } from '../components/PurgeAllModal'
 import { InstallAllCard } from '../components/InstallAllModal'
 import type { HubVersionInfo, HubVulnDBInfo, Job } from '../types'
@@ -437,6 +438,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
       <AISettingsCard />
       <DocsSettingsCard isHub admin={admin} />
       <NavLayoutCard admin={admin} />
+      <ExperimentalCard admin={admin} />
       <ApiTokensCard admin={admin} />
 
       <Card title={t('about.vulnDBTitle')} subtitle={t('about.vulnDBHint')}>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { osLabel } from './OsIcon'
-import { Button, Checkbox, Input, Select, Space, Tag } from 'antd'
+import { Button, Checkbox, Input, Select, Space, Spin, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Sensitive, blurValues } from '../privacy'
 import { ApiError, api, useApi } from '../api'
@@ -98,7 +98,18 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
                 <strong className="mono">
                   <Sensitive>{e.domain || e.address}</Sensitive>
                 </strong>
-                {e.connected ? <Tag color="success">{t('edge.connected')}</Tag> : e.enabled ? <Tag color="error">{t('edge.disconnected')}</Tag> : <Tag>{t('edge.disabled')}</Tag>}
+                {e.connected ? (
+                  <Tag color="success">{t('edge.connected')}</Tag>
+                ) : e.enabled && !e.last_error ? (
+                  // Только что добавлен или переподключается, ошибки ещё нет.
+                  <Tag color="processing">
+                    <Spin size="small" /> {t('edge.connecting')}
+                  </Tag>
+                ) : e.enabled ? (
+                  <Tag color="error">{t('edge.disconnected')}</Tag>
+                ) : (
+                  <Tag>{t('edge.disabled')}</Tag>
+                )}
                 {e.connected && e.since && <span className="muted">{formatRelative(e.since)}</span>}
                 {e.roles.map((r) => (
                   <Tag key={r} color={r === 'api' ? 'purple' : r === 'probe' ? 'cyan' : r === 'callbacks' ? 'gold' : r === 'fly' ? 'magenta' : 'blue'}>
@@ -328,6 +339,13 @@ export function InstallModal({
               </>
             )}
           </div>
+        )}
+        {busy && (
+          // Хаб до запуска задания ходит на хост: SSH, sudo, порты — до
+          // полуминуты; без этого окно выглядит зависшим.
+          <Banner kind="info">
+            <Spin size="small" /> {t('edge.preparing')}
+          </Banner>
         )}
         <div>
           <Button

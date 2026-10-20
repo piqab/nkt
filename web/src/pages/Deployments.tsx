@@ -4,7 +4,7 @@ import { Button, Checkbox, Dropdown, Input, Select, Space, Spin, Switch, Tabs, T
 import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { Sensitive } from '../privacy'
-import { ApiError, api, useApi } from '../api'
+import { ApiError, api, useApi, fetchHubJob } from '../api'
 import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, DiffView, ErrorNote, Loading, Modal, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
@@ -125,7 +125,7 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
   async function openJob(id?: number) {
     if (!id) return
     try {
-      setJob(await api<Job>(`/hosts/local/jobs/${id}`))
+      setJob(await fetchHubJob<Job>(id))
     } catch {
       // задание откроется из «Заданий»
     }

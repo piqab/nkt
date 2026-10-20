@@ -180,6 +180,24 @@ A standalone host without a hub shows the default menu. API: `GET` and
 `PUT /api/hub/ui/nav/hub` and `/api/hub/ui/nav/host` with `{"order": [...],
 "hidden": [...]}`.
 
+## Experimental features
+
+The **Experimental features** card in "About" sets which experimental
+parts the hub interface shows (hidden by default):
+
+- **Hosts map** — the "Map" switch above the host list (Traffic Fly and
+  deployment links, moving containers by dragging);
+- **Kubernetes clusters** — the "Clusters" card in the host list, "New
+  cluster" on a host's row and the "Clusters" menu item.
+
+The checkboxes **only hide the interface**: created clusters live on,
+their jobs run, the API answers, deployments to clusters work. If the hub
+already has clusters and the setting was never touched, "Clusters" is
+shown. An admin edits it with "Edit": a window with the "now → after"
+difference and history ("restore"); the setting is shared by the hub and
+travels in its export. API: `GET` and `PUT /api/hub/experimental` with
+`{"map": true, "clusters": false}`.
+
 ## Installing nkt on hosts
 
 The **"Installing nkt on hosts"** card (admin only) sits next to the danger
