@@ -150,6 +150,16 @@ the window. The size of log, job, editor, terminal and VM screen windows
 is remembered in the browser.
 :::
 
+::: tip Narrow window and phone
+When the buttons, switches and checkboxes above a list do not fit in one
+row, the secondary ones go into the **"☰"** menu and the main ones stay
+outside (for hosts — "add host", for the map — zoom, search, move and
+refresh, for Traffic Fly — "Apply"). Checkboxes work right in the menu; a
+dot on "☰" means something hidden is a turned-on filter or needs
+attention. In a narrow pipelines table a row keeps "Deploy" and "⋯" with
+the other actions. A wider window shows everything outside again.
+:::
+
 ## 5. Terminal UI
 
 If you are already on the host over SSH, you don't need a browser:

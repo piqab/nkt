@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Select, Space, Spin, Switch, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { OverflowBar } from './OverflowBar'
 import { DeleteOutlined } from '@ant-design/icons'
 import { api, fetchHubJob, useApi } from '../api'
 import { Banner, Card, DiffView, Loading, Modal } from './ui'
@@ -419,34 +420,70 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
         }
         subtitle={t('fly.subtitle')}
         actions={
-          <Space wrap>
-            {doc && (
-              <span className="small muted">
-                {t('fly.revision', { n: doc.revision })}{' '}
-                {pending ? <Tag color="warning">{appliedRev ? t('fly.notApplied', { n: appliedRev }) : t('fly.neverApplied')}</Tag> : doc.revision > 0 && <Tag color="success">{t('fly.applied')}</Tag>}
-              </span>
-            )}
-            <Button size="small" onClick={() => setHistory(true)} disabled={!doc}>
-              {t('fly.history')}
-            </Button>
-            {admin && doc && doc.routes.length > 0 && (
-              <Tooltip title={t('fly.mapEditHint')}>
-                <Button size="small" type={mapEdit ? 'primary' : 'default'} onClick={() => (mapEdit ? void leaveMapEdit() : setMapEdit(true))}>
-                  {t('fly.mapEdit')}
-                </Button>
-              </Tooltip>
-            )}
-            {admin && (
-              <>
-                <Button size="small" loading={busy} disabled={!doc || doc.routes.length === 0} onClick={() => void apply(true)}>
-                  {t('fly.dryRun')}
-                </Button>
-                <Button size="small" type="primary" loading={busy} disabled={!doc} onClick={() => void apply(false)}>
-                  {t('fly.apply')}
-                </Button>
-              </>
-            )}
-          </Space>
+          // В узком окне — «Применить» снаружи, остальное в «☰».
+          <OverflowBar
+            align="end"
+            items={[
+              ...(doc
+                ? [
+                    {
+                      key: 'rev',
+                      active: !!pending,
+                      node: (
+                        <span className="small muted" style={{ whiteSpace: 'nowrap' }}>
+                          {t('fly.revision', { n: doc.revision })}{' '}
+                          {pending ? <Tag color="warning">{appliedRev ? t('fly.notApplied', { n: appliedRev }) : t('fly.neverApplied')}</Tag> : doc.revision > 0 && <Tag color="success">{t('fly.applied')}</Tag>}
+                        </span>
+                      ),
+                    },
+                  ]
+                : []),
+              {
+                key: 'history',
+                node: (
+                  <Button size="small" onClick={() => setHistory(true)} disabled={!doc}>
+                    {t('fly.history')}
+                  </Button>
+                ),
+              },
+              ...(admin && doc && doc.routes.length > 0
+                ? [
+                    {
+                      key: 'mapEdit',
+                      active: mapEdit,
+                      node: (
+                        <Tooltip title={t('fly.mapEditHint')}>
+                          <Button size="small" type={mapEdit ? 'primary' : 'default'} onClick={() => (mapEdit ? void leaveMapEdit() : setMapEdit(true))}>
+                            {t('fly.mapEdit')}
+                          </Button>
+                        </Tooltip>
+                      ),
+                    },
+                  ]
+                : []),
+              ...(admin
+                ? [
+                    {
+                      key: 'dry',
+                      node: (
+                        <Button size="small" loading={busy} disabled={!doc || doc.routes.length === 0} onClick={() => void apply(true)}>
+                          {t('fly.dryRun')}
+                        </Button>
+                      ),
+                    },
+                    {
+                      key: 'apply',
+                      keep: true,
+                      node: (
+                        <Button size="small" type="primary" loading={busy} disabled={!doc} onClick={() => void apply(false)}>
+                          {t('fly.apply')}
+                        </Button>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
         }
       >
         {error && <Banner kind="error">{error}</Banner>}

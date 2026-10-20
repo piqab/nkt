@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { osLabel } from '../components/OsIcon'
 import { Button, Checkbox, Dropdown, Input, Select, Space, Spin, Switch, Tabs, Tag, Tooltip } from 'antd'
-import { CopyOutlined, DownOutlined } from '@ant-design/icons'
+import { CopyOutlined, DownOutlined, EllipsisOutlined } from '@ant-design/icons'
+import { useWidth } from '../components/OverflowBar'
 import { useTranslation } from 'react-i18next'
 import { Sensitive } from '../privacy'
 import { ApiError, api, useApi, fetchHubJob } from '../api'
@@ -130,6 +131,23 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
     }
   }
 
+  // Удалить конвейер: compose — окно уборки стека, иначе — вопрос.
+  async function deletePipeline(p: Pipeline) {
+    if (p.action === 'compose') {
+      setRemove(p)
+      return
+    }
+    if (!(await confirmAction(t('deploy.deleteConfirm', { name: p.name })))) return
+    try {
+      await api(`/hub/pipelines/${p.id}`, { method: 'DELETE' })
+      void list.reload()
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  const tableRef = useRef<HTMLDivElement>(null)
+  const tableW = useWidth(tableRef)
+  const narrow = tableW > 0 && tableW < 1000
   const columns = [
     {
       title: t('deploy.name'),
@@ -224,6 +242,30 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
       title: '',
       key: 'actions',
       render: (_: unknown, p: Pipeline) => (
+        // Узкая таблица — «Выложить» и «⋯»: шесть кнопок в строке
+        // переносились на две строки в каждой.
+        narrow ? (
+          <Space size={4}>
+            <Button size="small" type="primary" onClick={() => setDialog({ type: 'deploy', p })}>
+              {t('deploy.deployNow')}
+            </Button>
+            <Dropdown
+              trigger={['click']}
+              menu={{
+                items: [
+                  { key: 'history', label: t('deploy.history'), onClick: () => setDialog({ type: 'history', p }) },
+                  { key: 'description', label: t('deploy.description'), onClick: () => void api<Pipeline>(`/hub/pipelines/${p.id}`).then((full) => setEdit({ pipeline: full })) },
+                  { key: 'access', label: t('deploy.access'), onClick: () => setDialog({ type: 'access', p }) },
+                  { key: 'hook', label: t('deploy.hook'), onClick: () => setDialog({ type: 'hook', p }) },
+                  { type: 'divider' as const },
+                  { key: 'delete', danger: true, label: p.action === 'compose' && removalOf(p) ? t('deploy.deleteRetry') : t('deploy.delete'), onClick: () => void deletePipeline(p) },
+                ],
+              }}
+            >
+              <Button size="small" icon={<EllipsisOutlined />} aria-label={t('common.moreActions')} />
+            </Dropdown>
+          </Space>
+        ) : (
         <Space size={4} wrap>
           <Button size="small" type="primary" onClick={() => setDialog({ type: 'deploy', p })}>
             {t('deploy.deployNow')}
@@ -240,28 +282,11 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
           <Button size="small" onClick={() => setDialog({ type: 'hook', p })}>
             {t('deploy.hook')}
           </Button>
-          {p.action === 'compose' ? (
-            <Button size="small" danger onClick={() => setRemove(p)}>
-              {removalOf(p) ? t('deploy.deleteRetry') : t('deploy.delete')}
-            </Button>
-          ) : (
-            <Button
-              size="small"
-              danger
-              onClick={async () => {
-                if (!(await confirmAction(t('deploy.deleteConfirm', { name: p.name })))) return
-                try {
-                  await api(`/hub/pipelines/${p.id}`, { method: 'DELETE' })
-                  void list.reload()
-                } catch (err) {
-                  setError(errText(err))
-                }
-              }}
-            >
-              {t('deploy.delete')}
-            </Button>
-          )}
+          <Button size="small" danger onClick={() => void deletePipeline(p)}>
+            {p.action === 'compose' && removalOf(p) ? t('deploy.deleteRetry') : t('deploy.delete')}
+          </Button>
         </Space>
+        )
       ),
     },
   ]
@@ -308,7 +333,9 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
                     <p className="small muted">{t('deploy.empty')}</p>
                   ) : (
                     <div className="table-wrap">
-                      <DataTable<Pipeline> dataSource={list.data?.pipelines ?? []} rowKey={(p) => String(p.id)} size="small" columns={columns} />
+                      <div ref={tableRef}>
+                        <DataTable<Pipeline> dataSource={list.data?.pipelines ?? []} rowKey={(p) => String(p.id)} size="small" columns={columns} />
+                      </div>
                     </div>
                   )}
                 </Card>

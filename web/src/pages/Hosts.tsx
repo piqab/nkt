@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { OverflowBar } from '../components/OverflowBar'
 import { Sensitive, blurText, setKnownNames } from '../privacy'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Radio, Select, Space, Switch, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
@@ -1635,56 +1636,90 @@ export default function Hosts({
           </span>
         }
         actions={
-          <div className="row" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <Button size="small" type="primary" onClick={() => setCreatingHost(true)}>
-              {t('hosts.addHostBtn')}
-            </Button>
-            <Button
-              size="small"
-              type={outdatedCount > 0 ? 'primary' : 'default'}
-              loading={bulkUpdating}
-              disabled={outdatedCount === 0 || bulkBusy !== null}
-              onClick={() => setUpdateAllDialog(true)}
-            >
-              {outdatedCount > 0 ? t('hosts.updateAllCount', { count: outdatedCount }) : t('hosts.updateAllNone')}
-            </Button>
-            {updatePlan.active.length > 0 && <span className="small muted">{t('hosts.updatingNow', { count: updatePlan.active.length })}</span>}
-            <Button
-              size="small"
-              type="primary"
-              onClick={() => {
-                setGroupName('')
-                setGroupProfileID(0)
-                setGroupDialog({ mode: 'create' })
-              }}
-            >
-              {t('hosts.createGroupBtn')}
-            </Button>
-            <Button
-              size="small"
-              loading={bulkBusy === 'start'}
-              disabled={bulkBusy === 'stop' || bulkUpdating}
-              onClick={() => bulkSetServiceRunning(true)}
-            >
-              {t('hosts.startAll')}
-            </Button>
-            <Button
-              size="small"
-              danger
-              loading={bulkBusy === 'stop'}
-              disabled={bulkBusy === 'start' || bulkUpdating}
-              onClick={() => bulkSetServiceRunning(false)}
-            >
-              {t('hosts.stopAll')}
-            </Button>
-            <Tooltip title={t('hosts.exportWithKeyTooltip')}>
-              <Button size="small" onClick={() => exportHosts(true)}>
-                {t('hosts.export')}
-              </Button>
-            </Tooltip>
-            <Button size="small" onClick={() => importInputRef.current?.click()}>
-              {t('hosts.import')}
-            </Button>
+          <div className="row" style={{ gap: '0.3rem', alignItems: 'center', flexWrap: 'nowrap' }}>
+            {/* В узком окне второстепенное — в «☰» (OverflowBar). */}
+            <OverflowBar
+              gap="0.3rem"
+              items={[
+                {
+                  key: 'add',
+                  keep: true,
+                  node: (
+                    <Button size="small" type="primary" onClick={() => setCreatingHost(true)}>
+                      {t('hosts.addHostBtn')}
+                    </Button>
+                  ),
+                },
+                {
+                  key: 'update',
+                  active: outdatedCount > 0,
+                  node: (
+                    <Button
+                      size="small"
+                      type={outdatedCount > 0 ? 'primary' : 'default'}
+                      loading={bulkUpdating}
+                      disabled={outdatedCount === 0 || bulkBusy !== null}
+                      onClick={() => setUpdateAllDialog(true)}
+                    >
+                      {outdatedCount > 0 ? t('hosts.updateAllCount', { count: outdatedCount }) : t('hosts.updateAllNone')}
+                    </Button>
+                  ),
+                },
+                ...(updatePlan.active.length > 0
+                  ? [{ key: 'updating', active: true, node: <span className="small muted">{t('hosts.updatingNow', { count: updatePlan.active.length })}</span> }]
+                  : []),
+                {
+                  key: 'group',
+                  node: (
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() => {
+                        setGroupName('')
+                        setGroupProfileID(0)
+                        setGroupDialog({ mode: 'create' })
+                      }}
+                    >
+                      {t('hosts.createGroupBtn')}
+                    </Button>
+                  ),
+                },
+                {
+                  key: 'start',
+                  node: (
+                    <Button size="small" loading={bulkBusy === 'start'} disabled={bulkBusy === 'stop' || bulkUpdating} onClick={() => bulkSetServiceRunning(true)}>
+                      {t('hosts.startAll')}
+                    </Button>
+                  ),
+                },
+                {
+                  key: 'stop',
+                  node: (
+                    <Button size="small" danger loading={bulkBusy === 'stop'} disabled={bulkBusy === 'start' || bulkUpdating} onClick={() => bulkSetServiceRunning(false)}>
+                      {t('hosts.stopAll')}
+                    </Button>
+                  ),
+                },
+                {
+                  key: 'export',
+                  node: (
+                    <Tooltip title={t('hosts.exportWithKeyTooltip')}>
+                      <Button size="small" onClick={() => exportHosts(true)}>
+                        {t('hosts.export')}
+                      </Button>
+                    </Tooltip>
+                  ),
+                },
+                {
+                  key: 'import',
+                  node: (
+                    <Button size="small" onClick={() => importInputRef.current?.click()}>
+                      {t('hosts.import')}
+                    </Button>
+                  ),
+                },
+              ]}
+            />
             <input
               ref={importInputRef}
               type="file"
@@ -1699,7 +1734,7 @@ export default function Hosts({
             {/* Карта — справа в той же строке; в узком окне уходит влево
                 вместе с переносом кнопок. */}
             {showMap && (
-              <span className="row small" style={{ gap: '0.35rem', alignItems: 'center', marginLeft: 'auto', cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setMapOn(!mapOn)}>
+              <span className="row small" style={{ gap: '0.35rem', alignItems: 'center', marginLeft: 'auto', cursor: 'pointer', whiteSpace: 'nowrap', flex: '0 0 auto' }} onClick={() => setMapOn(!mapOn)}>
                 <Switch size="small" checked={mapOn} />
                 {t('hostsMap.toggle')}
               </span>

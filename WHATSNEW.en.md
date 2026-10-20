@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.63 — 2026-10-20
+
+- **Narrow window and phone: secondary controls go into "☰".** The
+  buttons, switches and checkboxes above the hosts list, on the hosts map,
+  in the fail2ban and "Monitoring" headers and in the Traffic Fly card no
+  longer spill over two or three rows: whatever does not fit in one row
+  goes into "☰", the main ones stay outside. Checkboxes work right in the
+  menu, a dot on "☰" means a hidden filter is on. The map legend is one
+  "Legend (N)" button. A pipeline row keeps "Deploy" and "⋯".
+- **Card headers:** when the buttons on the right do not fit they move
+  under the title instead of squeezing it into a word-per-line column
+  (Traffic Fly's "Map and apply", the "Configs" editor).
+
 ## v1.13.62 — 2026-10-20
 
 - **Traffic Fly on Ubuntu 26.04: the host tunnel did not come up** —

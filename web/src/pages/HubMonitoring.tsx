@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { OverflowBar } from '../components/OverflowBar'
 import { OsIconOf } from '../components/OsIcon'
 import { useJobLauncher } from '../components/useJobLauncher'
 import { Button, Input, InputNumber, Select, Space, Tabs, Tag } from 'antd'
@@ -234,22 +235,37 @@ export default function HubMonitoring({ me, onOpenHost }: { me: Me; onOpenHost: 
           {t('monitoring.title')}
           <TitleHelp>{t('monitoring.hint')}</TitleHelp>
         </h1>
-        <Space wrap>
-          <Select<Range>
-            value={range}
-            onChange={setRange}
-            options={(['24h', '7d', '30d', '90d', '365d'] as Range[]).map((r) => ({ value: r, label: t(`monitoring.range.${r}`) }))}
-            style={{ width: '9rem' }}
-          />
-          {me.is_admin && (
-            <>
-              <Button loading={busy || d?.collecting} onClick={() => void collect()}>
-                {t('monitoring.collectNow')}
-              </Button>
-              <Button onClick={() => setSettingsOpen(true)}>{t('monitoring.thresholds')}</Button>
-            </>
-          )}
-        </Space>
+        <OverflowBar
+          align="end"
+          style={{ flex: '1 1 0' }}
+          items={[
+            {
+              key: 'range',
+              keep: true,
+              node: (
+                <Select<Range>
+                  value={range}
+                  onChange={setRange}
+                  options={(['24h', '7d', '30d', '90d', '365d'] as Range[]).map((r) => ({ value: r, label: t(`monitoring.range.${r}`) }))}
+                  style={{ width: '9rem' }}
+                />
+              ),
+            },
+            ...(me.is_admin
+              ? [
+                  {
+                    key: 'collect',
+                    node: (
+                      <Button loading={busy || d?.collecting} onClick={() => void collect()}>
+                        {t('monitoring.collectNow')}
+                      </Button>
+                    ),
+                  },
+                  { key: 'thresholds', node: <Button onClick={() => setSettingsOpen(true)}>{t('monitoring.thresholds')}</Button> },
+                ]
+              : []),
+          ]}
+        />
       </div>
       {d?.last_run && <p className="small muted" style={{ marginTop: '-0.4rem' }}>{t('monitoring.lastRun', { when: formatRelative(d.last_run) })}</p>}
       <ErrorNote error={data.error} />
