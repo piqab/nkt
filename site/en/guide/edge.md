@@ -262,6 +262,19 @@ The WireGuard keys and rule files that `wg` and `wg-quick` read live in
 `/etc/wireguard/`: on Ubuntu 26.04+ the "wg" and "wg-quick" AppArmor
 profiles only allow reading there.
 
+Packet forwarding (`net.ipv4.ip_forward`, the tunnel's `rp_filter`) and the
+host tunnel's `nft` rules are set not by the `wg-quick` PostUp but by the
+`nkt-fly-rules@<tunnel>` service (template
+`/etc/systemd/system/nkt-fly-rules@.service`): the "wg-quick" AppArmor
+profile runs `sysctl` and `nft` in narrow sub-profiles — `sysctl` may only
+write `src_valid_mark`, `nft` cannot read files. The service is enabled
+together with the tunnel and starts right after `wg-quick@<tunnel>`,
+including after a reboot. Forwarding is kept on permanently by
+`/etc/sysctl.d/90-nkt-fly.conf` (on the gateway it also turns on
+connection byte counters). To check: `systemctl status
+nkt-fly-rules@nkt-fly` on the gateway, `systemctl status
+nkt-fly-rules@nkt-fly1` on a host.
+
 ## Manual install
 
 If you'd rather not add the VPS to the hub:
@@ -388,6 +401,7 @@ sender's address and an `(edge)` mark.
 | Install: "port 80 is taken …, but it is not a systemd service" | 80 is held by a program started by hand or in a container — certbot standalone can't stop it; free 80 for the installation |
 | `certificate: … no such file` in the service log | No certificate copy in `/etc/nkt-edge/tls` — run the deploy hook ("Manual install") or reinstall from the hub |
 | The service doesn't start | `EDGE_TOKEN` shorter than 32 characters, no certificate, port 443 or 8444 taken — the message is in the service log |
+| Host or gateway: "sysctl: permission denied on key "net.ipv4.ip_forward"", "nft -f /etc/wireguard/….nft … Could not open file … Permission denied" | AppArmor (Ubuntu 26.04+) keeps `sysctl` and `nft` from running in the `wg-quick` PostUp — nkt and nkt-edge before 1.13.62: update nkt on the host, "Reinstall" the gateway, "Apply" (forwarding and rules move to the `nkt-fly-rules@` service) |
 | Gateway: "wg-quick … fopen: Permission denied" | AppArmor (Ubuntu 26.04+) kept `wg` from reading the key outside `/etc/wireguard` — the gateway and hosts before 1.13.58: "Reinstall" the gateway, update nkt on the hosts, "Apply" |
 | Gateway install: "the VPS kernel does not support WireGuard" | A container VPS (`systemd-detect-virt` → openvz, lxc) — you need a KVM VPS; on KVM — `apt install wireguard` and reboot |
 | 403 behind a proxy with "GitHub only" on | The proxy doesn't pass `X-Real-IP` — add `proxy_set_header X-Real-IP $remote_addr;` |

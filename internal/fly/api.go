@@ -148,12 +148,18 @@ const WGDir = "/etc/wireguard"
 func WGFile(iface, ext string) string { return WGDir + "/" + iface + ext }
 
 // WGFailure — вид сбоя wg-quick по его выводу и журналу: "apparmor" —
-// профиль AppArmor не дал прочитать ключ, "kernel" — ядро без WireGuard
+// профиль AppArmor не дал прочитать ключ, "apparmor-old" — не пустил
+// sysctl и nft из PostUp (nkt на хосте или шлюзе старше 1.13.62), "kernel" — ядро без WireGuard
 // (виртуализация openvz/lxc, нет модуля), "port" — порт занят, "" — не
 // распознан.
 func WGFailure(text string) string {
 	t := strings.ToLower(text)
 	switch {
+	// Старый nkt на хосте или шлюзе: sysctl и nft -f ещё в PostUp, а
+	// AppArmor wg-quick их не пускает.
+	case strings.Contains(t, "could not open file") && strings.Contains(t, ".nft") && strings.Contains(t, "permission denied"),
+		strings.Contains(t, "sysctl: permission denied on key"):
+		return "apparmor-old"
 	case strings.Contains(t, "fopen: permission denied") || strings.Contains(t, `apparmor="denied"`):
 		return "apparmor"
 	case strings.Contains(t, "unknown device type") || strings.Contains(t, "operation not supported") ||

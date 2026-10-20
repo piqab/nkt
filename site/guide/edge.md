@@ -252,6 +252,17 @@ loopback, а TLS остаётся у вашего сервера.
 `/etc/wireguard/`: на Ubuntu 26.04+ профили AppArmor «wg» и «wg-quick»
 пускают только туда.
 
+Пересылку пакетов (`net.ipv4.ip_forward`, `rp_filter` туннеля) и правила
+`nft` туннеля хоста ставит не PostUp `wg-quick`, а служба
+`nkt-fly-rules@<туннель>` (шаблон `/etc/systemd/system/nkt-fly-rules@.service`):
+профиль AppArmor «wg-quick» запускает `sysctl` и `nft` в узких подпрофилях —
+`sysctl` пишет только `src_valid_mark`, `nft` не читает файлы. Служба
+включена вместе с туннелем и стартует вслед за `wg-quick@<туннель>`, в том
+числе после перезагрузки. Постоянно пересылка включена файлом
+`/etc/sysctl.d/90-nkt-fly.conf` (у шлюза там же счётчики байт соединений).
+Проверить: `systemctl status nkt-fly-rules@nkt-fly` на шлюзе,
+`systemctl status nkt-fly-rules@nkt-fly1` на хосте.
+
 ## Установка вручную
 
 Если VPS не хочется добавлять в хаб:
@@ -377,6 +388,7 @@ curl -s https://hooks.example.com/healthz     # {"ok":true,"hub":true,"version":
 | Установка: «порт 80 занят …, но это не служба systemd» | 80 держит программа, запущенная вручную или в контейнере, — certbot standalone не может её остановить; освободите 80 на время установки |
 | `certificate: … no such file` в журнале службы | Нет копии сертификата в `/etc/nkt-edge/tls` — выполните deploy-hook (раздел «Установка вручную») или переустановите из хаба |
 | Служба не стартует | `EDGE_TOKEN` короче 32 знаков, нет сертификата, порт 443 или 8444 занят — сообщение в журнале службы |
+| Хост или шлюз: «sysctl: permission denied on key "net.ipv4.ip_forward"», «nft -f /etc/wireguard/….nft … Could not open file … Permission denied» | AppArmor (Ubuntu 26.04+) не пускает `sysctl` и `nft` из PostUp `wg-quick` — nkt и nkt-edge до 1.13.62: обновить nkt на хосте, «Переустановить» шлюз, «Применить» (пересылка и правила перейдут в службу `nkt-fly-rules@`) |
 | Шлюз: «wg-quick … fopen: Permission denied» | AppArmor (Ubuntu 26.04+) не дал `wg` прочитать ключ вне `/etc/wireguard` — шлюз и хосты до 1.13.58: «Переустановить» шлюз, обновить nkt на хостах, «Применить» |
 | Установка шлюза: «ядро VPS не поддерживает WireGuard» | VPS-контейнер (`systemd-detect-virt` → openvz, lxc) — нужен VPS на KVM; на KVM — `apt install wireguard` и перезагрузка |
 | 403 за прокси при включённом «только GitHub» | Прокси не передаёт `X-Real-IP` — добавьте `proxy_set_header X-Real-IP $remote_addr;` |

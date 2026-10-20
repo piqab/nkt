@@ -189,6 +189,9 @@ func (d *flyDaemon) apply(cfg fly.GatewayConfig, save bool) error {
 	if err := writeFileAtomic(d.wgConf, []byte(fly.GatewayWG(cfg, keyWG)), 0o600); err != nil {
 		return fmt.Errorf("wireguard config: %w", err)
 	}
+	if err := installRulesUnit(); err != nil {
+		errs = append(errs, err.Error())
+	}
 	if err := wgUp(cfg, keyWG); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -227,18 +230,50 @@ func (d *flyDaemon) apply(cfg fly.GatewayConfig, save bool) error {
 // Поэтому сразу за ним — wg set private-key: без ключа шлюз молча
 // отбрасывает рукопожатия хостов.
 func wgUp(cfg fly.GatewayConfig, keyFile string) error {
+	rules := fly.RulesUnitName(flyIface)
 	if exec.Command("ip", "link", "show", flyIface).Run() == nil {
 		if out, err := exec.Command("bash", "-c", "wg syncconf "+flyIface+" <(wg-quick strip "+flyIface+") && wg set "+flyIface+" private-key "+keyFile).CombinedOutput(); err != nil {
 			return fmt.Errorf("wg syncconf: %v: %s", err, strings.TrimSpace(string(out)))
 		}
 		_ = exec.Command("ip", "address", "replace", cfg.Address, "dev", flyIface).Run()
-		return nil
+		// Поднятый прежним nkt-edge (sysctl в PostUp) — теперь со службой.
+		_ = exec.Command("systemctl", "enable", rules).Run()
+		return rulesStart(rules)
+	}
+	if out, err := exec.Command("systemctl", "enable", rules).CombinedOutput(); err != nil {
+		return fmt.Errorf("systemctl enable %s: %v: %s", rules, err, strings.TrimSpace(string(out)))
 	}
 	if out, err := exec.Command("systemctl", "enable", "--now", "wg-quick@"+flyIface).CombinedOutput(); err != nil {
 		// Сам systemctl причину не говорит — она в журнале юнита: хаб по
 		// ней подскажет, что делать (fly.WGFailure).
 		j, _ := exec.Command("journalctl", "-u", "wg-quick@"+flyIface, "-n", "8", "--no-pager", "-o", "cat").Output()
 		return fmt.Errorf("wg-quick: %v: %s | %s", err, strings.TrimSpace(string(out)), strings.Join(strings.Fields(strings.ReplaceAll(strings.TrimSpace(string(j)), "\n", " / ")), " "))
+	}
+	return rulesStart(rules)
+}
+
+// rulesStart — пересылка пакетов (служба вслед за туннелем) и счётчики
+// байт соединений для сводки — их nkt-edge ставит сам.
+func rulesStart(unit string) error {
+	_ = exec.Command("sysctl", "-qw", "net.netfilter.nf_conntrack_acct=1").Run()
+	if out, err := exec.Command("systemctl", "start", unit).CombinedOutput(); err != nil {
+		j, _ := exec.Command("journalctl", "-u", unit, "-n", "8", "--no-pager", "-o", "cat").Output()
+		return fmt.Errorf("%s: %v: %s | %s", unit, err, strings.TrimSpace(string(out)), strings.Join(strings.Fields(strings.ReplaceAll(strings.TrimSpace(string(j)), "\n", " / ")), " "))
+	}
+	return nil
+}
+
+// installRulesUnit — служба пересылки и правил туннеля и постоянный
+// sysctl: из PostUp wg-quick их не пускает AppArmor (fly.RulesUnit).
+func installRulesUnit() error {
+	if err := writeFileAtomic(fly.RulesUnitPath, []byte(fly.RulesUnit), 0o644); err != nil {
+		return err
+	}
+	if err := writeFileAtomic(fly.SysctlPath, []byte(fly.SysctlConf(true)), 0o644); err != nil {
+		return err
+	}
+	if out, err := exec.Command("systemctl", "daemon-reload").CombinedOutput(); err != nil {
+		return fmt.Errorf("systemctl daemon-reload: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

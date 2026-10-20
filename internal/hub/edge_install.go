@@ -752,8 +752,11 @@ func (r *EdgeUninstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	script := sudo + "systemctl disable --now nkt-edge 2>/dev/null; " +
 		// Шлюз Traffic Fly: служба, туннель и правила.
-		sudo + "systemctl disable --now nkt-fly wg-quick@nkt-fly 2>/dev/null; " + sudo + "nft delete table ip nkt_fly 2>/dev/null; " +
+		sudo + "systemctl disable --now nkt-fly nkt-fly-rules@nkt-fly wg-quick@nkt-fly 2>/dev/null; " + sudo + "nft delete table ip nkt_fly 2>/dev/null; " +
 		sudo + "rm -f /etc/systemd/system/nkt-fly.service /etc/wireguard/nkt-fly.conf /etc/wireguard/nkt-fly.key; " +
+		// Шаблон службы пересылки и sysctl — общие с туннелями хоста nkt
+		// на той же машине: убираются, только если туннелей больше нет.
+		"if ! ls /etc/systemd/system/wg-quick@*.service.wants/nkt-fly-rules@*.service >/dev/null 2>&1; then " + sudo + "rm -f " + fly.RulesUnitPath + " " + fly.SysctlPath + "; fi; " +
 		sudo + "rm -f /usr/local/bin/nkt-edge /etc/systemd/system/nkt-edge.service && " +
 		sudo + "rm -rf /etc/nkt-edge /var/lib/nkt-edge /var/lib/private/nkt-edge && " +
 		sudo + "systemctl daemon-reload && " + sudo + "systemctl reset-failed nkt-edge 2>/dev/null; " +
