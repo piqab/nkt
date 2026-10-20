@@ -567,7 +567,8 @@ function Shell({
         ),
       },
       { key: 'profiles', icon: <ProfileOutlined />, label: t('nav.profiles') },
-      { key: 'clusters', icon: <ClusterOutlined />, label: t('nav.clusters') },
+      // Кластеры — экспериментальное: пункт меню только по галочке в «О системе».
+      ...(me.experimental?.clusters ? [{ key: 'clusters', icon: <ClusterOutlined />, label: t('nav.clusters') }] : []),
       { key: 'deploy', icon: <RocketOutlined />, label: t('nav.deploy') },
       {
         key: 'about',

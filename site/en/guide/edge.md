@@ -224,6 +224,44 @@ Edge takes the sender's address from `X-Real-IP` (or the last
 `X-Forwarded-For` address) — only when the request comes from loopback,
 so the rate limit and "GitHub addresses only" work behind a proxy too.
 
+## Traffic Fly gateway (fly role)
+
+A gateway is the same nkt-edge with the `fly` role and different
+requirements:
+
+| | Webhooks, API, callbacks | External checks | Traffic Fly gateway |
+|---|---|---|---|
+| Name and certificate | needed | not needed | not needed (the gateway issues route certificates itself) |
+| 80/443 on the VPS | 80 — certbot, 443 — edge | not needed | **free** — the gateway's router holds them |
+| More ports | 8444/tcp from the hub | 8444/tcp from the hub | 8444/tcp from the hub, **51820/udp** from the hosts, route ports |
+| Combines with | each other and checks | everything | checks only |
+| Kernel | any | any | **with WireGuard**: a KVM VPS (not openvz/lxc), kernel 5.6+ or the `wireguard` module |
+
+**Installed from the hub only:** "Deployments" → "Traffic Fly" → **"Add
+gateway"** (or here, "Install on a host" with the `fly` role). The VPS is
+added to the hub as a regular host; nkt on it is optional. While the hub
+checks the host (SSH, sudo, ports) the window says "checking the
+host…", then the job log opens, and "Gateways" shows an "installing…" row
+until it ends. The job:
+
+1. checks 80, 443 and 8444;
+2. installs `wireguard-tools`, `nftables`, `conntrack` and **checks that
+   the kernel supports WireGuard** (a probe interface) — on a container
+   VPS the installation stops with an explanation;
+3. puts `nkt-edge` and the `nkt-fly` service (root: WireGuard, nftables,
+   the 80/443 router) in place, opens the ports in `ufw`;
+4. connects the tunnel to the hub.
+
+Then a route, "Dry run" (it also checks WireGuard in the hosts' kernels)
+and "Apply" — see [Traffic Fly](/en/guide/traffic-fly).
+
+The `fly` role has no manual installation: the root `nkt-fly` service,
+its unit and the checks are set up by the hub job.
+
+The WireGuard keys and rule files that `wg` and `wg-quick` read live in
+`/etc/wireguard/`: on Ubuntu 26.04+ the "wg" and "wg-quick" AppArmor
+profiles only allow reading there.
+
 ## Manual install
 
 If you'd rather not add the VPS to the hub:
@@ -350,4 +388,6 @@ sender's address and an `(edge)` mark.
 | Install: "port 80 is taken …, but it is not a systemd service" | 80 is held by a program started by hand or in a container — certbot standalone can't stop it; free 80 for the installation |
 | `certificate: … no such file` in the service log | No certificate copy in `/etc/nkt-edge/tls` — run the deploy hook ("Manual install") or reinstall from the hub |
 | The service doesn't start | `EDGE_TOKEN` shorter than 32 characters, no certificate, port 443 or 8444 taken — the message is in the service log |
+| Gateway: "wg-quick … fopen: Permission denied" | AppArmor (Ubuntu 26.04+) kept `wg` from reading the key outside `/etc/wireguard` — the gateway and hosts before 1.13.58: "Reinstall" the gateway, update nkt on the hosts, "Apply" |
+| Gateway install: "the VPS kernel does not support WireGuard" | A container VPS (`systemd-detect-virt` → openvz, lxc) — you need a KVM VPS; on KVM — `apt install wireguard` and reboot |
 | 403 behind a proxy with "GitHub only" on | The proxy doesn't pass `X-Real-IP` — add `proxy_set_header X-Real-IP $remote_addr;` |

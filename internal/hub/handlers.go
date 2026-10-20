@@ -145,6 +145,8 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"forward_base":    s.cfg.ForwardBase(),
 		"simulated":       false,
 		"hub_version":     s.hub.Version(),
+		// Что из экспериментального показывать (только интерфейс).
+		"experimental": s.experimental(r.Context()),
 	}
 	// Запрос токеном — его пределы (узел n8n показывает, к чему доступ).
 	if t, ok := tokenFromContext(r.Context()); ok {

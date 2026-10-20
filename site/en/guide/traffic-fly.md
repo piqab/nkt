@@ -434,6 +434,8 @@ wg-quick@nkt-flyN`.
 | Symptom | What to check |
 |---|---|
 | Gateway “offline” | is the edge connected to the hub? `systemctl status nkt-edge nkt-fly` on the VPS |
+| "Apply": the gateway or a host answered with a `wg-quick` error | the message carries its log lines and a hint: AppArmor kept it from reading the key (update the gateway and hosts to 1.13.58), a kernel without WireGuard (container VPS — you need KVM), a taken port |
+| Dry run: "the kernel does not support WireGuard" on a host | the host is a container (openvz, lxc) or lacks the module; the tunnel to it won't come up |
 | Tunnel doesn't come up | the reason is shown under the gateway in Gateways: “not configured yet” — Apply has not reached the host; “gateway rejects” — the host sends, the gateway does not accept: run `sudo tcpdump -ni any udp port 51820` on the gateway — nothing: 51820/udp is closed at the VPS provider or outbound UDP on the host; packets visible: the gateway firewall, or the interface has no key (`sudo wg show nkt-fly public-key` → `(none)`; gateways on 1.13.22+ restore it themselves); “keys do not match” — Apply again; “tunnel is not up on the host” — `systemctl status wg-quick@nkt-flyN` on the host |
 | “Host did not answer within 20 s” | does the host page open in the hub; `systemctl status netknownsthat` on the host |
 | “nkt cannot do Traffic Fly” | update nkt on the host (1.13.12 or newer) |

@@ -111,7 +111,21 @@
     "betaHint": "Pre-releases (vX.Y.Z-beta) count as updates; hosts always follow the hub version. Unchecked, a hub on a beta updates to the stable build of the same version once it is out.",
     "updateAllHosts": "After the hub update, update nkt on all hosts",
     "updateAllHostsHint": "The hub restarts, the page reloads and opens the “Update all” window listing the hosts that will be updated.",
-    "restartStuck": "The hub has not answered with the new version within 3 minutes. Reload the page: if the version in About is still the old one, the install did not go through — check the service log on the hub machine (journalctl -u netknownsthat-hub and the transient run-… units)."
+    "restartStuck": "The hub has not answered with the new version within 3 minutes. Reload the page: if the version in About is still the old one, the install did not go through — check the service log on the hub machine (journalctl -u netknownsthat-hub and the transient run-… units).",
+    "expTitle": "Experimental features",
+    "expHint": "What to show in the hub interface. The checkboxes only hide: the features keep working — created clusters live on, jobs run, the API answers. The setting is shared by the hub.",
+    "expOn": "shown",
+    "expOff": "hidden",
+    "expHistory": "History",
+    "expRestore": "restore",
+    "exp": {
+      "map": "Hosts map",
+      "clusters": "Kubernetes clusters"
+    },
+    "expDesc": {
+      "map": "The \"Map\" switch above the host list: Traffic Fly and deployment links, moving containers by dragging.",
+      "clusters": "The \"Clusters\" card in the host list, \"New cluster\" on a host's row and the \"Clusters\" menu item."
+    }
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",
@@ -3561,14 +3575,14 @@
         "title": "Authorizer + PostgreSQL",
         "hint": "Sign-in and users for your apps (OAuth2/OIDC): settings as flags from .env, a Traffic Fly variant commented out."
       },
-        "technitium": {
-          "title": "Technitium DNS Server",
-          "hint": "Your own name server: zones, DNS-01 checks for certificates (cert-manager), failover records, DoH; the secondary is a second pipeline (README)"
-        },
-        "nkthub": {
-          "title": "Test nkt hub",
-          "hint": "A second hub in Docker next to this one (localhost): its own port 18443, the admin password in \"Secrets\"; do not import the production hosts into it (README)"
-        }
+      "technitium": {
+        "title": "Technitium DNS Server",
+        "hint": "Your own name server: zones, DNS-01 checks for certificates (cert-manager), failover records, DoH; the secondary is a second pipeline (README)"
+      },
+      "nkthub": {
+        "title": "Test nkt hub",
+        "hint": "A second hub in Docker next to this one (localhost): its own port 18443, the admin password in \"Secrets\"; do not import the production hosts into it (README)"
+      }
     },
     "imagesComment": "pinned image versions",
     "portsComment": "port publications instead of the file's",
@@ -3697,6 +3711,8 @@
     "portsExampleComment": "host port instead of the compose file's (host:container; address 127.0.0.1)"
   },
   "edge": {
+    "connecting": "connecting…",
+    "preparing": "Checking the host: SSH connection, sudo, free ports… Then the installation job log opens.",
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment deployment webhooks, signed API token requests, a Traffic Fly gateway), and the hub keeps the tunnel to it. There can be several edges.",
     "install": "Install on a host",
     "manual": "Configure manually",
@@ -4618,6 +4634,9 @@
     "willTryOthers": "no answer — try the same port with another Megatec driver and nutdrv_qx over USB; the driver's answer goes to the log"
   },
   "fly": {
+    "openLog": "log",
+    "gwInstallFailed": "gateway installation failed",
+    "gwInstalling": "Installing a gateway: {{title}}",
     "subtitle": "Inbound traffic through a VPS gateway to services on your hosts: real client IP, TCP and UDP, 80/443 by name, other ports as port-to-pool, load balancing and target checks.",
     "revision": "Revision {{n}}",
     "notApplied": "not applied (gateways run {{n}})",

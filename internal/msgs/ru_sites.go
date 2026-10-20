@@ -558,4 +558,11 @@ var ruSitesCatalog = map[string]string{
 	"migrate.pipelineNotSwitched":     "стек выложен конвейером %s, а конвейер не переключён: следующая выкладка поднимет стек снова на %s",
 	"deploy.selfStack":                "стек %s на %s — тот, в котором работает этот хаб: выкладка остановила бы сам хаб посередине задания. Обновляйте его с другого хаба или на машине: docker compose pull && docker compose up -d",
 	"migrate.selfStack":               "стек %s — тот, в котором работает этот хаб: перенос остановил бы сам хаб; переносите его с другого хаба (экспорт и импорт)",
+	"fly.wgHintAppArmor":              "%v — AppArmor не дал wg прочитать ключ (Ubuntu 26.04+): обновите nkt-edge («Переустановить» шлюз) и nkt на хостах до 1.13.58 и нажмите «Применить» — ключи переедут в /etc/wireguard",
+	"fly.wgHintKernel":                "%v — ядро не поддерживает WireGuard: на VPS-контейнере (openvz, lxc — systemd-detect-virt) его не включить, нужен VPS на KVM; на KVM — apt install wireguard и перезагрузка",
+	"fly.wgHintPort":                  "%v — порт WireGuard занят другой службой (ещё один WireGuard?): освободите порт или смените порт шлюза",
+	"fly.wgUnsupported":               "ядро VPS не поддерживает WireGuard (виртуализация: %s): %s — на VPS-контейнере (openvz, lxc) его не включить, нужен VPS на KVM; на KVM — apt install wireguard и перезагрузка",
+	"fly.wgSupported":                 "ядро поддерживает WireGuard",
+	"fly.hostNoWG":                    "%s: ядро не поддерживает WireGuard (виртуализация: %s): %s — нужен хост на KVM или apt install wireguard и перезагрузка",
+	"fly.dryHostsNoWG":                "хостов без WireGuard в ядре: %d — туннели к ним не поднимутся",
 }

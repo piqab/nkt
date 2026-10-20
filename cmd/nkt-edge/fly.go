@@ -178,10 +178,18 @@ func (d *flyDaemon) apply(cfg fly.GatewayConfig, save bool) error {
 		return err
 	}
 	var errs []string
-	if err := writeFileAtomic(d.wgConf, []byte(fly.GatewayWG(cfg, filepath.Join(d.dir, "wg.key"))), 0o600); err != nil {
+	// Рабочая копия ключа — в /etc/wireguard: AppArmor на новых Ubuntu
+	// не даёт wg читать ключ из /etc/nkt-edge (см. fly.WGDir).
+	keyWG := fly.WGFile(flyIface, ".key")
+	if raw, err := os.ReadFile(filepath.Join(d.dir, "wg.key")); err != nil {
+		return err
+	} else if err := writeFileAtomic(keyWG, raw, 0o600); err != nil {
+		return err
+	}
+	if err := writeFileAtomic(d.wgConf, []byte(fly.GatewayWG(cfg, keyWG)), 0o600); err != nil {
 		return fmt.Errorf("wireguard config: %w", err)
 	}
-	if err := wgUp(cfg, filepath.Join(d.dir, "wg.key")); err != nil {
+	if err := wgUp(cfg, keyWG); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if err := d.rt.Apply(cfg); err != nil {
@@ -227,7 +235,10 @@ func wgUp(cfg fly.GatewayConfig, keyFile string) error {
 		return nil
 	}
 	if out, err := exec.Command("systemctl", "enable", "--now", "wg-quick@"+flyIface).CombinedOutput(); err != nil {
-		return fmt.Errorf("wg-quick: %v: %s", err, strings.TrimSpace(string(out)))
+		// Сам systemctl причину не говорит — она в журнале юнита: хаб по
+		// ней подскажет, что делать (fly.WGFailure).
+		j, _ := exec.Command("journalctl", "-u", "wg-quick@"+flyIface, "-n", "8", "--no-pager", "-o", "cat").Output()
+		return fmt.Errorf("wg-quick: %v: %s | %s", err, strings.TrimSpace(string(out)), strings.Join(strings.Fields(strings.ReplaceAll(strings.TrimSpace(string(j)), "\n", " / ")), " "))
 	}
 	return nil
 }
@@ -420,7 +431,7 @@ func (d *flyDaemon) healKey(ctx context.Context) {
 	if err != nil || strings.TrimSpace(string(out)) == d.pub {
 		return
 	}
-	if exec.CommandContext(ctx, "wg", "set", flyIface, "private-key", filepath.Join(d.dir, "wg.key")).Run() == nil {
+	if exec.CommandContext(ctx, "wg", "set", flyIface, "private-key", fly.WGFile(flyIface, ".key")).Run() == nil {
 		log.Printf("nkt-fly: private key of %s was missing, restored", flyIface)
 	}
 }

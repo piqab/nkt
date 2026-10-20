@@ -282,3 +282,14 @@ export function useApi<T>(path: string | null, pollMs = 0, timeoutMs?: number): 
 
   return { data, error, loading, reload: load }
 }
+
+/** Задание хаба: через встроенный локальный хост, а если его нет (хаб в
+ * контейнере) — через /hub/jobs. Окно журнала не должно молча не
+ * открываться. */
+export async function fetchHubJob<T>(id: number): Promise<T> {
+  try {
+    return await api<T>(`/hosts/local/jobs/${id}`)
+  } catch {
+    return await api<T>(`/hub/jobs/${id}`)
+  }
+}

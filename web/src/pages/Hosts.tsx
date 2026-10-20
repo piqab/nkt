@@ -23,7 +23,7 @@ import {
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { CopyButton } from '../components/CopyButton'
-import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
+import { api, ApiError, LOCAL_HOST_ID, useApi, fetchHubJob } from '../api'
 import type { HubHost, Job, Me, Severity } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, Spinner, formatRelative, severityLabel } from '../components/ui'
 import { decryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
@@ -436,6 +436,9 @@ export default function Hosts({
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
   // Перенос контейнеров на карте — администратору.
   const meInfo = useApi<Me>('/auth/me')
+  // Экспериментальное («О системе»): карта и кластеры — только если включены.
+  const showMap = !!meInfo.data?.experimental?.map
+  const showClusters = !!meInfo.data?.experimental?.clusters
   // Карта вместо списка — выключена по умолчанию, выбор помнится.
   const [mapOn, setMapOnState] = useState<boolean>(() => {
     try {
@@ -559,7 +562,7 @@ export default function Hosts({
 
   async function openHubJob(jobID: number) {
     try {
-      setHubJob(await api<Job>(`/hosts/local/jobs/${jobID}`))
+      setHubJob(await fetchHubJob<Job>(jobID))
     } catch {
       // Журнал не открылся — не повод считать задание неудачным: оно
       // идёт своим ходом, и его всегда видно в разделе «Задания».
@@ -1196,7 +1199,7 @@ export default function Hosts({
         {h.status === 'online' && !h.parent_id && (
           <span className="vm-action">
             <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
-            <RowAction icon={<ClusterOutlined />} label={t('clusters.new')} disabled={busy} onClick={() => setClusterOn(h)} />
+            {showClusters && <RowAction icon={<ClusterOutlined />} label={t('clusters.new')} disabled={busy} onClick={() => setClusterOn(h)} />}
           </span>
         )}
       </div>
@@ -1690,14 +1693,16 @@ export default function Hosts({
             />
             {/* Карта — справа в той же строке; в узком окне уходит влево
                 вместе с переносом кнопок. */}
-            <span className="row small" style={{ gap: '0.35rem', alignItems: 'center', marginLeft: 'auto', cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setMapOn(!mapOn)}>
-              <Switch size="small" checked={mapOn} />
-              {t('hostsMap.toggle')}
-            </span>
+            {showMap && (
+              <span className="row small" style={{ gap: '0.35rem', alignItems: 'center', marginLeft: 'auto', cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setMapOn(!mapOn)}>
+                <Switch size="small" checked={mapOn} />
+                {t('hostsMap.toggle')}
+              </span>
+            )}
           </div>
         }
       >
-        {mapOn && hosts?.length ? (
+        {mapOn && showMap && hosts?.length ? (
           <HostsMap
             hosts={hosts}
             onOpenHost={(h) => onSelect({ id: h.id, name: h.name })}
@@ -1831,7 +1836,7 @@ export default function Hosts({
         )}
       </Card>
 
-      <ClustersCard onOpenJob={(id) => void openHubJob(id)} onChanged={() => reload()} />
+      {showClusters && <ClustersCard onOpenJob={(id) => void openHubJob(id)} onChanged={() => reload()} />}
 
       {creatingHost && (
         <Modal title={t('hosts.addHostTitle')} onClose={() => setCreatingHost(false)} width={860}>

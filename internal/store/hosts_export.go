@@ -260,6 +260,8 @@ var ExportedSettingKeys = []string{
 	"ui.docs_url", "ui.docs_url.history",
 	// Раскладка меню хаба и хоста с историей.
 	"ui.nav.hub", "ui.nav.hub.history", "ui.nav.host", "ui.nav.host.history",
+	// Экспериментальные функции в интерфейсе («О системе») с историей.
+	"ui.experimental", "ui.experimental.history",
 }
 
 // ExportHosts returns every managed host in the shape GET /hub/export sends

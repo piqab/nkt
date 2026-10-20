@@ -215,6 +215,28 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 		gwCfg[gi.g.EdgeID] = c
 	}
 	if p.DryRun {
+		// Ядро хостов умеет WireGuard? Шлюзы проверены при установке.
+		bad := 0
+		for id, hc := range hostCfg {
+			if len(hc.Ifaces) == 0 {
+				continue
+			}
+			var chk struct {
+				WireGuard bool   `json:"wireguard"`
+				Virt      string `json:"virt"`
+				Error     string `json:"error"`
+			}
+			if err := s.flyHostCall(ctx, user, id, names[id], "GET", "/api/fly/check", nil, &chk); err != nil {
+				continue // старый nkt или хост не ответил — скажет «Применить»
+			}
+			if !chk.WireGuard {
+				jc.Log("fly.hostNoWG", names[id], chk.Virt, chk.Error)
+				bad++
+			}
+		}
+		if bad > 0 {
+			return msgs.Errorf("fly.dryHostsNoWG", bad)
+		}
 		jc.Log("fly.dryOK", len(hostCfg), len(gws))
 		return nil
 	}
@@ -257,7 +279,7 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 			Log []string `json:"log"`
 		}
 		if _, err := s.hostCall(ctx, user, id, "PUT", "/api/fly/config", hostCfg[id], &res); err != nil {
-			return msgs.Errorf("fly.hostApply", names[id], err)
+			return flyWGHint(msgs.Errorf("fly.hostApply", names[id], err))
 		}
 		for _, l := range res.Log {
 			jc.Logf("    %s: %s", names[id], l)
@@ -288,7 +310,7 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 			}
 		}
 		if err := flyGatewayCall(ctx, sess, "PUT", fly.PathConfig, gwCfg[gi.g.EdgeID], nil); err != nil {
-			return msgs.Errorf("fly.gatewayApply", edgeName(gi.st), err)
+			return flyWGHint(msgs.Errorf("fly.gatewayApply", edgeName(gi.st), err))
 		}
 		jc.Log("fly.gatewayApplied", edgeName(gi.st), len(gwCfg[gi.g.EdgeID].Routes))
 		gwPush[gi.g.EdgeID] = flyPush{Hash: hash, Rev: d.Revision}
@@ -476,4 +498,18 @@ func (s *Server) flyLogCerts(jc flyLog, st fly.GatewayStatus) {
 			jc.Log("fly.certIssuing", c.Name)
 		}
 	}
+}
+
+// flyWGHint — к ошибке wg-quick на шлюзе или хосте — что с ней делать
+// (AppArmor, ядро без WireGuard, занятый порт).
+func flyWGHint(err error) error {
+	switch fly.WGFailure(msgs.Localize(msgs.EN, err)) {
+	case "apparmor":
+		return msgs.Errorf("fly.wgHintAppArmor", err)
+	case "kernel":
+		return msgs.Errorf("fly.wgHintKernel", err)
+	case "port":
+		return msgs.Errorf("fly.wgHintPort", err)
+	}
+	return err
 }

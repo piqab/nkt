@@ -98,13 +98,13 @@ if ip link show "$1" >/dev/null 2>&1; then
   ip route replace default via "$6" dev "$1" onlink table "$5"
   echo "updated"
 else
-  systemctl enable --now "wg-quick@$1"
+  systemctl enable --now "wg-quick@$1" || { journalctl -u "wg-quick@$1" -n 8 --no-pager -o cat 2>/dev/null | tr '\n' ' '; exit 1; }
   echo "started"
 fi`
 
 // flyHostRemove — снять туннель. $1 iface.
 const flyHostRemove = `systemctl disable --now "wg-quick@$1" 2>/dev/null || true
-rm -f "/etc/wireguard/$1.conf"
+rm -f "/etc/wireguard/$1.conf" "/etc/wireguard/$1.key" "/etc/wireguard/$1.nft"
 echo "removed"`
 
 func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, error) {
@@ -135,6 +135,19 @@ func (s *Server) flyApply(ctx context.Context, cfg fly.HostConfig) ([]string, er
 		if err := os.WriteFile(nftFile, []byte(fly.HostNFT(i)), 0o600); err != nil {
 			return log, err
 		}
+		// Рабочие копии ключа и правил — в /etc/wireguard: их читают wg
+		// и PostUp, а AppArmor новых Ubuntu пускает их только туда.
+		keyRaw, err := os.ReadFile(key)
+		if err != nil {
+			return log, err
+		}
+		if err := flyWGInstall(ctx, fly.WGFile(i.Name, ".key"), keyRaw); err != nil {
+			return log, fmt.Errorf("%s: %v", i.Name, err)
+		}
+		if err := flyWGInstall(ctx, fly.WGFile(i.Name, ".nft"), []byte(fly.HostNFT(i))); err != nil {
+			return log, fmt.Errorf("%s: %v", i.Name, err)
+		}
+		key, nftFile = fly.WGFile(i.Name, ".key"), fly.WGFile(i.Name, ".nft")
 		conf := fly.HostWG(i, key, nftFile)
 		res, err := RunUnrestrictedInput(ctx, []byte(conf), "sh", "-c", `umask 077; mkdir -p /etc/wireguard && cat > "$1.tmp" && mv "$1.tmp" "$1"`, "sh", "/etc/wireguard/"+i.Name+".conf")
 		if err != nil || !res.OK() {
@@ -222,7 +235,10 @@ func (s *Server) flyHealKey(ctx context.Context, iface string) {
 	if err != nil || !res.OK() || strings.TrimSpace(res.Stdout) == pub {
 		return
 	}
-	_, _ = RunUnrestricted(ctx, "wg", "set", iface, "private-key", key)
+	if raw, err := os.ReadFile(key); err == nil {
+		_ = flyWGInstall(ctx, fly.WGFile(iface, ".key"), raw)
+	}
+	_, _ = RunUnrestricted(ctx, "wg", "set", iface, "private-key", fly.WGFile(iface, ".key"))
 }
 
 // flyWatchEvery — как часто хост сам сверяет туннели Traffic Fly: адреса
@@ -295,6 +311,8 @@ func (s *Server) flyFollowTargets(ctx context.Context, cfg fly.HostConfig, snap 
 		if err := os.WriteFile(nftFile, []byte(fly.HostNFT(*i)), 0o600); err != nil {
 			continue
 		}
+		// Копия для PostUp при следующем подъёме интерфейса.
+		_ = flyWGInstall(ctx, fly.WGFile(i.Name, ".nft"), []byte(fly.HostNFT(*i)))
 		if res, err := RunUnrestricted(ctx, "nft", "-f", nftFile); err == nil && res.OK() {
 			changed = true
 		}
@@ -383,4 +401,32 @@ func (s *Server) handleFlyRefresh(w http.ResponseWriter, r *http.Request) {
 		out = append(out, item{Name: c.Name, Project: c.Project, Service: c.ServiceName, State: c.State, IP: flyTargetIP(snap, "container", c.Name)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"containers": out})
+}
+
+// flyWGInstall — файл в /etc/wireguard (0600, root): каталог вне песочницы
+// службы — через выход из неё, как и сама конфигурация wg-quick.
+func flyWGInstall(ctx context.Context, path string, data []byte) error {
+	res, err := RunUnrestrictedInput(ctx, data, "sh", "-c", `umask 077; mkdir -p /etc/wireguard && cat > "$1.tmp" && mv "$1.tmp" "$1"`, "sh", path)
+	if err != nil || !res.OK() {
+		return fmt.Errorf("%s: %s", path, strings.TrimSpace(res.Output()+" "+errText(err)))
+	}
+	return nil
+}
+
+// handleFlyCheck — GET /fly/check: умеет ли ядро хоста WireGuard (пробный
+// интерфейс) — для сухого прогона Traffic Fly. В режиме снимков — да.
+func (s *Server) handleFlyCheck(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.IsFixtures() {
+		writeJSON(w, http.StatusOK, map[string]any{"wireguard": true})
+		return
+	}
+	res, err := RunUnrestricted(r.Context(), "sh", "-c", "modprobe wireguard 2>/dev/null; ip link add nktwgprobe type wireguard && ip link del nktwgprobe")
+	ok := err == nil && res.OK()
+	out := map[string]any{"wireguard": ok}
+	if !ok {
+		v, _ := RunTooling(r.Context(), "systemd-detect-virt")
+		out["virt"] = strings.TrimSpace(v.Stdout)
+		out["error"] = strings.TrimSpace(res.Output() + " " + errText(err))
+	}
+	writeJSON(w, http.StatusOK, out)
 }

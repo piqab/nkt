@@ -510,6 +510,7 @@ func (s *Server) Handler() http.Handler {
 				r.Put("/ups/thresholds", s.handleUPSThresholds)
 				r.Post("/fly/key", s.handleFlyKey)
 				r.Put("/fly/config", s.handleFlyConfig)
+				r.Get("/fly/check", s.handleFlyCheck)
 				r.Post("/fly/refresh", s.handleFlyRefresh)
 				r.Put("/fail2ban/templates", s.handleF2BTemplateSave)
 				r.Delete("/fail2ban/templates/{name}", s.handleF2BTemplateDelete)

@@ -8,6 +8,29 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.58 — 2026-10-20
+
+- **The Traffic Fly gateway comes up on Ubuntu 26.04.** AppArmor there
+  keeps `wg` from reading a key outside `/etc/wireguard` ("fopen:
+  Permission denied" even for root). WireGuard keys and rule files now
+  live in `/etc/wireguard/` on the gateway and hosts — keys move, they do
+  not change. Update the gateway ("Reinstall") and nkt on the hosts, then
+  "Apply".
+- **The WireGuard failure reason is in the message:** `wg-quick` log lines
+  and a hint — AppArmor, a kernel without WireGuard (a container VPS), a
+  taken port.
+- **WireGuard checked up front:** the gateway installation probes the VPS
+  kernel with a test interface, the Traffic Fly dry run probes the hosts.
+- **Gateway installation is visible:** "checking the host…" in the window,
+  the job log, an "installing…" row and the outcome in "Gateways"; adding
+  an edge by hand shows "connecting…". Job windows open on a hub without
+  a built-in local host too.
+- **"Experimental features" in "About":** "Hosts map" and "Kubernetes
+  clusters" are hidden by default; the checkboxes only hide the interface,
+  the features keep working (existing clusters keep them shown).
+- nkt-edge guide: roles and requirements as a table, a "Traffic Fly
+  gateway" section, WireGuard troubleshooting.
+
 ## v1.13.57 — 2026-10-19
 
 - **"Test nkt hub" example** — a second hub in Docker on this hub's

@@ -8,6 +8,10 @@ title: Kubernetes clusters
 Clusters across several hosts, WireGuard between hosts and Cilium have
 been exercised on test stands. Do a “dry run” before a real creation and
 read the job log after it.
+
+The section, the "Clusters" card in the host list and "New cluster" show
+when "Kubernetes clusters" is on in "About" → "Experimental features"
+(existing clusters work without it).
 :::
 
 The hub assembles a cluster from machines on hosts with virtualization
