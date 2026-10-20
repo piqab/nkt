@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.60 — 2026-10-20
+
+- **Garage deployment example — your own S3 storage.** "Deployments" →
+  "New pipeline" → "Examples" → "Garage (S3 storage)": a single node, the
+  config from a template in the repository with secrets from `.env`, the
+  bucket and access key created by the one-shot `garage-init` through the
+  admin API, the S3 API through an HTTPS site with no file size limit, the
+  garage-webui admin panel on `127.0.0.1:3909` only. Web access to files for
+  clients (Filestash) is commented out; how to enable it is in the
+  example's README.
+- **Request body limit for a site.** `max_body` in a pipeline's `site:`,
+  "Request body limit" in the site window: empty means 64m as before; `0`
+  means no limit and no buffering at nginx (uploads are streamed); otherwise
+  a number with k, m, g. Kept in the hub export.
+- **`generate:hex12`** — 24 hex characters (a Garage key is `GK` + this value).
+- **`nkt health` verifies HTTPS against nkt's certificate** instead of
+  skipping the check: it trusts only the certificate from `NKT_TLS_CERT` (or
+  `<data>/tls/cert.pem`). Resolves the CodeQL alert "Disabled TLS
+  certificate check".
+
 ## v1.13.59 — 2026-10-20
 
 - **Traffic Fly is its own menu section** (it was a Deployments tab): map,

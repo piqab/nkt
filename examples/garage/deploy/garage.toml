@@ -1,0 +1,30 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Конфигурация Garage — шаблон: ${ИМЯ} хост подставляет из .env стека при
+# выкладке (блок configs: в конвейере), файл с секретами не попадает ни в
+# историю конфигов, ни в журналы. Один узел: replication_factor = 1.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+metadata_auto_snapshot_interval = "6h"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "${GARAGE_RPC_SECRET}"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+# Адреса бакетов как поддоменов (bucket.s3.example.com) — нужны wildcard
+# A-запись и сертификат; без них работает адресация путём (s3.example.com/bucket).
+root_domain = ".${S3_DOMAIN}"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.${S3_DOMAIN}"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "${GARAGE_ADMIN_TOKEN}"

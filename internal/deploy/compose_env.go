@@ -31,7 +31,7 @@ const envGenPrefix = "generate:"
 
 // EnvGenKinds — виды generate: и сколько байт случайности.
 var EnvGenKinds = map[string]int{
-	"hex16": 16, "hex32": 32,
+	"hex12": 12, "hex16": 16, "hex32": 32,
 	"base64-32": 32, "base64-48": 48,
 	// Пароль — буквы и цифры: без знаков, которые ломают URL базы
 	// (postgres://user:пароль@db) и кавычки .env.

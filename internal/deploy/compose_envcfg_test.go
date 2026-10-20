@@ -78,7 +78,7 @@ func TestEnvBlockErrors(t *testing.T) {
 }
 
 func TestGenerateAndMerge(t *testing.T) {
-	for k, n := range map[string]int{"hex16": 32, "hex32": 64, "password": 24} {
+	for k, n := range map[string]int{"hex12": 24, "hex16": 32, "hex32": 64, "password": 24} {
 		if v := GenerateEnvValue(k); len(v) != n || strings.ContainsAny(v, "@:/#'\"$ ") {
 			t.Errorf("%s: %q", k, v)
 		}

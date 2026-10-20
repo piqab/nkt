@@ -1,0 +1,38 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Garage — S3-хранилище из examples/ репозитория nkt. Подробно — README.md.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/garage/deploy/docker-compose.yml
+  project: garage
+  hosts: [web1]
+  files: [examples/garage/deploy/init.py]   # первичная настройка через админ-API
+  wait_timeout: 5m
+  # /etc/garage.toml — шаблон из репозитория, ${ИМЯ} — из .env на хосте.
+  configs:
+    garage:
+      - target: /etc/garage.toml
+        file: examples/garage/deploy/garage.toml
+        mode: "0400"
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера, generate: — значение создаст хаб. «Секреты» → «.env» → «Показать».
+  env:
+    S3_DOMAIN: s3.example.com               # имя S3 API (сайт ниже)
+    BUCKET: files                           # бакет, который заведёт garage-init
+    CAPACITY: 100G                          # сколько места отдать Garage на этом хосте
+    GARAGE_RPC_SECRET: generate:hex32
+    GARAGE_ADMIN_TOKEN: generate:hex32      # админ-API и админка
+    S3_KEY_HEX: generate:hex12              # ключ доступа: GK + это значение
+    S3_SECRET: generate:hex32               # секрет ключа
+    # Пароль админки: «admin:<bcrypt-хеш>» — как получить, README.
+    # WEBUI_AUTH: admin:$2y$05$…
+  # S3 API наружу: сайт с HTTPS. max_body: "0" — без предела размера и без
+  # буферизации запроса у прокси: файлы любого размера идут потоком.
+  site:
+    domains: [s3.example.com]
+    service: garage
+    port: 3900
+    max_body: "0"

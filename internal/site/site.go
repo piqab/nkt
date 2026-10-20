@@ -102,6 +102,29 @@ type Config struct {
 	// сайта выкладки); KeyFile пуст — ключ в том же файле.
 	CertFile string
 	KeyFile  string
+	// MaxBody — предел тела запроса nginx (client_max_body_size): "" —
+	// 64m, "0" — без предела и без буферизации запроса (S3 и большие
+	// загрузки), иначе число с k/m/g.
+	MaxBody string
+}
+
+// maxBodyRe — допустимое значение MaxBody.
+var maxBodyRe = regexp.MustCompile(`^(0|[1-9][0-9]{0,5}[kmgKMG]?)$`)
+
+// ValidMaxBody — пусто или допустимый предел.
+func ValidMaxBody(v string) bool { return v == "" || maxBodyRe.MatchString(v) }
+
+func (c Config) bodyLines() (server, location string) {
+	v := c.MaxBody
+	if !ValidMaxBody(v) || v == "" {
+		v = "64m"
+	}
+	server = "    client_max_body_size " + v + ";\n\n"
+	if v == "0" {
+		// Без предела — и потоком: прокси не копит загрузку целиком.
+		location = "        proxy_request_buffering off;\n"
+	}
+	return server, location
 }
 
 // certPaths — сертификат и ключ для nginx: свой файл или lineage certbot.
@@ -130,6 +153,7 @@ func NginxFile(root, domain string) string { return root + "/conf.d/nkt-" + doma
 // Nginx — сервер 80 (редирект) и 443 с сертификатом и проксированием.
 func Nginx(c Config) string {
 	names := strings.Join(c.Domains, " ")
+	bodyServer, bodyLocation := c.bodyLines()
 	certFile, keyFile := c.certPaths()
 	conn := "$nkt_conn_" + slug(c.ID())
 	return "# Managed by nkt: site " + c.ID() + "\n" +
@@ -143,9 +167,10 @@ func Nginx(c Config) string {
 		"    server_name " + names + ";\n" +
 		"    ssl_certificate " + certFile + ";\n" +
 		"    ssl_certificate_key " + keyFile + ";\n" +
-		"    client_max_body_size 64m;\n\n" +
+		bodyServer +
 		"    location / {\n" +
 		"        proxy_pass http://" + c.Upstream + ";\n" +
+		bodyLocation +
 		"        proxy_http_version 1.1;\n" +
 		"        proxy_set_header Host $host;\n" +
 		"        proxy_set_header X-Real-IP $remote_addr;\n" +

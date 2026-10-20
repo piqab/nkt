@@ -1,0 +1,75 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Garage (https://git.deuxfleurs.fr/Deuxfleurs/garage) — S3-хранилище на
+# одном узле для выкладки через хаб nkt: S3 API — через сайт с HTTPS,
+# админ-API и админка garage-webui — только на 127.0.0.1, первичная
+# настройка (раскладка, бакет, ключ) — разовым garage-init через админ-API.
+# Конфиг /etc/garage.toml кладёт конвейер (configs:), секреты — из .env.
+services:
+  garage:
+    # Версия закреплена; новая — правкой тега (сначала прочитайте заметки
+    # к выпуску: миграции метаданных между большими версиями).
+    image: dxflrs/garage:v2.4.1
+    restart: unless-stopped
+    volumes:
+      - meta:/var/lib/garage/meta
+      - data:/var/lib/garage/data
+    # 3900 — S3 API: публикует сайт (на 127.0.0.1). 3903 — админ-API,
+    # 3902 — раздача сайтов из бакетов: только на хосте. 3901 (связь узлов)
+    # одному узлу не нужен.
+    ports:
+      - "127.0.0.1:3903:3903"
+      # - "127.0.0.1:3902:3902"
+    expose: ["3900"]
+
+  # Разовый: раскладка, бакет, ключ — через админ-API (init.py рядом).
+  garage-init:
+    image: python:3.13-alpine
+    restart: "no"
+    command: ["python3", "/init.py"]
+    environment:
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      CAPACITY: ${CAPACITY:-100G}
+      BUCKET: ${BUCKET:-}
+      S3_KEY_HEX: ${S3_KEY_HEX}
+      S3_SECRET: ${S3_SECRET}
+    volumes:
+      - ./init.py:/init.py:ro
+    depends_on:
+      - garage
+
+  # Админка (https://github.com/khairul169/garage-webui): бакеты, ключи,
+  # раскладка, объекты. Держит админ-токен Garage — полный доступ, поэтому
+  # только 127.0.0.1 (ssh -L 3909:127.0.0.1:3909 хост) и с паролем:
+  # WEBUI_AUTH в .env — «admin:<bcrypt-хеш>» (как получить — README).
+  garage-webui:
+    image: khairul169/garage-webui:1.1.0
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://garage:3903
+      API_ADMIN_KEY: ${GARAGE_ADMIN_TOKEN}
+      S3_ENDPOINT_URL: http://garage:3900
+      S3_REGION: garage
+      AUTH_USER_PASS: ${WEBUI_AUTH:-}
+    ports:
+      - "127.0.0.1:3909:3909"
+    depends_on:
+      - garage
+
+  # Веб-доступ к файлам для клиентов (https://github.com/mickael-kerjean/filestash):
+  # входят своим ключом S3. ПЕРВЫЙ открывший задаёт пароль администратора —
+  # сначала задайте его через ssh -L 8334:127.0.0.1:8334, потом публикуйте
+  # («Сайты» → 127.0.0.1:8334). Образ без версий — закреплён по
+  # дайджесту.
+  # filestash:
+  #   image: machines/filestash@sha256:294af2acaa273373dc4cca1fa37e53f59deea897fd5d1da37f42ca7ebc2c544b
+  #   restart: unless-stopped
+  #   volumes:
+  #     - filestash:/app/data/state
+  #   ports:
+  #     - "127.0.0.1:8334:8334"
+
+volumes:
+  meta:
+  data:
+  # filestash:

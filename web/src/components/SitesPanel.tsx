@@ -71,6 +71,8 @@ interface Site {
   container_port?: number
   upstream?: string
   open_firewall: boolean
+  /** Предел тела запроса у прокси: "" — 64m, "0" — без предела. */
+  max_body?: string
   pipeline_id?: number
   pipeline_name?: string
   status: string
@@ -324,6 +326,8 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
   const [port, setPort] = useState<number | null>(site?.container_port ?? null)
   const [upstream, setUpstream] = useState(site?.upstream ?? '127.0.0.1:8080')
   const [openFW, setOpenFW] = useState(site?.open_firewall ?? true)
+  const [maxBody, setMaxBody] = useState(site?.max_body ?? '')
+  const maxBodyOK = /^(0|[1-9][0-9]{0,5}[kmgKMG]?)?$/.test(maxBody.trim())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -377,6 +381,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
         container_port: targetKind === 'stack' ? port ?? 0 : 0,
         upstream: targetKind === 'addr' ? upstream : '',
         open_firewall: openFW,
+        max_body: maxBody.trim(),
         install_proxy: true,
       }
       const res = await api<{ job_id: number }>(site ? `/hub/sites/${site.id}` : '/hub/sites', { method: site ? 'PUT' : 'POST', body })
@@ -388,7 +393,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
     }
   }
 
-  const ready = hostID !== null && !!proxy && domains.trim() !== '' && (targetKind === 'addr' ? !!upstream : !!stack && !!service && !!port)
+  const ready = hostID !== null && !!proxy && maxBodyOK && domains.trim() !== '' && (targetKind === 'addr' ? !!upstream : !!stack && !!service && !!port)
 
   return (
     <Modal title={site ? t('sites.editTitle', { name: site.domains[0] }) : t('sites.newTitle')} onClose={onClose} width={860} maskClosable={false}>
@@ -514,6 +519,18 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
               )}
               {targetKind === 'stack' && <div className="small muted">{t('sites.publishNote')}</div>}
             </div>
+            <label style={{ maxWidth: 520 }}>
+              {t('sites.maxBody')}
+              <Input
+                value={maxBody}
+                onChange={(e) => setMaxBody(e.target.value)}
+                placeholder="64m"
+                className="mono"
+                style={{ maxWidth: 140 }}
+                status={maxBodyOK ? undefined : 'error'}
+              />
+              <span className="small muted">{t('sites.maxBodyHint')}</span>
+            </label>
             <Checkbox checked={openFW} onChange={(e) => setOpenFW(e.target.checked)}>
               {t('sites.openFirewall')}{' '}
               {pre.host.firewall.active ? (

@@ -9,10 +9,14 @@ export interface PipelineExample {
   link: string
   project: string
   readme: string
-  site: { service: string; port: number }
+  /** maxBody — предел тела запроса у прокси сайта (max_body; "0" — без
+   * предела и без буферизации). */
+  site: { service: string; port: number; maxBody?: string }
   /** Образы вместо compose-файла; {hubversion} — версия этого хаба. */
   images?: Record<string, string>
   files?: string[]
+  /** Конфиги сервисов из репозитория (configs: target, file, mode). */
+  configs?: Record<string, { target: string; file: string; mode?: string }[]>
   /** Публикации вместо compose-файла; {hostip} — адрес выбранного хоста
    * (IPv4 из «Хостов»), иначе заглушка 203.0.113.10 — поправить. */
   ports?: Record<string, string[]>
@@ -156,6 +160,25 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
       ['SECONDARY_NS', 'ns2.example.com'],
       ['TSIG_CERT_MANAGER', 'generate:base64-32'],
       ['TSIG_TRANSFER', 'generate:base64-32'],
+    ],
+  },
+  {
+    key: 'garage',
+    link: `${NKT}/blob/main/examples/garage/deploy/docker-compose.yml`,
+    project: 'garage',
+    readme: `${NKT}/tree/main/examples/garage`,
+    // S3 API за прокси: файлы любого размера — потоком.
+    site: { service: 'garage', port: 3900, maxBody: '0' },
+    files: ['examples/garage/deploy/init.py'],
+    configs: { garage: [{ target: '/etc/garage.toml', file: 'examples/garage/deploy/garage.toml', mode: '0400' }] },
+    env: [
+      ['S3_DOMAIN', '{domain}'],
+      ['BUCKET', 'files'],
+      ['CAPACITY', '100G'],
+      ['GARAGE_RPC_SECRET', 'generate:hex32'],
+      ['GARAGE_ADMIN_TOKEN', 'generate:hex32'],
+      ['S3_KEY_HEX', 'generate:hex12'],
+      ['S3_SECRET', 'generate:hex32'],
     ],
   },
   {

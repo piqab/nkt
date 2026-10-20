@@ -52,6 +52,7 @@ type HostSite struct {
 	// CertFile / KeyFile — свой сертификат (cert: /путь у сайта выкладки).
 	CertFile  string `json:"cert_file,omitempty"`
 	KeyFile   string `json:"key_file,omitempty"`
+	MaxBody   string `json:"max_body,omitempty"`
 	File      string `json:"file,omitempty"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -524,6 +525,8 @@ type SiteApplyParams struct {
 	// "/путь" — свой файл (CertKey — ключ, пусто — в том же файле).
 	Cert    string `json:"cert,omitempty"`
 	CertKey string `json:"cert_key,omitempty"`
+	// MaxBody — предел тела запроса у прокси (site.Config.MaxBody).
+	MaxBody string `json:"max_body,omitempty"`
 }
 
 // certPathRe — путь своего сертификата: абсолютный, без «..» и пробелов.
@@ -554,6 +557,9 @@ func (p *SiteApplyParams) check() error {
 	p.Domains = d
 	if !slices.Contains(site.Proxies, p.Proxy) {
 		return msgs.Errorf("site.badProxy", p.Proxy)
+	}
+	if !site.ValidMaxBody(p.MaxBody) {
+		return msgs.Errorf("site.badMaxBody", p.MaxBody)
 	}
 	if err := checkCert(p.Cert, p.CertKey); err != nil {
 		return err
@@ -674,7 +680,7 @@ func (sr *siteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 
 	// 3. Цель: сервис стека — на 127.0.0.1.
 	jc.StepKey(3, 5, "site.stepTarget")
-	rec := HostSite{Domains: p.Domains, Proxy: p.Proxy, Upstream: p.Upstream, Stack: p.Stack, Service: p.Service, ContainerPort: p.ContainerPort}
+	rec := HostSite{Domains: p.Domains, Proxy: p.Proxy, Upstream: p.Upstream, Stack: p.Stack, Service: p.Service, ContainerPort: p.ContainerPort, MaxBody: p.MaxBody}
 	if p.Stack != "" {
 		up, hostPort, err := s.sitePublish(ctx, jc, snap, p)
 		if err != nil {
@@ -886,7 +892,7 @@ func (s *Server) siteWriteProxy(ctx context.Context, jc *jobs.Context, user stri
 	}
 	c := s.scanner.Collector()
 	note := msgs.T(lang, "site.noteProxy", rec.Domains[0])
-	cfg := site.Config{Domains: rec.Domains, Upstream: rec.Upstream, Lineage: rec.Lineage, CertFile: rec.CertFile, KeyFile: rec.KeyFile}
+	cfg := site.Config{Domains: rec.Domains, Upstream: rec.Upstream, Lineage: rec.Lineage, CertFile: rec.CertFile, KeyFile: rec.KeyFile, MaxBody: rec.MaxBody}
 	write := func(p, content string) error {
 		res, err := s.configs.Write(ctx, lang, user, p, content, note, true)
 		if err != nil {
@@ -942,7 +948,7 @@ func (s *Server) siteWriteProxy(ctx context.Context, jc *jobs.Context, user stri
 		var sites []site.Config
 		for _, o := range append(others, rec) {
 			if o.Proxy == site.ProxyHAProxy {
-				sites = append(sites, site.Config{Domains: o.Domains, Upstream: o.Upstream, Lineage: o.Lineage, CertFile: o.CertFile, KeyFile: o.KeyFile})
+				sites = append(sites, site.Config{Domains: o.Domains, Upstream: o.Upstream, Lineage: o.Lineage, CertFile: o.CertFile, KeyFile: o.KeyFile, MaxBody: o.MaxBody})
 			}
 		}
 		if err := write(mainPath, site.ReplaceHAProxyBlock(string(main), site.HAProxyBlock(sites))); err != nil {
@@ -1125,7 +1131,7 @@ func (s *Server) handleSiteRemove(w http.ResponseWriter, r *http.Request) {
 		var sites []site.Config
 		for _, o := range kept {
 			if o.Proxy == site.ProxyHAProxy {
-				sites = append(sites, site.Config{Domains: o.Domains, Upstream: o.Upstream, Lineage: o.Lineage, CertFile: o.CertFile, KeyFile: o.KeyFile})
+				sites = append(sites, site.Config{Domains: o.Domains, Upstream: o.Upstream, Lineage: o.Lineage, CertFile: o.CertFile, KeyFile: o.KeyFile, MaxBody: o.MaxBody})
 			}
 		}
 		var res control.WriteResult

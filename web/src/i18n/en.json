@@ -3598,6 +3598,10 @@
         "title": "Technitium DNS Server",
         "hint": "Your own name server: zones, DNS-01 checks for certificates (cert-manager), failover records, DoH; the secondary is a second pipeline (README)"
       },
+      "garage": {
+        "title": "Garage (S3 storage)",
+        "hint": "S3 for files and backups: the bucket and key are created by the one-shot garage-init, the garage-webui admin panel is on 127.0.0.1:3909, the site has no size limit (max_body: “0”); Filestash is commented out (README)"
+      },
       "nkthub": {
         "title": "Test nkt hub",
         "hint": "A second hub in Docker next to this one (localhost): its own port 18443, the admin password in \"Secrets\"; do not import the production hosts into it (README)"
@@ -3727,7 +3731,9 @@
     "envSkipped": "Already set — left as is: {{keys}}.",
     "configSecretHints": "Looks like a secret written right into a config ({{list}}) — better move the value into env and reference it as ${NAME}.",
     "envBlockComment": "→ moved to secrets on save; generate: — the hub creates the value",
-    "portsExampleComment": "host port instead of the compose file's (host:container; address 127.0.0.1)"
+    "portsExampleComment": "host port instead of the compose file's (host:container; address 127.0.0.1)",
+    "configsComment": "service configs from the repository; ${NAME} comes from .env",
+    "maxBodyComment": "\"0\" — no request body size limit (files are streamed)"
   },
   "edge": {
     "connecting": "connecting…",
@@ -4048,6 +4054,8 @@
     "upstream": "Address:port",
     "publishNote": "If the port is not published, nkt publishes it on 127.0.0.1 only (compose.nkt.yml next to the stack), so the service is reachable from outside only through the proxy.",
     "openFirewall": "open 80 and 443 in the host firewall",
+    "maxBody": "Request body limit",
+    "maxBodyHint": "Empty — 64m; “0” — no limit and no buffering at the proxy (large uploads, S3); otherwise a number with k, m, g — for example 512m.",
     "firewallOff": "the firewall is off",
     "setup": "Set up",
     "status": {

@@ -579,4 +579,5 @@ var ruSitesCatalog = map[string]string{
 	"hub.hostRefPipelineLast":         "конвейер %s: хост в нём единственный — описание не тронуто, поправьте хосты сами",
 	"hub.hostRefPipelineNote":         "хост %s удалён из хаба",
 	"hub.hostRefFlyJob":               "Traffic Fly: убрать цели удалённого хоста %s",
+	"site.badMaxBody":                 "недопустимый max_body %q: 0 (без предела) или число с k, m, g",
 }

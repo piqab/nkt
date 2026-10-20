@@ -579,4 +579,5 @@ var enSitesCatalog = map[string]string{
 	"hub.hostRefPipelineLast":         "pipeline %s: it is the only host there — the description is untouched, fix the hosts yourself",
 	"hub.hostRefPipelineNote":         "host %s removed from the hub",
 	"hub.hostRefFlyJob":               "Traffic Fly: remove the targets of the deleted host %s",
+	"site.badMaxBody":                 "bad max_body %q: 0 (no limit) or a number with k, m, g",
 }
