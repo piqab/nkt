@@ -341,6 +341,17 @@ h3 { font-size: 0.95rem; }
   overflow-wrap: anywhere;
 }
 
+/* Кнопкам в шапке карточки не хватает места — они переходят под
+   заголовок, а не сжимают его в колонку по слову («Карта и применение»
+   Traffic Fly, редактор «Конфигураций»). Три класса: правила antd
+   приходят позже и при равной специфичности выигрывают. */
+.ant-card > .ant-card-head .ant-card-head-wrapper { flex-wrap: wrap; row-gap: 0.35rem; }
+.ant-card > .ant-card-head .ant-card-head-title { flex: 1 1 14rem; }
+/* extra тянется на остаток строки: его ширина — место для кнопок
+   (по ней OverflowBar решает, что спрятать в «☰»). */
+.ant-card > .ant-card-head .ant-card-extra { flex: 1 1 auto; display: flex; justify-content: flex-end; min-width: 0; max-width: 100%; margin-inline-start: 0.6rem; padding-block: 0.3rem; }
+.ant-card > .ant-card-head .ant-card-extra > .row { flex-wrap: wrap; justify-content: flex-end; }
+
 /* ---------------------------------------------------------------- controls */
 
 button, .btn {
@@ -890,11 +901,11 @@ span.vm-toggle {
 
 /* Список хостов: заголовок карточки не сжимается под кнопки — при
    нехватке места переносятся кнопки, а не режется название. */
-.hosts-card .ant-card-head-title { flex: 0 0 auto; overflow: visible; font-size: 0.92rem; }
-.hosts-card .ant-card-extra { flex: 1 1 auto; margin-inline-start: 0.6rem; display: flex; justify-content: flex-start; }
+.hosts-card.ant-card > .ant-card-head .ant-card-head-title { flex: 0 0 auto; overflow: visible; font-size: 0.92rem; }
+.hosts-card.ant-card > .ant-card-head .ant-card-extra { flex: 1 1 auto; margin-inline-start: 0.6rem; display: flex; justify-content: flex-start; }
 /* Строка действий — на всю ширину: переключатель «Карта» прижат вправо
  * (margin-left: auto), в узком окне переносится вместе с кнопками. */
-.hosts-card .ant-card-extra > .row, .hosts-card .ant-card-extra > .row > .row { flex: 1 1 auto; min-width: 0; }
+.hosts-card.ant-card > .ant-card-head .ant-card-extra > .row, .hosts-card .ant-card-extra > .row > .row { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; justify-content: flex-start; }
 
 /* Справка по командам сценария. */
 .script-help-cmd { padding: 0.5rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }

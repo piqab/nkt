@@ -197,7 +197,8 @@
     "saved": "saved",
     "savedShort": "saved",
     "edit": "Edit",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "moreActions": "More actions"
   },
   "containers": {
     "vms": "Libvirt"
@@ -4984,6 +4985,7 @@
         "ok": "site {{name}}: ready",
         "failed": "site {{name}}: error (see the log)"
       }
-    }
+    },
+    "legend": "Legend ({{n}})"
   }
 }

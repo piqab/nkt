@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox, Input, Segmented, Space, Switch, Tag, Tooltip } from 'antd'
 import { LoadingOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { OverflowBar } from './OverflowBar'
 import { api, useApi } from '../api'
 import { Banner, Loading, Modal } from './ui'
 import { confirmAction } from './confirm'
@@ -926,114 +927,219 @@ export function HostsMap({
 
   return (
     <div className="col" style={{ gap: '0.5rem' }}>
-      <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <Space.Compact size="small">
-          <Button size="small" onClick={() => zoomBy(1 / 1.25)}>
-            −
-          </Button>
-          <Button size="small" onClick={() => setView((v) => ({ ...v, k: 1 }))}>
-            {Math.round(view.k * 100)}%
-          </Button>
-          <Button size="small" onClick={() => zoomBy(1.25)}>
-            +
-          </Button>
-        </Space.Compact>
-        <Button size="small" onClick={fit}>
-          {t('hostsMap.fit')}
-        </Button>
-        <Tooltip title={t('hostsMap.colsHint', { n: ONE_COLUMN_MAX })}>
-          <span className="row small" style={{ gap: '0.3rem', alignItems: 'center' }}>
-            {t('hostsMap.cols')}
-            <Segmented
-              size="small"
-              value={cols}
-              onChange={(v) => setCols(v as 'auto' | '1' | '2')}
-              options={[
-                { value: 'auto', label: t('hostsMap.colsAuto') },
-                { value: '1', label: '1' },
-                { value: '2', label: '2' },
-              ]}
-            />
-          </span>
-        </Tooltip>
-        <Checkbox checked={expandAll} onChange={(e) => setExpandAll(e.target.checked)}>
-          {t('hostsMap.expandAll')}
-        </Checkbox>
-        <Input size="small" allowClear placeholder={t('hostsMap.search')} value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 180 }} />
-        <Checkbox checked={onlyRunning} onChange={(e) => setOnlyRunning(e.target.checked)}>
-          {t('hostsMap.onlyRunning')}
-        </Checkbox>
-        {admin && (
-          <Tooltip title={t('hostsMap.moveHint')}>
-            <Button size="small" type={moveMode ? 'primary' : 'default'} disabled={settling} onClick={() => setMoveMode(!moveMode)}>
-              {t('hostsMap.moveMode')}
-            </Button>
-          </Tooltip>
-        )}
-        {moveMode && (
-          <Tooltip title={drafts.length ? t('hostsMap.applyNowDraft') : t('hostsMap.applyNowHint')}>
-            <span className="row small" style={{ gap: '0.3rem', alignItems: 'center' }}>
-              <Switch size="small" checked={applyNow} disabled={drafts.length > 0 || settling} onChange={setApplyNow} />
-              {t('hostsMap.applyNow')}
-            </span>
-          </Tooltip>
-        )}
-        {drafts.length > 0 && (
-          <>
-            <Button size="small" type="primary" danger disabled={settling} onClick={() => void applyDrafts()}>
-              {t('hostsMap.applyMoves', { n: drafts.length })}
-            </Button>
-            <Button size="small" onClick={() => setDrafts([])}>
-              {t('hostsMap.discardMoves')}
-            </Button>
-          </>
-        )}
-        {moving.map((m) => (
-          <Tag key={m.id} color="processing" style={{ cursor: 'pointer' }} onClick={() => onOpenJob?.(m.id)}>
-            ⟳ {m.title} · {Math.round((Date.now() - m.started) / 1000)} {t('hostsMap.sec')}
-          </Tag>
-        ))}
-        {movesFailed.map((id) => (
-          <Tag key={id} color="error" closable onClose={() => setMovesFailed((f) => f.filter((x) => x !== id))} style={{ cursor: 'pointer' }} onClick={() => onOpenJob?.(id)}>
-            {t('hostsMap.moveFailed', { id })}
-          </Tag>
-        ))}
-        <Checkbox checked={onlyLinked} onChange={(e) => setOnlyLinked(e.target.checked)}>
-          {t('hostsMap.onlyLinked')}
-        </Checkbox>
-        <span style={{ flex: 1 }} />
-        <Tooltip title={privacy ? t('hostsMap.pngPrivacy') : t('hostsMap.pngHint')}>
-          <Button size="small" disabled={!data.data || exporting} loading={exporting} onClick={() => void exportPng()}>
-            PNG
-          </Button>
-        </Tooltip>
-        <Tooltip title={t('hostsMap.refreshHint')}>
-          <Button size="small" icon={<ReloadOutlined />} loading={refreshing || data.loading} onClick={() => void refresh()} />
-        </Tooltip>
-      </div>
-      {/* Легенда: какие связи показывать и чей цвет. */}
-      <div className="row small" style={{ gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <Checkbox checked={showFly} onChange={(e) => setShowFly(e.target.checked)}>
-          Traffic Fly
-        </Checkbox>
-        <Checkbox checked={showDeploy} onChange={(e) => setShowDeploy(e.target.checked)}>
-          {t('hostsMap.deployments')}
-        </Checkbox>
-        {layout.left.map((n) => (
-          <span
-            key={n.key}
-            className="row"
-            style={{ gap: 4, alignItems: 'center', cursor: 'pointer', opacity: dim(n.key) < 1 ? 0.5 : 1 }}
-            onMouseEnter={() => setHover(n.key)}
-            onMouseLeave={() => setHover(null)}
-            onClick={() => setPinned(pinned === n.key ? null : n.key)}
-          >
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: n.color, display: 'inline-block' }} />
-            <span className={n.key.startsWith('route:') ? 'sensitive' : undefined}>{midEllipsis(n.label, 28)}</span>
-          </span>
-        ))}
-        <span className="muted">{t('hostsMap.legendLines')}</span>
-      </div>
+      {/* В узком окне второстепенное — в «☰» (OverflowBar): масштаб, поиск,
+          перенос и обновление — всегда снаружи. */}
+      <OverflowBar
+        items={[
+          {
+            key: 'zoom',
+            keep: true,
+            node: (
+              <Space.Compact size="small">
+                <Button size="small" onClick={() => zoomBy(1 / 1.25)}>
+                  −
+                </Button>
+                <Button size="small" onClick={() => setView((v) => ({ ...v, k: 1 }))}>
+                  {Math.round(view.k * 100)}%
+                </Button>
+                <Button size="small" onClick={() => zoomBy(1.25)}>
+                  +
+                </Button>
+              </Space.Compact>
+            ),
+          },
+          {
+            key: 'fit',
+            keep: true,
+            node: (
+              <Button size="small" onClick={fit}>
+                {t('hostsMap.fit')}
+              </Button>
+            ),
+          },
+          {
+            key: 'cols',
+            active: cols !== 'auto',
+            node: (
+              <Tooltip title={t('hostsMap.colsHint', { n: ONE_COLUMN_MAX })}>
+                <span className="row small" style={{ gap: '0.3rem', alignItems: 'center' }}>
+                  {t('hostsMap.cols')}
+                  <Segmented
+                    size="small"
+                    value={cols}
+                    onChange={(v) => setCols(v as 'auto' | '1' | '2')}
+                    options={[
+                      { value: 'auto', label: t('hostsMap.colsAuto') },
+                      { value: '1', label: '1' },
+                      { value: '2', label: '2' },
+                    ]}
+                  />
+                </span>
+              </Tooltip>
+            ),
+          },
+          {
+            key: 'expand',
+            active: expandAll,
+            node: (
+              <Checkbox checked={expandAll} onChange={(e) => setExpandAll(e.target.checked)}>
+                {t('hostsMap.expandAll')}
+              </Checkbox>
+            ),
+          },
+          {
+            key: 'search',
+            keep: true,
+            node: <Input size="small" allowClear placeholder={t('hostsMap.search')} value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 160 }} />,
+          },
+          {
+            key: 'running',
+            active: onlyRunning,
+            node: (
+              <Checkbox checked={onlyRunning} onChange={(e) => setOnlyRunning(e.target.checked)}>
+                {t('hostsMap.onlyRunning')}
+              </Checkbox>
+            ),
+          },
+          ...(admin
+            ? [
+                {
+                  key: 'move',
+                  keep: true,
+                  node: (
+                    <Tooltip title={t('hostsMap.moveHint')}>
+                      <Button size="small" type={moveMode ? 'primary' : 'default'} disabled={settling} onClick={() => setMoveMode(!moveMode)}>
+                        {t('hostsMap.moveMode')}
+                      </Button>
+                    </Tooltip>
+                  ),
+                },
+              ]
+            : []),
+          ...(moveMode
+            ? [
+                {
+                  key: 'applyNow',
+                  active: applyNow,
+                  node: (
+                    <Tooltip title={drafts.length ? t('hostsMap.applyNowDraft') : t('hostsMap.applyNowHint')}>
+                      <span className="row small" style={{ gap: '0.3rem', alignItems: 'center' }}>
+                        <Switch size="small" checked={applyNow} disabled={drafts.length > 0 || settling} onChange={setApplyNow} />
+                        {t('hostsMap.applyNow')}
+                      </span>
+                    </Tooltip>
+                  ),
+                },
+              ]
+            : []),
+          ...(drafts.length > 0
+            ? [
+                {
+                  key: 'drafts',
+                  keep: true,
+                  node: (
+                    <span className="row" style={{ gap: '0.3rem' }}>
+                      <Button size="small" type="primary" danger disabled={settling} onClick={() => void applyDrafts()}>
+                        {t('hostsMap.applyMoves', { n: drafts.length })}
+                      </Button>
+                      <Button size="small" onClick={() => setDrafts([])}>
+                        {t('hostsMap.discardMoves')}
+                      </Button>
+                    </span>
+                  ),
+                },
+              ]
+            : []),
+          ...moving.map((m) => ({
+            key: `m${m.id}`,
+            keep: true,
+            node: (
+              <Tag color="processing" style={{ cursor: 'pointer', marginInlineEnd: 0 }} onClick={() => onOpenJob?.(m.id)}>
+                ⟳ {m.title} · {Math.round((Date.now() - m.started) / 1000)} {t('hostsMap.sec')}
+              </Tag>
+            ),
+          })),
+          ...movesFailed.map((id) => ({
+            key: `f${id}`,
+            keep: true,
+            node: (
+              <Tag color="error" closable onClose={() => setMovesFailed((f) => f.filter((x) => x !== id))} style={{ cursor: 'pointer', marginInlineEnd: 0 }} onClick={() => onOpenJob?.(id)}>
+                {t('hostsMap.moveFailed', { id })}
+              </Tag>
+            ),
+          })),
+          {
+            key: 'linked',
+            active: onlyLinked,
+            node: (
+              <Checkbox checked={onlyLinked} onChange={(e) => setOnlyLinked(e.target.checked)}>
+                {t('hostsMap.onlyLinked')}
+              </Checkbox>
+            ),
+          },
+          {
+            key: 'png',
+            node: (
+              <Tooltip title={privacy ? t('hostsMap.pngPrivacy') : t('hostsMap.pngHint')}>
+                <Button size="small" disabled={!data.data || exporting} loading={exporting} onClick={() => void exportPng()}>
+                  PNG
+                </Button>
+              </Tooltip>
+            ),
+          },
+          {
+            key: 'refresh',
+            keep: true,
+            node: (
+              <Tooltip title={t('hostsMap.refreshHint')}>
+                <Button size="small" icon={<ReloadOutlined />} loading={refreshing || data.loading} onClick={() => void refresh()} />
+              </Tooltip>
+            ),
+          },
+        ]}
+      />
+      {/* Легенда: какие связи показывать и чей цвет; в узком окне — одной
+          кнопкой «Легенда (N)». */}
+      <OverflowBar
+        gap="0.6rem"
+        label={t('hostsMap.legend', { n: layout.left.length })}
+        items={[
+          {
+            key: 'fly',
+            active: !showFly,
+            node: (
+              <Checkbox checked={showFly} onChange={(e) => setShowFly(e.target.checked)}>
+                <span className="small">Traffic Fly</span>
+              </Checkbox>
+            ),
+          },
+          {
+            key: 'deploy',
+            active: !showDeploy,
+            node: (
+              <Checkbox checked={showDeploy} onChange={(e) => setShowDeploy(e.target.checked)}>
+                <span className="small">{t('hostsMap.deployments')}</span>
+              </Checkbox>
+            ),
+          },
+          ...layout.left.map((n) => ({
+            key: n.key,
+            node: (
+              <span
+                className="row small"
+                style={{ gap: 4, alignItems: 'center', cursor: 'pointer', opacity: dim(n.key) < 1 ? 0.5 : 1 }}
+                onMouseEnter={() => setHover(n.key)}
+                onMouseLeave={() => setHover(null)}
+                onClick={() => setPinned(pinned === n.key ? null : n.key)}
+              >
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: n.color, display: 'inline-block' }} />
+                <span className={n.key.startsWith('route:') ? 'sensitive' : undefined}>{midEllipsis(n.label, 28)}</span>
+              </span>
+            ),
+          })),
+          { key: 'lines', node: <span className="small muted">{t('hostsMap.legendLines')}</span> },
+        ]}
+      />
       {data.error && <Banner kind="error">{data.error}</Banner>}
       {!data.data ? (
         <Loading what={t('hostsMap.title')} />

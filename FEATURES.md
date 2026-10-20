@@ -11,6 +11,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Three modes: `local` (a real host), `fixtures` (a host snapshot for development, works on Windows too), `hub`.
 - Russian and English UI: the language follows the browser, switches at the bottom of the menu, and every server message arrives in the UI language.
 - Light, dark and system theme; the sidebar collapses to icons (by button or automatically on narrow screens), the state is remembered.
+- Narrow window and phone: whatever does not fit in the button row above a list (hosts, hosts map, fail2ban, "Monitoring", Traffic Fly) goes into the "☰" menu, the main controls stay outside, a dot on "☰" means a hidden filter is on; card header buttons move under the title; a narrow pipelines table keeps "Deploy" and "⋯".
 - Privacy mode (“hide sensitive data”) for screen sharing and screenshots: addresses, host names, users, keys and domains are blurred across all sections — from hosts and logs to deployments, nkt-edge and the Traffic Fly map, diffs and error messages.
 - Accounts with `admin` and `viewer` roles, argon2id passwords, sessions, brute-force protection, login with a host system account (PAM).
 - Security policy (`.github/SECURITY.md`): report vulnerabilities privately via GitHub "Report a vulnerability"; acknowledgement within 7 days, assessment within 30.

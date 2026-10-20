@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { OverflowBar } from '../components/OverflowBar'
 import { Button, Input, InputNumber, Segmented, Select, Switch, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { UnlockOutlined } from '@ant-design/icons'
@@ -87,24 +88,44 @@ export default function Fail2ban({ me }: { me: Me }) {
           fail2ban
           <TitleHelp>{t('fail2ban.hint')}</TitleHelp>
         </h1>
-        <div className="row">
-          {state?.installed && admin && (
-            <>
-              <Button onClick={() => setTemplates(true)}>{t('fail2ban.templates')}</Button>
-              <Tooltip title={t('fail2ban.setupHint')}>
-                <Button loading={busy === 'setup'} onClick={() => void run('setup', () => api('/fail2ban/setup', { method: 'POST', timeoutMs: 120_000 }), t('fail2ban.setupDone'))}>
-                  {t('fail2ban.setup')}
+        <OverflowBar
+          align="end"
+          style={{ flex: '1 1 0' }}
+          items={[
+            ...(state?.installed && admin
+              ? [
+                  { key: 'templates', node: <Button onClick={() => setTemplates(true)}>{t('fail2ban.templates')}</Button> },
+                  {
+                    key: 'setup',
+                    node: (
+                      <Tooltip title={t('fail2ban.setupHint')}>
+                        <Button loading={busy === 'setup'} onClick={() => void run('setup', () => api('/fail2ban/setup', { method: 'POST', timeoutMs: 120_000 }), t('fail2ban.setupDone'))}>
+                          {t('fail2ban.setup')}
+                        </Button>
+                      </Tooltip>
+                    ),
+                  },
+                  {
+                    key: 'reload',
+                    node: (
+                      <Button disabled={!state.running} loading={busy === 'reload'} onClick={() => void run('reload', () => api('/fail2ban/reload', { method: 'POST', body: {} }), t('fail2ban.reloaded'))}>
+                        {t('fail2ban.reload')}
+                      </Button>
+                    ),
+                  },
+                ]
+              : []),
+            {
+              key: 'refresh',
+              keep: true,
+              node: (
+                <Button onClick={() => st.reload()} loading={st.loading}>
+                  {t('fail2ban.refresh')}
                 </Button>
-              </Tooltip>
-              <Button disabled={!state.running} loading={busy === 'reload'} onClick={() => void run('reload', () => api('/fail2ban/reload', { method: 'POST', body: {} }), t('fail2ban.reloaded'))}>
-                {t('fail2ban.reload')}
-              </Button>
-            </>
-          )}
-          <Button onClick={() => st.reload()} loading={st.loading}>
-            {t('fail2ban.refresh')}
-          </Button>
-        </div>
+              ),
+            },
+          ]}
+        />
       </div>
 
       <ErrorNote error={st.error} />
