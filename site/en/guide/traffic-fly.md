@@ -411,6 +411,13 @@ map — the routes switch to the new host by themselves, A records and
 certificates stay the same. Step by step with Forgejo as the example:
 [Moving a stack with Traffic Fly](/en/guide/migrate-with-fly).
 
+### Access to a Kubernetes cluster
+
+A route target can also be a cluster node machine: an `https` route to the
+Ingress controller port of all nodes gives access to the cluster with the
+certificate on the gateway and balancing across nodes — [Cluster: from zero
+to the first pod](/en/guide/k8s-first-pod).
+
 ## Without the hub
 
 The hub is needed for changes, the map and alerts. Traffic itself flows

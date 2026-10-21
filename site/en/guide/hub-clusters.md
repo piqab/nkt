@@ -20,6 +20,10 @@ a cloud image, installs nkt into them, and nkt on each node runs the k3s
 or kubeadm installation steps. Nodes are ordinary hub machines under
 their host; the kubeconfig is in the cluster card.
 
+Step by step from creation to a test pod reachable from outside through an
+Ingress and Traffic Fly: [Cluster: from zero to the first
+pod](/en/guide/k8s-first-pod).
+
 ## A cluster on one host
 
 “New cluster” next to a host with virtualization: the flavor (**k3s** or
