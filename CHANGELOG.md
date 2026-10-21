@@ -891,3 +891,4 @@
 - `3e57106c` Сценарии: pipeline, deploy, migrate, wait url; сценарий Forgejo за Traffic Fly; 1.13.67
 - `912f8b83` Сценарии: k8s ingress/apply/wait, fly route/apply; сценарий «Кластер Kubernetes: от нуля до первого пода»; 1.13.68
 - `07dec8d1` Сайт: vite 6.4.4 (Dependabot #22–#24); 1.13.69
+- `88b415bc` Сценарии: разбор fly route без замыкания проверки длины (CodeQL #325); 1.13.70
