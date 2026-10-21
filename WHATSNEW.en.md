@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.69 — 2026-10-21
+
+- **Documentation site: vite 6.4.4** instead of 5.4.21 inside vitepress 1.6.4
+  (`overrides` in `site/package.json`) — closes the `launch-editor` and
+  esbuild alerts (Dependabot #22–#24). They concerned only the site's
+  development server; the published site and nkt were not affected.
+
 ## v1.13.68 — 2026-10-21
 
 - **Scripts: cluster and Traffic Fly.** New commands:
