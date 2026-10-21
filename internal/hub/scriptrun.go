@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/deploy"
 	"net/url"
 	"strconv"
 	"strings"
@@ -52,6 +53,10 @@ type scriptRunResume struct {
 	// HostIDs — хосты, заведённые сценарием: имя → идентификатор. После
 	// перезапуска по ним же продолжаем, не заводя вторых.
 	HostIDs map[string]int64 `json:"host_ids,omitempty"`
+	// Сухой прогон: описания «pipeline» (имя → текст) — для «deploy» ниже,
+	// и была ли выше выкладка — «migrate» тогда не находит стек на хосте.
+	DryPipelines  map[string]string `json:"-"`
+	DeployedInDry bool              `json:"-"`
 }
 
 // ScriptRunner выполняет сценарии.
@@ -221,7 +226,19 @@ func (r *ScriptRunner) step(ctx context.Context, jc *jobs.Context, p *ScriptRunP
 		}
 		return nil
 
+	case script.KindPipeline:
+		return r.savePipeline(ctx, jc, st)
+
+	case script.KindDeploy:
+		return r.runDeploy(ctx, jc, st)
+
+	case script.KindMigrate:
+		return r.runMigrate(ctx, jc, done, st, false)
+
 	case script.KindWait:
+		if st.Action == "url" {
+			return r.waitURL(ctx, jc, st)
+		}
 		h, err := r.hostByName(ctx, done, st.Host)
 		if err != nil {
 			return err
@@ -525,6 +542,25 @@ func (r *ScriptRunner) waitCertJob(ctx context.Context, jc *jobs.Context, h stor
 // профиль, и «сделал бы …» для остального.
 func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptRunParams, done *scriptRunResume, st script.Step) error {
 	switch st.Kind {
+	case script.KindPipeline:
+		if _, err := deploy.ParseSpec(st.Block); err != nil {
+			return err
+		}
+		if done.DryPipelines == nil {
+			done.DryPipelines = map[string]string{}
+		}
+		done.DryPipelines[st.Name] = st.Block
+		if _, ok := r.pipelineByName(ctx, st.Name); ok {
+			jc.Log("hub.scriptDryPipelineUpdate", st.Name)
+		} else {
+			jc.Log("hub.scriptDryPipelineCreate", st.Name)
+		}
+		return nil
+	case script.KindDeploy:
+		done.DeployedInDry = true
+		return r.dryDeploy(ctx, jc, st, done.DryPipelines[st.Name])
+	case script.KindMigrate:
+		return r.runMigrate(ctx, jc, done, st, true)
 	case script.KindGroup, script.KindInstall, script.KindWait, script.KindVMCreate, script.KindVMAction,
 		script.KindDockerInst, script.KindCert, script.KindGitClone, script.KindSystem, script.KindK8sDestroy:
 		jc.Log("hub.scriptDryWould", st.Text)

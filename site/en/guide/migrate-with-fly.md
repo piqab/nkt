@@ -174,6 +174,84 @@ volumes on the old host; without it they stay — moving the stack back there
 will then require cleaning up these leftovers (the move window offers it). A
 week after the move the hub reminds you of a copy left behind in "Alerts".
 
+## The same as a script
+
+Everything from the deployment to the check after the move — as one hub
+script ("Scripts" → the "Reference" tab → "Ready-made scripts" → "Forgejo behind
+Traffic Fly: deploy and move" → "Into editor", also
+[`examples/scripts/forgejo-fly.nkt`](https://github.com/piqab/nkt/blob/main/examples/scripts/forgejo-fly.nkt)).
+At start it asks for the host to deploy on, the host to move to and the name;
+"Dry run" shows the pipeline's dry run, and the move plan comes at run time
+(before the deployment the stack is not on the host yet).
+
+```
+# Forgejo за Traffic Fly: выкладка и перенос на другой хост
+param FROM "хост, где Forgejo будет выложен сначала"
+param TO "хост, куда его перенести"
+param DOMAIN "имя Forgejo — A-запись на адрес шлюза Traffic Fly"
+
+# Веб и git по SSH — через шлюз; сертификат выпускает шлюз
+pipeline forgejo
+repo: https://github.com/piqab/nkt.git
+ref: main
+action: compose
+compose:
+  file: examples/forgejo/deploy/docker-compose.yml
+  project: forgejo
+  hosts: [${FROM}]
+  wait_timeout: 5m
+  env_keys:
+    forgejo-admin: [FORGEJO_ADMIN_USER, FORGEJO_ADMIN_PASSWORD, FORGEJO_ADMIN_EMAIL]
+  env:
+    POSTGRES_PASSWORD: generate:password
+    FORGEJO_DOMAIN: ${DOMAIN}
+    FORGEJO_ROOT_URL: https://${DOMAIN}/
+    FORGEJO_ADMIN_USER: gitadmin
+    FORGEJO_ADMIN_PASSWORD: generate:password
+    FORGEJO_ADMIN_EMAIL: admin@example.com
+  fly:
+    - route: forgejo-web
+      kind: https
+      names: [${DOMAIN}]
+      tls: gateway
+      service: forgejo
+      target_port: 3000
+      check: http
+      check_path: /api/healthz
+    - route: forgejo-ssh
+      kind: tcp
+      port: 2222
+      service: forgejo
+      target_port: 2222
+end
+deploy forgejo 20m
+
+# Проверка снаружи — через DNS и шлюз, как зайдёт пользователь
+wait url https://${DOMAIN}/api/healthz 200 10m
+
+# Перенос: маршруты Traffic Fly и конвейер переключаются на новый хост
+migrate ${FROM} forgejo-forgejo-1 to ${TO} switch-fly switch-pipeline
+wait url https://${DOMAIN}/api/healthz 200 5m
+```
+
+The script's comments are in Russian; the commands are the same in any
+language.
+
+- **`pipeline forgejo … end`** — the pipeline, like "Save" in the window: the
+  hub creates the passwords, the values go to "Secrets".
+- **`deploy forgejo 20m`** — the deployment with waiting; the `forgejo-web`
+  and `forgejo-ssh` routes are created by the pipeline itself (the `fly:`
+  block).
+- **`wait url …`** — an outside check from the hub to the real name: DNS,
+  gateway and certificate as for a user.
+- **`migrate … switch-fly switch-pipeline`** — the move, like from the map:
+  with obstacles the script stops before the stack stops, a failed move rolls
+  back by itself.
+
+The script is one-off: running it again saves the pipeline with host `FROM`
+again, and the next deployment would bring the stack back there. Roll back
+and remove the old copy from the map (steps 5 and 6).
+
 ## See also
 
 - [Hosts map](/en/guide/hub-hosts#hosts-map) — the move in detail: what

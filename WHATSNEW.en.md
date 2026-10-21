@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.67 — 2026-10-21
+
+- **Scripts: deployments and moves.** New commands:
+  - `pipeline NAME … end` — save a pipeline as in the pipeline window (`env:`
+    values go to secrets, `generate:` is created by the hub, another value for
+    an already set key is an error, not a silent replacement);
+  - `deploy PIPELINE` — deploy and wait for the result (in a dry run — the
+    pipeline's dry run);
+  - `migrate HOST CONTAINER to HOST [switch-fly] [switch-pipeline]
+    [clean-leftovers]` — move a stack as from the hosts map: a plan with
+    obstacles before the stack stops, rollback on error;
+  - `wait url URL [CODE]` — check an outside address with a request from the
+    hub (DNS, gateway, certificate as for a user).
+- **A ready-made script "Forgejo behind Traffic Fly: deploy and move"** — the
+  "Reference" tab of "Scripts" and `examples/scripts/forgejo-fly.nkt`; the
+  "Moving a stack with Traffic Fly" guide has a "The same as a script" section.
+- "Check" no longer complains about host names from parameters (`on ${HOST}`)
+  — they are checked at run time; the "Scheme" shows a "Hub" block with
+  pipelines, deployments and outside checks.
+
 ## v1.13.66 — 2026-10-21
 
 - **Guide "A Kubernetes cluster: from zero to the first pod"** — step by

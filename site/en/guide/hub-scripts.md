@@ -40,6 +40,7 @@ wait web1 http http://${ADDR}/ 200 1m
 | `host NAME ADDR[:PORT] user … (password ask \| password "…" \| key hub) [group …]` | register a host |
 | `install HOST…` | install nkt |
 | `wait HOST online \| port N \| http URL [CODE] \| service NAME active` | wait |
+| `wait url URL [CODE] [DURATION]` | wait for an outside address: a request from the hub to the real name — DNS, gateway and certificate are verified as for a user |
 | `on HOST… packages install\|remove …` | packages; several hosts may be listed in `on` |
 | `on HOST service NAME start\|stop\|restart\|reload\|enable\|disable` | services |
 | `on HOST firewall allow\|deny PORT [from CIDR]` | firewall |
@@ -52,6 +53,9 @@ wait web1 http http://${ADDR}/ 200 1m
 | `on HOST cert issue DOMAIN… \| cert renew DOMAIN` | a Let's Encrypt certificate |
 | `on HOST git clone URL /DIR [branch …] [token ask]` | clone a repository |
 | `on HOST k8s create NAME [nodes single\|1+N\|3+N\|"HOST: cp N, w N, host cp\|w; …"] [network nat\|bridge\|wireguard] [cni cilium] [expose] …`, `on HOST k8s destroy NAME` | a Kubernetes cluster on the host's machines or placed across several hosts (experimental) |
+| `pipeline NAME` … `end` | save a deployment pipeline — the description as a block, like “Save” in the pipeline window: `env:` values go to secrets, `generate:` is created by the hub, another value for an already set key is an error |
+| `deploy PIPELINE [DURATION]` | deploy a pipeline and wait for the result; in a dry run — the pipeline's dry run |
+| `migrate HOST CONTAINER to HOST [switch-fly] [switch-pipeline] [clean-leftovers]` | move a stack to another host, like from the hosts map: a plan with obstacles, the move, rollback on error; in a dry run — the plan |
 
 The full reference with examples you can copy or insert into the editor is
 the “Reference” tab in the section itself.

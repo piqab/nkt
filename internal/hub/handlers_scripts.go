@@ -194,7 +194,12 @@ func (s *Server) refsNow(r *http.Request) script.Refs { return s.refsNowCtx(r.Co
 
 // refsNowCtx — имена хостов, групп и профилей для проверки сценария.
 func (s *Server) refsNowCtx(ctx context.Context) script.Refs {
-	refs := script.Refs{Hosts: map[string]bool{}, Groups: map[string]bool{}, Profiles: map[string]bool{}}
+	refs := script.Refs{Hosts: map[string]bool{}, Groups: map[string]bool{}, Profiles: map[string]bool{}, Pipelines: map[string]bool{}}
+	if list, err := s.db.ListPipelines(ctx); err == nil {
+		for _, p := range list {
+			refs.Pipelines[p.Name] = true
+		}
+	}
 	if hosts, err := s.db.ListHosts(ctx); err == nil {
 		for _, h := range hosts {
 			refs.Hosts[h.Name] = true

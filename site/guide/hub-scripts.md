@@ -41,6 +41,7 @@ wait web1 http http://${ADDR}/ 200 1m
 | `host ИМЯ АДРЕС[:ПОРТ] user … (password ask \| password "…" \| key hub) [group …]` | завести хост |
 | `install ХОСТ…` | поставить nkt |
 | `wait ХОСТ online \| port N \| http URL [КОД] \| service ИМЯ active` | подождать |
+| `wait url URL [КОД] [ДЛИТЕЛЬНОСТЬ]` | подождать ответа адреса снаружи: запрос с хаба по настоящему имени — DNS, шлюз и сертификат проверяются, как у пользователя |
 | `on ХОСТ… packages install\|remove …` | пакеты; в `on` можно перечислить несколько хостов |
 | `on ХОСТ service ИМЯ start\|stop\|restart\|reload\|enable\|disable` | службы |
 | `on ХОСТ firewall allow\|deny ПОРТ [from CIDR]` | firewall |
@@ -53,6 +54,9 @@ wait web1 http http://${ADDR}/ 200 1m
 | `on ХОСТ cert issue ДОМЕН… \| cert renew ДОМЕН` | сертификат Let's Encrypt |
 | `on ХОСТ git clone URL /КАТАЛОГ [branch …] [token ask]` | клонировать репозиторий |
 | `on ХОСТ k8s create ИМЯ [nodes single\|1+N\|3+N\|"ХОСТ: cp N, w N, host cp\|w; …"] [network nat\|bridge\|wireguard] [cni cilium] [expose] …`, `on ХОСТ k8s destroy ИМЯ` | кластер Kubernetes на машинах хоста или с размещением по нескольким хостам (экспериментально) |
+| `pipeline ИМЯ` … `end` | сохранить конвейер выкладки — описание блоком, как «Сохранить» в окне конвейера: значения `env:` — в секреты, `generate:` создаёт хаб, другое значение уже заданного ключа — ошибка |
+| `deploy КОНВЕЙЕР [ДЛИТЕЛЬНОСТЬ]` | выложить конвейер и дождаться итога; в сухом прогоне — сухой прогон конвейера |
+| `migrate ХОСТ КОНТЕЙНЕР to ХОСТ [switch-fly] [switch-pipeline] [clean-leftovers]` | перенести стек на другой хост, как с карты хостов: план с препятствиями, перенос, откат при ошибке; в сухом прогоне — план |
 
 Полная справка с примерами, которые можно скопировать или вставить в
 редактор, — вкладка «Справка» в самом разделе.

@@ -3,6 +3,10 @@ import { Tag } from 'antd'
 import {
   AppstoreOutlined,
   CloudDownloadOutlined,
+  CloudServerOutlined,
+  CloudUploadOutlined,
+  GlobalOutlined,
+  SwapOutlined,
   ClusterOutlined,
   DesktopOutlined,
   FileTextOutlined,
@@ -43,7 +47,9 @@ interface GroupNode {
   hosts: HostNode[]
 }
 
-function build(steps: ScriptStep[]): { groups: GroupNode[]; existing: HostNode[] } {
+function build(steps: ScriptStep[]): { groups: GroupNode[]; existing: HostNode[]; hub: ScriptStep[] } {
+  // Шаги самого хаба: конвейеры, выкладки, проверка адреса снаружи.
+  const hub: ScriptStep[] = []
   const groups = new Map<string, GroupNode>()
   const hosts = new Map<string, HostNode>()
   const existing: HostNode[] = []
@@ -83,7 +89,12 @@ function build(steps: ScriptStep[]): { groups: GroupNode[]; existing: HostNode[]
         for (const n of s.hosts ?? []) hostFor(n).install = true
         break
       case 'wait':
-        if (s.host) hostFor(s.host).wait = true
+        if (s.action === 'url') hub.push(s)
+        else if (s.host) hostFor(s.host).wait = true
+        break
+      case 'pipeline':
+      case 'deploy':
+        hub.push(s)
         break
       case 'vm.create': {
         const parent = hostFor(s.host ?? '')
@@ -100,7 +111,7 @@ function build(steps: ScriptStep[]): { groups: GroupNode[]; existing: HostNode[]
       }
     }
   }
-  return { groups: [...groups.values()], existing }
+  return { groups: [...groups.values()], existing, hub }
 }
 
 function actionIcon(kind: string) {
@@ -128,6 +139,14 @@ function actionIcon(kind: string) {
       return <LockOutlined />
     case 'git.clone':
       return <ForkOutlined />
+    case 'pipeline':
+      return <FileTextOutlined />
+    case 'deploy':
+      return <CloudUploadOutlined />
+    case 'migrate':
+      return <SwapOutlined />
+    case 'wait':
+      return <GlobalOutlined />
     default:
       return null
   }
@@ -166,6 +185,14 @@ function actionLabel(s: ScriptStep): string {
       return `cert ${s.action} ${(s.list ?? []).join(', ')}`
     case 'git.clone':
       return `git ${s.args?.dir}`
+    case 'pipeline':
+      return `pipeline ${s.name}`
+    case 'deploy':
+      return `deploy ${s.name}`
+    case 'migrate':
+      return `${s.name} → ${s.args?.to}${s.args?.['switch-fly'] === 'true' ? ' · Traffic Fly' : ''}${s.args?.['switch-pipeline'] === 'true' ? ' · pipeline' : ''}`
+    case 'wait':
+      return s.action === 'url' ? `wait ${s.args?.url}` : s.text
     default:
       return s.text
   }
@@ -243,8 +270,8 @@ export default function ScriptScheme({ content }: { content: string }) {
       </div>
     )
   }
-  const { groups, existing } = build(result.steps)
-  if (groups.length === 0 && existing.length === 0) return <p className="small muted">{t('scripts.scheme.empty')}</p>
+  const { groups, existing, hub } = build(result.steps)
+  if (groups.length === 0 && existing.length === 0 && hub.length === 0) return <p className="small muted">{t('scripts.scheme.empty')}</p>
   return (
     <div className="col" style={{ gap: '0.6rem' }}>
       {result.issues.length > 0 && <Banner kind="warn">{t('scripts.scheme.issues', { count: result.issues.length })}</Banner>}
@@ -261,6 +288,20 @@ export default function ScriptScheme({ content }: { content: string }) {
             ))}
           </div>
         ))}
+        {hub.length > 0 && (
+          <div className="scheme-group">
+            <div className="scheme-group-head">
+              <CloudServerOutlined /> <strong>{t('scripts.scheme.hub')}</strong>
+            </div>
+            <ol className="scheme-actions">
+              {hub.map((a, i) => (
+                <li key={i} title={a.text}>
+                  {actionIcon(a.kind)} {actionLabel(a)}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
         {existing.length > 0 && (
           <div className="scheme-group scheme-group-existing">
             <div className="scheme-group-head">
