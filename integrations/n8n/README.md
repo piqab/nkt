@@ -4,9 +4,11 @@ n8n nodes for the [NetKnownsThat (nkt)](https://github.com/piqab/nkt) hub.
 
 - **nkt**: hosts (list, overview, findings, vulnerabilities, services),
   service and container actions, pipelines (deploy, dry run with selectable
-  checks, waiting for the result, deployments), hub jobs (get, log, wait),
-  fail2ban (ban, unban, banned list), alerts, and any API call the token
-  allows.
+  checks, waiting for the result, deployments), saved scripts (run, with
+  answers and dry run), stack moves between hosts (preview, move with
+  Traffic Fly and pipeline switching), Traffic Fly (apply, map, status),
+  manifests into clusters (apply, diff), hub jobs (get, log, wait), fail2ban
+  (ban, unban, banned list), alerts, and any API call the token allows.
 - **nkt Trigger**: receives the hub's outgoing webhooks (alerts and
   deployment outcomes) and checks their HMAC signature.
 - **nkt Alert Trigger (Polling)**: polls the hub for new alerts when n8n

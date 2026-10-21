@@ -251,6 +251,14 @@ wait url https://${DOMAIN}/api/healthz 200 5m
 `FROM` и следующая выкладка вернула бы стек туда. Откат и уборку старой копии
 делайте с карты (шаги 5 и 6).
 
+## По API и из n8n
+
+Перенос запускается и без карты: API-токеном администратора — план
+`POST /api/hub/migrate/preview`, перенос `POST /api/hub/migrate`
+(`switch_fly`, `switch_pipeline`), откат и уборка —
+`POST /api/hub/migrations/{id}/rollback|remove`; в n8n — **Migration →
+Preview / Move Stack**. Подробно — [API хаба](/guide/hub-api#что-доступно-токену).
+
 ## См. также
 
 - [Карта хостов](/guide/hub-hosts#карта-хостов) — перенос подробно: что

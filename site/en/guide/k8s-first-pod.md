@@ -269,6 +269,16 @@ The route — "Delete" in "Traffic Fly" and "Apply". The whole cluster —
 **"delete cluster"** in the card: the machines with their disks, the WireGuard
 tunnel and the machine network leave the hosts; host nodes (if any) stay.
 
+## Through the API and n8n
+
+Steps 6–7 also work without the UI: a manifest into clusters with an API
+token (`POST /api/hub/k8s/manifests/apply?job=1`) or the n8n **Cluster →
+Apply Manifest**; applying Traffic Fly — `POST /api/hub/fly/apply` or
+**Traffic Fly → Apply**; the whole path — as a saved script
+(**Script → Run**). Creating a cluster and the kubeconfig are closed to
+tokens. Details — [Hub API](/en/guide/hub-api#what-a-token-can-call),
+[n8n](/en/guide/n8n).
+
 ## What next
 
 - **Helm to clusters** — a release into chosen clusters as a hub job.

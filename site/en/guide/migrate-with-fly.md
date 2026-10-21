@@ -258,6 +258,14 @@ The script is one-off: running it again saves the pipeline with host `FROM`
 again, and the next deployment would bring the stack back there. Roll back
 and remove the old copy from the map (steps 5 and 6).
 
+## Through the API and n8n
+
+A move also runs without the map: with an admin API token — the plan
+`POST /api/hub/migrate/preview`, the move `POST /api/hub/migrate`
+(`switch_fly`, `switch_pipeline`), rollback and cleanup —
+`POST /api/hub/migrations/{id}/rollback|remove`; in n8n — **Migration →
+Preview / Move Stack**. Details — [Hub API](/en/guide/hub-api#what-a-token-can-call).
+
 ## See also
 
 - [Hosts map](/en/guide/hub-hosts#hosts-map) — the move in detail: what

@@ -4143,8 +4143,8 @@
       "admin": "admin"
     },
     "roleHint": {
-      "read": "state, findings, alerts, job logs",
-      "admin": "also actions: deploy, dry run, IP bans, services"
+      "read": "state, findings, alerts, job logs, scripts, moves, Traffic Fly, clusters — viewing",
+      "admin": "actions too: deploy, dry run, IP bans, services, running saved scripts, stack moves, Traffic Fly (without a host limit), manifests into clusters"
     },
     "scope": "Scope",
     "scopeHint": "Hosts and groups limit the token; both empty means all hosts.",

@@ -335,6 +335,11 @@ func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Токену с пределом по хостам — только сценарий целиком на его хостах.
+	if err := s.scriptScopeError(r.Context(), parsed); err != nil {
+		writeErr(w, r, http.StatusForbidden, err)
+		return
+	}
 	for _, a := range parsed.Asks {
 		if strings.TrimSpace(req.Values[a.Key]) == "" {
 			writeError(w, http.StatusBadRequest, msgs.T(lang, "hub.scriptPasswordMissing", a.Prompt))

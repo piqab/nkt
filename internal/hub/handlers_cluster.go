@@ -60,6 +60,9 @@ func (s *Server) handleClusterList(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]clusterJSON, 0, len(list))
 	for _, cl := range list {
+		if !s.clusterInScope(r.Context(), cl.ID) {
+			continue // токену с пределом — только кластеры на его хостах
+		}
 		out = append(out, s.clusterJSON(r.Context(), cl))
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -174,6 +177,10 @@ func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
 	id, err := clusterIDParam(r)
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if !s.clusterInScope(r.Context(), id) {
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenHostDenied"))
 		return
 	}
 	hosts, err := s.db.ClusterHosts(r.Context(), id)

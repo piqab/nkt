@@ -40,6 +40,12 @@ const hostField = (operations: string[], resource: string) => ({
   displayOptions: { show: { resource: [resource], operation: operations } },
 })
 
+/** Идентификатор хоста числом (машина хаба — -1). */
+const hostNumber = (v: string) => {
+  const p = hostPath(v)
+  return p === 'local' ? -1 : Number(p)
+}
+
 const pipelineField = (operations: string[]) => ({
   displayName: 'Pipeline Name or ID',
   name: 'pipelineId',
@@ -60,7 +66,7 @@ export class Nkt implements INodeType {
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-    description: 'Work with an nkt (NetKnownsThat) hub: hosts, findings, deployments, dry runs, fail2ban, alerts',
+    description: 'Work with an nkt (NetKnownsThat) hub: hosts, findings, deployments, dry runs, scripts, stack moves, Traffic Fly, cluster manifests, fail2ban, alerts',
     defaults: { name: 'nkt' },
     inputs: [NodeConnectionTypes.Main],
     outputs: [NodeConnectionTypes.Main],
@@ -74,12 +80,16 @@ export class Nkt implements INodeType {
         options: [
           { name: 'API Call', value: 'api' },
           { name: 'Alert', value: 'event' },
+          { name: 'Cluster', value: 'cluster' },
           { name: 'Container', value: 'container' },
           { name: 'Fail2ban', value: 'fail2ban' },
           { name: 'Host', value: 'host' },
           { name: 'Job', value: 'job' },
+          { name: 'Migration', value: 'migration' },
           { name: 'Pipeline', value: 'pipeline' },
+          { name: 'Script', value: 'script' },
           { name: 'Service', value: 'service' },
+          { name: 'Traffic Fly', value: 'fly' },
         ],
         default: 'host',
       },
@@ -215,6 +225,203 @@ export class Nkt implements INodeType {
         default: 900,
         typeOptions: { minValue: 10 },
         displayOptions: { show: { resource: ['pipeline'], operation: ['deploy', 'dryRun'], wait: [true] } },
+      },
+
+      // --- script
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: { show: { resource: ['script'] } },
+        options: [
+          { name: 'Get Many', value: 'getAll', action: 'Get saved scripts' },
+          { name: 'Run', value: 'run', action: 'Run a saved script' },
+        ],
+        default: 'run',
+      },
+      {
+        displayName: 'Script Name or ID',
+        name: 'scriptId',
+        type: 'options',
+        typeOptions: { loadOptionsMethod: 'getScripts' },
+        default: '',
+        required: true,
+        description: 'A saved hub script (Profiles → Scripts). Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+        displayOptions: { show: { resource: ['script'], operation: ['run'] } },
+      },
+      {
+        displayName: 'Answers (JSON)',
+        name: 'values',
+        type: 'json',
+        default: '{}',
+        description: 'Answers to the questions the script asks at start: {"param:FROM": "web1", "var:DB_PASS": "…", "host:web2": "password"}. The keys are in the "asks" of a check.',
+        displayOptions: { show: { resource: ['script'], operation: ['run'] } },
+      },
+      {
+        displayName: 'Dry Run',
+        name: 'dryRun',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to only ask the hosts for plans instead of changing anything',
+        displayOptions: { show: { resource: ['script'], operation: ['run'] } },
+      },
+
+      // --- migration
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: { show: { resource: ['migration'] } },
+        options: [
+          { name: 'Get Many', value: 'getAll', action: 'Get the moves record' },
+          { name: 'Move Stack', value: 'move', action: 'Move a stack to another host' },
+          { name: 'Preview', value: 'preview', action: 'Preview a stack move' },
+        ],
+        default: 'move',
+      },
+      {
+        displayName: 'From Host Name or ID',
+        name: 'fromHostId',
+        type: 'options',
+        typeOptions: { loadOptionsMethod: 'getHosts' },
+        default: '',
+        required: true,
+        description: 'The host the stack runs on now. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+        displayOptions: { show: { resource: ['migration'], operation: ['move', 'preview'] } },
+      },
+      {
+        displayName: 'Container',
+        name: 'container',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'A container of the stack; the whole compose project moves',
+        displayOptions: { show: { resource: ['migration'], operation: ['move', 'preview'] } },
+      },
+      {
+        displayName: 'To Host Name or ID',
+        name: 'toHostId',
+        type: 'options',
+        typeOptions: { loadOptionsMethod: 'getHosts' },
+        default: '',
+        required: true,
+        description: 'The host to move to. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+        displayOptions: { show: { resource: ['migration'], operation: ['move', 'preview'] } },
+      },
+      {
+        displayName: 'Switch Traffic Fly Routes',
+        name: 'switchFly',
+        type: 'boolean',
+        default: true,
+        description: 'Whether route targets of the stack move to the new host with the same role',
+        displayOptions: { show: { resource: ['migration'], operation: ['move'] } },
+      },
+      {
+        displayName: 'Switch Pipeline',
+        name: 'switchPipeline',
+        type: 'boolean',
+        default: true,
+        description: "Whether the stack's pipeline (host in the description, deployment record, site) moves to the new host",
+        displayOptions: { show: { resource: ['migration'], operation: ['move'] } },
+      },
+      {
+        displayName: 'Remove Leftovers',
+        name: 'cleanLeftovers',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to remove leftovers of an earlier copy of this stack on the new host (moving there and back)',
+        displayOptions: { show: { resource: ['migration'], operation: ['move'] } },
+      },
+
+      // --- Traffic Fly
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: { show: { resource: ['fly'] } },
+        options: [
+          { name: 'Apply', value: 'apply', action: 'Apply the Traffic Fly map' },
+          { name: 'Get Map', value: 'get', action: 'Get the Traffic Fly map' },
+          { name: 'Get Status', value: 'status', action: 'Get the Traffic Fly status' },
+        ],
+        default: 'apply',
+      },
+      {
+        displayName: 'Dry Run',
+        name: 'dryRun',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to only check what applying would change',
+        displayOptions: { show: { resource: ['fly'], operation: ['apply'] } },
+      },
+
+      // --- cluster
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: { show: { resource: ['cluster'] } },
+        options: [
+          { name: 'Apply Manifest', value: 'apply', action: 'Apply a manifest to clusters' },
+          { name: 'Diff Manifest', value: 'diff', action: 'Diff a manifest against clusters' },
+          { name: 'Get Many', value: 'getAll', action: 'Get clusters' },
+        ],
+        default: 'apply',
+      },
+      {
+        displayName: 'Cluster Names or IDs',
+        name: 'clusterIds',
+        type: 'multiOptions',
+        typeOptions: { loadOptionsMethod: 'getClusters' },
+        default: [],
+        required: true,
+        description: 'Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+        displayOptions: { show: { resource: ['cluster'], operation: ['apply', 'diff'] } },
+      },
+      {
+        displayName: 'Manifest Name',
+        name: 'manifestName',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The manifest is saved on the hub under this name with the result per cluster',
+        displayOptions: { show: { resource: ['cluster'], operation: ['apply', 'diff'] } },
+      },
+      {
+        displayName: 'Manifest (YAML)',
+        name: 'manifest',
+        type: 'string',
+        typeOptions: { rows: 12 },
+        default: '',
+        required: true,
+        displayOptions: { show: { resource: ['cluster'], operation: ['apply', 'diff'] } },
+      },
+      {
+        displayName: 'Note',
+        name: 'note',
+        type: 'string',
+        default: '',
+        displayOptions: { show: { resource: ['cluster'], operation: ['apply'] } },
+      },
+      {
+        displayName: 'Wait for Result',
+        name: 'wait',
+        type: 'boolean',
+        default: true,
+        description: 'Whether to wait for the hub job to finish and return its status and log',
+        displayOptions: { show: { resource: ['script', 'migration', 'fly', 'cluster'], operation: ['run', 'move', 'apply'] } },
+      },
+      {
+        displayName: 'Timeout (Seconds)',
+        name: 'timeout',
+        type: 'number',
+        default: 3600,
+        typeOptions: { minValue: 10 },
+        displayOptions: { show: { resource: ['script', 'migration', 'fly', 'cluster'], operation: ['run', 'move', 'apply'], wait: [true] } },
       },
 
       // --- job
@@ -359,6 +566,14 @@ export class Nkt implements INodeType {
         const hosts = (await nktRequest.call(this, 'GET', '/api/hub/hosts')) as IDataObject[]
         return hosts.map((h) => ({ name: `${h.name} (${h.id})`, value: String(h.id) }))
       },
+      async getScripts(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+        const res = (await nktRequest.call(this, 'GET', '/api/hub/scripts')) as IDataObject
+        return ((res.scripts as IDataObject[]) ?? []).map((s) => ({ name: String(s.name), value: String(s.id) }))
+      },
+      async getClusters(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+        const list = (await nktRequest.call(this, 'GET', '/api/hub/clusters')) as IDataObject[]
+        return (list ?? []).map((c) => ({ name: `${c.name} (${c.host_name})`, value: String(c.id) }))
+      },
       async getPipelines(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
         const res = (await nktRequest.call(this, 'GET', '/api/hub/pipelines')) as IDataObject
         return ((res.pipelines as IDataObject[]) ?? []).map((p) => ({ name: String(p.name), value: String(p.id) }))
@@ -397,6 +612,13 @@ export class Nkt implements INodeType {
         const operation = this.getNodeParameter('operation', i) as string
         const push = (data: IDataObject | IDataObject[]) => {
           for (const d of Array.isArray(data) ? data : [data]) out.push({ json: d, pairedItem: { item: i } })
+        }
+        // Задание хаба: с «Wait for Result» — до конца, с журналом.
+        const pushJob = async (res: IDataObject) => {
+          const jobId = Number(res.job_id)
+          if (jobId && this.getNodeParameter('wait', i, false)) {
+            push({ job_id: jobId, ...(await waitJob.call(this, jobId, this.getNodeParameter('timeout', i, 3600) as number)) })
+          } else push(res)
         }
         if (resource === 'host') {
           if (operation === 'getAll') {
@@ -439,6 +661,57 @@ export class Nkt implements INodeType {
               push({ job_id: jobId, ...(await waitJob.call(this, jobId, this.getNodeParameter('timeout', i) as number)) })
             } else push(res)
           }
+        } else if (resource === 'script') {
+          if (operation === 'getAll') {
+            const res = (await nktRequest.call(this, 'GET', '/api/hub/scripts')) as IDataObject
+            push((res.scripts as IDataObject[]) ?? [])
+            continue
+          }
+          const id = Number(this.getNodeParameter('scriptId', i))
+          const raw = this.getNodeParameter('values', i, '{}') as string | IDataObject
+          const values = typeof raw === 'string' ? (raw.trim() ? JSON.parse(raw) : {}) : raw
+          const res = (await nktRequest.call(this, 'POST', `/api/hub/scripts/${id}/run`, { values, dry_run: this.getNodeParameter('dryRun', i) as boolean })) as IDataObject
+          await pushJob(res)
+        } else if (resource === 'migration') {
+          if (operation === 'getAll') {
+            const res = (await nktRequest.call(this, 'GET', '/api/hub/migrations')) as IDataObject
+            push((res.migrations as IDataObject[]) ?? [])
+            continue
+          }
+          const body: IDataObject = {
+            from: hostNumber(this.getNodeParameter('fromHostId', i) as string),
+            to: hostNumber(this.getNodeParameter('toHostId', i) as string),
+            container: (this.getNodeParameter('container', i) as string).trim(),
+          }
+          if (operation === 'preview') {
+            push((await nktRequest.call(this, 'POST', '/api/hub/migrate/preview', body)) as IDataObject)
+            continue
+          }
+          body.switch_fly = this.getNodeParameter('switchFly', i) as boolean
+          body.switch_pipeline = this.getNodeParameter('switchPipeline', i) as boolean
+          body.clean_leftovers = this.getNodeParameter('cleanLeftovers', i) as boolean
+          await pushJob((await nktRequest.call(this, 'POST', '/api/hub/migrate', body)) as IDataObject)
+        } else if (resource === 'fly') {
+          if (operation === 'get') push((await nktRequest.call(this, 'GET', '/api/hub/fly')) as IDataObject)
+          else if (operation === 'status') push((await nktRequest.call(this, 'GET', '/api/hub/fly/status')) as IDataObject)
+          else await pushJob((await nktRequest.call(this, 'POST', '/api/hub/fly/apply', { dry_run: this.getNodeParameter('dryRun', i) as boolean })) as IDataObject)
+        } else if (resource === 'cluster') {
+          if (operation === 'getAll') {
+            push((await nktRequest.call(this, 'GET', '/api/hub/clusters')) as IDataObject[])
+            continue
+          }
+          const body: IDataObject = {
+            name: (this.getNodeParameter('manifestName', i) as string).trim(),
+            content: this.getNodeParameter('manifest', i) as string,
+            clusters: (this.getNodeParameter('clusterIds', i) as string[]).map(Number),
+          }
+          if (operation === 'diff') {
+            const res = (await nktRequest.call(this, 'POST', '/api/hub/k8s/manifests/diff', body)) as IDataObject
+            push((res.results as IDataObject[]) ?? [])
+            continue
+          }
+          body.note = this.getNodeParameter('note', i) as string
+          await pushJob((await nktRequest.call(this, 'POST', '/api/hub/k8s/manifests/apply?job=1', body)) as IDataObject)
         } else if (resource === 'job') {
           const id = this.getNodeParameter('jobId', i) as number
           if (operation === 'get') push(await nktRequest.call(this, 'GET', `/api/hub/jobs/${id}`))

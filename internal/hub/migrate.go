@@ -274,6 +274,10 @@ func (s *Server) handleMigratePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	if allow := s.scopeFilter(ctx); allow != nil && (!allow(req.From) || !allow(req.To)) {
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenHostDenied"))
+		return
+	}
 	p, c, err := s.migrateInspect(ctx, auth.Username(ctx), req.From, req.To, req.Container)
 	if err != nil {
 		writeErr(w, r, http.StatusBadGateway, err)
@@ -350,6 +354,15 @@ func (s *Server) handleMigrationAction(w http.ResponseWriter, r *http.Request) {
 // handleMigrations — GET /hub/migrations: учёт переносов (для карты).
 func (s *Server) handleMigrations(w http.ResponseWriter, r *http.Request) {
 	list := s.loadMigrations(r.Context())
+	if allow := s.scopeFilter(r.Context()); allow != nil {
+		kept := []migrateRecord{}
+		for _, rec := range list {
+			if allow(rec.From) && allow(rec.To) {
+				kept = append(kept, rec)
+			}
+		}
+		list = kept
+	}
 	if list == nil {
 		list = []migrateRecord{}
 	}

@@ -8,6 +8,29 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.72 — 2026-10-21
+
+- **API tokens get scripts, moves, Traffic Fly and clusters.**
+  - Scripts: list, text, check and **running a saved** script
+    (`POST /api/hub/scripts/{id}/run` with answers and `dry_run`); a token
+    cannot create or edit scripts.
+  - Moves: plan, stack move, rollback, "remove old", progress and record.
+  - Traffic Fly: map, status, history, saving the map, point operations,
+    switching, applying — only for a token without a host limit (the map is
+    shared).
+  - Clusters: list and nodes, saved manifests, `kubectl diff` and
+    `kubectl apply` per cluster. Creating and deleting clusters, the
+    kubeconfig and Helm stay closed.
+  - A token limited by hosts: a script only if entirely on its hosts
+    (checked before the run), a move only between them, only clusters with
+    all nodes on them.
+- **n8n:** **Script → Run**, **Migration → Preview / Move Stack**,
+  **Traffic Fly → Apply / Get Map / Get Status**, **Cluster → Apply Manifest
+  / Diff Manifest**.
+- Docs: "Hub API" — the permissions table, limits, `curl` examples; n8n;
+  "Through the API and n8n" sections in "Scripts", "Moving a stack with
+  Traffic Fly" and "Cluster: from zero to the first pod".
+
 ## v1.13.71 — 2026-10-21
 
 - **Scripts: "Ready-made scripts ▾" right in the editor window** — an example
