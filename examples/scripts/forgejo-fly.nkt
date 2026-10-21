@@ -1,0 +1,47 @@
+# Forgejo за Traffic Fly: выкладка и перенос на другой хост
+param FROM "хост, где Forgejo будет выложен сначала"
+param TO "хост, куда его перенести"
+param DOMAIN "имя Forgejo — A-запись на адрес шлюза Traffic Fly"
+
+# Веб и git по SSH — через шлюз; сертификат выпускает шлюз
+pipeline forgejo
+repo: https://github.com/piqab/nkt.git
+ref: main
+action: compose
+compose:
+  file: examples/forgejo/deploy/docker-compose.yml
+  project: forgejo
+  hosts: [${FROM}]
+  wait_timeout: 5m
+  env_keys:
+    forgejo-admin: [FORGEJO_ADMIN_USER, FORGEJO_ADMIN_PASSWORD, FORGEJO_ADMIN_EMAIL]
+  env:
+    POSTGRES_PASSWORD: generate:password
+    FORGEJO_DOMAIN: ${DOMAIN}
+    FORGEJO_ROOT_URL: https://${DOMAIN}/
+    FORGEJO_ADMIN_USER: gitadmin
+    FORGEJO_ADMIN_PASSWORD: generate:password
+    FORGEJO_ADMIN_EMAIL: admin@example.com
+  fly:
+    - route: forgejo-web
+      kind: https
+      names: [${DOMAIN}]
+      tls: gateway
+      service: forgejo
+      target_port: 3000
+      check: http
+      check_path: /api/healthz
+    - route: forgejo-ssh
+      kind: tcp
+      port: 2222
+      service: forgejo
+      target_port: 2222
+end
+deploy forgejo 20m
+
+# Проверка снаружи — через DNS и шлюз, как зайдёт пользователь
+wait url https://${DOMAIN}/api/healthz 200 10m
+
+# Перенос: маршруты Traffic Fly и конвейер переключаются на новый хост
+migrate ${FROM} forgejo-forgejo-1 to ${TO} switch-fly switch-pipeline
+wait url https://${DOMAIN}/api/healthz 200 5m

@@ -171,6 +171,79 @@
 будет только с уборкой этих остатков (окно переноса предложит). Через
 неделю после переноса хаб напомнит о неубранной копии в «Оповещениях».
 
+## То же сценарием
+
+Всё от выкладки до проверки после переноса — одним сценарием хаба
+(«Сценарии» → вкладка «Справка» → «Готовые сценарии» → «Forgejo за Traffic
+Fly: выкладка и перенос» → «В редактор», он же — [`examples/scripts/forgejo-fly.nkt`](https://github.com/piqab/nkt/blob/main/examples/scripts/forgejo-fly.nkt)).
+При запуске спрашивает хост, где выложить, хост, куда перенести, и имя;
+«Сухой прогон» покажет сухой прогон конвейера, а план переноса — при запуске
+(до выкладки стека на хосте ещё нет).
+
+```
+# Forgejo за Traffic Fly: выкладка и перенос на другой хост
+param FROM "хост, где Forgejo будет выложен сначала"
+param TO "хост, куда его перенести"
+param DOMAIN "имя Forgejo — A-запись на адрес шлюза Traffic Fly"
+
+# Веб и git по SSH — через шлюз; сертификат выпускает шлюз
+pipeline forgejo
+repo: https://github.com/piqab/nkt.git
+ref: main
+action: compose
+compose:
+  file: examples/forgejo/deploy/docker-compose.yml
+  project: forgejo
+  hosts: [${FROM}]
+  wait_timeout: 5m
+  env_keys:
+    forgejo-admin: [FORGEJO_ADMIN_USER, FORGEJO_ADMIN_PASSWORD, FORGEJO_ADMIN_EMAIL]
+  env:
+    POSTGRES_PASSWORD: generate:password
+    FORGEJO_DOMAIN: ${DOMAIN}
+    FORGEJO_ROOT_URL: https://${DOMAIN}/
+    FORGEJO_ADMIN_USER: gitadmin
+    FORGEJO_ADMIN_PASSWORD: generate:password
+    FORGEJO_ADMIN_EMAIL: admin@example.com
+  fly:
+    - route: forgejo-web
+      kind: https
+      names: [${DOMAIN}]
+      tls: gateway
+      service: forgejo
+      target_port: 3000
+      check: http
+      check_path: /api/healthz
+    - route: forgejo-ssh
+      kind: tcp
+      port: 2222
+      service: forgejo
+      target_port: 2222
+end
+deploy forgejo 20m
+
+# Проверка снаружи — через DNS и шлюз, как зайдёт пользователь
+wait url https://${DOMAIN}/api/healthz 200 10m
+
+# Перенос: маршруты Traffic Fly и конвейер переключаются на новый хост
+migrate ${FROM} forgejo-forgejo-1 to ${TO} switch-fly switch-pipeline
+wait url https://${DOMAIN}/api/healthz 200 5m
+```
+
+- **`pipeline forgejo … end`** — конвейер, как «Сохранить» в окне: пароли
+  создаст хаб, значения уйдут в «Секреты».
+- **`deploy forgejo 20m`** — выкладка с ожиданием; маршруты `forgejo-web` и
+  `forgejo-ssh` создаёт сам конвейер (блок `fly:`).
+- **`wait url …`** — проверка снаружи, с хаба по настоящему имени: DNS,
+  шлюз и сертификат — как у пользователя.
+- **`migrate … switch-fly switch-pipeline`** — перенос, как с карты: при
+  препятствиях сценарий остановится до остановки стека, упавший перенос
+  откатится сам.
+
+Сценарий — разовый: повторный запуск снова сохранит конвейер с хостом
+`FROM` и следующая выкладка вернула бы стек туда. Откат и уборку старой копии
+делайте с карты (шаги 5 и 6).
+
 ## См. также
 
 - [Карта хостов](/guide/hub-hosts#карта-хостов) — перенос подробно: что

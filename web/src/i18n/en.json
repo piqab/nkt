@@ -2569,7 +2569,8 @@
         "password": "password in text",
         "password-ask": "password at run",
         "key-hub": "hub key"
-      }
+      },
+      "hub": "Hub: pipelines, deployments, outside checks"
     },
     "help": {
       "rules": "How the language works",

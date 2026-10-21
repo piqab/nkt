@@ -8,9 +8,10 @@ import (
 // сверяется до запуска, чтобы опечатка в имени профиля не всплыла на
 // пятом шаге, когда хосты уже заведены.
 type Refs struct {
-	Hosts    map[string]bool
-	Groups   map[string]bool
-	Profiles map[string]bool
+	Hosts     map[string]bool
+	Groups    map[string]bool
+	Profiles  map[string]bool
+	Pipelines map[string]bool
 }
 
 // Check сверяет ссылки сценария с тем, что есть в хабе и что заводит сам
@@ -21,11 +22,24 @@ func Check(sc Script, refs Refs) []Issue {
 	fail := func(line int, key string, args ...any) {
 		issues = append(issues, Issue{Line: line, Err: msgs.Errorf(key, args...)})
 	}
-	known := func(m map[string]bool, k string) bool { return m != nil && m[k] }
+	known := func(m map[string]bool, k string) bool { return (m != nil && m[k]) || sc.Placeholder(k) }
 	hosts := map[string]bool{}
 	groups := map[string]bool{}
+	pipelines := map[string]bool{}
 	for _, s := range sc.Steps {
 		switch s.Kind {
+		case KindPipeline:
+			pipelines[s.Name] = true
+		case KindDeploy:
+			if !known(refs.Pipelines, s.Name) && !pipelines[s.Name] {
+				fail(s.Line, "script.unknownPipeline", s.Name)
+			}
+		case KindMigrate:
+			for _, h := range []string{s.Host, s.Args["to"]} {
+				if !known(refs.Hosts, h) && !hosts[h] {
+					fail(s.Line, "script.unknownHost", h)
+				}
+			}
 		case KindGroup:
 			if known(refs.Groups, s.Name) || groups[s.Name] {
 				fail(s.Line, "script.groupExists", s.Name)

@@ -49,6 +49,9 @@ const (
 	KindGitClone     Kind = "git.clone"
 	KindK8sCreate    Kind = "k8s.create"
 	KindK8sDestroy   Kind = "k8s.destroy"
+	KindPipeline     Kind = "pipeline"
+	KindDeploy       Kind = "deploy"
+	KindMigrate      Kind = "migrate"
 )
 
 // ArgDoc — один аргумент команды в справке.
@@ -127,7 +130,7 @@ var Commands = []CommandDoc{
 		Example: "install web1 web2",
 	},
 	{
-		Kind: KindWait, Syntax: "wait ХОСТ online [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ port ПОРТ [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ http URL [КОД] [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ service ИМЯ active [ДЛИТЕЛЬНОСТЬ]",
+		Kind: KindWait, Syntax: "wait ХОСТ online [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ port ПОРТ [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ http URL [КОД] [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ service ИМЯ active [ДЛИТЕЛЬНОСТЬ]\nwait url URL [КОД] [ДЛИТЕЛЬНОСТЬ]",
 		Summary: "script.doc.wait",
 		Args: []ArgDoc{
 			{Name: "ХОСТ", Required: true, Desc: "script.doc.wait.host"},
@@ -135,9 +138,10 @@ var Commands = []CommandDoc{
 			{Name: "port", Desc: "script.doc.wait.port"},
 			{Name: "http", Desc: "script.doc.wait.http"},
 			{Name: "service", Desc: "script.doc.wait.service"},
+			{Name: "url", Desc: "script.doc.wait.url"},
 			{Name: "ДЛИТЕЛЬНОСТЬ", Desc: "script.doc.wait.duration"},
 		},
-		Example: "wait web1 online 5m\nwait web1 port 443 30s\nwait web1 http https://example.org/ 200 1m\nwait web1 service nginx active",
+		Example: "wait web1 online 5m\nwait web1 port 443 30s\nwait web1 http https://example.org/ 200 1m\nwait web1 service nginx active\nwait url https://git.example.com/api/healthz 200 10m",
 	},
 	{
 		Kind: KindPackages, OnHost: true, Syntax: "on ХОСТ… packages install|remove ПАКЕТ…",
@@ -285,6 +289,36 @@ var Commands = []CommandDoc{
 		Args:    []ArgDoc{{Name: "ИМЯ", Required: true, Desc: "script.doc.k8sDestroy.name"}},
 		Example: "on hv1 k8s destroy lab",
 	},
+	{
+		Kind: KindPipeline, Syntax: "pipeline ИМЯ\n  описание конвейера построчно\nend",
+		Summary: "script.doc.pipeline", Block: true,
+		Args: []ArgDoc{
+			{Name: "ИМЯ", Required: true, Desc: "script.doc.pipeline.name"},
+		},
+		Example: "pipeline hello\nrepo: https://github.com/org/app.git\nref: main\naction: compose\ncompose:\n  file: deploy/docker-compose.yml\n  project: hello\n  hosts: [web1]\n  env:\n    DB_PASSWORD: generate:password\nend",
+	},
+	{
+		Kind: KindDeploy, Syntax: "deploy КОНВЕЙЕР [ДЛИТЕЛЬНОСТЬ]",
+		Summary: "script.doc.deploy",
+		Args: []ArgDoc{
+			{Name: "КОНВЕЙЕР", Required: true, Desc: "script.doc.deploy.name"},
+			{Name: "ДЛИТЕЛЬНОСТЬ", Desc: "script.doc.deploy.duration"},
+		},
+		Example: "deploy hello 20m",
+	},
+	{
+		Kind: KindMigrate, Syntax: "migrate ХОСТ КОНТЕЙНЕР to ХОСТ [switch-fly] [switch-pipeline] [clean-leftovers]",
+		Summary: "script.doc.migrate",
+		Args: []ArgDoc{
+			{Name: "ХОСТ", Required: true, Desc: "script.doc.migrate.from"},
+			{Name: "КОНТЕЙНЕР", Required: true, Desc: "script.doc.migrate.container"},
+			{Name: "to ХОСТ", Required: true, Desc: "script.doc.migrate.to"},
+			{Name: "switch-fly", Desc: "script.doc.migrate.switchFly"},
+			{Name: "switch-pipeline", Desc: "script.doc.migrate.switchPipeline"},
+			{Name: "clean-leftovers", Desc: "script.doc.migrate.cleanLeftovers"},
+		},
+		Example: "migrate web1 forgejo-forgejo-1 to web2 switch-fly switch-pipeline",
+	},
 }
 
 // docByKind — команда справки по виду шага.
@@ -362,6 +396,10 @@ on lab-web packages install nginx
 `,
 	},
 	{
+		Title: "script.ex.forgejoFly.title", Summary: "script.ex.forgejoFly.summary",
+		Content: ForgejoFlyExample,
+	},
+	{
 		Title: "script.ex.maintain.title", Summary: "script.ex.maintain.summary",
 		Content: `# Хосты уже есть в хабе: только действия
 on web1 apply profile web-base
@@ -382,6 +420,16 @@ on web2 packages remove telnet
 // и одинаковы в обоих вариантах.
 var englishTerms = [][2]string{
 	{"compose-файл построчно", "compose file line by line"},
+	{"описание конвейера построчно", "pipeline description line by line"},
+	{"Forgejo за Traffic Fly: выкладка и перенос на другой хост", "Forgejo behind Traffic Fly: deploy and move to another host"},
+	{"хост, где Forgejo будет выложен сначала", "host where Forgejo is deployed first"},
+	{"хост, куда его перенести", "host to move it to"},
+	{"имя Forgejo — A-запись на адрес шлюза Traffic Fly", "Forgejo name — A record at the Traffic Fly gateway"},
+	{"Веб и git по SSH — через шлюз; сертификат выпускает шлюз", "Web and git over SSH go through the gateway; the gateway issues the certificate"},
+	{"Проверка снаружи — через DNS и шлюз, как зайдёт пользователь", "Check from outside — via DNS and the gateway, as a user would"},
+	{"Перенос: маршруты Traffic Fly и конвейер переключаются на новый хост", "Move: Traffic Fly routes and the pipeline switch to the new host"},
+	{"КОНВЕЙЕР", "PIPELINE"},
+	{"КОНТЕЙНЕР", "CONTAINER"},
 	{"содержимое построчно", "contents line by line"},
 	{"адрес нового сервера", "address of the new server"},
 	{"имя хоста в хабе", "host name on the hub"},
@@ -426,3 +474,55 @@ func Localize(text string, en bool) string {
 	}
 	return text
 }
+
+// ForgejoFlyExample — сценарий справки «Перенос стека с Traffic Fly»:
+// Forgejo через шлюз (examples/forgejo/pipeline.fly.yaml), выкладка,
+// проверка снаружи, перенос на другой хост и проверка снова.
+const ForgejoFlyExample = `# Forgejo за Traffic Fly: выкладка и перенос на другой хост
+param FROM "хост, где Forgejo будет выложен сначала"
+param TO "хост, куда его перенести"
+param DOMAIN "имя Forgejo — A-запись на адрес шлюза Traffic Fly"
+
+# Веб и git по SSH — через шлюз; сертификат выпускает шлюз
+pipeline forgejo
+repo: https://github.com/piqab/nkt.git
+ref: main
+action: compose
+compose:
+  file: examples/forgejo/deploy/docker-compose.yml
+  project: forgejo
+  hosts: [${FROM}]
+  wait_timeout: 5m
+  env_keys:
+    forgejo-admin: [FORGEJO_ADMIN_USER, FORGEJO_ADMIN_PASSWORD, FORGEJO_ADMIN_EMAIL]
+  env:
+    POSTGRES_PASSWORD: generate:password
+    FORGEJO_DOMAIN: ${DOMAIN}
+    FORGEJO_ROOT_URL: https://${DOMAIN}/
+    FORGEJO_ADMIN_USER: gitadmin
+    FORGEJO_ADMIN_PASSWORD: generate:password
+    FORGEJO_ADMIN_EMAIL: admin@example.com
+  fly:
+    - route: forgejo-web
+      kind: https
+      names: [${DOMAIN}]
+      tls: gateway
+      service: forgejo
+      target_port: 3000
+      check: http
+      check_path: /api/healthz
+    - route: forgejo-ssh
+      kind: tcp
+      port: 2222
+      service: forgejo
+      target_port: 2222
+end
+deploy forgejo 20m
+
+# Проверка снаружи — через DNS и шлюз, как зайдёт пользователь
+wait url https://${DOMAIN}/api/healthz 200 10m
+
+# Перенос: маршруты Traffic Fly и конвейер переключаются на новый хост
+migrate ${FROM} forgejo-forgejo-1 to ${TO} switch-fly switch-pipeline
+wait url https://${DOMAIN}/api/healthz 200 5m
+`

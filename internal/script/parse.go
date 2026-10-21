@@ -2,6 +2,7 @@ package script
 
 import (
 	"net"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -56,10 +57,19 @@ type Script struct {
 	// (host:ИМЯ), «param» (param:ИМЯ), «set ИМЯ ask» (var:ИМЯ, секрет),
 	// «token ask» у git (token:URL).
 	Asks []Ask
-	// Hosts — хосты, заведённые сценарием (по имени); Groups — группы.
-	Hosts  []string
-	Groups []string
+	// Hosts — хосты, заведённые сценарием (по имени); Groups — группы;
+	// Pipelines — конвейеры, которые сценарий сохраняет.
+	Hosts     []string
+	Groups    []string
+	Pipelines []string
+	// Unresolved — значения параметров ещё не известны (проверка без
+	// запуска): вместо них заглушка, и имена из параметров сверяются
+	// только при запуске.
+	Unresolved bool
 }
+
+// Placeholder — имя из незаполненного параметра: проверить его нельзя.
+func (sc Script) Placeholder(name string) bool { return sc.Unresolved && name == paramPlaceholder }
 
 // AskKeys — ключи вопросов.
 func (sc Script) AskKeys() []string {
@@ -199,6 +209,7 @@ func parseDecl(line string, sc *Script, values map[string]string) (bool, bool, e
 			sc.Vars[toks[1]] = v
 		} else {
 			sc.Vars[toks[1]] = paramPlaceholder
+			sc.Unresolved = true
 		}
 		return true, true, nil
 	case toks[0] == "set" && len(toks) == 3 && toks[2] == "ask":
@@ -210,6 +221,7 @@ func parseDecl(line string, sc *Script, values map[string]string) (bool, bool, e
 			sc.Vars[toks[1]] = v
 		} else {
 			sc.Vars[toks[1]] = paramPlaceholder
+			sc.Unresolved = true
 		}
 		return true, true, nil
 	}
@@ -370,6 +382,41 @@ func parseStep(toks []string, sc *Script) (Step, error) {
 		return Step{Kind: KindInstall, Host: toks[1], Hosts: toks[1:]}, nil
 	case "wait":
 		return parseWait(toks)
+	case "pipeline":
+		// Описание конвейера блоком до «end» — как текст в окне конвейера.
+		if len(toks) != 2 || !nameRe.MatchString(toks[1]) {
+			return Step{}, msgs.Errorf("script.badPipeline")
+		}
+		sc.Pipelines = append(sc.Pipelines, toks[1])
+		return Step{Kind: KindPipeline, Name: toks[1]}, nil
+	case "deploy":
+		// deploy ИМЯ [ДЛИТЕЛЬНОСТЬ] — выкладка конвейера, ожидание итога.
+		if len(toks) < 2 || len(toks) > 3 || !nameRe.MatchString(toks[1]) {
+			return Step{}, msgs.Errorf("script.badDeploy")
+		}
+		args := map[string]string{"timeout": "30m"}
+		if len(toks) == 3 {
+			if _, err := time.ParseDuration(toks[2]); err != nil {
+				return Step{}, msgs.Errorf("script.badDuration", toks[2])
+			}
+			args["timeout"] = toks[2]
+		}
+		return Step{Kind: KindDeploy, Name: toks[1], Args: args}, nil
+	case "migrate":
+		// migrate ХОСТ КОНТЕЙНЕР to ХОСТ [switch-fly] [switch-pipeline]
+		// [clean-leftovers] — перенос стека, как с карты хостов.
+		if len(toks) < 5 || !nameRe.MatchString(toks[1]) || !nameRe.MatchString(toks[2]) || toks[3] != "to" || !nameRe.MatchString(toks[4]) {
+			return Step{}, msgs.Errorf("script.badMigrate")
+		}
+		if toks[1] == toks[4] && !sc.Placeholder(toks[1]) {
+			return Step{}, msgs.Errorf("script.migrateSameHost", toks[1])
+		}
+		args, err := kv(toks[5:], nil, []string{"switch-fly", "switch-pipeline", "clean-leftovers"})
+		if err != nil {
+			return Step{}, err
+		}
+		args["to"] = toks[4]
+		return Step{Kind: KindMigrate, Host: toks[1], Name: toks[2], Args: args}, nil
 	case "on":
 		// Хосты — все слова до первой команды; их может быть несколько.
 		i := 1
@@ -639,8 +686,12 @@ func splitAddr(s string) (addr, port string, err error) {
 	return addr, port, nil
 }
 
-// parseWait разбирает «wait ХОСТ online|port|http|service …».
+// parseWait разбирает «wait ХОСТ online|port|http|service …» и
+// «wait url URL [КОД] [ДЛИТЕЛЬНОСТЬ]» — адрес снаружи, запросом с хаба.
 func parseWait(toks []string) (Step, error) {
+	if len(toks) >= 3 && toks[1] == "url" && (strings.HasPrefix(toks[2], "http://") || strings.HasPrefix(toks[2], "https://")) {
+		return parseWaitURL(toks[2:])
+	}
 	if len(toks) < 3 || !nameRe.MatchString(toks[1]) {
 		return Step{}, msgs.Errorf("script.badWait")
 	}
@@ -693,6 +744,33 @@ func parseWait(toks []string) (Step, error) {
 		args["timeout"] = rest[0]
 	}
 	return st, nil
+}
+
+// parseWaitURL — «wait url URL [КОД] [ДЛИТЕЛЬНОСТЬ]»: хоста нет, проверка
+// с хаба по настоящему адресу (DNS, сертификат) — как зайдёт пользователь.
+func parseWaitURL(rest []string) (Step, error) {
+	u, err := url.Parse(rest[0])
+	if err != nil || u.Host == "" || u.User != nil {
+		return Step{}, msgs.Errorf("script.badWaitURL", rest[0])
+	}
+	args := map[string]string{"url": rest[0], "code": "200", "timeout": "5m"}
+	rest = rest[1:]
+	if len(rest) > 0 {
+		if n, err := strconv.Atoi(rest[0]); err == nil && n >= 100 && n < 600 {
+			args["code"] = rest[0]
+			rest = rest[1:]
+		}
+	}
+	if len(rest) > 1 {
+		return Step{}, msgs.Errorf("script.unexpectedWord", rest[1])
+	}
+	if len(rest) == 1 {
+		if _, err := time.ParseDuration(rest[0]); err != nil {
+			return Step{}, msgs.Errorf("script.badDuration", rest[0])
+		}
+		args["timeout"] = rest[0]
+	}
+	return Step{Kind: KindWait, Action: "url", Args: args}, nil
 }
 
 // expandKnown подставляет в текст блока только переменные сценария
