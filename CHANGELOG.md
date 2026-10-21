@@ -888,3 +888,4 @@
 - `44c2a596` Go 1.26.10 (GO-2026-6809), vite 8.3.4 (Dependabot #19–#21); 1.13.64
 - `a69c6b02` Справка «Перенос стека с Traffic Fly» на примере Forgejo, examples/forgejo/pipeline.fly.yaml, призраки на карте первыми; 1.13.65
 - `c4491360` Справка «Кластер Kubernetes: от нуля до первого пода» (kubeadm на двух хостах, Cilium Ingress, Traffic Fly); 1.13.66
+- `3e57106c` Сценарии: pipeline, deploy, migrate, wait url; сценарий Forgejo за Traffic Fly; 1.13.67
