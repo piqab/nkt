@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.66 — 2026-10-21
+
+- **Guide "A Kubernetes cluster: from zero to the first pod"** — step by
+  step: kubeadm with three machines on two hosts over WireGuard, Cilium
+  replacing kube-proxy, dry run and creation, Cilium Ingress in host network
+  mode (port 8080 on every node), a `whoami` test pod and outside access over
+  `https://` through a Traffic Fly route to all three nodes — certificate on
+  the gateway, balancing, a failed node taken out; cleanup and common
+  problems.
+
 ## v1.13.65 — 2026-10-21
 
 - **Guide "Moving a stack with Traffic Fly"** — step by step with Forgejo:
