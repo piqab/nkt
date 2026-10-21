@@ -4934,7 +4934,7 @@
     "pipelineCannot": "Pipeline {{name}} picks hosts by group (or already has the new host) — the move will not switch it; edit the description yourself, or the next deployment brings the stack up on {{host}} again.",
     "migratePorts": "Ports:",
     "migrateSkipped": "System paths are not copied — the new host needs its own: {{list}}",
-    "migrateDowntime": "The stack on the old host stops while the data moves and stays stopped — for a rollback. If it is a Traffic Fly target or has a site, switch them after the move.",
+    "migrateDowntime": "The stack on the old host stops for the data transfer and stays stopped — for a rollback. Traffic Fly routes and the pipeline not switched by the checkboxes above keep pointing at the old host.",
     "migrateProblems": "Cannot move:",
     "migrateGo": "Move",
     "migratedTitle": "Moved: {{name}}",

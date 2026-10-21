@@ -313,6 +313,8 @@ runs a job with a log. A stack's container moves with the whole stack:
 while it is dragged, all the stack's tiles and its frame are highlighted,
 and the cursor reads `stack <name> · containers: N`.
 
+- **Step by step** with Forgejo behind Traffic Fly — [Moving a stack with
+  Traffic Fly](/en/guide/migrate-with-fly).
 - **What moves.** A compose project container brings the whole project:
   the working directory (compose files, `.env`, directories next to it),
   named volumes, bind mounts outside it, images. A standalone container

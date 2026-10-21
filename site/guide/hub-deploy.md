@@ -308,7 +308,7 @@ Codeberg/Gitea/Forgejo `…/src/branch/…`, их raw-варианты), выб�
 | Uptime Kuma | compose-файл проекта как есть, данные в `./data` |
 | umami + PostgreSQL | секреты из `.env` (`env_keys`), закреплённая версия (`images`) |
 | n8n + PostgreSQL | три сервиса, файл рядом (`files`), всё из `.env` проекта |
-| Forgejo + PostgreSQL | без мастера установки — администратор из `.env` разовым сервисом; второй порт наружу — SSH 2222 (`ports` с `0.0.0.0`) |
+| Forgejo + PostgreSQL | без мастера установки — администратор из `.env` разовым сервисом; второй порт наружу — SSH 2222 (`ports` с `0.0.0.0`); вариант через Traffic Fly (`pipeline.fly.yaml`: `https` и `tcp` 2222 через шлюз) — для [переноса между хостами](/guide/migrate-with-fly) |
 | WordPress + MariaDB | сайт за HTTPS-прокси (`X-Forwarded-Proto`) |
 | Plausible | три сервиса с ClickHouse, каталог конфигов (`files`) |
 | Authorizer + PostgreSQL | настройки только флагами запуска — из `.env` в `command:`; закомментированный вариант входа через Traffic Fly (`fly:`) |

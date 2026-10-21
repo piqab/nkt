@@ -522,9 +522,12 @@ export function HostsMap({
         return true
       })
       if ((onlyLinked || ql) && items.length === 0 && !h.name.toLowerCase().includes(ql)) continue
-      // Сначала связанные, потом работающие, потом по имени: свёрнутый
-      // хост показывает самое важное.
+      // Сначала переезжающие сюда (призраки), связанные, потом работающие,
+      // потом по имени: свёрнутый хост показывает самое важное.
       items = [...items].sort((a, b) => {
+        const ga = a.ghost ? 0 : 1
+        const gb = b.ghost ? 0 : 1
+        if (ga !== gb) return ga - gb
         const la = linkedTiles.has(tileKey(h.id, a.kind, a.name)) ? 0 : 1
         const lb = linkedTiles.has(tileKey(h.id, b.kind, b.name)) ? 0 : 1
         const ra = (a.state ?? '').toLowerCase() === 'running' ? 0 : 1

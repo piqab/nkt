@@ -323,7 +323,7 @@ placeholders `<service from compose>` and `<container port>` in `site:`:
 | Uptime Kuma | the project's compose file as is, data in `./data` |
 | umami + PostgreSQL | secrets from `.env` (`env_keys`), a pinned version (`images`) |
 | n8n + PostgreSQL | three services, a file alongside (`files`), everything from the project's `.env` |
-| Forgejo + PostgreSQL | no install wizard: the administrator comes from `.env` through a one-shot service; a second port to the outside, SSH 2222 (`ports` with `0.0.0.0`) |
+| Forgejo + PostgreSQL | no install wizard: the administrator comes from `.env` through a one-shot service; a second port to the outside, SSH 2222 (`ports` with `0.0.0.0`); a Traffic Fly variant (`pipeline.fly.yaml`: `https` and `tcp` 2222 through the gateway) — for [moving between hosts](/en/guide/migrate-with-fly) |
 | WordPress + MariaDB | a site behind the HTTPS proxy (`X-Forwarded-Proto`) |
 | Plausible | three services with ClickHouse, a config directory (`files`) |
 | Authorizer + PostgreSQL | configuration by startup flags only — from `.env` in `command:`; a commented-out variant entering through Traffic Fly (`fly:`) |
