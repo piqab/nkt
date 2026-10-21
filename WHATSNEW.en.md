@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.70 — 2026-10-21
+
+- Parsing `fly route` in scripts: the "the key has a value" check sits right
+  at the access (CodeQL #325 "Off-by-one comparison against length"); there
+  was no out-of-bounds access; a test for keys without a value at the end of
+  the line.
+
 ## v1.13.69 — 2026-10-21
 
 - **Documentation site: vite 6.4.4** instead of 5.4.21 inside vitepress 1.6.4

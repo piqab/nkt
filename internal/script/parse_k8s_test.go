@@ -68,6 +68,13 @@ func TestParseK8sFlyCommands(t *testing.T) {
 		"fly route hello https names a.example.com check ping targets cluster lab port 8080",
 		"fly route hello ftp names a.example.com targets cluster lab port 8080",
 		"fly route mc tcp port 25565 target web1 vm mc 99999",
+		// ключ без значения последним словом — ошибка, а не выход за границы
+		"fly route hello https names",
+		"fly route mc tcp port",
+		"fly route hello https names a.example.com tls",
+		"fly route hello https names a.example.com check",
+		"fly route hello https names a.example.com targets cluster lab port",
+		"fly route mc tcp port 25565 target web1 vm mc",
 	} {
 		if _, issues := Parse(bad, nil); len(issues) == 0 {
 			t.Errorf("%q разобрано без ошибки", bad)
