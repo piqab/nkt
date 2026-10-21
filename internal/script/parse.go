@@ -824,17 +824,11 @@ func parseFly(toks []string) (Step, error) {
 	}
 	st := Step{Kind: KindFlyRoute, Name: toks[2], Action: toks[3], Args: map[string]string{}}
 	rest := toks[4:]
-	need := func(n int) error {
-		if len(rest) < n+1 {
-			return msgs.Errorf("script.missingValue", rest[0])
-		}
-		return nil
-	}
 	for len(rest) > 0 {
 		switch rest[0] {
 		case "names":
-			if err := need(1); err != nil {
-				return Step{}, err
+			if len(rest) < 2 {
+				return Step{}, msgs.Errorf("script.missingValue", rest[0])
 			}
 			for _, n := range strings.Split(rest[1], ",") {
 				if n = strings.TrimSpace(n); n != "" {
@@ -843,8 +837,8 @@ func parseFly(toks []string) (Step, error) {
 			}
 			rest = rest[2:]
 		case "port", "check", "path", "gateway":
-			if err := need(1); err != nil {
-				return Step{}, err
+			if len(rest) < 2 {
+				return Step{}, msgs.Errorf("script.missingValue", rest[0])
 			}
 			if _, dup := st.Args[rest[0]]; dup {
 				return Step{}, msgs.Errorf("script.duplicateArg", rest[0])
@@ -852,8 +846,8 @@ func parseFly(toks []string) (Step, error) {
 			st.Args[rest[0]] = rest[1]
 			rest = rest[2:]
 		case "tls":
-			if err := need(1); err != nil {
-				return Step{}, err
+			if len(rest) < 2 {
+				return Step{}, msgs.Errorf("script.missingValue", rest[0])
 			}
 			if rest[1] != "gateway" {
 				return Step{}, msgs.Errorf("script.badFlyRoute")
