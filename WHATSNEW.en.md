@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.65 — 2026-10-21
+
+- **Guide "Moving a stack with Traffic Fly"** — step by step with Forgejo:
+  preparation, the plan window, the move steps on the map, checks (web and
+  `git` over HTTPS and SSH), rollback, removing the old copy, common
+  problems.
+- **Forgejo through Traffic Fly** — `examples/forgejo/pipeline.fly.yaml`:
+  web (`https`, certificate on the gateway) and git over SSH (`tcp` 2222)
+  through the gateway, nothing opened on the host; such a stack moves
+  between hosts without DNS changes.
+- **Hosts map:** stacks moving onto a collapsed host (more than 12 tiles) no
+  longer hide under "+N more" — ghosts come first. The move plan window no
+  longer carries the outdated "switch Traffic Fly after the move" hint — the
+  checkboxes above switch the routes and the pipeline.
+
 ## v1.13.64 — 2026-10-21
 
 - **Go 1.26.10** (was 1.26.9): a `crypto/x509` fix — distrust compromised

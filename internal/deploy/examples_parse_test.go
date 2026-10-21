@@ -45,3 +45,27 @@ func TestSiteMaxBody(t *testing.T) {
 		}
 	}
 }
+
+// Forgejo через Traffic Fly (справка «Перенос стека с Traffic Fly»): веб —
+// https с сертификатом на шлюзе, git по SSH — tcp 2222; прокси хоста нет.
+func TestForgejoFlyExample(t *testing.T) {
+	raw, err := os.ReadFile("../../examples/forgejo/pipeline.fly.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := ParseSpec(string(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := spec.Compose
+	if c == nil || c.Site != nil || len(c.Fly) != 2 {
+		t.Fatalf("%+v", c)
+	}
+	web, ssh := c.Fly[0], c.Fly[1]
+	if web.Kind != "https" || web.TLS != "gateway" || web.Port != 443 || web.TargetPort != 3000 || web.Check != "http" || web.Service != "forgejo" {
+		t.Errorf("web: %+v", web)
+	}
+	if ssh.Kind != "tcp" || ssh.Port != 2222 || ssh.TargetPort != 2222 || ssh.Service != "forgejo" {
+		t.Errorf("ssh: %+v", ssh)
+	}
+}

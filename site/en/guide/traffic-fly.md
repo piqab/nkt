@@ -404,6 +404,13 @@ The gateway certificate is not reissued either: the gateway uses the saved
 one and goes to Let's Encrypt only when fewer than 30 days remain. The
 deployment Dry run shows whether a route will be created or reconciled.
 
+### Moving a stack between hosts
+
+A stack that routes lead to can be moved to another host from the hosts
+map — the routes switch to the new host by themselves, A records and
+certificates stay the same. Step by step with Forgejo as the example:
+[Moving a stack with Traffic Fly](/en/guide/migrate-with-fly).
+
 ## Without the hub
 
 The hub is needed for changes, the map and alerts. Traffic itself flows

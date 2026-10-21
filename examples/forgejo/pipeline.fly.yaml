@@ -1,0 +1,46 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Forgejo + PostgreSQL — вход через Traffic Fly (шлюз nkt-edge в роли fly)
+# вместо прокси на хосте: веб и git по SSH идут через VPS-шлюз, A-запись
+# git.example.com — на адрес шлюза. Стек можно переносить между хостами
+# (карта хостов → «Перенос»): маршруты переключаются на новый хост сами,
+# DNS менять не нужно. Пошагово — справка «Перенос стека с Traffic Fly».
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/forgejo/deploy/docker-compose.yml
+  project: forgejo
+  hosts: [web1]
+  wait_timeout: 5m
+  # Публикаций наружу нет: шлюз ходит к контейнеру по туннелю, порт 2222
+  # из compose-файла опубликован только на 127.0.0.1 (bind по умолчанию).
+  env_keys:
+    forgejo-admin: [FORGEJO_ADMIN_USER, FORGEJO_ADMIN_PASSWORD, FORGEJO_ADMIN_EMAIL]
+  env:
+    POSTGRES_PASSWORD: generate:password
+    FORGEJO_DOMAIN: git.example.com
+    FORGEJO_ROOT_URL: https://git.example.com/
+    FORGEJO_ADMIN_USER: gitadmin
+    FORGEJO_ADMIN_PASSWORD: generate:password
+    FORGEJO_ADMIN_EMAIL: admin@example.com
+  # Вместо site: — два маршрута Traffic Fly. Сертификат git.example.com
+  # выпускает и продлевает шлюз; Forgejo получает обычный HTTP с
+  # X-Forwarded-For и X-Forwarded-Proto: https.
+  fly:
+    - route: forgejo-web
+      # gateway: fly-vps        # имя шлюза; один шлюз — можно не писать
+      kind: https
+      names: [git.example.com]
+      tls: gateway
+      service: forgejo
+      target_port: 3000
+      check: http
+      check_path: /api/healthz
+    # git по SSH: ssh://git@git.example.com:2222/… — порт 2222 на шлюзе.
+    - route: forgejo-ssh
+      kind: tcp
+      port: 2222
+      service: forgejo
+      target_port: 2222

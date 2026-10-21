@@ -32,3 +32,14 @@ administrator right away.
 
 Gitea data does not move to Forgejo 16: remove the old gitea example's stack
 (with its volumes) and deploy this one fresh.
+
+## Traffic Fly variant
+
+[`pipeline.fly.yaml`](pipeline.fly.yaml) is the same stack with access through
+a VPS gateway (nkt-edge in the fly role) instead of a proxy on the host: an
+`https` route for `git.example.com` (the gateway issues the certificate) and
+`tcp` 2222 for git over SSH. Nothing is opened on the host itself and the A
+record points at the gateway. Such a stack is easy to move between hosts:
+the routes switch to the new host by themselves and DNS stays the same — see
+the step-by-step guide
+["Moving a stack with Traffic Fly"](https://piqab.github.io/nkt/en/guide/migrate-with-fly).
