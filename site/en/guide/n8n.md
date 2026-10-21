@@ -11,7 +11,7 @@ in the repository's `integrations/n8n` directory. They call the
 
 | Node | What |
 |---|---|
-| **nkt** | hosts (list, overview, findings, vulnerabilities, services), service and container actions, pipelines (deploy, dry run with selectable checks, waiting for the result, history), hub jobs (state, log, waiting), fail2ban (ban, unban, list), alerts, and any API call the token allows |
+| **nkt** | hosts (list, overview, findings, vulnerabilities, services), service and container actions, pipelines (deploy, dry run with selectable checks, waiting for the result, history), scripts (run a saved one), stack moves, Traffic Fly (apply, map, status), manifests into clusters, hub jobs (state, log, waiting), fail2ban (ban, unban, list), alerts, and any API call the token allows |
 | **nkt Trigger** | receives the hub's outgoing webhooks (alerts, deployment outcomes) and checks the signature |
 | **nkt Alert Trigger (Polling)** | polls the hub for new alerts when n8n cannot receive webhooks from outside |
 
@@ -83,6 +83,19 @@ also acts; a host and group scope narrows both lists and actions.
 - **Service / Container**: start, stop, restart (and reload for services).
 - **Fail2ban → Ban / Unban**: addresses on every host with fail2ban or on
   the selected ones, waiting for the job outcome.
+- **Script → Run**: run a saved hub script ("Profiles" → "Scripts"):
+  **Answers (JSON)** are the answers to the start questions
+  (`{"param:FROM": "web1"}`), **Dry Run**, "Wait for Result". **Get Many**
+  lists the scripts.
+- **Migration → Move Stack**: move a stack between hosts as from the map:
+  a container of the stack, the hosts, "Switch Traffic Fly Routes",
+  "Switch Pipeline", "Remove Leftovers"; **Preview** is the plan without a
+  move; **Get Many** is the moves record.
+- **Traffic Fly → Apply** (with **Dry Run**), **Get Map**, **Get Status** —
+  only for a token without a host limit.
+- **Cluster → Apply Manifest / Diff Manifest**: YAML into the selected
+  clusters (`kubectl apply` as a job or `kubectl diff`); **Get Many** lists
+  the clusters.
 - **Job**: a hub job by number: state, log, waiting.
 - **Alert**: alerts newer than a number (`After ID`).
 - **API Call**: any `/api/…` path the token allows, with a JSON body.

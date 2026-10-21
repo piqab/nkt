@@ -271,6 +271,15 @@ kubectl delete ingress,service,deployment hello
 **«удалить кластер»** в карточке: машины с дисками, туннель WireGuard и сеть
 машин уходят с хостов, хосты-узлы (если были) остаются.
 
+## По API и из n8n
+
+Шаги 6–7 — и без интерфейса: манифест в кластеры — API-токеном
+(`POST /api/hub/k8s/manifests/apply?job=1`) или в n8n **Cluster → Apply
+Manifest**; применить Traffic Fly — `POST /api/hub/fly/apply` или
+**Traffic Fly → Apply**; весь путь целиком — сохранённым сценарием
+(**Script → Run**). Создание кластера и kubeconfig по токену закрыты.
+Подробно — [API хаба](/guide/hub-api#что-доступно-токену), [n8n](/guide/n8n).
+
 ## Что дальше
 
 - **Helm в кластеры** — релиз в выбранные кластеры заданием хаба.

@@ -71,6 +71,15 @@ the “Reference” tab on the scripts page (on the right, next to “Text” an
 “Scheme”); the same ready-made scripts are under “Ready-made scripts ▾” in
 the editor window.
 
+## Through the API and n8n
+
+A saved script also runs without the UI — with an admin API token
+(`POST /api/hub/scripts/{id}/run` with the start answers and `dry_run`) or
+the n8n node **Script → Run**. A token cannot create or edit scripts — only
+here, with version history. A token limited by hosts runs only a script
+entirely on its hosts. Details — [Hub API](/en/guide/hub-api#what-a-token-can-call),
+[n8n](/en/guide/n8n).
+
 ## Check, dry run, run
 
 - **Check** parses the text and verifies host, group and profile names

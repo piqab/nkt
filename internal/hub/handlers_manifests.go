@@ -42,6 +42,16 @@ type manifestRequest struct {
 // maxManifestClusters — предел кластеров за раз.
 const maxManifestClusters = 50
 
+// manifestScopeError — все кластеры запроса в пределе токена.
+func (s *Server) manifestScopeError(ctx context.Context, req manifestRequest) error {
+	for _, id := range req.Clusters {
+		if !s.clusterInScope(ctx, id) {
+			return msgs.Errorf("auth.tokenHostDenied")
+		}
+	}
+	return nil
+}
+
 func (req manifestRequest) validate(apply bool) error {
 	if _, err := k8s.ParseManifest(req.Content); err != nil {
 		return err
@@ -96,6 +106,10 @@ func (s *Server) handleManifestDiff(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	if err := s.manifestScopeError(r.Context(), req); err != nil {
+		writeErr(w, r, http.StatusForbidden, err)
+		return
+	}
 	results := s.forEachCluster(r.Context(), msgs.LangFromRequest(r), req.Clusters, func(cl store.Cluster, hostID int64) ManifestResult {
 		var res struct {
 			Diff string `json:"diff"`
@@ -120,6 +134,10 @@ func (s *Server) handleManifestApply(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := req.validate(true); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.manifestScopeError(r.Context(), req); err != nil {
+		writeErr(w, r, http.StatusForbidden, err)
 		return
 	}
 	user := auth.Username(r.Context())

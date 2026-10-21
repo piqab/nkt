@@ -16,10 +16,12 @@ scope, an address list and an expiry.
 "About" → **"API tokens"** → "New token" (admins only):
 
 - **Role.** *Read*: the host list, state, findings, vulnerabilities,
-  services and containers, alerts, pipelines and job logs. *Admin*: also
-  actions, such as deploying and rolling back a pipeline, dry runs, IP bans
-  and unbans on the hosts, service and container actions, and
-  vulnerability scans.
+  services and containers, alerts, pipelines and job logs, scripts, moves,
+  the Traffic Fly map, clusters. *Admin*: also actions, such as deploying
+  and rolling back a pipeline, dry runs, IP bans and unbans on the hosts,
+  service and container actions, vulnerability scans, running saved
+  scripts, stack moves, Traffic Fly (saving and applying the map), and
+  manifests into clusters.
 - **Hosts and groups** limit the token. Both empty means all hosts. A host
   is in scope if it is named itself or belongs to one of the groups (a
   machine belongs to its host's group). Renaming a group does not break the
@@ -42,8 +44,10 @@ token was last used.
 
 **No role** gives a token: hub management (accounts, tokens themselves,
 export and import, hub updates, edge, AI settings, adding and deleting
-hosts), the terminal and console, files and backups, config contents,
-Kubernetes, or websockets. Such a call gets 403.
+hosts), creating and editing scripts, creating, deleting and upgrading
+clusters, the kubeconfig and Helm, Kubernetes on a host directly, the
+terminal and console, files and backups, config contents, or websockets.
+Such a call gets 403.
 
 ## Presenting the token
 
@@ -143,11 +147,66 @@ to the hub through the tunnel. Conditions:
 | `POST /api/hosts/{id}/vulnerabilities/scan` | admin | vulnerability scan |
 | `POST/PUT/DELETE /api/hosts/{id}/<section>/…` | admin | host actions: services, containers, package updates and so on, except what is closed above and **file uploads** (image archives, machine images, file browser files, backups — they have routes of their own, closed to tokens) |
 | `POST /api/hosts/{id}/images/archives/fetch` | admin | download an image archive to the host by URL and load it into Docker or Podman → `job_id` (see below) |
+| `GET /api/hub/scripts`, `/{id}` | read | saved scripts and their text |
+| `POST /api/hub/scripts/check` | admin | parse and check a text (`{"content":"…"}`): steps, errors, what it asks (`asks`) — changes nothing |
+| `POST /api/hub/scripts/{id}/run` | admin | run a **saved** script (`{"dry_run":false,"values":{"param:FROM":"web1"}}`) → `job_id`; a token cannot create or edit scripts |
+| `GET /api/hub/migrations`, `/api/hub/migrate/live` | read | the moves record, moves in progress |
+| `POST /api/hub/migrate/preview` | admin | a move plan (`{"from":1,"to":2,"container":"…"}`): what travels, obstacles, routes, pipeline |
+| `POST /api/hub/migrate` | admin | move a stack (`… "switch_fly":true,"switch_pipeline":true,"clean_leftovers":false`) → `job_id` |
+| `POST /api/hub/migrations/{id}/rollback`, `/remove`, `/stopnew` | admin | roll back, "remove old" (`{"data":true}` — with volumes), stop the second copy → `job_id` |
+| `GET /api/hub/fly`, `/fly/status`, `/fly/versions` | read | the Traffic Fly map (and its YAML text), target and tunnel health, version history |
+| `PUT /api/hub/fly` | admin | save the whole map (a new version; reaches the gateways when applied) |
+| `POST /api/hub/fly/ops` | admin | point changes: add or remove a target, make active, reserve, drain → `job_id` |
+| `POST /api/hub/fly/routes/{id}/switch` | admin | switch a route's active target |
+| `POST /api/hub/fly/apply` | admin | apply (`{"dry_run":false}`) → `job_id` |
+| `GET /api/hub/clusters`, `/{id}/nodes` | read | clusters and nodes |
+| `GET /api/hub/k8s/manifests`, `/{id}` | admin | saved manifests |
+| `POST /api/hub/k8s/manifests/diff` | admin | `kubectl diff` per cluster (`{"name":"…","content":"…","clusters":[1,2]}`) |
+| `POST /api/hub/k8s/manifests/apply?job=1` | admin | `kubectl apply` per cluster as a job (body as for diff, plus `note`) → `job_id` |
+
+Still closed to any token: creating, editing and deleting scripts;
+creating, deleting and upgrading clusters, adding workers, the
+**kubeconfig**, Helm; restoring an old Traffic Fly map version; hosts,
+groups, profiles, "About", users, export.
 
 The hub machine is `/api/hosts/local/…`; in a token's scope its number is
 `-1`. A scoped token sees only its hosts, their alerts and sites; only
 compose pipelines whose hosts are all in its scope; and it can dry-run only
 a saved pipeline. A scoped token sees only the hub jobs it started itself.
+
+Also for a scoped token:
+
+- a **script** runs only if all its hosts are in scope — checked by parsing
+  before the run (`on`, `install`, `wait`, `migrate` — both hosts, the
+  `k8s create` placement hosts, the `pipeline` block hosts); `host`,
+  `group`, `fly route`, `fly apply`, a pipeline by group are refused;
+- a **move** and its plan — only between hosts in scope; the moves record
+  shows only such entries;
+- **clusters** — only those with all nodes in scope; a manifest goes only to
+  such clusters;
+- **Traffic Fly** is unavailable: the map is shared by all hosts.
+
+### Examples
+
+```sh
+H='Authorization: Bearer nkt_…'
+# Run a saved script (dry run) and wait for the outcome
+curl -s -H "$H" -H 'Content-Type: application/json' https://hub.example.com/api/hub/scripts/4/run \
+  -d '{"dry_run":true,"values":{"param:FROM":"web1","param:TO":"web2","param:DOMAIN":"git.example.com"}}'
+curl -s -H "$H" https://hub.example.com/api/hub/jobs/123          # status: succeeded | failed
+curl -s -H "$H" 'https://hub.example.com/api/hub/jobs/123/log?after=0'
+
+# Move a stack switching the routes and the pipeline
+curl -s -H "$H" -H 'Content-Type: application/json' https://hub.example.com/api/hub/migrate \
+  -d '{"from":1,"to":2,"container":"forgejo-forgejo-1","switch_fly":true,"switch_pipeline":true}'
+
+# Apply Traffic Fly
+curl -s -H "$H" -H 'Content-Type: application/json' https://hub.example.com/api/hub/fly/apply -d '{}'
+
+# A manifest into two clusters
+jq -Rs '{name: "hello", content: ., clusters: [1, 2]}' hello.yaml |
+  curl -s -H "$H" -H 'Content-Type: application/json' --data @- 'https://hub.example.com/api/hub/k8s/manifests/apply?job=1'
+```
 
 Deployments and dry runs are jobs: the response is `job_id`, the outcome is
 in `GET /api/hub/jobs/{id}` (`status`: `queued`, `running`, `succeeded`,

@@ -344,6 +344,35 @@ var tokenHubRoutes = map[string]bool{
 	"POST /hub/fail2ban/fleet":              true,
 	"GET /hosts/{id}/vulnerabilities":       false,
 	"POST /hosts/{id}/vulnerabilities/scan": true,
+	// Сценарии: читать и запускать сохранённые; создавать и править — только
+	// в интерфейсе (с историей версий).
+	"GET /hub/scripts":           false,
+	"GET /hub/scripts/{id}":      false,
+	"POST /hub/scripts/check":    true,
+	"POST /hub/scripts/{id}/run": true,
+	// Переносы стеков.
+	"GET /hub/migrations":                false,
+	"GET /hub/migrate/live":              false,
+	"POST /hub/migrate/preview":          true,
+	"POST /hub/migrate":                  true,
+	"POST /hub/migrations/{id}/{action}": true,
+	// Traffic Fly — карта общая на все хосты: только токену без предела
+	// (tokenPolicy).
+	"GET /hub/fly":                     false,
+	"GET /hub/fly/status":              false,
+	"GET /hub/fly/versions":            false,
+	"PUT /hub/fly":                     true,
+	"POST /hub/fly/ops":                true,
+	"POST /hub/fly/routes/{id}/switch": true,
+	"POST /hub/fly/apply":              true,
+	// Кластеры: смотреть и применять манифесты; создание, удаление,
+	// обновление, kubeconfig и Helm — нет.
+	"GET /hub/clusters":             false,
+	"GET /hub/clusters/{id}/nodes":  false,
+	"GET /hub/k8s/manifests":        true,
+	"GET /hub/k8s/manifests/{id}":   true,
+	"POST /hub/k8s/manifests/diff":  true,
+	"POST /hub/k8s/manifests/apply": true,
 }
 
 // tokenPolicy — открыт ли токену этот вызов. grant — GET, открытый
@@ -367,6 +396,9 @@ func (s *Server) tokenPolicy(r *http.Request, t store.APIToken) (bool, error) {
 	if needAdmin, ok := tokenHubRoutes[method+" "+pattern]; ok {
 		if needAdmin && !admin {
 			return false, tokenDeny(http.StatusForbidden, "auth.tokenReadOnly")
+		}
+		if strings.HasPrefix(pattern, "/hub/fly") && t.Scoped() {
+			return false, tokenDeny(http.StatusForbidden, "auth.tokenFlyScoped")
 		}
 		if strings.HasPrefix(pattern, "/hosts/{id}/") && !s.tokenHostAllowed(r.Context(), t, chi.URLParam(r, "id")) {
 			return false, tokenDeny(http.StatusForbidden, "auth.tokenHostDenied")
