@@ -52,6 +52,11 @@ const (
 	KindPipeline     Kind = "pipeline"
 	KindDeploy       Kind = "deploy"
 	KindMigrate      Kind = "migrate"
+	KindK8sIngress   Kind = "k8s.ingress"
+	KindK8sApply     Kind = "k8s.apply"
+	KindK8sWait      Kind = "k8s.wait"
+	KindFlyRoute     Kind = "fly.route"
+	KindFlyApply     Kind = "fly.apply"
 )
 
 // ArgDoc — один аргумент команды в справке.
@@ -319,6 +324,53 @@ var Commands = []CommandDoc{
 		},
 		Example: "migrate web1 forgejo-forgejo-1 to web2 switch-fly switch-pipeline",
 	},
+	{
+		Kind: KindK8sIngress, Syntax: "k8s КЛАСТЕР ingress cilium [port ПОРТ]",
+		Summary: "script.doc.k8sIngress",
+		Args: []ArgDoc{
+			{Name: "КЛАСТЕР", Required: true, Desc: "script.doc.k8sCluster"},
+			{Name: "port", Desc: "script.doc.k8sIngress.port"},
+		},
+		Example: "k8s lab ingress cilium port 8080",
+	},
+	{
+		Kind: KindK8sApply, Syntax: "k8s КЛАСТЕР apply\n  манифест построчно\nend",
+		Summary: "script.doc.k8sApply", Block: true,
+		Args:    []ArgDoc{{Name: "КЛАСТЕР", Required: true, Desc: "script.doc.k8sCluster"}},
+		Example: "k8s lab apply\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: demo\nend",
+	},
+	{
+		Kind: KindK8sWait, Syntax: "k8s КЛАСТЕР wait deployment ИМЯ [namespace NS] [ДЛИТЕЛЬНОСТЬ]",
+		Summary: "script.doc.k8sWait",
+		Args: []ArgDoc{
+			{Name: "КЛАСТЕР", Required: true, Desc: "script.doc.k8sCluster"},
+			{Name: "ИМЯ", Required: true, Desc: "script.doc.k8sWait.name"},
+			{Name: "namespace", Desc: "script.doc.k8sWait.namespace"},
+			{Name: "ДЛИТЕЛЬНОСТЬ", Desc: "script.doc.wait.duration"},
+		},
+		Example: "k8s lab wait deployment hello 5m",
+	},
+	{
+		Kind: KindFlyRoute, Syntax: "fly route ИД ВИД [names ИМЯ,…] [port ПОРТ] [tls gateway] [check tcp|http|none] [path ПУТЬ] [gateway ШЛЮЗ] (targets cluster КЛАСТЕР port ПОРТ | target ХОСТ container|vm|lxd ИМЯ ПОРТ … | target ХОСТ host ПОРТ …)",
+		Summary: "script.doc.flyRoute",
+		Args: []ArgDoc{
+			{Name: "ИД", Required: true, Desc: "script.doc.flyRoute.id"},
+			{Name: "ВИД", Required: true, Desc: "script.doc.flyRoute.kind"},
+			{Name: "names", Desc: "script.doc.flyRoute.names"},
+			{Name: "port", Desc: "script.doc.flyRoute.port"},
+			{Name: "tls gateway", Desc: "script.doc.flyRoute.tls"},
+			{Name: "check", Desc: "script.doc.flyRoute.check"},
+			{Name: "gateway", Desc: "script.doc.flyRoute.gateway"},
+			{Name: "targets cluster", Desc: "script.doc.flyRoute.cluster"},
+			{Name: "target", Desc: "script.doc.flyRoute.target"},
+		},
+		Example: "fly route hello https names hello.example.com tls gateway check tcp targets cluster lab port 8080\nfly route mc tcp port 25565 target web1 container mc-server-1 25565",
+	},
+	{
+		Kind: KindFlyApply, Syntax: "fly apply",
+		Summary: "script.doc.flyApply",
+		Example: "fly apply",
+	},
 }
 
 // docByKind — команда справки по виду шага.
@@ -400,6 +452,10 @@ on lab-web packages install nginx
 		Content: ForgejoFlyExample,
 	},
 	{
+		Title: "script.ex.k8sFirstPod.title", Summary: "script.ex.k8sFirstPod.summary",
+		Content: K8sFirstPodExample,
+	},
+	{
 		Title: "script.ex.maintain.title", Summary: "script.ex.maintain.summary",
 		Content: `# Хосты уже есть в хабе: только действия
 on web1 apply profile web-base
@@ -428,7 +484,20 @@ var englishTerms = [][2]string{
 	{"Веб и git по SSH — через шлюз; сертификат выпускает шлюз", "Web and git over SSH go through the gateway; the gateway issues the certificate"},
 	{"Проверка снаружи — через DNS и шлюз, как зайдёт пользователь", "Check from outside — via DNS and the gateway, as a user would"},
 	{"Перенос: маршруты Traffic Fly и конвейер переключаются на новый хост", "Move: Traffic Fly routes and the pipeline switch to the new host"},
+	{"манифест построчно", "manifest line by line"},
+	{"Кластер Kubernetes: от нуля до первого пода", "A Kubernetes cluster: from zero to the first pod"},
+	{"хост с control plane и первым worker", "host with the control plane and the first worker"},
+	{"хост со вторым worker", "host with the second worker"},
+	{"имя тестового сайта — A-запись на адрес шлюза Traffic Fly", "test site name — A record at the Traffic Fly gateway"},
+	{"kubeadm: 1 control plane + 2 worker на двух хостах, WireGuard, Cilium без kube-proxy", "kubeadm: 1 control plane + 2 workers on two hosts, WireGuard, Cilium without kube-proxy"},
+	{"Ingress Cilium: порт 8080 на каждом узле", "Cilium Ingress: port 8080 on every node"},
+	{"Тестовый под, сервис и Ingress", "Test pod, service and Ingress"},
+	{"Вход снаружи: шлюз Traffic Fly на все узлы кластера", "Outside access: the Traffic Fly gateway to all cluster nodes"},
 	{"КОНВЕЙЕР", "PIPELINE"},
+	{"КЛАСТЕР", "CLUSTER"},
+	{"ШЛЮЗ", "GATEWAY"},
+	{"ВИД", "KIND"},
+	{"ИД", "ID"},
 	{"КОНТЕЙНЕР", "CONTAINER"},
 	{"содержимое построчно", "contents line by line"},
 	{"адрес нового сервера", "address of the new server"},
@@ -525,4 +594,67 @@ wait url https://${DOMAIN}/api/healthz 200 10m
 # Перенос: маршруты Traffic Fly и конвейер переключаются на новый хост
 migrate ${FROM} forgejo-forgejo-1 to ${TO} switch-fly switch-pipeline
 wait url https://${DOMAIN}/api/healthz 200 5m
+`
+
+// K8sFirstPodExample — сценарий справки «Кластер Kubernetes: от нуля до
+// первого пода»: кластер kubeadm на двух хостах, Ingress Cilium, тестовый
+// под и вход снаружи через Traffic Fly.
+const K8sFirstPodExample = `# Кластер Kubernetes: от нуля до первого пода
+param HOST1 "хост с control plane и первым worker"
+param HOST2 "хост со вторым worker"
+param DOMAIN "имя тестового сайта — A-запись на адрес шлюза Traffic Fly"
+
+# kubeadm: 1 control plane + 2 worker на двух хостах, WireGuard, Cilium без kube-proxy
+on ${HOST1} k8s create lab flavor kubeadm nodes "${HOST1}: cp 1, w 1; ${HOST2}: w 1" network wireguard cni cilium no-kube-proxy image debian-13 expose http 0 https 0
+
+# Ingress Cilium: порт 8080 на каждом узле
+k8s lab ingress cilium port 8080
+
+# Тестовый под, сервис и Ingress
+k8s lab apply
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: hello}
+  template:
+    metadata:
+      labels: {app: hello}
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.12.0
+          ports: [{containerPort: 80}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+spec:
+  selector: {app: hello}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello
+spec:
+  ingressClassName: cilium
+  rules:
+    - host: ${DOMAIN}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: hello, port: {number: 80}}
+end
+k8s lab wait deployment hello 5m
+
+# Вход снаружи: шлюз Traffic Fly на все узлы кластера
+fly route hello https names ${DOMAIN} tls gateway check tcp targets cluster lab port 8080
+wait url https://${DOMAIN}/ 200 10m
 `

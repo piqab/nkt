@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.68 — 2026-10-21
+
+- **Scripts: cluster and Traffic Fly.** New commands:
+  - `k8s CLUSTER ingress cilium [port N]` — Cilium Ingress in host network
+    mode (a port on every node) as a job on the control plane, the Cilium
+    version stays the same;
+  - `k8s CLUSTER apply … end` — a manifest to the cluster (in a dry run —
+    `kubectl diff`);
+  - `k8s CLUSTER wait deployment NAME` — wait for the replicas;
+  - `fly route …` — a Traffic Fly route, applied; `targets cluster CLUSTER
+    port N` — targets on all cluster nodes; `fly apply` — apply the map.
+- **A ready-made script "A Kubernetes cluster: from zero to the first pod"** —
+  the "Reference" tab of "Scripts" and `examples/scripts/k8s-first-pod.nkt`;
+  the guide of the same name has a "The same as a script" section.
+- The host gets `POST /api/k8s/cilium/ingress` (a port; fixed commands).
+
 ## v1.13.67 — 2026-10-21
 
 - **Scripts: deployments and moves.** New commands:

@@ -12,6 +12,7 @@ type Refs struct {
 	Groups    map[string]bool
 	Profiles  map[string]bool
 	Pipelines map[string]bool
+	Clusters  map[string]bool
 }
 
 // Check сверяет ссылки сценария с тем, что есть в хабе и что заводит сам
@@ -26,8 +27,22 @@ func Check(sc Script, refs Refs) []Issue {
 	hosts := map[string]bool{}
 	groups := map[string]bool{}
 	pipelines := map[string]bool{}
+	clusters := map[string]bool{}
 	for _, s := range sc.Steps {
 		switch s.Kind {
+		case KindK8sIngress, KindK8sApply, KindK8sWait:
+			if !known(refs.Clusters, s.Name) && !clusters[s.Name] {
+				fail(s.Line, "script.unknownCluster2", s.Name)
+			}
+		case KindFlyRoute:
+			if c := s.Args["cluster"]; c != "" && !known(refs.Clusters, c) && !clusters[c] {
+				fail(s.Line, "script.unknownCluster2", c)
+			}
+			for _, t := range s.FlyTargets() {
+				if !known(refs.Hosts, t.Host) && !hosts[t.Host] {
+					fail(s.Line, "script.unknownHost", t.Host)
+				}
+			}
 		case KindPipeline:
 			pipelines[s.Name] = true
 		case KindDeploy:
@@ -63,6 +78,9 @@ func Check(sc Script, refs Refs) []Issue {
 				}
 			}
 		default:
+			if s.Kind == KindK8sCreate {
+				clusters[s.Name] = true
+			}
 			if s.Host != "" && !known(refs.Hosts, s.Host) && !hosts[s.Host] {
 				fail(s.Line, "script.unknownHost", s.Host)
 			}

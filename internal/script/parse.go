@@ -30,6 +30,8 @@ type Step struct {
 	List []string `json:"list,omitempty"`
 	// Block — содержимое блока до «end» (compose-файл, текст файла).
 	Block string `json:"block,omitempty"`
+	// Targets — цели маршрута fly.route: «ХОСТ|ВИД|ИМЯ|ПОРТ».
+	Targets []string `json:"targets,omitempty"`
 	// Text — исходная строка, как её показывать в плане.
 	Text string `json:"text"`
 }
@@ -417,6 +419,10 @@ func parseStep(toks []string, sc *Script) (Step, error) {
 		}
 		args["to"] = toks[4]
 		return Step{Kind: KindMigrate, Host: toks[1], Name: toks[2], Args: args}, nil
+	case "k8s":
+		return parseK8s(toks)
+	case "fly":
+		return parseFly(toks)
 	case "on":
 		// Хосты — все слова до первой команды; их может быть несколько.
 		i := 1
@@ -744,6 +750,185 @@ func parseWait(toks []string) (Step, error) {
 		args["timeout"] = rest[0]
 	}
 	return st, nil
+}
+
+// parseK8s — действия в готовом кластере (без «on»: кластер — по имени):
+// «k8s ИМЯ ingress cilium [port N]», «k8s ИМЯ apply» с манифестом блоком,
+// «k8s ИМЯ wait deployment ИМЯ [namespace NS] [ДЛИТЕЛЬНОСТЬ]».
+func parseK8s(toks []string) (Step, error) {
+	if len(toks) < 3 || !nameRe.MatchString(toks[1]) {
+		return Step{}, msgs.Errorf("script.badK8sCluster")
+	}
+	name := toks[1]
+	switch toks[2] {
+	case "ingress":
+		if len(toks) < 4 || toks[3] != "cilium" {
+			return Step{}, msgs.Errorf("script.badK8sCluster")
+		}
+		args, err := kv(toks[4:], []string{"port"}, nil)
+		if err != nil {
+			return Step{}, err
+		}
+		if args["port"] == "" {
+			args["port"] = "8080"
+		}
+		if n, err := strconv.Atoi(args["port"]); err != nil || n < 1024 || n > 65535 {
+			return Step{}, msgs.Errorf("script.badK8sIngressPort", args["port"])
+		}
+		return Step{Kind: KindK8sIngress, Name: name, Action: "cilium", Args: args}, nil
+	case "apply":
+		if len(toks) != 3 {
+			return Step{}, msgs.Errorf("script.badK8sCluster")
+		}
+		return Step{Kind: KindK8sApply, Name: name}, nil
+	case "wait":
+		if len(toks) < 5 || toks[3] != "deployment" || !nameRe.MatchString(toks[4]) {
+			return Step{}, msgs.Errorf("script.badK8sCluster")
+		}
+		args := map[string]string{"deployment": toks[4], "namespace": "default", "timeout": "5m"}
+		rest := toks[5:]
+		if len(rest) >= 2 && rest[0] == "namespace" {
+			if !nameRe.MatchString(rest[1]) {
+				return Step{}, msgs.Errorf("script.badName", "namespace")
+			}
+			args["namespace"] = rest[1]
+			rest = rest[2:]
+		}
+		if len(rest) > 1 {
+			return Step{}, msgs.Errorf("script.unexpectedWord", rest[1])
+		}
+		if len(rest) == 1 {
+			if _, err := time.ParseDuration(rest[0]); err != nil {
+				return Step{}, msgs.Errorf("script.badDuration", rest[0])
+			}
+			args["timeout"] = rest[0]
+		}
+		return Step{Kind: KindK8sWait, Name: name, Args: args}, nil
+	}
+	return Step{}, msgs.Errorf("script.badK8sCluster")
+}
+
+// flyKinds — виды маршрута; flyTargetKinds — виды цели.
+var flyKinds = map[string]bool{"https": true, "http": true, "tcp": true, "udp": true, "tcpudp": true}
+var flyTargetKinds = map[string]bool{"container": true, "vm": true, "lxd": true, "host": true}
+
+// parseFly — «fly route ИД ВИД [names …] [port N] [tls gateway] [check
+// tcp|http|none] [path ПУТЬ] [gateway ШЛЮЗ] (targets cluster КЛАСТЕР port N
+// | target ХОСТ ВИД ИМЯ ПОРТ …)» и «fly apply».
+func parseFly(toks []string) (Step, error) {
+	if len(toks) == 2 && toks[1] == "apply" {
+		return Step{Kind: KindFlyApply}, nil
+	}
+	if len(toks) < 4 || toks[1] != "route" || !nameRe.MatchString(toks[2]) || !flyKinds[toks[3]] {
+		return Step{}, msgs.Errorf("script.badFlyRoute")
+	}
+	st := Step{Kind: KindFlyRoute, Name: toks[2], Action: toks[3], Args: map[string]string{}}
+	rest := toks[4:]
+	need := func(n int) error {
+		if len(rest) < n+1 {
+			return msgs.Errorf("script.missingValue", rest[0])
+		}
+		return nil
+	}
+	for len(rest) > 0 {
+		switch rest[0] {
+		case "names":
+			if err := need(1); err != nil {
+				return Step{}, err
+			}
+			for _, n := range strings.Split(rest[1], ",") {
+				if n = strings.TrimSpace(n); n != "" {
+					st.List = append(st.List, strings.ToLower(n))
+				}
+			}
+			rest = rest[2:]
+		case "port", "check", "path", "gateway":
+			if err := need(1); err != nil {
+				return Step{}, err
+			}
+			if _, dup := st.Args[rest[0]]; dup {
+				return Step{}, msgs.Errorf("script.duplicateArg", rest[0])
+			}
+			st.Args[rest[0]] = rest[1]
+			rest = rest[2:]
+		case "tls":
+			if err := need(1); err != nil {
+				return Step{}, err
+			}
+			if rest[1] != "gateway" {
+				return Step{}, msgs.Errorf("script.badFlyRoute")
+			}
+			st.Args["tls"] = "gateway"
+			rest = rest[2:]
+		case "targets":
+			// targets cluster КЛАСТЕР port N — все узлы кластера.
+			if len(rest) < 5 || rest[1] != "cluster" || !nameRe.MatchString(rest[2]) || rest[3] != "port" {
+				return Step{}, msgs.Errorf("script.badFlyTargets")
+			}
+			st.Args["cluster"], st.Args["target_port"] = rest[2], rest[4]
+			rest = rest[5:]
+		case "target":
+			// target ХОСТ ВИД ИМЯ ПОРТ (у «host» — без имени: ХОСТ host ПОРТ).
+			if len(rest) < 4 || !nameRe.MatchString(rest[1]) || !flyTargetKinds[rest[2]] {
+				return Step{}, msgs.Errorf("script.badFlyTargets")
+			}
+			if rest[2] == "host" {
+				st.Targets = append(st.Targets, rest[1]+"|host||"+rest[3])
+				rest = rest[4:]
+				continue
+			}
+			if len(rest) < 5 || !nameRe.MatchString(rest[3]) {
+				return Step{}, msgs.Errorf("script.badFlyTargets")
+			}
+			st.Targets = append(st.Targets, rest[1]+"|"+rest[2]+"|"+rest[3]+"|"+rest[4])
+			rest = rest[5:]
+		default:
+			return Step{}, msgs.Errorf("script.unexpectedWord", rest[0])
+		}
+	}
+	for _, k := range []string{"port", "target_port"} {
+		if v := st.Args[k]; v != "" {
+			if n, err := strconv.Atoi(v); err != nil || n < 1 || n > 65535 {
+				return Step{}, msgs.Errorf("script.badPort", v)
+			}
+		}
+	}
+	for _, t := range st.Targets {
+		if n, err := strconv.Atoi(t[strings.LastIndex(t, "|")+1:]); err != nil || n < 1 || n > 65535 {
+			return Step{}, msgs.Errorf("script.badPort", t[strings.LastIndex(t, "|")+1:])
+		}
+	}
+	if c := st.Args["check"]; c != "" && c != "tcp" && c != "http" && c != "none" {
+		return Step{}, msgs.Errorf("script.badFlyRoute")
+	}
+	if (st.Args["cluster"] == "") == (len(st.Targets) == 0) {
+		return Step{}, msgs.Errorf("script.badFlyTargets")
+	}
+	named := st.Action == "https" || st.Action == "http"
+	if named && len(st.List) == 0 || !named && st.Args["port"] == "" {
+		return Step{}, msgs.Errorf("script.badFlyRoute")
+	}
+	return st, nil
+}
+
+// FlyTarget — цель из «target ХОСТ ВИД ИМЯ ПОРТ» (Step.Hosts у fly.route).
+type FlyTarget struct {
+	Host, Kind, Ref string
+	Port            int
+}
+
+// FlyTargets — цели шага fly.route, заданные списком.
+func (st Step) FlyTargets() []FlyTarget {
+	var out []FlyTarget
+	for _, t := range st.Targets {
+		p := strings.SplitN(t, "|", 4)
+		if len(p) != 4 {
+			continue
+		}
+		n, _ := strconv.Atoi(p[3])
+		out = append(out, FlyTarget{Host: p[0], Kind: p[1], Ref: p[2], Port: n})
+	}
+	return out
 }
 
 // parseWaitURL — «wait url URL [КОД] [ДЛИТЕЛЬНОСТЬ]»: хоста нет, проверка

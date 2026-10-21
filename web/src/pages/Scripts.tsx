@@ -49,6 +49,7 @@ export interface ScriptStep {
   args?: Record<string, string>
   list?: string[]
   block?: string
+  targets?: string[]
   text: string
 }
 

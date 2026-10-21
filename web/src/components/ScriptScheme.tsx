@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Tag } from 'antd'
 import {
+  ApiOutlined,
   AppstoreOutlined,
   CloudDownloadOutlined,
   CloudServerOutlined,
@@ -94,6 +95,11 @@ function build(steps: ScriptStep[]): { groups: GroupNode[]; existing: HostNode[]
         break
       case 'pipeline':
       case 'deploy':
+      case 'k8s.ingress':
+      case 'k8s.apply':
+      case 'k8s.wait':
+      case 'fly.route':
+      case 'fly.apply':
         hub.push(s)
         break
       case 'vm.create': {
@@ -145,6 +151,13 @@ function actionIcon(kind: string) {
       return <CloudUploadOutlined />
     case 'migrate':
       return <SwapOutlined />
+    case 'k8s.ingress':
+    case 'k8s.apply':
+    case 'k8s.wait':
+      return <ClusterOutlined />
+    case 'fly.route':
+    case 'fly.apply':
+      return <ApiOutlined />
     case 'wait':
       return <GlobalOutlined />
     default:
@@ -193,6 +206,16 @@ function actionLabel(s: ScriptStep): string {
       return `${s.name} → ${s.args?.to}${s.args?.['switch-fly'] === 'true' ? ' · Traffic Fly' : ''}${s.args?.['switch-pipeline'] === 'true' ? ' · pipeline' : ''}`
     case 'wait':
       return s.action === 'url' ? `wait ${s.args?.url}` : s.text
+    case 'k8s.ingress':
+      return `${s.name}: ingress cilium :${s.args?.port}`
+    case 'k8s.apply':
+      return `${s.name}: apply (${(s.block?.match(/^kind:/gm) ?? []).length})`
+    case 'k8s.wait':
+      return `${s.name}: wait ${s.args?.namespace}/${s.args?.deployment}`
+    case 'fly.route':
+      return `Traffic Fly ${s.name}: ${(s.list ?? []).join(', ') || ':' + s.args?.port} → ${s.args?.cluster ? `${s.args.cluster} :${s.args.target_port}` : (s.targets ?? []).map((x) => x.split('|')[0]).join(', ')}`
+    case 'fly.apply':
+      return 'Traffic Fly: apply'
     default:
       return s.text
   }
