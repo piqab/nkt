@@ -278,6 +278,92 @@ tunnel and the machine network leave the hosts; host nodes (if any) stay.
 - **+ worker** — one more node in a ready cluster (the same Kubernetes
   branch); add one more target on its 8080 to the Traffic Fly route.
 
+## The same as a script
+
+Everything from creating the cluster to an answer from
+`https://hello.example.com` — as one hub script ("Scripts" → the "Reference"
+tab → "Ready-made scripts" → "A Kubernetes cluster: from zero to the first
+pod" → "Into editor", also
+[`examples/scripts/k8s-first-pod.nkt`](https://github.com/piqab/nkt/blob/main/examples/scripts/k8s-first-pod.nkt)).
+At start it asks for two hosts and the site name. "Dry run" checks the hosts
+(like the cluster form's "Dry run"), the rest is "would": the cluster does not
+exist before it is created.
+
+```
+# Кластер Kubernetes: от нуля до первого пода
+param HOST1 "хост с control plane и первым worker"
+param HOST2 "хост со вторым worker"
+param DOMAIN "имя тестового сайта — A-запись на адрес шлюза Traffic Fly"
+
+# kubeadm: 1 control plane + 2 worker на двух хостах, WireGuard, Cilium без kube-proxy
+on ${HOST1} k8s create lab flavor kubeadm nodes "${HOST1}: cp 1, w 1; ${HOST2}: w 1" network wireguard cni cilium no-kube-proxy image debian-13 expose http 0 https 0
+
+# Ingress Cilium: порт 8080 на каждом узле
+k8s lab ingress cilium port 8080
+
+# Тестовый под, сервис и Ingress
+k8s lab apply
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: hello}
+  template:
+    metadata:
+      labels: {app: hello}
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.12.0
+          ports: [{containerPort: 80}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+spec:
+  selector: {app: hello}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello
+spec:
+  ingressClassName: cilium
+  rules:
+    - host: ${DOMAIN}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: hello, port: {number: 80}}
+end
+k8s lab wait deployment hello 5m
+
+# Вход снаружи: шлюз Traffic Fly на все узлы кластера
+fly route hello https names ${DOMAIN} tls gateway check tcp targets cluster lab port 8080
+wait url https://${DOMAIN}/ 200 10m
+```
+
+The script's comments are in Russian; the commands are the same in any
+language.
+
+- **`on … k8s create`** — steps 1–3: the cluster form as one line (kubeadm,
+  placement on two hosts, WireGuard, Cilium without kube-proxy, only the API
+  exposed).
+- **`k8s lab ingress cilium port 8080`** — step 5: the same `cilium upgrade`
+  with the running Cilium version, as a job on the control plane.
+- **`k8s lab apply … end`** and **`k8s lab wait deployment hello`** — step 6.
+- **`fly route … targets cluster lab port 8080`** — step 7: a route to all
+  cluster nodes; applied right away.
+- **`wait url`** — step 8: an answer from outside, from the hub to the real
+  name.
+
 ## If it doesn't work
 
 | Symptom | Cause and what to do |

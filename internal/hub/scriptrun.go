@@ -57,6 +57,8 @@ type scriptRunResume struct {
 	// и была ли выше выкладка — «migrate» тогда не находит стек на хосте.
 	DryPipelines  map[string]string `json:"-"`
 	DeployedInDry bool              `json:"-"`
+	// DryClusters — кластеры, которые сухой прогон «создал» выше.
+	DryClusters map[string]bool `json:"-"`
 }
 
 // ScriptRunner выполняет сценарии.
@@ -234,6 +236,17 @@ func (r *ScriptRunner) step(ctx context.Context, jc *jobs.Context, p *ScriptRunP
 
 	case script.KindMigrate:
 		return r.runMigrate(ctx, jc, done, st, false)
+
+	case script.KindK8sIngress:
+		return r.k8sIngress(ctx, jc, done, st, false)
+	case script.KindK8sApply:
+		return r.k8sApply(ctx, jc, done, st, false)
+	case script.KindK8sWait:
+		return r.k8sWait(ctx, jc, done, st, false)
+	case script.KindFlyRoute:
+		return r.flyRoute(ctx, jc, done, st, false)
+	case script.KindFlyApply:
+		return r.flyApply(ctx, jc, false)
 
 	case script.KindWait:
 		if st.Action == "url" {
@@ -561,11 +574,25 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 		return r.dryDeploy(ctx, jc, st, done.DryPipelines[st.Name])
 	case script.KindMigrate:
 		return r.runMigrate(ctx, jc, done, st, true)
+	case script.KindK8sIngress:
+		return r.k8sIngress(ctx, jc, done, st, true)
+	case script.KindK8sApply:
+		return r.k8sApply(ctx, jc, done, st, true)
+	case script.KindK8sWait:
+		return r.k8sWait(ctx, jc, done, st, true)
+	case script.KindFlyRoute:
+		return r.flyRoute(ctx, jc, done, st, true)
+	case script.KindFlyApply:
+		return r.flyApply(ctx, jc, true)
 	case script.KindGroup, script.KindInstall, script.KindWait, script.KindVMCreate, script.KindVMAction,
 		script.KindDockerInst, script.KindCert, script.KindGitClone, script.KindSystem, script.KindK8sDestroy:
 		jc.Log("hub.scriptDryWould", st.Text)
 		return nil
 	case script.KindK8sCreate:
+		if done.DryClusters == nil {
+			done.DryClusters = map[string]bool{}
+		}
+		done.DryClusters[st.Name] = true
 		// Кластер в сухом прогоне — те же проверки, что и кнопка «Сухой
 		// прогон» в диалоге: план машин и чек-лист хоста, без подготовки.
 		h, err := r.hostByName(ctx, done, st.Host)
