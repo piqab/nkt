@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.64 — 2026-10-21
+
+- **Go 1.26.10** (was 1.26.9): a `crypto/x509` fix — distrust compromised
+  intermediate certificates (GO-2026-6809). It affects TLS verification,
+  including outside port checks.
+- **vite 8.3.4** for building the UI (was 8.3.0): closes the `launch-editor`
+  alerts (development server only, never part of the nkt build).
+
 ## v1.13.63 — 2026-10-20
 
 - **Narrow window and phone: secondary controls go into "☰".** The
