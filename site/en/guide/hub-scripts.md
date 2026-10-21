@@ -17,6 +17,10 @@ runs it top to bottom with the same calls as the UI buttons and stops at
 the first error. One line — one action; a compose file or a file's text
 goes in as a block up to `end`.
 
+Where: **"Profiles" → the "Scripts" tab**. "New script" opens the editor
+window; **"Ready-made scripts ▾"** in it inserts an example whole. Then — a
+name, "Save", "Check", "Dry run", "Run".
+
 ```
 param ADDR "address of the new server"
 group prod profile web-base
@@ -63,7 +67,9 @@ wait web1 http http://${ADDR}/ 200 1m
 | `migrate HOST CONTAINER to HOST [switch-fly] [switch-pipeline] [clean-leftovers]` | move a stack to another host, like from the hosts map: a plan with obstacles, the move, rollback on error; in a dry run — the plan |
 
 The full reference with examples you can copy or insert into the editor is
-the “Reference” tab in the section itself.
+the “Reference” tab on the scripts page (on the right, next to “Text” and
+“Scheme”); the same ready-made scripts are under “Ready-made scripts ▾” in
+the editor window.
 
 ## Check, dry run, run
 

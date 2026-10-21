@@ -281,10 +281,16 @@ tunnel and the machine network leave the hosts; host nodes (if any) stay.
 ## The same as a script
 
 Everything from creating the cluster to an answer from
-`https://hello.example.com` — as one hub script ("Scripts" → the "Reference"
-tab → "Ready-made scripts" → "A Kubernetes cluster: from zero to the first
-pod" → "Into editor", also
-[`examples/scripts/k8s-first-pod.nkt`](https://github.com/piqab/nkt/blob/main/examples/scripts/k8s-first-pod.nkt)).
+`https://hello.example.com` — as one hub script "A Kubernetes cluster: from
+zero to the first pod" (also
+[`examples/scripts/k8s-first-pod.nkt`](https://github.com/piqab/nkt/blob/main/examples/scripts/k8s-first-pod.nkt), needs hub 1.13.68+).
+
+How to run it: **"Profiles" → the "Scripts" tab → "New script"**, in the
+editor window — **"Ready-made scripts ▾"** → "A Kubernetes cluster: from zero to the first pod"; enter a name →
+"Save" → "Check" → "Dry run" → "Run" (the parameters are asked at start, the
+progress is in the job log). The ready-made scripts are also on the scripts
+page's "Reference" tab ("Into editor" button).
+
 At start it asks for two hosts and the site name. "Dry run" checks the hosts
 (like the cluster form's "Dry run"), the rest is "would": the cluster does not
 exist before it is created.
