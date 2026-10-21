@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, ColorPicker, Input, Tabs, Tag, Tooltip } from 'antd'
-import { CopyOutlined } from '@ant-design/icons'
+import { Button, ColorPicker, Dropdown, Input, Tabs, Tag, Tooltip } from 'antd'
+import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Job, Me } from '../types'
@@ -162,6 +162,17 @@ export default function Scripts({ me }: { me: Me }) {
   }
 
   const [editing, setEditing] = useState(false)
+  // Готовые сценарии — и прямо в окне редактора («Готовые сценарии ▾»):
+  // вкладка «Справка» страницы под окном не видна.
+  const helpData = useApi<HelpData>('/hub/scripts/help')
+  async function pickExample(i: number) {
+    const ex = helpData.data?.examples[i]
+    if (!ex) return
+    const pristine = draft.trim() === '' || draft === template(t('scripts.templateComment')) || (selected !== null && draft === (current.data?.content ?? ''))
+    if (!pristine && !(await confirmAction(t('scripts.help.confirmInsert'), { okText: t('scripts.help.insert'), danger: false }))) return
+    setDraft(ex.content)
+    setCheck(null)
+  }
 
   async function save(): Promise<number | null> {
     setBusy('save')
@@ -463,6 +474,28 @@ export default function Scripts({ me }: { me: Me }) {
                 <label style={{ flex: 1, minWidth: '14rem' }}>
                   {t('scripts.note')}
                   <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('scripts.notePlaceholder')} />
+                </label>
+                <label>
+                  {t('scripts.examplesLabel')}
+                  <Dropdown
+                    trigger={['click']}
+                    menu={{
+                      items: (helpData.data?.examples ?? []).map((e, i) => ({
+                        key: String(i),
+                        label: (
+                          <div style={{ maxWidth: 460, whiteSpace: 'normal' }}>
+                            <strong>{e.title}</strong>
+                            <div className="small muted">{e.summary}</div>
+                          </div>
+                        ),
+                      })),
+                      onClick: ({ key }) => void pickExample(Number(key)),
+                    }}
+                  >
+                    <Button loading={helpData.loading && !helpData.data}>
+                      {t('scripts.examplesBtn')} <DownOutlined />
+                    </Button>
+                  </Dropdown>
                 </label>
                 <label>
                   {t('profiles.color')}

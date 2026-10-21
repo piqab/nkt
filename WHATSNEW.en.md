@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.71 — 2026-10-21
+
+- **Scripts: "Ready-made scripts ▾" right in the editor window** — an example
+  is inserted whole (with a question if the text already has your edits).
+  Before, the ready-made scripts were only on the page's "Reference" tab,
+  under the editor window.
+- Docs: the path to scripts is "Profiles" → the "Scripts" tab → "New script" →
+  "Ready-made scripts ▾" (in "Moving a stack with Traffic Fly", "Cluster: from
+  zero to the first pod" and "Scripts").
+
 ## v1.13.70 — 2026-10-21
 
 - Parsing `fly route` in scripts: the "the key has a value" check sits right

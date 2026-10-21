@@ -2580,7 +2580,9 @@
       "insert": "Into editor",
       "confirmInsert": "Replace the editor text with this script? Unsaved edits will be lost."
     },
-    "templateComment": "Web farm: a group, two hosts, nginx and a stack"
+    "templateComment": "Web farm: a group, two hosts, nginx and a stack",
+    "examplesLabel": "Start from a ready one",
+    "examplesBtn": "Ready-made scripts"
   },
   "malware": {
     "tab": "Malware",

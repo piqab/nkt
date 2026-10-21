@@ -177,9 +177,15 @@ week after the move the hub reminds you of a copy left behind in "Alerts".
 ## The same as a script
 
 Everything from the deployment to the check after the move — as one hub
-script ("Scripts" → the "Reference" tab → "Ready-made scripts" → "Forgejo behind
-Traffic Fly: deploy and move" → "Into editor", also
-[`examples/scripts/forgejo-fly.nkt`](https://github.com/piqab/nkt/blob/main/examples/scripts/forgejo-fly.nkt)).
+script "Forgejo behind Traffic Fly: deploy and move" (also
+[`examples/scripts/forgejo-fly.nkt`](https://github.com/piqab/nkt/blob/main/examples/scripts/forgejo-fly.nkt), needs hub 1.13.67+).
+
+How to run it: **"Profiles" → the "Scripts" tab → "New script"**, in the
+editor window — **"Ready-made scripts ▾"** → "Forgejo behind Traffic Fly: deploy and move"; enter a name →
+"Save" → "Check" → "Dry run" → "Run" (the parameters are asked at start, the
+progress is in the job log). The ready-made scripts are also on the scripts
+page's "Reference" tab ("Into editor" button).
+
 At start it asks for the host to deploy on, the host to move to and the name;
 "Dry run" shows the pipeline's dry run, and the move plan comes at run time
 (before the deployment the stack is not on the host yet).
