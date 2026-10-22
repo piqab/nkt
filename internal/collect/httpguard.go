@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -11,36 +12,61 @@ import (
 )
 
 // Источники HTTP описаний сервисов ходят только к API программ на этом
-// хосте и во внутренней сети: loopback, частные сети (RFC 1918, fc00::/7)
-// и link-local. Имя хоста — только localhost: иначе описание могло бы
-// отправить файл секрета (basic_auth) на чужой адрес.
+// хосте: localhost, 127.0.0.1 (127.0.0.0/8) и ::1. Иначе описание могло бы
+// отправить файл секрета (basic_auth) на чужой адрес или опрашивать
+// соседние машины.
 
-// LocalAddr — адрес разрешён для HTTP-источника.
-func LocalAddr(a netip.Addr) bool {
-	a = a.Unmap()
-	return a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast()
-}
+// LocalAddr — адрес разрешён для HTTP-источника: loopback.
+func LocalAddr(a netip.Addr) bool { return a.Unmap().IsLoopback() }
 
-// CheckLocalURL — адрес http(s) без логина в адресе, к localhost или к IP
-// из LocalAddr.
-func CheckLocalURL(raw string) (*url.URL, error) {
+// CheckLocalURL проверяет адрес и собирает его заново: схема и хост — из
+// постоянных строк, порт — числом, путь и запрос — из исходного адреса.
+func CheckLocalURL(raw string) (string, error) {
+	bad := msgs.Errorf("collect.httpNotLocal", raw)
 	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
-		return nil, msgs.Errorf("collect.httpNotLocal", raw)
+	if err != nil || u.User != nil || u.Opaque != "" {
+		return "", bad
 	}
-	host := strings.ToLower(u.Hostname())
-	if host == "localhost" {
-		return u, nil
+	scheme := ""
+	switch u.Scheme {
+	case "http":
+		scheme = "http"
+	case "https":
+		scheme = "https"
+	default:
+		return "", bad
 	}
-	a, err := netip.ParseAddr(host)
-	if err != nil || !LocalAddr(a) {
-		return nil, msgs.Errorf("collect.httpNotLocal", raw)
+	host := ""
+	switch h := strings.ToLower(u.Hostname()); {
+	case h == "localhost":
+		host = "localhost"
+	case h == "::1":
+		host = "[::1]"
+	default:
+		a, err := netip.ParseAddr(h)
+		if err != nil || !a.Is4() || !a.IsLoopback() {
+			return "", bad
+		}
+		host = "127.0.0.1"
+		if a != netip.MustParseAddr("127.0.0.1") {
+			// Другой адрес из 127.0.0.0/8 — собирается из чисел.
+			b := a.As4()
+			host = "127." + strconv.Itoa(int(b[1])) + "." + strconv.Itoa(int(b[2])) + "." + strconv.Itoa(int(b[3]))
+		}
 	}
-	return u, nil
+	if p := u.Port(); p != "" {
+		n, err := strconv.ParseUint(p, 10, 16)
+		if err != nil || n == 0 {
+			return "", bad
+		}
+		host += ":" + strconv.FormatUint(n, 10)
+	}
+	out := url.URL{Scheme: scheme, Host: host, Path: u.Path, RawPath: u.RawPath, RawQuery: u.RawQuery}
+	return out.String(), nil
 }
 
-// localOnlyControl — проверка при соединении (после разрешения имени): тот
-// же список адресов, что у CheckLocalURL.
+// localOnlyControl — проверка при соединении (после разрешения имени
+// localhost): только loopback.
 func localOnlyControl(_, address string, _ syscall.RawConn) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {

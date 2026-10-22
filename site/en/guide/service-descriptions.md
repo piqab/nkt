@@ -138,10 +138,10 @@ A source has an `id` and exactly one of:
   own document. A file is re-read only when its modification time or size
   changes; over 8 MB it isn't read. Files go to “Configs”
   (`editable: false` — view only).
-- **`http`** — the program's API address **on this host or in the
-  internal network**: `localhost` or an IP from 127.0.0.0/8, ::1, 10/8,
-  172.16/12, 192.168/16, fc00::/7, link-local; the address is checked on
-  connect too, redirects are not followed. `interval` — how long the
+- **`http`** — the program's API address **on this host**: `localhost`,
+  127.0.0.0/8 or `::1` (an API in a container — through a port published
+  on 127.0.0.1); the address is checked on connect too, redirects are not
+  followed. `interval` — how long the
   answer lives (every scan by default), `timeout` — 5 s by default, at
   most a minute. No login and password in the address and no
   `Authorization`/`Cookie` headers: `basic_auth: {user: …, password_file:

@@ -602,13 +602,13 @@ func (l *Local) HTTPGet(ctx context.Context, url string, headers map[string]stri
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	// Только этот хост и внутренняя сеть (CheckLocalURL): и по адресу, и
-	// при соединении; перенаправления не идут.
-	u, err := CheckLocalURL(url)
+	// Только этот хост (CheckLocalURL): адрес собран заново из постоянных
+	// схемы и хоста, при соединении — ещё раз; перенаправления не идут.
+	safe, err := CheckLocalURL(url)
 	if err != nil {
 		return nil, 0, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safe, nil)
 	if err != nil {
 		return nil, 0, err
 	}

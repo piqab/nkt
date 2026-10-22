@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -626,11 +627,8 @@ func fieldText(fields map[string]*Expr, name string, c Ctx) string {
 
 func buildEndpoint(d *Descriptor, r EndpointRule, c Ctx) (model.Endpoint, bool) {
 	f := r.fields
-	port := 0
-	if v, ok := num(field(f, "port", c)); ok && v >= 1 && v <= 65535 {
-		port = int(v)
-	}
-	if port <= 0 || port > 65535 {
+	port := portField(field(f, "port", c))
+	if port <= 0 {
 		return model.Endpoint{}, false
 	}
 	ep := model.Endpoint{
@@ -696,11 +694,11 @@ func buildUpstream(d *Descriptor, r UpstreamRule, c Ctx) model.Upstream {
 				srv.Port = p
 			}
 		}
-		if v, ok := num(field(sf, "port", sc)); ok && v >= 1 && v <= 65535 {
-			srv.Port = int(v)
+		if p := portField(field(sf, "port", sc)); p > 0 {
+			srv.Port = p
 		}
-		if v, ok := num(field(sf, "weight", sc)); ok && v >= 0 && v <= 1e6 {
-			srv.Weight = int(v)
+		if w, err := strconv.ParseUint(Text(field(sf, "weight", sc)), 10, 32); err == nil {
+			srv.Weight = int(w)
 		}
 		if e := sf["backup"]; e != nil {
 			srv.Backup = Truthy(e.Value(sc))
@@ -829,4 +827,14 @@ func (e *Engine) Engines(ctx context.Context, effective, all []Loaded) EngineCon
 		out[d.Engine] = c
 	}
 	return out
+}
+
+// portField — порт из значения поля: целое 1…65535 (разбор в 16 бит —
+// преобразование без переполнения), иначе 0.
+func portField(v any) int {
+	p, err := strconv.ParseUint(strings.TrimSpace(Text(v)), 10, 16)
+	if err != nil || p == 0 {
+		return 0
+	}
+	return int(p)
 }
