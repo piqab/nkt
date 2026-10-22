@@ -13,6 +13,7 @@ title: Command line and configuration
 | `nkt tui` | the terminal UI |
 | `nkt users`, `nkt passwd` | accounts and passwords without the web UI |
 | `nkt hub` | the [hub](/en/guide/hub); `nkt hub import` restores the registry, `nkt hub delete` removes the hub's data completely |
+| `nkt mcp` | the MCP bridge for AI agents: stdio → hub ([MCP](/en/guide/hub-mcp#nkt-mcp-stdio-bridge)) |
 | `nkt version` | the version |
 
 The command language follows the terminal locale: `LANG=ru_RU.UTF-8` (or

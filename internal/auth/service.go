@@ -57,7 +57,8 @@ func (s *Service) SetTokenAuth(t TokenAuthenticator) { s.tokens = t }
 
 // IsTokenRequest — запрос пришёл с API-токеном, а не с сессией браузера.
 func IsTokenRequest(r *http.Request) bool {
-	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || r.Header.Get("X-NKT-API-Key") != ""
+	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || r.Header.Get("X-NKT-API-Key") != "" ||
+		r.Header.Get("X-NKT-MCP-Internal") != ""
 }
 
 const readGrantKey ctxKey = iota + 100

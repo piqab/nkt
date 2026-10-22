@@ -32,6 +32,8 @@ import (
 // internal/auth, unchanged) plus the host registry and per-host proxy
 // routes backed by Manager.
 type Server struct {
+	// apiRouter — роутер хаба для внутренних вызовов MCP.
+	apiRouter http.Handler
 	// mon — сбор и анализ «Мониторинга» (monitoring.go).
 	mon          monState
 	cfg          *config.Config
@@ -291,6 +293,8 @@ func (s *Server) Handler() http.Handler {
 				// это то же состояние, только во времени.
 				r.Get("/hub/events", s.handleEvents)
 				r.Post("/hub/events/seen", s.handleEventsSeen)
+				// MCP для ИИ-агентов — только по API-токену (mcp.go).
+				r.Post("/mcp", s.handleMCP)
 				// Опросить хост сейчас (щелчок по значку «недоступен»): на
 				// хосте ничего не меняет, поэтому — всем, кто видит список.
 				r.Post("/hub/hosts/{id}/poll", s.handleHostPoll)
@@ -530,6 +534,8 @@ func (s *Server) Handler() http.Handler {
 	if s.ui != nil {
 		r.Handle("/*", s.spaHandler())
 	}
+	// Внутренние вызовы MCP идут через этот же роутер (mcp.go).
+	s.apiRouter = r
 	return r
 }
 

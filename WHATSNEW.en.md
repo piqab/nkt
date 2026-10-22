@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.75 — 2026-10-22
+
+- **MCP for AI agents.** The hub is an MCP server: Claude Code, Claude
+  Desktop and Cursor connect to `https://hub/api/mcp` with an API token and
+  see nkt as tools — hosts, findings, services, containers, alerts,
+  pipelines, scripts, stack moves, Traffic Fly, clusters. The rights are
+  the token's: a read token only looks, an admin token runs actions right
+  away, without confirmation (all of it in the audit log as
+  `token:<name>`). With `"wait": true` a tool waits for the job and
+  returns the outcome with the log. For clients that start a server as a
+  command there is the `nkt mcp` bridge (address and token from the
+  environment). Docs: “MCP for AI agents”.
+
 ## v1.13.74 — 2026-10-22
 
 - **A fix script with a finding analysis.** When the fix can be done with

@@ -166,6 +166,11 @@ language reference and the names of hub objects; its answer goes through
 "Check" and gets into the editor only through a diff window, and a person
 runs the script.
 
+An external AI agent (Claude Code, Claude Desktop, Cursor) connects to
+the hub over [MCP](/en/guide/hub-mcp) with an API token: with a read
+token it only looks, with an admin token it runs actions itself, without
+confirmation.
+
 When writing a configuration fails (validation or apply), the failure
 banner carries the same bulb: the model gets the check output and the
 diff of the edit, with the task to explain and show a corrected

@@ -8,6 +8,7 @@ Everything the hub's web interface does goes through its JSON API. For
 automation (n8n, CI, your own scripts) there are **API tokens**: access
 without a password or a browser session, with a role, a host and group
 scope, an address list and an expiry.
+With the same token the hub is an [MCP server for AI agents](/en/guide/hub-mcp).
 
 ## Tokens
 

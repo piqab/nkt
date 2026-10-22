@@ -20,6 +20,7 @@ var enAPICatalog = map[string]string{
 	"auth.tokenRouteDenied":    "The API token cannot call %s %s",
 	"auth.tokenReadOnly":       "The API token is read-only: actions are not allowed",
 	"auth.tokenFlyScoped":      "The Traffic Fly map is shared by all hosts — only a token without a host limit can use it",
+	"mcp.tokenOnly":            "The hub MCP works with an API token only (the “API tokens” section), not with an interface login",
 	"auth.tokenScriptHost":     "line %d: host “%s” is outside the token's limit",
 	"auth.tokenScriptGlobal":   "line %d: “%s” — not allowed for a token limited by hosts (hosts, groups, Traffic Fly, a pipeline by group or not compose)",
 	"auth.tokenScriptCluster":  "line %d: cluster “%s” is not entirely on the token's hosts",
