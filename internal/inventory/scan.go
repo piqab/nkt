@@ -22,6 +22,7 @@ import (
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/parse"
 	"github.com/piqab/nkt/internal/store"
+	"github.com/piqab/nkt/internal/svcdesc"
 )
 
 // snapshotsKept — сколько снимков хранится. Их читают ради вопроса «что
@@ -33,6 +34,8 @@ type Scanner struct {
 	cfg *config.Config
 	c   collect.Collector
 	db  *store.DB
+	// desc — описания сервисов (svcdesc): свои и встроенные.
+	desc *svcdesc.Engine
 
 	mu      sync.RWMutex
 	latest  *model.Snapshot
@@ -41,7 +44,7 @@ type Scanner struct {
 
 // New builds a scanner.
 func New(cfg *config.Config, c collect.Collector, db *store.DB) *Scanner {
-	return &Scanner{cfg: cfg, c: c, db: db}
+	return &Scanner{cfg: cfg, c: c, db: db, desc: svcdesc.NewEngine(c, cfg.ServicesDir, cfg.DataDir)}
 }
 
 // Latest returns the cached snapshot, or nil when no scan has finished yet.
@@ -169,6 +172,14 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Firewall = fwRes.State
 	snap.Listeners = listeners
 
+	// Описания сервисов — после встроенных разборщиков: обнаружению нужны
+	// контейнеры и слушающие порты, а файлы встроенных — старше.
+	descRes := s.desc.Run(ctx, snap)
+	snap.Endpoints = append(snap.Endpoints, descRes.Endpoints...)
+	snap.Upstreams = append(snap.Upstreams, descRes.Upstreams...)
+	snap.Files = append(snap.Files, descRes.Files...)
+	snap.Sources = append(snap.Sources, descRes.Sources...)
+
 	// A bridge interface's own data (ip addr) has no idea what's plugged
 	// into it — that only exists in the separately-parsed docker network
 	// and container data, gathered above.
@@ -226,7 +237,8 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	})
 	sort.Slice(snap.Files, func(i, j int) bool { return snap.Files[i].Path < snap.Files[j].Path })
 
-	snap.Findings = analyze.Run(snap)
+	snap.Findings = append(analyze.Run(snap), descRes.Findings...)
+	analyze.SortFindings(snap.Findings)
 	snap.ScanMS = time.Since(started).Milliseconds()
 	snap.Digest = digest(snap)
 

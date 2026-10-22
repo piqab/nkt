@@ -80,8 +80,15 @@ func Run(s *model.Snapshot) []model.Finding {
 	ruleMalware(c, s)
 	ruleAdminInterfaces(c, s)
 
-	sort.SliceStable(c.findings, func(i, j int) bool {
-		a, b := c.findings[i], c.findings[j]
+	SortFindings(c.findings)
+	return c.findings
+}
+
+// SortFindings — порядок находок: важность, сервис, объект (и для
+// находок из описаний сервисов, которые добавляются после Run).
+func SortFindings(findings []model.Finding) {
+	sort.SliceStable(findings, func(i, j int) bool {
+		a, b := findings[i], findings[j]
 		if ra, rb := model.SeverityRank(a.Severity), model.SeverityRank(b.Severity); ra != rb {
 			return ra < rb
 		}
@@ -90,7 +97,6 @@ func Run(s *model.Snapshot) []model.Finding {
 		}
 		return a.Object < b.Object
 	})
-	return c.findings
 }
 
 // --------------------------------------------------------------------- index
