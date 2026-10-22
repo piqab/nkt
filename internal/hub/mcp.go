@@ -260,7 +260,7 @@ func (s *Server) mcpInternal(r *http.Request, tok store.APIToken, method, path s
 	sub.RemoteAddr = net.JoinHostPort(tokenClientIP(r), "0")
 	sub.Header.Set("Content-Type", "application/json")
 	sub.Header.Set(mcpInternalHeader, mcpSecret+":"+strconv.FormatInt(tok.ID, 10))
-	sub.Header.Set("Accept-Language", r.Header.Get("Accept-Language"))
+	sub.Header.Set("X-NKT-Lang", string(msgs.FromContext(r.Context())))
 	rec := httptest.NewRecorder()
 	s.apiRouter.ServeHTTP(rec, sub)
 	out := rec.Body.String()
@@ -333,6 +333,10 @@ func (t mcpTool) build(args map[string]any) (string, any, error) {
 	})
 	if bad != nil {
 		return "", nil, bad
+	}
+	// Машина хаба (-1) — свой путь /hosts/local/….
+	if rest, ok := strings.CutPrefix(path, "/hosts/"+strconv.Itoa(localHostID)+"/"); ok {
+		path = "/hosts/local/" + rest
 	}
 	if q, ok := args["after"].(float64); ok && t.Method == http.MethodGet {
 		sep := "?"

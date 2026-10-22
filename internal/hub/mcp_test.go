@@ -149,6 +149,10 @@ func TestMCP(t *testing.T) {
 	if text, isErr := call(scoped, "host_findings", map[string]any{"host_id": otherID}); !isErr || !strings.Contains(text, "HTTP 403") {
 		t.Fatalf("scoped other host: %v %s", isErr, text)
 	}
+	// Машина хаба — host_id -1.
+	if text, isErr := call(admin, "host_findings", map[string]any{"host_id": -1}); isErr || !strings.Contains(text, "findings") {
+		t.Fatalf("local findings: %v %.200s", isErr, text)
+	}
 	// Инструмент не по роли — отказ без вызова.
 	if text, isErr := call(read, "run_script", map[string]any{"script_id": 1}); !isErr || !strings.Contains(text, "not allowed") {
 		t.Fatalf("read run_script: %v %s", isErr, text)

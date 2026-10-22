@@ -58,7 +58,8 @@
     "toSection": "Open: {{name}}",
     "toFirewall": "Firewall",
     "monitoring": "Monitoring",
-    "fly": "Traffic Fly"
+    "fly": "Traffic Fly",
+    "assistant": "Assistant"
   },
   "about": {
     "title": "About",
@@ -5008,5 +5009,23 @@
       }
     },
     "legend": "Legend ({{n}})"
+  },
+  "assistant": {
+    "title": "Assistant",
+    "hint": "Questions about the hub's hosts: the model itself looks at findings, services, containers, alerts, jobs, pipelines, moves and Traffic Fly — read only, with your rights. A change comes as a script: “Open as a script”, “Check”, a dry run and the run — by you.",
+    "intro": "Ask about the fleet — the assistant looks at the hub's data and answers. For example:",
+    "example1": "Which critical findings are on the hosts now and where do I start?",
+    "example2": "Why did the last job fail and what do I do about it?",
+    "example3": "Which stacks can move off the busiest host?",
+    "placeholder": "A question about hosts, services, deployments… (Ctrl+Enter — send)",
+    "ask": "Ask",
+    "new": "New conversation",
+    "readOnly": "The assistant only reads; changes come as a script you run.",
+    "looked": "Looked at:",
+    "summary": "from a snapshot",
+    "summaryHint": "The model cannot call tools: the answer is from a hub snapshot (hosts, alerts, pipelines, moves).",
+    "scriptChecked": "The script from the answer passed “Check”.",
+    "footer": "Answer by {{model}} · turns: {{rounds}}",
+    "disabled": "AI is off: turn it on in “About” → “Model analysis”."
   }
 }

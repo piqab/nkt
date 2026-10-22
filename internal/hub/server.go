@@ -236,6 +236,13 @@ func (s *Server) Handler() http.Handler {
 		// минуте. Разбор находки — обычному пользователю тоже: это
 		// объяснение, а не изменение; проверка ключа и список моделей —
 		// администратору.
+		// Ассистент хаба: до assistantRounds ходов модели — свой предел.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(assistantTotal + time.Minute))
+			r.Use(s.auth.RequireAuth)
+			r.Use(s.auth.RequireAdmin)
+			r.Post("/hub/assistant", s.handleAssistant)
+		})
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(aiTimeoutMaxS*time.Second + time.Minute))
 			r.Use(s.auth.RequireAuth)

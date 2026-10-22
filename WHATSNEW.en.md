@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.76 — 2026-10-22
+
+- **Hub assistant.** A new “Assistant” menu section: ask about the fleet
+  — “which critical findings and where to start”, “why did the job fail” —
+  and the model looks at hosts, findings, services, alerts, jobs,
+  pipelines, moves and Traffic Fly itself (read only, with your rights)
+  and answers; above the answer you see what it looked at. Changes come
+  as a script: it passes “Check” right away, “Open as a script” takes it
+  to the editor, you run it. A model without tool calling answers from a
+  hub snapshot. Docs: “Hub assistant”.
+- MCP: the hub machine (`host_id: -1`) works in host tools; the answer
+  language is the `X-NKT-Lang` header (the `nkt mcp` bridge sets it from
+  the locale).
+
 ## v1.13.75 — 2026-10-22
 
 - **MCP for AI agents.** The hub is an MCP server: Claude Code, Claude
