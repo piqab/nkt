@@ -591,3 +591,29 @@ func EnsureSnapPath() {
 	}
 	_ = os.Setenv("PATH", path+string(os.PathListSeparator)+snapBin)
 }
+
+// maxHTTPBody — предел ответа HTTPGet.
+const maxHTTPBody = 8 << 20
+
+// HTTPGet implements Collector.
+func (l *Local) HTTPGet(ctx context.Context, url string, headers map[string]string, timeout time.Duration) ([]byte, int, error) {
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
+	return body, resp.StatusCode, err
+}

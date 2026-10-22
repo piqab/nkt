@@ -13,6 +13,7 @@ title: Командная строка и настройка
 | `nkt tui` | терминальный интерфейс |
 | `nkt users`, `nkt passwd` | учётные записи и пароли без веб-интерфейса |
 | `nkt hub` | [хаб](/guide/hub); `nkt hub import` — восстановление реестра, `nkt hub delete` — полное удаление данных хаба |
+| `nkt services` | [свои сервисы](/guide/service-descriptions): какие описания есть и что дали; `nkt services test <файл>` — журнал разбора |
 | `nkt mcp` | мост MCP для ИИ-агентов: stdio → хаб ([MCP](/guide/hub-mcp#nkt-mcp-мост-stdio)) |
 | `nkt version` | версия |
 

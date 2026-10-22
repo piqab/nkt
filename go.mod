@@ -3,6 +3,7 @@ module github.com/piqab/nkt
 go 1.26.10
 
 require (
+	github.com/BurntSushi/toml v1.5.0
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
 	github.com/gdamore/tcell/v2 v2.13.10

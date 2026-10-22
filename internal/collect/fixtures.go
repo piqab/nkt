@@ -464,3 +464,32 @@ func (f *Fixtures) HostInfo(ctx context.Context) HostInfo {
 	}
 	return info
 }
+
+// -------------------------------------------------------------------- http
+
+// HTTPGet implements Collector: ответы — из .http/index.json
+// ({"адрес": "файл в .http"}); нет адреса — 404.
+func (f *Fixtures) HTTPGet(_ context.Context, url string, _ map[string]string, _ time.Duration) ([]byte, int, error) {
+	dir := filepath.Join(f.root, ".http")
+	raw, err := os.ReadFile(filepath.Join(dir, "index.json"))
+	if err != nil {
+		return nil, 0, msgs.Errorf("collect.httpFixture", url)
+	}
+	var idx map[string]string
+	if err := json.Unmarshal(raw, &idx); err != nil {
+		return nil, 0, err
+	}
+	name, ok := idx[url]
+	if !ok {
+		return []byte(`{"message":"no such fixture"}`), 404, nil
+	}
+	// Файл — из листинга каталога, а не строка из индекса как путь.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.Name() == name && !e.IsDir() {
+			body, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			return body, 200, err
+		}
+	}
+	return nil, 0, msgs.Errorf("collect.httpFixture", url)
+}

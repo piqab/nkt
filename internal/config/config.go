@@ -59,9 +59,11 @@ type Config struct {
 	// умолчанию в local-режиме: на своей машине заводить отдельный пароль
 	// для панели незачем. В режиме хаба не имеет смысла — там учётки свои,
 	// а системных пользователей управляемых хостов хаб не знает.
-	SystemLogin      bool
-	SysctlRoot       string
-	CronRoot         string
+	SystemLogin bool
+	SysctlRoot  string
+	CronRoot    string
+	// ServicesDir — описания сервисов на хосте (svcdesc, *.yaml).
+	ServicesDir      string
 	ComposeFiles     []string
 	NginxAccessLogs  []string
 	HAProxyAccessLog []string
@@ -361,6 +363,7 @@ func Load() (*Config, error) {
 		SystemLogin:      envBool("NKT_SYSTEM_LOGIN", mode == ModeLocal),
 		SysctlRoot:       envStr("NKT_SYSCTL_ROOT", "/etc/sysctl.d"),
 		CronRoot:         envStr("NKT_CRON_ROOT", "/etc/cron.d"),
+		ServicesDir:      envStr("NKT_SERVICES_DIR", "/etc/netknownsthat/services.d"),
 		ComposeFiles:     envList("NKT_COMPOSE_FILES", "/srv/docker/docker-compose.yml,/opt/stacks/docker-compose.yml"),
 		NginxAccessLogs:  envList("NKT_NGINX_ACCESS_LOGS", "/var/log/nginx/access.log"),
 		HAProxyAccessLog: envList("NKT_HAPROXY_ACCESS_LOGS", "/var/log/haproxy.log"),

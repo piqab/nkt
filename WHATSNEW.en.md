@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.77 — 2026-10-22
+
+- **Your own services: YAML descriptions.** Any program — Traefik,
+  RabbitMQ, Tomcat, your own service — can be described in
+  `/etc/netknownsthat/services.d/*.yaml`: how to find it, where to read
+  from (a file, the HTTP API, a read-only command), in which format (yaml,
+  json, toml, ini, env, properties, “key value”, xml, regex) and what to
+  take with JSONPath paths. The service shows up on the resource map, in
+  findings (your own rules) and in “Configs”. A broken description doesn't
+  break the scan — the last good version keeps working. `nkt services` —
+  what is found, `nkt services test file.yaml` — a step-by-step parse log.
+  Docs: “Your own services”.
+
 ## v1.13.76 — 2026-10-22
 
 - **Hub assistant.** A new “Assistant” menu section: ask about the fleet

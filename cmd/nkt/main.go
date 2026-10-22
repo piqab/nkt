@@ -82,9 +82,11 @@ func main() {
 	// positional argument, then continue with what follows it.
 	_ = fs.Parse(args)
 	positional := ""
+	var extra []string
 	if rest := fs.Args(); len(rest) > 0 {
 		positional = rest[0]
 		_ = fs.Parse(rest[1:])
+		extra = fs.Args()
 	}
 
 	switch {
@@ -95,6 +97,7 @@ func main() {
 	}
 
 	opts := commandOptions{
+		args:     extra,
 		username: positional,
 		role:     *roleFlag,
 		random:   *randomFlag,
@@ -125,6 +128,8 @@ func main() {
 // command == "hub" — both are just "whatever followed the command word",
 // the same slot passwd's <username> and hub's <subcommand> both fill.
 type commandOptions struct {
+	// args — позиционные после первого (nkt services test <файл>).
+	args     []string
 	username string
 	role     string
 	random   bool
@@ -139,6 +144,9 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 	case "version":
 		fmt.Printf("netknownsthat %s\n", version)
 		return nil
+	case "services":
+		// Описания сервисов: что найдено и журнал разбора одного описания.
+		return runServices(opts)
 	case "mcp":
 		// MCP для ИИ-агентов: stdio → хаб (NKT_HUB_URL, NKT_API_TOKEN).
 		return runMCP(os.Stdin, os.Stdout)
