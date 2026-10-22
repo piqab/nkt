@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.73 — 2026-10-22
+
+- **"AI ▾" in the script editor:** explain the selection (or the whole
+  text), write commands from `# AI: …` lines, write a script from a task
+  description. The model gets the language reference and the names of
+  hosts, groups, profiles, pipelines, clusters and gateways (no addresses or
+  secrets). The answer goes through "Check" right away, errors go back to the
+  model for another attempt; into the editor only through a diff window, and
+  a person runs the script.
+
 ## v1.13.72 — 2026-10-21
 
 - **API tokens get scripts, moves, Traffic Fly and clusters.**

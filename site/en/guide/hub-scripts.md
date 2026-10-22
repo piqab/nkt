@@ -71,6 +71,27 @@ the “Reference” tab on the scripts page (on the right, next to “Text” an
 “Scheme”); the same ready-made scripts are under “Ready-made scripts ▾” in
 the editor window.
 
+## AI in the editor
+
+When model analysis is on in "About", the editor window has an **"AI ▾"**
+button:
+
+- **"Explain the selection"** (with no selection — the whole text): what each
+  step does on the hosts, what changes and what is risky;
+- **"Write from „# AI: …“ lines"**: a line `# AI: install nginx on web1 and
+  open 443` is a task; the model writes commands under it and leaves the rest
+  alone;
+- **"Script from a task description"**: a "what to do" field → a whole script.
+
+The model sees the language reference (the same as the "Reference" tab) and
+the **names** of hosts, groups, profiles, pipelines, clusters and gateways —
+no addresses, passwords or secrets; with "anonymize" in the AI settings host
+names go out as aliases. The answer goes through "Check" right away; errors
+go back to the model for one more attempt, the rest are shown by line. The
+new text gets into the editor only through a diff window ("Insert into the
+editor"); **AI does not run the script** — then the usual "Save", "Dry run",
+"Run".
+
 ## Through the API and n8n
 
 A saved script also runs without the UI — with an admin API token

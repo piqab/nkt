@@ -2582,7 +2582,23 @@
     },
     "templateComment": "Web farm: a group, two hosts, nginx and a stack",
     "examplesLabel": "Start from a ready one",
-    "examplesBtn": "Ready-made scripts"
+    "examplesBtn": "Ready-made scripts",
+    "ai": {
+      "label": "AI",
+      "button": "AI",
+      "explain": "Explain the selection (or the whole text)",
+      "comment": "Write from “# AI: …” lines",
+      "task": "Script from a task description",
+      "taskHint": "Describe what to do: which hosts, what to install or deploy, what to check. The model sees the language reference and the names of hosts, groups, profiles, pipelines and clusters — no addresses or secrets.",
+      "taskPlaceholder": "for example: install nginx on web1 and web2, open 80 and 443, wait for the site to answer",
+      "write": "Write",
+      "explainTitle": "Explanation",
+      "resultTitle": "The model’s suggestion",
+      "issues": "“Check” found errors: {{count}} — fix them after inserting",
+      "checked": "“Check” passed without errors. AI does not run the script — after inserting: “Save”, “Dry run”, “Run”.",
+      "apply": "Insert into the editor",
+      "footer": "model {{model}}, requests: {{attempts}}"
+    }
   },
   "malware": {
     "tab": "Malware",
