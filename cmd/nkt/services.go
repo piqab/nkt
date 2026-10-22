@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -58,6 +59,7 @@ func servicesSnapshot(ctx context.Context, c collect.Collector, cfg *config.Conf
 func servicesList(ctx context.Context, e *svcdesc.Engine, snap *model.Snapshot, lang msgs.Lang) error {
 	effective, all := e.Load()
 	res := e.RunLoaded(ctx, snap, effective)
+	engines := e.Engines(ctx, effective, all)
 	status := map[string]model.SourceStatus{}
 	for _, s := range res.Sources {
 		status[s.Name] = s
@@ -98,6 +100,14 @@ func servicesList(ctx context.Context, e *svcdesc.Engine, snap *model.Snapshot, 
 		case active[l.Desc.Name] != l.File:
 			name = l.Desc.Name
 			state = msgs.T(lang, "cli.servicesOverridden")
+		case l.Desc.Engine != "":
+			name = l.Desc.Name
+			switch c := engines[l.Desc.Engine]; {
+			case c.Enabled:
+				state = msgs.T(lang, "cli.servicesEngine", optionsText(c.Options))
+			default:
+				state = msgs.T(lang, "cli.servicesEngineOff")
+			}
 		default:
 			name = l.Desc.Name
 			st := status["service:"+name]
@@ -150,4 +160,20 @@ func servicesTest(ctx context.Context, e *svcdesc.Engine, snap *model.Snapshot, 
 		}
 	}
 	return nil
+}
+
+func optionsText(opts map[string]string) string {
+	if len(opts) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(opts))
+	for k := range opts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, k+"="+opts[k])
+	}
+	return " (" + strings.Join(parts, ", ") + ")"
 }

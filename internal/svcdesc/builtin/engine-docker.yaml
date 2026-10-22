@@ -1,0 +1,15 @@
+# Встроенный разборщик Docker (Go). Разбор — в nkt; описание задаёт
+# приоритет его файлов и даёт перекрыть пути или выключить его
+# описанием с тем же именем на хосте или в профиле:
+#
+#   name: docker
+#   engine: docker
+#   options:
+#     compose_files: /srv/docker/docker-compose.yml,/opt/stacks/docker-compose.yml  # NKT_COMPOSE_FILES
+#
+#   name: docker
+#   disabled: true
+name: docker
+title: Docker
+engine: docker
+priority: 100

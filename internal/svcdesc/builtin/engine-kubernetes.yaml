@@ -1,0 +1,13 @@
+# Встроенный разборщик Kubernetes (Go). Разбор — в nkt; описание задаёт
+# приоритет его файлов и даёт перекрыть пути или выключить его
+# описанием с тем же именем на хосте или в профиле:
+#
+#   name: kubernetes
+#   engine: kubernetes
+#
+#   name: kubernetes
+#   disabled: true
+name: kubernetes
+title: Kubernetes
+engine: kubernetes
+priority: 100

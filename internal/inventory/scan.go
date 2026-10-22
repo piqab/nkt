@@ -122,18 +122,43 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	)
 	var malwareRep model.MalwareReport
 	var f2b *model.Fail2banState
-	wg.Add(15)
-	go func() { defer wg.Done(); f2b = fail2ban.Collect(ctx, s.c) }()
+
+	// Встроенные разборщики — по своим описаниям (svcdesc, engine:):
+	// описание на хосте или в профиле меняет пути или выключает разборщик.
+	effective, allDesc := s.desc.Load()
+	eng := s.desc.Engines(ctx, effective, allDesc)
+	engine := func(name string, run func(), off *model.SourceStatus) {
+		if !eng.On(name) {
+			if off != nil {
+				*off = engineOffStatus(name, eng[name])
+			}
+			return
+		}
+		wg.Add(1)
+		go func() { defer wg.Done(); run() }()
+	}
+	wg.Add(5)
+	engine(model.ServiceFail2ban, func() { f2b = fail2ban.Collect(ctx, s.c) }, nil)
 	go func() { defer wg.Done(); malwareRep = malware.Scan(ctx, s.c) }()
-	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
-	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
-	go func() { defer wg.Done(); caddyRes = parse.Caddy(ctx, s.c, s.cfg.CaddyMainConfig) }()
-	go func() { defer wg.Done(); dockerRes = parse.Docker(ctx, s.c, s.cfg.ComposeFiles) }()
-	go func() { defer wg.Done(); podmanRes = parse.Podman(ctx, s.c) }()
-	go func() { defer wg.Done(); lxdRes = parse.LXD(ctx, s.c) }()
-	go func() { defer wg.Done(); libvirtRes = parse.Libvirt(ctx, s.c, s.cfg.LibvirtURI) }()
-	go func() { defer wg.Done(); k8sRes = parse.Kubernetes(ctx, s.c) }()
-	go func() { defer wg.Done(); fwRes = parse.Firewall(ctx, s.c) }()
+	engine(model.ServiceNginx, func() {
+		nginxRes = parse.Nginx(ctx, s.c, eng.Opt(model.ServiceNginx, "main_config", s.cfg.NginxMainConfig))
+	}, &nginxRes.Status)
+	engine(model.ServiceHAProxy, func() {
+		hapRes = parse.HAProxy(ctx, s.c, eng.Opt(model.ServiceHAProxy, "main_config", s.cfg.HAProxyMainConf))
+	}, &hapRes.Status)
+	engine(model.ServiceCaddy, func() {
+		caddyRes = parse.Caddy(ctx, s.c, eng.Opt(model.ServiceCaddy, "main_config", s.cfg.CaddyMainConfig))
+	}, &caddyRes.Status)
+	engine(model.ServiceDocker, func() {
+		dockerRes = parse.Docker(ctx, s.c, eng.List(model.ServiceDocker, "compose_files", s.cfg.ComposeFiles))
+	}, &dockerRes.Status)
+	engine(model.ServicePodman, func() { podmanRes = parse.Podman(ctx, s.c) }, &podmanRes.Status)
+	engine(model.ServiceLXD, func() { lxdRes = parse.LXD(ctx, s.c) }, &lxdRes.Status)
+	engine(model.ServiceLibvirt, func() {
+		libvirtRes = parse.Libvirt(ctx, s.c, eng.Opt(model.ServiceLibvirt, "uri", s.cfg.LibvirtURI))
+	}, &libvirtRes.Status)
+	engine(model.ServiceK8s, func() { k8sRes = parse.Kubernetes(ctx, s.c) }, &k8sRes.Status)
+	engine(svcdesc.EngineFirewall, func() { fwRes = parse.Firewall(ctx, s.c) }, &fwRes.Status)
 	go func() { defer wg.Done(); listeners, lisStatus = parse.Listeners(ctx, s.c) }()
 	go func() { defer wg.Done(); pkgRes, pkgStatus = parse.Packages(ctx, s.c) }()
 	go func() { defer wg.Done(); ifaces, ifaceStatus = parse.Interfaces(ctx, s.c) }()
@@ -154,7 +179,10 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	// No goroutine of its own, unlike the parsers above — just a couple of
 	// stat/glob calls against the local filesystem, not worth the
 	// WaitGroup ceremony the command-running parsers actually need.
-	fail2banFiles := parse.Fail2ban(s.c, s.cfg.Fail2banRoot)
+	var fail2banFiles []model.ManagedFile
+	if eng.On(model.ServiceFail2ban) {
+		fail2banFiles = parse.Fail2ban(s.c, eng.Opt(model.ServiceFail2ban, "root", s.cfg.Fail2banRoot))
+	}
 	snap.Files = append(append(append([]model.ManagedFile{}, nginxRes.Files...), hapRes.Files...), caddyRes.Files...)
 	snap.Files = append(snap.Files, dockerRes.Files...)
 	snap.Files = append(snap.Files, fail2banFiles...)
@@ -174,7 +202,20 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 
 	// Описания сервисов — после встроенных разборщиков: обнаружению нужны
 	// контейнеры и слушающие порты, а файлы встроенных — старше.
-	descRes := s.desc.Run(ctx, snap)
+	descRes := s.desc.RunLoaded(ctx, snap, effective)
+	if len(descRes.Replaced) > 0 {
+		replaced := map[string]bool{}
+		for _, p := range descRes.Replaced {
+			replaced[p] = true
+		}
+		kept := snap.Files[:0]
+		for _, f := range snap.Files {
+			if !replaced[f.Path] {
+				kept = append(kept, f)
+			}
+		}
+		snap.Files = kept
+	}
 	snap.Endpoints = append(snap.Endpoints, descRes.Endpoints...)
 	snap.Upstreams = append(snap.Upstreams, descRes.Upstreams...)
 	snap.Files = append(snap.Files, descRes.Files...)
@@ -385,4 +426,18 @@ func noteRefs(in []collect.NoteRef) []model.TextRef {
 		out = append(out, model.TextRef{Key: r.Key, Args: r.Args})
 	}
 	return out
+}
+
+// engineOffStatus — источник выключенного описанием разборщика: видно, кто
+// и почему его выключил.
+func engineOffStatus(name string, c svcdesc.EngineConf) model.SourceStatus {
+	key := "svcdesc.engineOff"
+	if c.Reason == "detect" {
+		key = "svcdesc.engineNotDetected"
+	}
+	return model.SourceStatus{
+		Name:        name,
+		Warnings:    []string{msgs.T(msgs.DefaultLang, key, c.File)},
+		WarningRefs: []model.TextRef{{Key: key, Args: []any{c.File}}},
+	}
 }

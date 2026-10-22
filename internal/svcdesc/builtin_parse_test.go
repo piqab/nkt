@@ -15,7 +15,7 @@ import (
 func TestBuiltinParse(t *testing.T) {
 	e := NewEngine(nil, "", "")
 	list := e.loadBuiltin()
-	if len(list) != 6 {
+	if len(list) != 16 {
 		t.Fatalf("builtin: %d", len(list))
 	}
 	for _, l := range list {

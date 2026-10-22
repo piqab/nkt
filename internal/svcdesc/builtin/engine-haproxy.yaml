@@ -1,0 +1,15 @@
+# Встроенный разборщик HAProxy (Go). Разбор — в nkt; описание задаёт
+# приоритет его файлов и даёт перекрыть пути или выключить его
+# описанием с тем же именем на хосте или в профиле:
+#
+#   name: haproxy
+#   engine: haproxy
+#   options:
+#     main_config: /etc/haproxy/haproxy.cfg  # NKT_HAPROXY_MAIN_CONFIG
+#
+#   name: haproxy
+#   disabled: true
+name: haproxy
+title: HAProxy
+engine: haproxy
+priority: 100

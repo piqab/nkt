@@ -40,6 +40,43 @@ or from the `detect` checks: `redis-server` on Debian, `redis` on RHEL)
 appears in the **“Services”** section — state, autostart and buttons to
 start, stop, restart and reload the configuration.
 
+## Built-in parsers
+
+nginx, HAProxy, Caddy, Docker, Podman, LXD, libvirt, Kubernetes, the
+firewall (iptables, ufw, firewalld) and fail2ban are parsed by nkt's code,
+but they have descriptions too — `engine:` with the same name. Through
+them a parser can be **turned off**, its **paths changed** and its
+**file priority** set, without touching the service's environment:
+
+```yaml
+# /etc/netknownsthat/services.d/nginx.yaml — nginx built into /opt
+name: nginx
+engine: nginx
+options:
+  main_config: /opt/nginx/conf/nginx.conf
+```
+
+```yaml
+# Docker isn't needed here — don't poll it
+name: docker
+disabled: true
+```
+
+| Parser | Options (`options`) | Default |
+|---|---|---|
+| `nginx`, `haproxy`, `caddy` | `main_config` — the main file | `NKT_NGINX_MAIN_CONFIG` etc. |
+| `docker` | `compose_files` — compose files, comma-separated | `NKT_COMPOSE_FILES` |
+| `libvirt` | `uri` | `NKT_LIBVIRT_URI` |
+| `fail2ban` | `root` — the directory | `NKT_FAIL2BAN_ROOT` |
+| `podman`, `lxd`, `kubernetes`, `firewall` | — | |
+
+An option not set comes from the environment, as before. `detect` of such
+a description is `file`, `unit` and `binary` only: if it doesn't match,
+the parser doesn't run. A turned-off parser shows in the host sources
+with the description that turned it off. Files of built-in parsers have
+`priority` 100: a description with a higher priority takes the file over
+in “Configs”.
+
 ## Where descriptions live
 
 | From | Where | Precedence |

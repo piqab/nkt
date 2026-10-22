@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.79 — 2026-10-22
+
+- **Built-in parsers go through descriptions.** nginx, HAProxy, Caddy,
+  Docker, Podman, LXD, libvirt, Kubernetes, the firewall and fail2ban
+  now have descriptions too (`engine:`): a file in
+  `/etc/netknownsthat/services.d` turns off a parser you don't need, points
+  nginx at a non-standard main file, sets other compose files or the
+  libvirt URI — without editing the service's environment. `nkt services`
+  lists them too. Parsing didn't change: the test host snapshot before and
+  after matches byte for byte.
+
 ## v1.13.78 — 2026-10-22
 
 - **Ready service descriptions:** Traefik, RabbitMQ, Redis, PostgreSQL,

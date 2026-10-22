@@ -39,6 +39,43 @@ Tomcat, свой сервис — можно **описать**: где у не�
 разделе **«Сервисы»** — состояние, автозапуск и кнопки запуска,
 остановки, перезапуска и перечитывания конфигурации.
 
+## Встроенные разборщики
+
+nginx, HAProxy, Caddy, Docker, Podman, LXD, libvirt, Kubernetes, файрвол
+(iptables, ufw, firewalld) и fail2ban разбирает код nkt, но и у них есть
+описания — `engine:` с тем же именем. Через них разборщик можно
+**выключить**, **поменять его пути** и **приоритет его файлов**, не трогая
+переменные окружения службы:
+
+```yaml
+# /etc/netknownsthat/services.d/nginx.yaml — nginx собран в /opt
+name: nginx
+engine: nginx
+options:
+  main_config: /opt/nginx/conf/nginx.conf
+```
+
+```yaml
+# Docker здесь не нужен — не опрашивать
+name: docker
+disabled: true
+```
+
+| Разборщик | Настройки (`options`) | По умолчанию |
+|---|---|---|
+| `nginx`, `haproxy`, `caddy` | `main_config` — главный файл | `NKT_NGINX_MAIN_CONFIG` и т. п. |
+| `docker` | `compose_files` — файлы compose через запятую | `NKT_COMPOSE_FILES` |
+| `libvirt` | `uri` | `NKT_LIBVIRT_URI` |
+| `fail2ban` | `root` — каталог | `NKT_FAIL2BAN_ROOT` |
+| `podman`, `lxd`, `kubernetes`, `firewall` | — | |
+
+Не заданная настройка берётся из окружения, как раньше. `detect` у такого
+описания — только `file`, `unit` и `binary`: не сработал — разборщик не
+запускается. Выключенный разборщик виден в источниках хоста с
+указанием, каким описанием он выключен. У файлов встроенных разборщиков
+`priority` — 100: описание с большим приоритетом забирает файл в
+«Конфигурациях» себе.
+
 ## Где лежат описания
 
 | Откуда | Где | Старшинство |
