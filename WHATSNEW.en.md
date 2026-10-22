@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.81 — 2026-10-22
+
+- The “Your own services” docs are rewritten: a step-by-step “your own
+  service in 5 minutes” (the description, `nkt services test`, a rescan),
+  quotes in YAML, when changes are picked up, source limits, who owns a
+  file with several descriptions, a full Traefik example; a link from
+  “Services”.
+
 ## v1.13.80 — 2026-10-22
 
 - **Service descriptions on the hub.** “Profiles” has a new “Services”

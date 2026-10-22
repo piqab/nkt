@@ -11,6 +11,9 @@ one listens on (by the process's unit — nginx shows its worker processes'
 sockets too). So you can see who holds 80 or 443 even when the port is
 described in a config.
 
+Add your own program to the catalogue with a [service description](/en/guide/service-descriptions):
+with a systemd unit it shows up here with its own buttons.
+
 The table has every installed service from nkt's catalogue: running ones
 on top, stopped and failed ones below, with a "start" button and the
 journal. Services that aren't installed are not shown — install them in
