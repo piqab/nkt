@@ -3144,7 +3144,9 @@
       "state": "state {{state}}",
       "problems": "problems: {{count}}",
       "link": "link"
-    }
+    },
+    "openScript": "Open as a script",
+    "openScriptHint": "A new script with this text in “Profiles” → “Scripts”: check it, dry-run it and run it yourself"
   },
   "editModal": {
     "saved": "saved",

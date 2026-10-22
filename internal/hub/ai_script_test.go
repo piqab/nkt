@@ -78,3 +78,40 @@ func TestAIScript(t *testing.T) {
 		t.Errorf("запросов к модели %d", calls)
 	}
 }
+
+// Разбор находки на хосте просит у модели и сценарий исправления (блок
+// ```nkt с командами для этого хоста); без хоста — нет.
+func TestAIExplainFixScriptHint(t *testing.T) {
+	ctx := context.Background()
+	var system string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct{ Role, Content string } `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		for _, m := range body.Messages {
+			if m.Role == "system" {
+				system = m.Content
+			}
+		}
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer srv.Close()
+	m, _ := newTestManager(t)
+	if err := m.SetAISettings(ctx, ai.Settings{Enabled: true, Provider: ai.ProviderOpenAI, BaseURL: srv.URL, Model: "m"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	h, _ := m.AddHost(ctx, "web-1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	if _, err := m.AIExplain(ctx, ai.KindFinding, ai.FindingContext{Title: "Порт 6379 открыт"}, nil, h, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(system, "```nkt") || !strings.Contains(system, "web-1") || !strings.Contains(system, "firewall") {
+		t.Errorf("нет просьбы о сценарии исправления:\n%.300s", system[max(0, len(system)-600):])
+	}
+	if _, err := m.AIExplain(ctx, ai.KindFinding, ai.FindingContext{Title: "Порт 6380 открыт"}, nil, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(system, "```nkt") {
+		t.Error("у разбора без хоста — просьба о сценарии")
+	}
+}
