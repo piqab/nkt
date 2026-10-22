@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.78 — 2026-10-22
+
+- **Ready service descriptions:** Traefik, RabbitMQ, Redis, PostgreSQL,
+  Mosquitto and Envoy now show on the resource map — addresses, TLS,
+  pools and backends, versions — and get checked: an unprotected Traefik
+  dashboard, RabbitMQ guest over the network, Redis without a password on
+  all addresses, trust in pg_hba.conf, anonymous Mosquitto login, Envoy
+  admin exposed and more. Their files are in “Configs”, their units in
+  “Services” with control buttons. Any built-in description can be
+  overridden with your own or turned off. Docs: “Your own services” →
+  “Built-in descriptions”.
+
 ## v1.13.77 — 2026-10-22
 
 - **Your own services: YAML descriptions.** Any program — Traefik,

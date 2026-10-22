@@ -1,0 +1,90 @@
+# Traefik: статическая конфигурация (yaml или toml), файлы динамической
+# (/etc/traefik/dynamic) и, если API открыт на 127.0.0.1:8080, сервисы
+# всех провайдеров (docker, file…) из /api/rawdata.
+name: traefik
+title: Traefik
+unit: traefik
+detect:
+  any:
+    - file: /etc/traefik/traefik.y*ml
+    - file: /etc/traefik/traefik.toml
+    - unit: traefik
+    - image: traefik
+sources:
+  - id: static
+    file: /etc/traefik/traefik.y*ml
+    format: yaml
+    optional: true
+  - id: static_toml
+    file: /etc/traefik/traefik.toml
+    optional: true
+  - id: dynamic
+    file: /etc/traefik/dynamic/*.y*ml
+    format: yaml
+    optional: true
+  - id: api
+    http: http://127.0.0.1:8080/api/rawdata
+    interval: 60s
+    timeout: 3s
+    optional: true
+  - id: api_version
+    http: http://127.0.0.1:8080/api/version
+    interval: 1h
+    timeout: 3s
+    optional: true
+version:
+  from: api_version
+  value: "$.Version"
+extract:
+  endpoints:
+    - from: static
+      each: "$.entryPoints.*"
+      fields: &ep
+        address: "@.address | host"
+        port: "@.address | port"
+        protocol: "@.address | matches('/udp$') | replace(true,udp) | replace(false,tcp)"
+        tls: "@.http.tls | exists"
+    - from: static_toml
+      each: "$.entryPoints.*"
+      fields: *ep
+  upstreams:
+    - from: dynamic
+      each: "$.http.services.*"
+      fields:
+        name: "@key"
+      servers:
+        each: "@.loadBalancer.servers[*]"
+        fields:
+          url: "@.url"
+    - from: api
+      each: "$.services[?@.loadBalancer]"
+      fields:
+        name: "@key"
+      servers:
+        each: "@.loadBalancer.servers[*]"
+        fields:
+          url: "@.url"
+rules:
+  - id: insecure-api
+    from: static
+    when: "@.api.insecure == true"
+    severity: high
+    title:
+      ru: "Панель и API Traefik открыты без защиты (api.insecure)"
+      en: "Traefik dashboard and API are open without protection (api.insecure)"
+    detail:
+      ru: "В {{@file}} api.insecure: true — панель и API на entryPoint «traefik» (порт 8080) без авторизации; через API видно все маршруты и сервисы."
+      en: "{{@file}} has api.insecure: true — the dashboard and API sit on the “traefik” entryPoint (port 8080) without auth; the API shows every route and service."
+    suggestion:
+      ru: "api.insecure: false и router на api@internal с middleware basicAuth или forwardAuth."
+      en: "api.insecure: false and a router to api@internal with a basicAuth or forwardAuth middleware."
+  - id: insecure-skip-verify
+    from: static
+    when: "@.serversTransport.insecureSkipVerify == true"
+    severity: medium
+    title:
+      ru: "Traefik не проверяет сертификаты бэкендов (insecureSkipVerify)"
+      en: "Traefik doesn't verify backend certificates (insecureSkipVerify)"
+    suggestion:
+      ru: "Уберите insecureSkipVerify и задайте rootCAs для бэкендов с собственным CA."
+      en: "Drop insecureSkipVerify and set rootCAs for backends with their own CA."

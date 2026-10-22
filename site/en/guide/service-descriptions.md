@@ -20,6 +20,26 @@ the built-in ones do:
 
 Descriptions change nothing on the host: they only read.
 
+## Built-in descriptions
+
+Ready descriptions are already inside nkt, nothing to install. Each can be
+overridden with your own file with the same `name` or turned off
+(`disabled: true`).
+
+| Service | What it reads | Findings |
+|---|---|---|
+| **Traefik** | `/etc/traefik/traefik.yml` or `.toml` — entryPoints (tcp/udp, TLS); `/etc/traefik/dynamic/*.yml` and, if the API is open on 127.0.0.1:8080, `/api/rawdata` — services of every provider (Docker too) with backend addresses; version — `/api/version` | dashboard and API without protection (`api.insecure`); backend certificates not verified (`insecureSkipVerify`) |
+| **RabbitMQ** | `rabbitmq-diagnostics listeners` — every listener (AMQP, TLS, management, MQTT, STOMP); version — `server_version`; `rabbitmq.conf` | guest can log in over the network; management over HTTP on all addresses |
+| **Redis** | `redis.conf` (Debian and RHEL) — bind, port, tls-port | all addresses without a password; protected-mode off without a password |
+| **PostgreSQL** | `postgresql.conf` and `pg_hba.conf` of every cluster (`/etc/postgresql/*/*`, `/var/lib/pgsql`) | network login without a password (trust) — critical; login from every address; cleartext password; all addresses without SSL |
+| **Mosquitto** | `mosquitto.conf` and `conf.d` — listeners with their settings (TLS, websockets) | login without credentials (`allow_anonymous true`) — global and per listener |
+| **Envoy** | `/etc/envoy/envoy.yaml` — listeners, admin, clusters with addresses | admin listens beyond localhost |
+
+A found service with a loaded systemd unit (from the description's `unit`
+or from the `detect` checks: `redis-server` on Debian, `redis` on RHEL)
+appears in the **“Services”** section — state, autostart and buttons to
+start, stop, restart and reload the configuration.
+
 ## Where descriptions live
 
 | From | Where | Precedence |

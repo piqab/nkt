@@ -211,6 +211,18 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 
 	// Service catalogue, with the config files each service actually uses.
 	specs := parse.DefaultServiceSpecs()
+	known := map[string]bool{}
+	for _, sp := range specs {
+		known[sp.Name] = true
+	}
+	var described []parse.ServiceSpec
+	for _, d := range descRes.Detected {
+		if d.Unit != "" && !known[d.Name] {
+			described = append(described, parse.ServiceSpec{Name: d.Name, Unit: d.Unit, ConfigFiles: d.Files, Actions: parse.DescribedActions})
+		}
+	}
+	parse.SetDescribedServiceSpecs(described)
+	specs = append(specs, described...)
 	for i := range specs {
 		switch specs[i].Name {
 		case model.ServiceNginx:

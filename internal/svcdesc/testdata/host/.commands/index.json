@@ -1,0 +1,33 @@
+{
+ "commands": [
+  {
+   "match": [
+    "rabbitmq-diagnostics",
+    "-q",
+    "listeners",
+    "--formatter",
+    "json"
+   ],
+   "stdout_file": "rabbitmq_listeners.json"
+  },
+  {
+   "match": [
+    "rabbitmq-diagnostics",
+    "-q",
+    "server_version"
+   ],
+   "stdout": "3.13.7\n"
+  },
+  {
+   "match": [
+    "systemctl",
+    "show",
+    "-p",
+    "LoadState",
+    "--value",
+    "redis-server"
+   ],
+   "stdout": "loaded\n"
+  }
+ ]
+}

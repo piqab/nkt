@@ -20,6 +20,25 @@ Tomcat, свой сервис — можно **описать**: где у не�
 
 Описания ничего не меняют на хосте: только читают.
 
+## Встроенные описания
+
+Готовые описания — уже внутри nkt, ничего ставить не нужно. Каждое можно
+перекрыть своим файлом с тем же `name` или выключить (`disabled: true`).
+
+| Сервис | Что читает | Находки |
+|---|---|---|
+| **Traefik** | `/etc/traefik/traefik.yml` или `.toml` — entryPoints (tcp/udp, TLS); `/etc/traefik/dynamic/*.yml` и, если API открыт на 127.0.0.1:8080, `/api/rawdata` — сервисы всех провайдеров (Docker тоже) с адресами бэкендов; версия — `/api/version` | панель и API без защиты (`api.insecure`); не проверяются сертификаты бэкендов (`insecureSkipVerify`) |
+| **RabbitMQ** | `rabbitmq-diagnostics listeners` — все слушатели (AMQP, TLS, панель, MQTT, STOMP); версия — `server_version`; `rabbitmq.conf` | guest может входить по сети; панель по HTTP на всех адресах |
+| **Redis** | `redis.conf` (Debian и RHEL) — bind, port, tls-port | все адреса без пароля; protected-mode выключен без пароля |
+| **PostgreSQL** | `postgresql.conf` и `pg_hba.conf` всех кластеров (`/etc/postgresql/*/*`, `/var/lib/pgsql`) | вход по сети без пароля (trust) — критично; вход со всех адресов; пароль открытым текстом; все адреса без SSL |
+| **Mosquitto** | `mosquitto.conf` и `conf.d` — слушатели с их настройками (TLS, websockets) | вход без логина (`allow_anonymous true`) — общий и у слушателя |
+| **Envoy** | `/etc/envoy/envoy.yaml` — слушатели, admin, кластеры с адресами | admin слушает не только localhost |
+
+Найденный сервис с загруженным юнитом systemd (из `unit` описания или из
+проверок `detect`: `redis-server` в Debian, `redis` в RHEL) появляется в
+разделе **«Сервисы»** — состояние, автозапуск и кнопки запуска,
+остановки, перезапуска и перечитывания конфигурации.
+
 ## Где лежат описания
 
 | Откуда | Где | Старшинство |

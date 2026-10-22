@@ -1,0 +1,64 @@
+# RabbitMQ: слушатели — rabbitmq-diagnostics listeners (только чтение;
+# обёртка Debian запускает CLI от пользователя rabbitmq), версия —
+# server_version, настройки — rabbitmq.conf.
+name: rabbitmq
+title: RabbitMQ
+unit: rabbitmq-server
+detect:
+  any:
+    - unit: rabbitmq-server
+    - file: /etc/rabbitmq/rabbitmq.conf
+sources:
+  - id: listeners
+    command: [rabbitmq-diagnostics, -q, listeners, --formatter, json]
+    interval: 5m
+    timeout: 30s
+    optional: true
+  - id: version
+    command: [rabbitmq-diagnostics, -q, server_version]
+    format: text
+    interval: 1h
+    timeout: 30s
+    optional: true
+  - id: conf
+    file: /etc/rabbitmq/rabbitmq.conf
+    format: properties
+    optional: true
+version:
+  from: version
+  value: "@ | trim"
+extract:
+  endpoints:
+    - from: listeners
+      each: "$[?@.protocol != 'clustering']"
+      fields:
+        address: "@.interface | host"
+        port: "@.port"
+        tls: "@.protocol | contains(/ssl)"
+        label: "@.protocol | prefix('RabbitMQ ')"
+rules:
+  - id: guest-remote
+    from: conf
+    when: "@['loopback_users.guest'] == false || @.loopback_users == 'none'"
+    severity: high
+    title:
+      ru: "RabbitMQ: пользователь guest может входить по сети"
+      en: "RabbitMQ: the guest user can log in over the network"
+    detail:
+      ru: "В {{@file}} снят запрет guest на вход не с localhost; пароль guest по умолчанию — guest."
+      en: "{{@file}} lifts the localhost-only restriction for guest; guest's default password is guest."
+    suggestion:
+      ru: "Удалите пользователя guest (rabbitmqctl delete_user guest) и верните loopback_users.guest = true."
+      en: "Delete the guest user (rabbitmqctl delete_user guest) and restore loopback_users.guest = true."
+  - id: management-plain-public
+    from: listeners
+    each: "$[?@.protocol == 'http']"
+    when: "@.interface == '[::]' || @.interface == '0.0.0.0' || @.interface == '::'"
+    severity: low
+    title:
+      ru: "Панель RabbitMQ доступна по HTTP на всех адресах (порт {{@.port}})"
+      en: "RabbitMQ management is served over HTTP on all addresses (port {{@.port}})"
+    suggestion:
+      ru: "management.ssl.* или management.tcp.ip = 127.0.0.1 за обратным прокси с TLS."
+      en: "management.ssl.* or management.tcp.ip = 127.0.0.1 behind a reverse proxy with TLS."
+    object: "@.port"

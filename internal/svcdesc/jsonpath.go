@@ -669,7 +669,11 @@ func (p *pparser) str() (string, error) {
 				b.WriteByte('\n')
 			case 't':
 				b.WriteByte('\t')
+			case '\'', '"', '\\', '/':
+				b.WriteByte(e)
 			default:
+				// Прочее (\s, \., \d) остаётся как есть — для регулярок.
+				b.WriteByte('\\')
 				b.WriteByte(e)
 			}
 			p.pos++
