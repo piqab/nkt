@@ -37,6 +37,8 @@ var i18nSweepSkip = []string{
 	"/ws", "/download", "/backups", "/k8s/pf/", "/updates", "/btop",
 	// Инструкции ИИ хранятся на обоих языках и правятся оператором.
 	"/hub/ai/prompts",
+	// Описания сервисов: тексты правил — на обоих языках (ru: / en:).
+	"/hub/svcdescs",
 }
 
 // TestAPIEnglishHasNoRussian поднимает API хоста на фикстурах ровно так,

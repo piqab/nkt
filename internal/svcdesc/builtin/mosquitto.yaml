@@ -1,5 +1,5 @@
-# Mosquitto: mosquitto.conf и conf.d; настройки после «listener» относятся
-# к этому слушателю (blocks).
+# Mosquitto: mosquitto.conf and conf.d; settings after “listener” belong
+# to that listener (blocks).
 name: mosquitto
 title: Mosquitto
 unit: mosquitto

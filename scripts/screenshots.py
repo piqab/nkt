@@ -63,6 +63,7 @@ SCREENS = [
     ('hosts-map', 'hub', '/', "clickText('span', new RegExp('^' + pick({ru: 'Карта', en: 'Map'}) + '$')); await sleep(6000)"),
     ('hub-alerts', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'})"),
     ('hub-scripts', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/)"),
+    ('hub-svcdesc', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сервисы', en: 'Services'})"),
     ('hub-script-scheme', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/); await sleep(800); tab({ru: 'Схема', en: 'Scheme'})"),
     ('hub-fail2ban', 'hub', '/', "menu('fail2ban')"),
     # «Мониторинг»: перед снимком хаб должен хоть раз собрать сводки с

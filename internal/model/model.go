@@ -32,6 +32,8 @@ const (
 	ServiceSSH     = "ssh"
 	ServiceSysctl  = "sysctl"
 	ServiceCron    = "cron"
+	// ServiceSvcDesc — описания сервисов (svcdesc) в /etc/netknownsthat/services.d.
+	ServiceSvcDesc = "svcdesc"
 )
 
 // Severity levels for findings, ordered from worst to least important.

@@ -1,6 +1,6 @@
-# Встроенный разборщик Kubernetes (Go). Разбор — в nkt; описание задаёт
-# приоритет его файлов и даёт перекрыть пути или выключить его
-# описанием с тем же именем на хосте или в профиле:
+# Built-in parser Kubernetes (Go). Parsing is in nkt; the description sets
+# the priority of its files and lets a description with the same name on
+# the host or in a profile override its paths or turn it off:
 #
 #   name: kubernetes
 #   engine: kubernetes

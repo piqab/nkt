@@ -7,7 +7,7 @@ title: Configs
 ![Config editor](/screens/en/configs-editor.png)
 
 Every discovered config — nginx, haproxy, caddy, docker compose, systemd,
-cron, sshd, netplan, libvirt — by category; a finding in “Findings” jumps
+cron, sshd, netplan, libvirt, [service descriptions](/en/guide/service-descriptions) — by category; a finding in “Findings” jumps
 straight to the line.
 
 ## Editor

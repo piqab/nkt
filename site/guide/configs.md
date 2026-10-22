@@ -7,7 +7,7 @@ title: Конфигурации
 ![Редактор конфигураций](/screens/ru/configs-editor.png)
 
 Все найденные конфиги — nginx, haproxy, caddy, docker compose, systemd,
-cron, sshd, netplan, libvirt — по категориям; из находки в «Проблемах»
+cron, sshd, netplan, libvirt, [описания сервисов](/guide/service-descriptions) — по категориям; из находки в «Проблемах»
 можно перейти сразу к нужной строке.
 
 ## Редактор

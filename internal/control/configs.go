@@ -106,6 +106,8 @@ func (m *ConfigManager) serviceForPath(path string) string {
 		return model.ServiceSysctl
 	case underRoot(path, m.cfg.CronRoot):
 		return model.ServiceCron
+	case m.cfg.ServicesDir != "" && underRoot(path, m.cfg.ServicesDir) && svcdescFileRe.MatchString(gopath.Base(path)):
+		return model.ServiceSvcDesc
 	// Одиночные файлы вне каталогов — перечислены поимённо, потому что
 	// разрешать /etc целиком значило бы отдать в редактор ещё и passwd,
 	// shadow и всё остальное, чему в этом разделе не место.
@@ -232,6 +234,7 @@ func (m *ConfigManager) CategoryRoots() map[string][]string {
 		model.ServiceNetwork:  {m.cfg.NetplanRoot},
 		model.ServiceSysctl:   {m.cfg.SysctlRoot},
 		model.ServiceCron:     {m.cfg.CronRoot},
+		model.ServiceSvcDesc:  {m.cfg.ServicesDir},
 		model.ServiceLibvirt:  {parse.LibvirtQEMUDir},
 		model.ServiceDocker:   {"/home", parse.ComposeStacksDir},
 	}
@@ -964,3 +967,6 @@ func normaliseNewlines(s string) string {
 	}
 	return s
 }
+
+// svcdescFileRe — файл описания сервиса: имя.yaml или имя.yml.
+var svcdescFileRe = regexp.MustCompile(`^[A-Za-z0-9._-]+\.ya?ml$`)

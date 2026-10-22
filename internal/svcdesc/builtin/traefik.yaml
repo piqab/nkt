@@ -1,6 +1,6 @@
-# Traefik: статическая конфигурация (yaml или toml), файлы динамической
-# (/etc/traefik/dynamic) и, если API открыт на 127.0.0.1:8080, сервисы
-# всех провайдеров (docker, file…) из /api/rawdata.
+# Traefik: the static configuration (yaml or toml), dynamic files
+# (/etc/traefik/dynamic) and, if the API is open on 127.0.0.1:8080, the
+# services of every provider (docker, file…) from /api/rawdata.
 name: traefik
 title: Traefik
 unit: traefik

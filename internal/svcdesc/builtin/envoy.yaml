@@ -1,5 +1,5 @@
-# Envoy: статическая конфигурация /etc/envoy/envoy.yaml — слушатели,
-# кластеры и admin.
+# Envoy: the static configuration /etc/envoy/envoy.yaml — listeners,
+# clusters and admin.
 name: envoy
 title: Envoy
 unit: envoy

@@ -1,6 +1,6 @@
-# RabbitMQ: слушатели — rabbitmq-diagnostics listeners (только чтение;
-# обёртка Debian запускает CLI от пользователя rabbitmq), версия —
-# server_version, настройки — rabbitmq.conf.
+# RabbitMQ: listeners — rabbitmq-diagnostics listeners (read-only; the
+# Debian wrapper runs the CLI as the rabbitmq user), version —
+# server_version, settings — rabbitmq.conf.
 name: rabbitmq
 title: RabbitMQ
 unit: rabbitmq-server

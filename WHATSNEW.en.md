@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.80 — 2026-10-22
+
+- **Service descriptions on the hub.** “Profiles” has a new “Services”
+  tab: your own descriptions with edit history and diffs, built-in ones to
+  view and override. The editor has “Check”, “Parse log” (the draft is
+  parsed on a chosen host) and “Path builder”: a file, API answer or
+  command output sample from a host as a tree, a path by click, the result
+  at once. “Deliver to hosts” sends the descriptions as a job. On a host,
+  `/etc/netknownsthat/services.d` files are a separate “Configs” category
+  with history. Descriptions are part of the hub export.
+
 ## v1.13.79 — 2026-10-22
 
 - **Built-in parsers go through descriptions.** nginx, HAProxy, Caddy,

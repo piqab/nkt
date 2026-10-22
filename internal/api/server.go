@@ -313,6 +313,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/fail2ban", s.handleF2BStatus)
 			r.Get("/fail2ban/log", s.handleF2BLog)
 			r.Get("/fail2ban/templates", s.handleF2BTemplates)
+			r.Get("/svcdesc", s.handleSvcdescList)
 			r.Get("/fail2ban/install/status", s.handleF2BInstallStatus)
 			r.Get("/sites/preflight", s.handleSitePreflight)
 			r.Get("/sites/port-check", s.handleSitePortCheck)
@@ -514,6 +515,10 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/fly/check", s.handleFlyCheck)
 				r.Post("/fly/refresh", s.handleFlyRefresh)
 				r.Put("/fail2ban/templates", s.handleF2BTemplateSave)
+				// Описания сервисов: набор с хаба, журнал разбора, образец.
+				r.Put("/svcdesc/profile", s.handleSvcdescProfile)
+				r.Post("/svcdesc/test", s.handleSvcdescTest)
+				r.Post("/svcdesc/sample", s.handleSvcdescSample)
 				r.Delete("/fail2ban/templates/{name}", s.handleF2BTemplateDelete)
 				r.Post("/fail2ban/templates/apply", s.handleF2BTemplateApply)
 				r.Post("/fail2ban/regex-test", s.handleF2BRegexTest)
