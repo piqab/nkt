@@ -450,6 +450,8 @@ var enCatalog = map[string]string{
 	"ai.scriptNoComment":                                  "the text has no “# AI: …” task lines — add what to do and press again",
 	"ai.scriptTooLong":                                    "the text is longer than %d characters — give the model less",
 	"ai.assistantTooLong":                                 "the conversation is too long — start a new one",
+	"ai.toolsTestSystem":                                  "You are checking tool calling. Call the get_hub_time tool and do nothing else.",
+	"ai.toolsTestUser":                                    "What time is it on the hub? Find out with the tool.",
 	"ai.assistantDisabled":                                "The assistant is off: turn it on in “About” → “Experimental”",
 	"ai.assistantNoAnswer":                                "The model gave no answer within the allowed turns — narrow the question.",
 	"ai.disabled":                                         "AI analysis is off: enable it in \"About\" and set a model",

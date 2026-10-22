@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -561,6 +562,9 @@ type AIStatus struct {
 	ai.Settings
 	UsageToday int `json:"usage_today"`
 	CacheSize  int `json:"cache_size"`
+	// Tools — умеет ли текущая модель вызывать инструменты (проверка или
+	// ответ ассистента); nil — неизвестно.
+	Tools *AIToolsState `json:"tools,omitempty"`
 }
 
 // AIStatusFor собирает состояние для интерфейса.
@@ -568,5 +572,86 @@ func (m *Manager) AIStatusFor(ctx context.Context) AIStatus {
 	set := m.AISettings(ctx)
 	used, _ := m.db.AIUsageToday(ctx)
 	size, _ := m.db.AICacheSize(ctx)
-	return AIStatus{Settings: set, UsageToday: used, CacheSize: size}
+	return AIStatus{Settings: set, UsageToday: used, CacheSize: size, Tools: m.aiToolsFor(ctx, set)}
+}
+
+// aiToolsKVKey — последнее, что известно о вызове инструментов моделью.
+const aiToolsKVKey = "ai.tools"
+
+// AIToolsState — умеет ли модель вызывать инструменты: tools — да,
+// no_tools — нет (ассистент отвечает по сводке). Origin — test (кнопка
+// «Проверить инструменты») или assistant (по вопросу ассистенту).
+type AIToolsState struct {
+	Provider string `json:"provider"`
+	BaseURL  string `json:"base_url"`
+	Model    string `json:"model"`
+	Status   string `json:"status"`
+	Origin   string `json:"origin"`
+	TS       string `json:"ts"`
+}
+
+// aiToolsFor — состояние для этих настроек (для других — неизвестно).
+func (m *Manager) aiToolsFor(ctx context.Context, set ai.Settings) *AIToolsState {
+	raw, ok, err := m.db.KVGet(ctx, aiToolsKVKey)
+	if err != nil || !ok {
+		return nil
+	}
+	var st AIToolsState
+	if json.Unmarshal([]byte(raw), &st) != nil || st.Provider != set.Provider ||
+		ai.NormalizeBaseURL(st.BaseURL) != ai.NormalizeBaseURL(set.BaseURL) || st.Model != set.Model {
+		return nil
+	}
+	return &st
+}
+
+// aiRecordTools запоминает, умеет ли модель вызывать инструменты.
+func (m *Manager) aiRecordTools(ctx context.Context, set ai.Settings, status, origin string) {
+	raw, _ := json.Marshal(AIToolsState{Provider: set.Provider, BaseURL: set.BaseURL, Model: set.Model,
+		Status: status, Origin: origin, TS: store.Now()})
+	_ = m.db.KVSet(ctx, aiToolsKVKey, string(raw))
+}
+
+// AIToolsResult — итог «Проверить инструменты».
+type AIToolsResult struct {
+	Status  string `json:"status"` // tools | no_tools | error
+	Model   string `json:"model"`
+	TookMS  int64  `json:"took_ms"`
+	Message string `json:"message,omitempty"`
+}
+
+// AIToolsTest — короткий запрос с одним пробным инструментом: вызвала ли
+// модель его. Запрос идёт в суточный предел.
+func (m *Manager) AIToolsTest(ctx context.Context, set ai.Settings, apiKey *string) (AIToolsResult, error) {
+	if strings.TrimSpace(set.Model) == "" {
+		return AIToolsResult{}, msgs.Errorf("ai.noModel")
+	}
+	set, err := m.aiFormSettings(ctx, set, apiKey)
+	if err != nil {
+		return AIToolsResult{}, err
+	}
+	lang := msgs.FromContext(ctx)
+	tool := ai.Tool{Name: "get_hub_time", Description: "Returns the current time on the hub.",
+		Schema: map[string]any{"type": "object", "properties": map[string]any{}}}
+	started := time.Now()
+	reply, err := ai.New(set).Chat(ctx, msgs.T(lang, "ai.toolsTestSystem"),
+		[]ai.ChatMessage{{Role: "user", Text: msgs.T(lang, "ai.toolsTestUser")}}, []ai.Tool{tool})
+	took := time.Since(started).Milliseconds()
+	_ = m.db.AIUsageAdd(ctx)
+	res := AIToolsResult{Model: set.Model, TookMS: took}
+	switch {
+	case errors.Is(err, ai.ErrToolsUnsupported):
+		res.Status = "no_tools"
+	case err != nil:
+		res.Status, res.Message = "error", msgs.Localize(lang, err)
+		return res, nil
+	default:
+		res.Status = "no_tools"
+		for _, c := range reply.Calls {
+			if c.Name == tool.Name {
+				res.Status = "tools"
+			}
+		}
+	}
+	m.aiRecordTools(ctx, set, res.Status, "test")
+	return res, nil
 }

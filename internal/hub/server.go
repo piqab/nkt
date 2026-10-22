@@ -251,6 +251,7 @@ func (s *Server) Handler() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.RequireAdmin)
 				r.Post("/hub/ai/test", s.handleAITest)
+				r.Post("/hub/ai/tools-test", s.handleAIToolsTest)
 				r.Post("/hub/ai/models", s.handleAIModels)
 			})
 		})

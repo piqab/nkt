@@ -38,7 +38,19 @@ interface AIStatus {
   timeout_s: number
   usage_today: number
   cache_size: number
+  /** Умеет ли текущая модель вызывать инструменты (нужно ассистенту). */
+  tools?: { status: 'tools' | 'no_tools'; origin: 'test' | 'assistant'; ts: string }
 }
+
+/** Готовые адреса OpenAI-совместимых серверов: кнопка только заполняет
+ * форму; локальным — без ключа, ожидание дольше, адреса можно не прятать. */
+const PRESETS: { key: string; label: string; base_url: string; local: boolean }[] = [
+  { key: 'ollama', label: 'Ollama', base_url: 'http://127.0.0.1:11434/v1', local: true },
+  { key: 'lmstudio', label: 'LM Studio', base_url: 'http://127.0.0.1:1234/v1', local: true },
+  { key: 'llamacpp', label: 'llama.cpp', base_url: 'http://127.0.0.1:8080/v1', local: true },
+  { key: 'vllm', label: 'vLLM', base_url: 'http://127.0.0.1:8000/v1', local: true },
+  { key: 'openrouter', label: 'OpenRouter', base_url: 'https://openrouter.ai/api/v1', local: false },
+]
 
 interface AIPrompt {
   kind: 'finding' | 'map' | 'config' | 'ip' | 'monitoring'
@@ -113,6 +125,8 @@ export function AISettingsCard() {
   // Итог проверки: живой запрос к модели теми настройками, что сейчас в
   // форме, — иначе неверный ключ обнаружится только при первом разборе.
   const [test, setTest] = useState<{ ok: boolean; text: Msg } | null>(null)
+  // Итог «Проверить инструменты».
+  const [toolsTest, setToolsTest] = useState<{ status: string; text: string } | null>(null)
 
   // Список моделей провайдера — только по кнопке и только на время
   // выбора: при смене провайдера или адреса он устаревает.
@@ -249,6 +263,34 @@ export function AISettingsCard() {
     }
   }
 
+  async function runToolsTest() {
+    if (!cur) return
+    setBusy(true)
+    setToolsTest(null)
+    try {
+      const res = await api<{ status: 'tools' | 'no_tools' | 'error'; took_ms: number; message?: string }>('/hub/ai/tools-test', {
+        method: 'POST',
+        timeoutMs: (cur.timeout_s + 30) * 1000,
+        body: {
+          enabled: true,
+          provider: cur.provider,
+          base_url: cur.base_url,
+          model: cur.model,
+          anonymize: cur.anonymize,
+          daily_limit: cur.daily_limit,
+          timeout_s: cur.timeout_s,
+          api_key: apiKey === '' ? null : apiKey,
+        },
+      })
+      setToolsTest({ status: res.status, text: res.status === 'error' ? res.message ?? '' : t(`ai.tools.${res.status}`) + ` (${res.took_ms} ms)` })
+      status.reload()
+    } catch (err) {
+      setToolsTest({ status: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function clearCache() {
     setBusy(true)
     try {
@@ -294,6 +336,28 @@ export function AISettingsCard() {
             <label style={{ flex: 1, minWidth: '16rem' }}>
               {t('ai.baseUrl')}
               <Input className="sensitive" value={cur.base_url} onChange={(e) => edit({ base_url: e.target.value })} />
+              {cur.provider === 'openai' && (
+                <span className="row small" style={{ gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                  <span className="muted">{t('ai.presets')}</span>
+                  {PRESETS.map((p) => (
+                    <Button
+                      key={p.key}
+                      size="small"
+                      type={cur.base_url === p.base_url ? 'primary' : 'default'}
+                      title={t(p.local ? 'ai.presetLocalHint' : 'ai.presetRemoteHint')}
+                      onClick={() =>
+                        edit(
+                          p.local
+                            ? { base_url: p.base_url, timeout_s: Math.max(cur.timeout_s, 300), anonymize: false }
+                            : { base_url: p.base_url },
+                        )
+                      }
+                    >
+                      {p.label}
+                    </Button>
+                  ))}
+                </span>
+              )}
             </label>
             <label style={{ flex: 1, minWidth: '16rem' }}>
               {t('ai.model')}
@@ -398,6 +462,14 @@ export function AISettingsCard() {
             <Button loading={busy} onClick={() => void runTest()}>
               {t('ai.test')}
             </Button>
+            <Button loading={busy} onClick={() => void runToolsTest()} title={t('ai.toolsTestHint')}>
+              {t('ai.toolsTest')}
+            </Button>
+            {cur.tools && (
+              <Tag color={cur.tools.status === 'tools' ? 'success' : 'orange'} title={t(`ai.toolsOrigin.${cur.tools.origin}`)}>
+                {t(`ai.tools.${cur.tools.status}`)}
+              </Tag>
+            )}
             {saved && <span className="small muted">{t('common.savedShort')}</span>}
             <span className="small muted">
               {t('ai.usageToday')}: {cur.usage_today}
@@ -409,6 +481,11 @@ export function AISettingsCard() {
           </div>
           {/* Итог — своей строкой: ответ модели бывает длинным и не должен
               растаскивать кнопки и счётчики. */}
+          {toolsTest && (
+            <div className="small" style={{ color: toolsTest.status === 'tools' ? 'var(--status-good)' : toolsTest.status === 'error' ? 'var(--status-critical)' : 'var(--status-warn, #d48806)', whiteSpace: 'pre-wrap' }}>
+              {toolsTest.status === 'tools' ? '✓' : toolsTest.status === 'error' ? '✗' : '!'} {toolsTest.text}
+            </div>
+          )}
           {test && (
             <div className="small" style={{ color: test.ok ? 'var(--status-good)' : 'var(--status-critical)', whiteSpace: 'pre-wrap' }}>
               {test.ok ? '✓' : '✗'} {msg(test.text)}

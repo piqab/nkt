@@ -116,8 +116,8 @@
     "restartStuck": "The hub has not answered with the new version within 3 minutes. Reload the page: if the version in About is still the old one, the install did not go through — check the service log on the hub machine (journalctl -u netknownsthat-hub and the transient run-… units).",
     "expTitle": "Experimental features",
     "expHint": "What is on at the hub. “Map” and “Clusters” only hide: the features keep working — created clusters live, jobs run, the API answers. “Assistant” and “MCP” turn off for real. The setting is shared by the whole hub.",
-    "expOn": "shown",
-    "expOff": "hidden",
+    "expOn": "on",
+    "expOff": "off",
     "expHistory": "History",
     "expRestore": "restore",
     "exp": {
@@ -3155,7 +3155,20 @@
       "link": "link"
     },
     "openScript": "Open as a script",
-    "openScriptHint": "A new script with this text in “Profiles” → “Scripts”: check it, dry-run it and run it yourself"
+    "openScriptHint": "A new script with this text in “Profiles” → “Scripts”: check it, dry-run it and run it yourself",
+    "presets": "Ready addresses:",
+    "presetLocalHint": "A local server: no key, 300 s wait, addresses needn’t be hidden",
+    "presetRemoteHint": "An external service: needs a key",
+    "toolsTest": "Check tools",
+    "toolsTestHint": "A short request with one probe tool: will the model call it. The assistant needs it; counts against the daily limit.",
+    "tools": {
+      "tools": "calls tools",
+      "no_tools": "doesn’t call tools"
+    },
+    "toolsOrigin": {
+      "test": "by “Check tools”",
+      "assistant": "by a question to the assistant"
+    }
   },
   "editModal": {
     "saved": "saved",
@@ -5034,7 +5047,8 @@
     "summaryHint": "The model cannot call tools: the answer is from a hub snapshot (hosts, alerts, pipelines, moves).",
     "scriptChecked": "The script from the answer passed “Check”.",
     "footer": "Answer by {{model}} · turns: {{rounds}}",
-    "disabled": "AI is off: turn it on in “About” → “Model analysis”."
+    "disabled": "AI is off: turn it on in “About” → “Model analysis”.",
+    "modelToolsHint": "The model calls tools: the assistant looks at the hub’s data itself."
   },
   "svcdesc": {
     "title": "Service descriptions",

@@ -468,3 +468,25 @@ func intQuery(r *http.Request, name string, def int) int {
 	}
 	return n
 }
+
+// handleAIToolsTest — POST /hub/ai/tools-test: умеет ли модель из формы
+// вызывать инструменты (нужно ассистенту). Запрос уходит наружу — в журнал.
+func (s *Server) handleAIToolsTest(w http.ResponseWriter, r *http.Request) {
+	var req aiSettingsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	set := ai.Settings{
+		Provider: req.Provider, BaseURL: strings.TrimSpace(req.BaseURL), Model: strings.TrimSpace(req.Model),
+		Anonymize: req.Anonymize, DailyLimit: req.DailyLimit, TimeoutS: req.TimeoutS,
+	}
+	s.aiExtendDeadline(w, normalizeAITimeout(req.TimeoutS))
+	res, err := s.hub.AIToolsTest(r.Context(), set, req.APIKey)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "ai.tools_test", ai.Describe(set), auditOK(res.Status != "error"), map[string]any{"status": res.Status})
+	writeJSON(w, http.StatusOK, res)
+}
