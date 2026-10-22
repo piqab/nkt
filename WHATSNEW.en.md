@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.84 — 2026-10-22
+
+- HTTP sources of service descriptions reach this host only
+  (`localhost`, 127.0.0.0/8, `::1`): the request address is rebuilt from
+  checked parts. The internal network is no longer allowed — an API in a
+  container is polled through a port published on 127.0.0.1.
+- Port and weight in descriptions are parsed as integers without overflow
+  (CodeQL findings).
+
 ## v1.13.83 — 2026-10-22
 
 - **Your own services, secured.** Description command sources now run as
