@@ -7,6 +7,7 @@ func init() {
 	}
 }
 
+// #nosec G101 -- тексты сообщений (ключи вроде svcdesc.secretFile), а не учётные данные.
 var ruSvcdescCatalog = map[string]string{
 	// Текст правила из описания: ru и en приходят аргументами.
 	"svcdesc.text": "%[1]s",
@@ -120,5 +121,7 @@ var ruSvcdescCatalog = map[string]string{
 	"svcdesc.t.finding":     "    находка %s: %s",
 	"svcdesc.t.done":        "  итог %s: адресов %d, пулов %d, находок %d, предупреждений %d",
 
-	"collect.httpFixture": "нет ответа для %s в .http/index.json",
+	"collect.httpFixture":     "нет ответа для %s в .http/index.json",
+	"collect.httpNotLocal":    "%s: HTTP-источник — только этот хост и внутренняя сеть (localhost, 127.0.0.0/8, ::1, 10/8, 172.16/12, 192.168/16, fc00::/7, link-local), адрес — IP или localhost",
+	"collect.outsideFixtures": "%s ведёт за пределы снимка",
 }

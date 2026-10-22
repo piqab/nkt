@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/msgs"
 )
 
@@ -32,6 +34,27 @@ var shellLike = map[string]bool{
 	"xargs": true, "nohup": true, "setsid": true, "timeout": true, "nice": true, "ionice": true, "chroot": true,
 	"systemd-run": true, "script": true, "expect": true, "python": true, "python3": true, "perl": true,
 	"ruby": true, "node": true, "php": true, "lua": true, "awk": true, "gawk": true, "find": true, "eval": true,
+}
+
+func basicAuthFile(s *Source) string {
+	if s.BasicAuth == nil {
+		return ""
+	}
+	return s.BasicAuth.PasswordFile
+}
+
+// unprivilegedUID — nobody: команды описаний без as_root идут от него.
+const unprivilegedUID = "65534"
+
+// commandArgv — argv запуска: от nobody через setpriv (без новых
+// привилегий и групп), если служба nkt — root и as_root не задан; иначе как
+// есть. В режиме fixtures — как есть (ответы ищутся по исходному argv).
+func commandArgv(s Source, mode string, euid int) []string {
+	if s.AsRoot || mode == "fixtures" || euid != 0 {
+		return s.Command
+	}
+	return append([]string{"setpriv", "--reuid=" + unprivilegedUID, "--regid=" + unprivilegedUID,
+		"--clear-groups", "--no-new-privs", "--"}, s.Command...)
 }
 
 func checkCommand(argv []string) error {
@@ -92,6 +115,9 @@ func checkHTTP(s *Source) error {
 	if u.User != nil {
 		return msgs.Errorf("svcdesc.urlCredentials")
 	}
+	if _, err := collect.CheckLocalURL(s.HTTP); err != nil {
+		return err
+	}
 	for k, v := range s.Headers {
 		if !headerNameRe.MatchString(k) || strings.ContainsAny(v, "\r\n") {
 			return msgs.Errorf("svcdesc.badHeader", k)
@@ -105,6 +131,13 @@ func checkHTTP(s *Source) error {
 	}
 	if s.BearerFile != "" && !strings.HasPrefix(s.BearerFile, "/") {
 		return msgs.Errorf("svcdesc.absPath", s.BearerFile)
+	}
+	// Файл секрета уходит заголовком на адрес из описания — закрытые
+	// пути (shadow, ключи, данные nkt) туда не отдаются.
+	for _, f := range []string{s.BearerFile, basicAuthFile(s)} {
+		if f != "" && Sensitive(f) {
+			return msgs.Errorf("svcdesc.sensitive", f)
+		}
 	}
 	return nil
 }
@@ -159,6 +192,11 @@ func (e *Engine) read(ctx context.Context, d *Descriptor, s Source, warn func(st
 			if !s.Optional && !strings.ContainsAny(s.File, "*?[") {
 				warn("svcdesc.w.noFile", s.ID, f)
 			}
+			continue
+		}
+		// Ссылка на закрытый путь (link → /etc/shadow) — как сам путь.
+		if real, err := e.c.RealPath(f); err != nil || Sensitive(real) {
+			warn("svcdesc.w.sensitive", s.ID, f)
 			continue
 		}
 		if st.Size > maxSourceBytes {
@@ -234,6 +272,14 @@ func (e *Engine) httpBody(ctx context.Context, s Source) ([]byte, error) {
 		headers[k] = v
 	}
 	// Секреты — из файлов на хосте: в описании (и в истории на хабе) их нет.
+	for _, f := range []string{s.BearerFile, basicAuthFile(&s)} {
+		if f == "" {
+			continue
+		}
+		if real, err := e.c.RealPath(f); err != nil || Sensitive(real) {
+			return nil, msgs.Errorf("svcdesc.sensitive", f)
+		}
+	}
 	if s.BasicAuth != nil {
 		pw, err := e.c.ReadFile(s.BasicAuth.PasswordFile)
 		if err != nil {
@@ -259,7 +305,8 @@ func (e *Engine) httpBody(ctx context.Context, s Source) ([]byte, error) {
 }
 
 func (e *Engine) commandOutput(ctx context.Context, s Source) ([]byte, error) {
-	res, err := e.c.RunTimeout(ctx, timeoutOf(s), s.Command[0], s.Command[1:]...)
+	argv := commandArgv(s, e.c.Mode(), os.Geteuid())
+	res, err := e.c.RunTimeout(ctx, timeoutOf(s), argv[0], argv[1:]...)
 	if err != nil {
 		return nil, err
 	}

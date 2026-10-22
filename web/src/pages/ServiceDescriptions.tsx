@@ -26,6 +26,7 @@ interface Check {
   endpoints: number
   upstreams: number
   rules: number
+  root_commands?: string[]
   error?: string
 }
 
@@ -77,7 +78,18 @@ function summary(t: (k: string, o?: Record<string, unknown>) => string, c: Check
   if (c.error) return <span className="small" style={{ color: 'var(--status-error, #d4380d)' }}>{c.error}</span>
   if (c.disabled) return <Tag>{t('svcdesc.disabled')}</Tag>
   if (c.engine) return <span className="small muted">{t('svcdesc.engine')}</span>
-  return <span className="small muted">{t('svcdesc.summary', { sources: c.sources, endpoints: c.endpoints, upstreams: c.upstreams, rules: c.rules })}</span>
+  return (
+    <span className="small muted">
+      {t('svcdesc.summary', { sources: c.sources, endpoints: c.endpoints, upstreams: c.upstreams, rules: c.rules })}
+      {c.root_commands && c.root_commands.length > 0 && (
+        <Tooltip title={c.root_commands.join('\n')}>
+          <Tag color="orange" style={{ marginLeft: 6 }}>
+            {t('svcdesc.asRoot', { count: c.root_commands.length })}
+          </Tag>
+        </Tooltip>
+      )}
+    </span>
+  )
 }
 
 export default function ServiceDescriptions({ me }: { me: Me }) {

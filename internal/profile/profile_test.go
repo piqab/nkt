@@ -70,12 +70,12 @@ func TestValidateRejectsDangerousValues(t *testing.T) {
 	cases := map[string]string{
 		"имя пакета с пробелом":    "packages: [\"nginx; rm -rf /\"]\n",
 		"относительный путь файла": "files:\n  - path: etc/app.conf\n    content: x\n",
-		"путь с ..":                "files:\n  - path: /etc/../root/.ssh/authorized_keys\n    content: x\n",
-		"порт вне диапазона":       "firewall:\n  allow:\n    - port: 70000\n",
-		"чужой протокол":           "firewall:\n  allow:\n    - port: 80\n      proto: sctp\n",
-		"не ключ SSH":              "users:\n  - name: deploy\n    keys: [\"пароль123\"]\n",
-		"имя машины с точкой":      "system:\n  hostname: \"web 01\"\n",
-		"дубль файла":              "files:\n  - path: /etc/a.conf\n    content: x\n  - path: /etc/a.conf\n    content: y\n",
+		"путь с ..":           "files:\n  - path: /etc/../root/.ssh/authorized_keys\n    content: x\n",
+		"порт вне диапазона":  "firewall:\n  allow:\n    - port: 70000\n",
+		"чужой протокол":      "firewall:\n  allow:\n    - port: 80\n      proto: sctp\n",
+		"не ключ SSH":         "users:\n  - name: deploy\n    keys: [\"пароль123\"]\n",
+		"имя машины с точкой": "system:\n  hostname: \"web 01\"\n",
+		"дубль файла":         "files:\n  - path: /etc/a.conf\n    content: x\n  - path: /etc/a.conf\n    content: y\n",
 	}
 	for name, raw := range cases {
 		if _, err := Parse([]byte(raw)); err == nil {

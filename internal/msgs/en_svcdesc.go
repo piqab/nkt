@@ -7,6 +7,7 @@ func init() {
 	}
 }
 
+// #nosec G101 -- тексты сообщений (ключи вроде svcdesc.secretFile), а не учётные данные.
 var enSvcdescCatalog = map[string]string{
 	// A rule text from a description: ru and en come as arguments.
 	"svcdesc.text": "%[2]s",
@@ -120,5 +121,7 @@ var enSvcdescCatalog = map[string]string{
 	"svcdesc.t.finding":     "    finding %s: %s",
 	"svcdesc.t.done":        "  total %s: %d addresses, %d pools, %d findings, %d warnings",
 
-	"collect.httpFixture": "no answer for %s in .http/index.json",
+	"collect.httpFixture":     "no answer for %s in .http/index.json",
+	"collect.httpNotLocal":    "%s: an HTTP source is this host and the internal network only (localhost, 127.0.0.0/8, ::1, 10/8, 172.16/12, 192.168/16, fc00::/7, link-local), the address is an IP or localhost",
+	"collect.outsideFixtures": "%s points outside the snapshot",
 }

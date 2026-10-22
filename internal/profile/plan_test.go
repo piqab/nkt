@@ -24,7 +24,7 @@ type fakeReader struct {
 	running map[string]int
 	// noDocker — на хосте нет docker вовсе.
 	noDocker bool
-	fail    map[string]error
+	fail     map[string]error
 }
 
 func (f fakeReader) InstalledPackages(_ context.Context, names []string) (map[string]bool, error) {
@@ -376,9 +376,9 @@ func TestComposeFilePath(t *testing.T) {
 
 func TestComposeValidate(t *testing.T) {
 	bad := map[string]Profile{
-		"имя с пробелом":   {Name: "p", Compose: []Compose{{Name: "мой стек", Content: "services: {}"}}},
-		"пустое описание":  {Name: "p", Compose: []Compose{{Name: "shop", Content: "  "}}},
-		"чужое имя файла":  {Name: "p", Compose: []Compose{{Name: "shop", Content: "services: {}", Path: "/srv/compose/shop/stack.yml"}}},
+		"имя с пробелом":     {Name: "p", Compose: []Compose{{Name: "мой стек", Content: "services: {}"}}},
+		"пустое описание":    {Name: "p", Compose: []Compose{{Name: "shop", Content: "  "}}},
+		"чужое имя файла":    {Name: "p", Compose: []Compose{{Name: "shop", Content: "services: {}", Path: "/srv/compose/shop/stack.yml"}}},
 		"путь не абсолютный": {Name: "p", Compose: []Compose{{Name: "shop", Content: "services: {}", Path: "shop/compose.yml"}}},
 		"дважды один стек": {Name: "p", Compose: []Compose{
 			{Name: "shop", Content: "services: {}"}, {Name: "shop", Content: "services: {}"}}},
@@ -424,4 +424,3 @@ func TestPlanOffersDockerWhenMissing(t *testing.T) {
 		t.Errorf("профиль без стеков = %v", composeActions(plan))
 	}
 }
-

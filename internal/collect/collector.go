@@ -125,6 +125,10 @@ type Collector interface {
 	// same host.
 	PodmanAPI(ctx context.Context, method, apiPath string, body []byte) ([]byte, int, error)
 
+	// RealPath — настоящий путь после символьных ссылок (описания сервисов
+	// проверяют закрытые пути по нему, а не по имени ссылки).
+	RealPath(path string) (string, error)
+
 	// HTTPGet — GET по адресу на хосте или в его сети: API программ для
 	// описаний сервисов (svcdesc). Тело — не больше 8 МБ.
 	HTTPGet(ctx context.Context, url string, headers map[string]string, timeout time.Duration) ([]byte, int, error)

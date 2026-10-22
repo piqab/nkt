@@ -63,7 +63,9 @@ func (s *Server) handleSvcdescProfile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	go func() { _, _ = s.scanner.Scan(context.Background()) }()
+	// Пересканирование переживает ответ: контекст запроса без отмены.
+	scanCtx := context.WithoutCancel(ctx)
+	go func() { _, _ = s.scanner.Scan(scanCtx) }()
 	writeJSON(w, http.StatusOK, map[string]any{"names": names})
 }
 
