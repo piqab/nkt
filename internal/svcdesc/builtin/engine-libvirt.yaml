@@ -1,0 +1,15 @@
+# Встроенный разборщик libvirt (Go). Разбор — в nkt; описание задаёт
+# приоритет его файлов и даёт перекрыть пути или выключить его
+# описанием с тем же именем на хосте или в профиле:
+#
+#   name: libvirt
+#   engine: libvirt
+#   options:
+#     uri: qemu:///system  # NKT_LIBVIRT_URI
+#
+#   name: libvirt
+#   disabled: true
+name: libvirt
+title: libvirt
+engine: libvirt
+priority: 100

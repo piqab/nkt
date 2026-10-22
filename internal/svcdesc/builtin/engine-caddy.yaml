@@ -1,0 +1,15 @@
+# Встроенный разборщик Caddy (Go). Разбор — в nkt; описание задаёт
+# приоритет его файлов и даёт перекрыть пути или выключить его
+# описанием с тем же именем на хосте или в профиле:
+#
+#   name: caddy
+#   engine: caddy
+#   options:
+#     main_config: /etc/caddy/Caddyfile  # NKT_CADDY_MAIN_CONFIG
+#
+#   name: caddy
+#   disabled: true
+name: caddy
+title: Caddy
+engine: caddy
+priority: 100

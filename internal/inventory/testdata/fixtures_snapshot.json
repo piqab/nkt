@@ -1,0 +1,4292 @@
+{
+ "ts": "",
+ "mode": "fixtures",
+ "host": {
+  "mode": "fixtures",
+  "hostname": "edge-01",
+  "kernel": "Linux 6.8.0-generic",
+  "os": "Debian GNU/Linux 12 (bookworm)",
+  "notes": [
+   "Режим снапшота: данные читаются из /home/alex/NetKnownsThat/fixtures/host, а не с реального хоста.",
+   "Команды управления выполняются в симуляции и ничего не меняют."
+  ],
+  "uptime_s": 300,
+  "os_info": {
+   "id": "debian",
+   "name": "Debian GNU/Linux 12 (bookworm)",
+   "source": "os-release"
+  }
+ },
+ "sources": [
+  {
+   "name": "nginx",
+   "available": true,
+   "version": "nginx version: nginx/1.24.0 (Ubuntu)",
+   "files": [
+    "/etc/nginx/nginx.conf",
+    "/etc/nginx/mime.types",
+    "/etc/nginx/conf.d/upstreams.conf",
+    "/etc/nginx/sites-enabled/api.example.com.conf",
+    "/etc/nginx/sites-enabled/app.example.com.conf",
+    "/etc/nginx/sites-enabled/grafana.internal.conf",
+    "/etc/nginx/sites-enabled/metrics.conf"
+   ],
+   "duration_ms": 0
+  },
+  {
+   "name": "haproxy",
+   "available": true,
+   "version": "HAProxy version 2.8.5-1ubuntu3 2026/01/24 - https://haproxy.org/",
+   "files": [
+    "/etc/haproxy/haproxy.cfg"
+   ],
+   "duration_ms": 0
+  },
+  {
+   "name": "caddy",
+   "available": false,
+   "duration_ms": 0
+  },
+  {
+   "name": "docker",
+   "available": true,
+   "version": "Docker 27.1.1 (API 1.46)",
+   "files": [
+    "/srv/docker/docker-compose.yml"
+   ],
+   "duration_ms": 0
+  },
+  {
+   "name": "podman",
+   "available": true,
+   "version": "Podman 5.1.2",
+   "duration_ms": 0
+  },
+  {
+   "name": "lxd",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "libvirt",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "firewall",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "listeners",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "packages",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "interfaces",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "host_capacity",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "kubernetes",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "processes",
+   "available": true,
+   "duration_ms": 0
+  },
+  {
+   "name": "certificates",
+   "available": true,
+   "files": [
+    "/etc/letsencrypt/live/api.example.com/fullchain.pem",
+    "/etc/haproxy/certs/api.internal.pem",
+    "/etc/haproxy/certs/app.internal.pem",
+    "/etc/haproxy/certs-le/app.example.com.pem",
+    "/etc/letsencrypt/live/app.example.com/fullchain.pem",
+    "/etc/ssl/certs/internal.pem"
+   ],
+   "duration_ms": 0
+  },
+  {
+   "name": "services",
+   "available": true,
+   "duration_ms": 0
+  }
+ ],
+ "services": [
+  {
+   "name": "nginx",
+   "unit": "nginx",
+   "description": "A high performance web server and a reverse proxy server",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "main_pid": 812,
+   "memory_bytes": 48234496,
+   "since": "Mon 2026-07-20 04:11:52 UTC",
+   "installed": true,
+   "config_files": [
+    "/etc/nginx/nginx.conf",
+    "/etc/nginx/mime.types",
+    "/etc/nginx/conf.d/upstreams.conf",
+    "/etc/nginx/sites-enabled/api.example.com.conf",
+    "/etc/nginx/sites-enabled/app.example.com.conf",
+    "/etc/nginx/sites-enabled/grafana.internal.conf",
+    "/etc/nginx/sites-enabled/metrics.conf"
+   ],
+   "actions": [
+    "validate",
+    "reload",
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "haproxy",
+   "unit": "haproxy",
+   "description": "HAProxy Load Balancer",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "main_pid": 933,
+   "memory_bytes": 97517568,
+   "since": "Mon 2026-07-20 04:11:55 UTC",
+   "restarts": 2,
+   "installed": true,
+   "config_files": [
+    "/etc/haproxy/haproxy.cfg"
+   ],
+   "actions": [
+    "validate",
+    "reload",
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "caddy",
+   "unit": "caddy",
+   "description": "Caddy",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "main_pid": 934,
+   "memory_bytes": 15728640,
+   "since": "Mon 2026-07-20 04:11:38 UTC",
+   "installed": true,
+   "actions": [
+    "validate",
+    "reload",
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "docker",
+   "unit": "docker",
+   "description": "Docker Application Container Engine",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "main_pid": 1102,
+   "memory_bytes": 284164096,
+   "since": "Mon 2026-07-20 04:11:40 UTC",
+   "installed": true,
+   "config_files": [
+    "/srv/docker/docker-compose.yml"
+   ],
+   "actions": [
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "podman",
+   "unit": "podman.socket",
+   "description": "Podman API Socket",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "since": "Mon 2026-07-20 04:11:40 UTC",
+   "installed": true,
+   "actions": [
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "lxd",
+   "unit": "snap.lxd.daemon",
+   "description": "Service for snap application lxd.daemon",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "main_pid": 1180,
+   "memory_bytes": 52428800,
+   "since": "Mon 2026-07-20 04:11:40 UTC",
+   "installed": true,
+   "actions": [
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "libvirt",
+   "unit": "libvirtd",
+   "description": "Virtualization daemon",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "main_pid": 1190,
+   "memory_bytes": 41943040,
+   "since": "Mon 2026-07-20 04:11:40 UTC",
+   "installed": true,
+   "actions": [
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "ufw",
+   "unit": "ufw",
+   "description": "Uncomplicated firewall",
+   "active_state": "active",
+   "sub_state": "exited",
+   "enabled": "enabled",
+   "since": "Mon 2026-07-20 04:11:38 UTC",
+   "installed": true,
+   "actions": [
+    "reload",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "firewalld",
+   "unit": "firewalld",
+   "description": "firewalld - dynamic firewall daemon",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "main_pid": 812,
+   "memory_bytes": 9748480,
+   "since": "Mon 2026-07-20 04:11:38 UTC",
+   "installed": true,
+   "actions": [
+    "reload",
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  },
+  {
+   "name": "fail2ban",
+   "unit": "fail2ban",
+   "description": "Fail2Ban Service",
+   "active_state": "active",
+   "sub_state": "running",
+   "enabled": "enabled",
+   "main_pid": 812,
+   "memory_bytes": 31457280,
+   "since": "Mon 2026-09-21 08:02:11 UTC",
+   "installed": true,
+   "actions": [
+    "restart",
+    "start",
+    "stop",
+    "enable",
+    "disable"
+   ]
+  }
+ ],
+ "files": [
+  {
+   "path": "/etc/haproxy/haproxy.cfg",
+   "service": "haproxy",
+   "size": 1822,
+   "mod_time": "TIME",
+   "sha256": "f2333e9ebba98ab59e98afff8a6db1fd0fb1e8c752bf35bb571aa6c4e4ec9364",
+   "editable": true,
+   "readable": true,
+   "sites": [
+    {
+     "name": "fe_postgres"
+    },
+    {
+     "name": "fe_http"
+    },
+    {
+     "name": "fe_https"
+    },
+    {
+     "name": "fe_https_le"
+    },
+    {
+     "name": "stats"
+    }
+   ],
+   "in_use": false
+  },
+  {
+   "path": "/etc/nginx/conf.d/upstreams.conf",
+   "service": "nginx",
+   "size": 314,
+   "mod_time": "TIME",
+   "sha256": "0b017bd18aa5b256beea2a1ac8a2333ffc1131c28ca5b6f41e4bf37ed18d6dbd",
+   "editable": true,
+   "readable": true,
+   "in_use": false
+  },
+  {
+   "path": "/etc/nginx/mime.types",
+   "service": "nginx",
+   "size": 740,
+   "mod_time": "TIME",
+   "sha256": "3e6f8bfa697ace465af0b6b4a2e16d1c0e5fe15b32e175343f3b3a21935cbe8e",
+   "editable": true,
+   "readable": true,
+   "in_use": false
+  },
+  {
+   "path": "/etc/nginx/nginx.conf",
+   "service": "nginx",
+   "size": 964,
+   "mod_time": "TIME",
+   "sha256": "f086e0488e27100c18dd35d18453aa837da6ec668b1ec8be7671dae6e71fc61c",
+   "editable": true,
+   "readable": true,
+   "in_use": false
+  },
+  {
+   "path": "/etc/nginx/sites-enabled/api.example.com.conf",
+   "service": "nginx",
+   "size": 524,
+   "mod_time": "TIME",
+   "sha256": "1c0289dc20b2e31ed2b1a949e9e23aa19cbfba1fbf66aae901f131b8b286e2d8",
+   "editable": true,
+   "readable": true,
+   "sites": [
+    {
+     "name": "api.example.com"
+    }
+   ],
+   "in_use": false
+  },
+  {
+   "path": "/etc/nginx/sites-enabled/app.example.com.conf",
+   "service": "nginx",
+   "size": 1091,
+   "mod_time": "TIME",
+   "sha256": "c681fcc3a4967b5e7a302f23eee5f1b6b54431abeda05bbb4a73c5d4c2964c7b",
+   "editable": true,
+   "readable": true,
+   "sites": [
+    {
+     "name": "app.example.com"
+    },
+    {
+     "name": "api.example.com"
+    }
+   ],
+   "in_use": false
+  },
+  {
+   "path": "/etc/nginx/sites-enabled/grafana.internal.conf",
+   "service": "nginx",
+   "size": 429,
+   "mod_time": "TIME",
+   "sha256": "812e1fcca686cfbc552065f7c61ca621e4dec41313948a825209d301cc432c52",
+   "editable": true,
+   "readable": true,
+   "sites": [
+    {
+     "name": "grafana.internal"
+    }
+   ],
+   "in_use": false
+  },
+  {
+   "path": "/etc/nginx/sites-enabled/metrics.conf",
+   "service": "nginx",
+   "size": 222,
+   "mod_time": "TIME",
+   "sha256": "e708a268b42b1a483dfca67d2784f19088f8c8a0d7b2f8d5835715f2926e1ed0",
+   "editable": true,
+   "readable": true,
+   "sites": [
+    {
+     "name": "metrics.example.com"
+    }
+   ],
+   "in_use": false
+  },
+  {
+   "path": "/srv/docker/docker-compose.yml",
+   "service": "docker",
+   "size": 1675,
+   "mod_time": "TIME",
+   "sha256": "cac79a7142173317dac92f6e3d462af6dd32b91f6a7e22afc55e870ef07f7457",
+   "editable": true,
+   "readable": true,
+   "sites": [
+    {
+     "name": "acme-grafana"
+    },
+    {
+     "name": "acme-redis"
+    },
+    {
+     "name": "acme-app"
+    },
+    {
+     "name": "acme-api"
+    },
+    {
+     "name": "acme-minio"
+    },
+    {
+     "name": "acme-prometheus"
+    }
+   ],
+   "in_use": false
+  }
+ ],
+ "endpoints": [
+  {
+   "id": "nginx::::80:app.example.com,api.example.com",
+   "service": "nginx",
+   "kind": "server",
+   "address": "::",
+   "port": 80,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "http",
+   "names": [
+    "app.example.com",
+    "api.example.com"
+   ],
+   "routes": [
+    {
+     "match": "/.well-known/acme-challenge/",
+     "target": "/var/www/certbot",
+     "target_kind": "static",
+     "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+     "line": 7
+    },
+    {
+     "match": "/",
+     "target": "301 https://$host$request_uri",
+     "target_kind": "redirect",
+     "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+     "line": 11
+    }
+   ],
+   "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+   "line": 3,
+   "label": "app.example.com, api.example.com"
+  },
+  {
+   "id": "nginx:0.0.0.0:80:metrics.example.com",
+   "service": "nginx",
+   "kind": "server",
+   "address": "0.0.0.0",
+   "port": 80,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "http",
+   "names": [
+    "metrics.example.com"
+   ],
+   "routes": [
+    {
+     "match": "/",
+     "target": "127.0.0.1:9090",
+     "target_kind": "address",
+     "file": "/etc/nginx/sites-enabled/metrics.conf",
+     "line": 8
+    }
+   ],
+   "file": "/etc/nginx/sites-enabled/metrics.conf",
+   "line": 2,
+   "label": "metrics.example.com",
+   "access_logs": [
+    "/var/log/nginx/metrics.access.log"
+   ]
+  },
+  {
+   "id": "nginx:0.0.0.0:80:app.example.com,api.example.com",
+   "service": "nginx",
+   "kind": "server",
+   "address": "0.0.0.0",
+   "port": 80,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "http",
+   "names": [
+    "app.example.com",
+    "api.example.com"
+   ],
+   "routes": [
+    {
+     "match": "/.well-known/acme-challenge/",
+     "target": "/var/www/certbot",
+     "target_kind": "static",
+     "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+     "line": 7
+    },
+    {
+     "match": "/",
+     "target": "301 https://$host$request_uri",
+     "target_kind": "redirect",
+     "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+     "line": 11
+    }
+   ],
+   "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+   "line": 2,
+   "label": "app.example.com, api.example.com"
+  },
+  {
+   "id": "nginx:0.0.0.0:443:api.example.com",
+   "service": "nginx",
+   "kind": "server",
+   "address": "0.0.0.0",
+   "port": 443,
+   "protocol": "tcp",
+   "tls": true,
+   "mode": "http",
+   "names": [
+    "api.example.com"
+   ],
+   "routes": [
+    {
+     "match": "/v1/",
+     "target": "api_backend",
+     "target_kind": "upstream",
+     "file": "/etc/nginx/sites-enabled/api.example.com.conf",
+     "line": 11
+    },
+    {
+     "match": "/metrics",
+     "target": "all",
+     "target_kind": "deny",
+     "file": "/etc/nginx/sites-enabled/api.example.com.conf",
+     "line": 18
+    }
+   ],
+   "upstreams": [
+    "api_backend"
+   ],
+   "file": "/etc/nginx/sites-enabled/api.example.com.conf",
+   "line": 2,
+   "label": "api.example.com",
+   "access_logs": [
+    "/var/log/nginx/api.access.log"
+   ],
+   "extra": {
+    "ssl_certificate": "/etc/letsencrypt/live/api.example.com/fullchain.pem",
+    "ssl_protocols": "TLSv1 TLSv1.1 TLSv1.2 TLSv1.3"
+   }
+  },
+  {
+   "id": "nginx:0.0.0.0:443:app.example.com",
+   "service": "nginx",
+   "kind": "server",
+   "address": "0.0.0.0",
+   "port": 443,
+   "protocol": "tcp",
+   "tls": true,
+   "mode": "http",
+   "names": [
+    "app.example.com"
+   ],
+   "routes": [
+    {
+     "match": "/",
+     "target": "app_backend",
+     "target_kind": "upstream",
+     "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+     "line": 28
+    },
+    {
+     "match": "/static/",
+     "target": "static_backend",
+     "target_kind": "upstream",
+     "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+     "line": 37
+    },
+    {
+     "match": "= /healthz",
+     "target": "app_backend",
+     "target_kind": "upstream",
+     "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+     "line": 43
+    }
+   ],
+   "upstreams": [
+    "app_backend",
+    "static_backend"
+   ],
+   "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+   "line": 16,
+   "label": "app.example.com",
+   "access_logs": [
+    "/var/log/nginx/app.access.log"
+   ],
+   "extra": {
+    "hsts": "max-age=31536000 always",
+    "http2": "on",
+    "ssl_certificate": "/etc/letsencrypt/live/app.example.com/fullchain.pem",
+    "ssl_protocols": "TLSv1 TLSv1.1 TLSv1.2 TLSv1.3"
+   }
+  },
+  {
+   "id": "docker:acme-grafana:127.0.0.1:3000",
+   "service": "docker",
+   "kind": "published-port",
+   "address": "127.0.0.1",
+   "port": 3000,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "tcp",
+   "names": [
+    "acme-grafana"
+   ],
+   "routes": [
+    {
+     "match": "",
+     "target": "172.19.0.6:3000",
+     "target_kind": "address"
+    }
+   ],
+   "file": "/srv/docker/docker-compose.yml",
+   "label": "acme-grafana",
+   "extra": {
+    "container": "acme-grafana",
+    "container_port": "3000",
+    "image": "grafana/grafana:11.1.0",
+    "state": "running"
+   }
+  },
+  {
+   "id": "haproxy:fe_postgres:10.10.0.2:5432",
+   "service": "haproxy",
+   "kind": "frontend",
+   "address": "10.10.0.2",
+   "port": 5432,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "tcp",
+   "names": [
+    "fe_postgres"
+   ],
+   "routes": [
+    {
+     "match": "default",
+     "target": "be_postgres",
+     "target_kind": "upstream",
+     "file": "/etc/haproxy/haproxy.cfg"
+    }
+   ],
+   "upstreams": [
+    "be_postgres"
+   ],
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 22,
+   "label": "fe_postgres"
+  },
+  {
+   "id": "docker:acme-redis:0.0.0.0:6379",
+   "service": "docker",
+   "kind": "published-port",
+   "address": "0.0.0.0",
+   "port": 6379,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "tcp",
+   "names": [
+    "acme-redis"
+   ],
+   "routes": [
+    {
+     "match": "",
+     "target": "172.19.0.4:6379",
+     "target_kind": "address"
+    }
+   ],
+   "file": "/srv/docker/docker-compose.yml",
+   "label": "acme-redis",
+   "extra": {
+    "container": "acme-redis",
+    "container_port": "6379",
+    "image": "redis:7-alpine",
+    "state": "running"
+   }
+  },
+  {
+   "id": "docker:acme-app:127.0.0.1:8080",
+   "service": "docker",
+   "kind": "published-port",
+   "address": "127.0.0.1",
+   "port": 8080,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "tcp",
+   "names": [
+    "acme-app"
+   ],
+   "routes": [
+    {
+     "match": "",
+     "target": "172.19.0.2:8080",
+     "target_kind": "address"
+    }
+   ],
+   "file": "/srv/docker/docker-compose.yml",
+   "label": "acme-app",
+   "extra": {
+    "container": "acme-app",
+    "container_port": "8080",
+    "image": "ghcr.io/acme/app:1.24.3",
+    "state": "running"
+   }
+  },
+  {
+   "id": "docker:acme-api:127.0.0.1:8081",
+   "service": "docker",
+   "kind": "published-port",
+   "address": "127.0.0.1",
+   "port": 8081,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "tcp",
+   "names": [
+    "acme-api"
+   ],
+   "routes": [
+    {
+     "match": "",
+     "target": "172.19.0.3:8080",
+     "target_kind": "address"
+    }
+   ],
+   "file": "/srv/docker/docker-compose.yml",
+   "label": "acme-api",
+   "extra": {
+    "container": "acme-api",
+    "container_port": "8080",
+    "image": "ghcr.io/acme/api:2.1.0",
+    "state": "running"
+   }
+  },
+  {
+   "id": "haproxy:fe_http:0.0.0.0:8090",
+   "service": "haproxy",
+   "kind": "frontend",
+   "address": "0.0.0.0",
+   "port": 8090,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "http",
+   "names": [
+    "fe_http"
+   ],
+   "routes": [
+    {
+     "match": "if is_static",
+     "target": "be_static",
+     "target_kind": "upstream",
+     "condition": "if is_static",
+     "file": "/etc/haproxy/haproxy.cfg"
+    },
+    {
+     "match": "default",
+     "target": "be_app",
+     "target_kind": "upstream",
+     "file": "/etc/haproxy/haproxy.cfg"
+    }
+   ],
+   "upstreams": [
+    "be_static",
+    "be_app"
+   ],
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 32,
+   "label": "fe_http",
+   "extra": {
+    "acl": "is_static: path_beg /static"
+   }
+  },
+  {
+   "id": "docker:acme-minio:0.0.0.0:8443",
+   "service": "docker",
+   "kind": "published-port",
+   "address": "0.0.0.0",
+   "port": 8443,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "tcp",
+   "names": [
+    "acme-minio"
+   ],
+   "routes": [
+    {
+     "match": "",
+     "target": "172.19.0.8:9000",
+     "target_kind": "address"
+    }
+   ],
+   "file": "/srv/docker/docker-compose.yml",
+   "label": "acme-minio",
+   "extra": {
+    "container": "acme-minio",
+    "container_port": "9000",
+    "image": "quay.io/minio/minio:RELEASE.2024-06-13T22-53-53Z",
+    "state": "restarting"
+   }
+  },
+  {
+   "id": "haproxy:fe_https:0.0.0.0:8443",
+   "service": "haproxy",
+   "kind": "frontend",
+   "address": "0.0.0.0",
+   "port": 8443,
+   "protocol": "tcp",
+   "tls": true,
+   "mode": "http",
+   "names": [
+    "fe_https"
+   ],
+   "routes": [
+    {
+     "match": "default",
+     "target": "be_app",
+     "target_kind": "upstream",
+     "file": "/etc/haproxy/haproxy.cfg"
+    }
+   ],
+   "upstreams": [
+    "be_app"
+   ],
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 59,
+   "label": "fe_https",
+   "extra": {
+    "ssl_certificate": "/etc/haproxy/certs"
+   }
+  },
+  {
+   "id": "nginx:0.0.0.0:8443:grafana.internal",
+   "service": "nginx",
+   "kind": "server",
+   "address": "0.0.0.0",
+   "port": 8443,
+   "protocol": "tcp",
+   "tls": true,
+   "mode": "http",
+   "names": [
+    "grafana.internal"
+   ],
+   "routes": [
+    {
+     "match": "/",
+     "target": "127.0.0.1:3000",
+     "target_kind": "address",
+     "file": "/etc/nginx/sites-enabled/grafana.internal.conf",
+     "line": 11
+    }
+   ],
+   "file": "/etc/nginx/sites-enabled/grafana.internal.conf",
+   "line": 2,
+   "label": "grafana.internal",
+   "access_logs": [
+    "/var/log/nginx/grafana.access.log"
+   ],
+   "extra": {
+    "ssl_certificate": "/etc/ssl/certs/internal.pem",
+    "ssl_protocols": "TLSv1 TLSv1.1 TLSv1.2 TLSv1.3"
+   }
+  },
+  {
+   "id": "haproxy:fe_https_le:0.0.0.0:8444",
+   "service": "haproxy",
+   "kind": "frontend",
+   "address": "0.0.0.0",
+   "port": 8444,
+   "protocol": "tcp",
+   "tls": true,
+   "mode": "http",
+   "names": [
+    "fe_https_le"
+   ],
+   "routes": [
+    {
+     "match": "default",
+     "target": "be_app",
+     "target_kind": "upstream",
+     "file": "/etc/haproxy/haproxy.cfg"
+    }
+   ],
+   "upstreams": [
+    "be_app"
+   ],
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 68,
+   "label": "fe_https_le",
+   "extra": {
+    "ssl_certificate": "/etc/haproxy/certs-le/app.example.com.pem"
+   }
+  },
+  {
+   "id": "haproxy:stats:0.0.0.0:9001",
+   "service": "haproxy",
+   "kind": "listen",
+   "address": "0.0.0.0",
+   "port": 9001,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "http",
+   "names": [
+    "stats"
+   ],
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 52,
+   "label": "stats",
+   "extra": {
+    "stats": "enabled",
+    "stats_auth": "none"
+   }
+  },
+  {
+   "id": "docker:acme-minio:127.0.0.1:9002",
+   "service": "docker",
+   "kind": "published-port",
+   "address": "127.0.0.1",
+   "port": 9002,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "tcp",
+   "names": [
+    "acme-minio"
+   ],
+   "routes": [
+    {
+     "match": "",
+     "target": "172.19.0.8:9002",
+     "target_kind": "address"
+    }
+   ],
+   "file": "/srv/docker/docker-compose.yml",
+   "label": "acme-minio",
+   "extra": {
+    "container": "acme-minio",
+    "container_port": "9002",
+    "image": "quay.io/minio/minio:RELEASE.2024-06-13T22-53-53Z",
+    "state": "restarting"
+   }
+  },
+  {
+   "id": "docker:acme-prometheus:127.0.0.1:9090",
+   "service": "docker",
+   "kind": "published-port",
+   "address": "127.0.0.1",
+   "port": 9090,
+   "protocol": "tcp",
+   "tls": false,
+   "mode": "tcp",
+   "names": [
+    "acme-prometheus"
+   ],
+   "routes": [
+    {
+     "match": "",
+     "target": "172.20.0.2:9090",
+     "target_kind": "address"
+    }
+   ],
+   "file": "/srv/docker/docker-compose.yml",
+   "label": "acme-prometheus",
+   "extra": {
+    "container": "acme-prometheus",
+    "container_port": "9090",
+    "image": "prom/prometheus:v2.53.0",
+    "state": "running"
+   }
+  }
+ ],
+ "upstreams": [
+  {
+   "id": "nginx:upstream:api_backend",
+   "name": "api_backend",
+   "service": "nginx",
+   "mode": "http",
+   "algorithm": "round-robin",
+   "servers": [
+    {
+     "host": "10.10.0.5",
+     "port": 9000,
+     "backup": false,
+     "down": false,
+     "checked": false
+    },
+    {
+     "host": "10.10.0.6",
+     "port": 9000,
+     "backup": true,
+     "down": false,
+     "checked": false,
+     "params": [
+      "backup"
+     ]
+    }
+   ],
+   "file": "/etc/nginx/conf.d/upstreams.conf",
+   "line": 8
+  },
+  {
+   "id": "nginx:upstream:app_backend",
+   "name": "app_backend",
+   "service": "nginx",
+   "mode": "http",
+   "algorithm": "least_conn",
+   "health": "passive (max_fails/fail_timeout)",
+   "servers": [
+    {
+     "host": "127.0.0.1",
+     "port": 8080,
+     "backup": false,
+     "down": false,
+     "checked": true,
+     "params": [
+      "max_fails=3",
+      "fail_timeout=30s"
+     ]
+    },
+    {
+     "host": "127.0.0.1",
+     "port": 8081,
+     "backup": false,
+     "down": false,
+     "checked": true,
+     "params": [
+      "max_fails=3",
+      "fail_timeout=30s"
+     ]
+    }
+   ],
+   "file": "/etc/nginx/conf.d/upstreams.conf",
+   "line": 1
+  },
+  {
+   "id": "nginx:upstream:static_backend",
+   "name": "static_backend",
+   "service": "nginx",
+   "mode": "http",
+   "algorithm": "round-robin",
+   "servers": [
+    {
+     "host": "127.0.0.1",
+     "port": 8082,
+     "backup": false,
+     "down": false,
+     "checked": false
+    }
+   ],
+   "file": "/etc/nginx/conf.d/upstreams.conf",
+   "line": 13
+  },
+  {
+   "id": "haproxy:upstream:be_app",
+   "name": "be_app",
+   "service": "haproxy",
+   "mode": "http",
+   "algorithm": "leastconn",
+   "health": "httpchk GET /healthz",
+   "servers": [
+    {
+     "name": "app1",
+     "host": "127.0.0.1",
+     "port": 8080,
+     "backup": false,
+     "down": false,
+     "checked": false
+    },
+    {
+     "name": "app2",
+     "host": "127.0.0.1",
+     "port": 8081,
+     "backup": false,
+     "down": false,
+     "checked": false
+    }
+   ],
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 45
+  },
+  {
+   "id": "haproxy:upstream:be_postgres",
+   "name": "be_postgres",
+   "service": "haproxy",
+   "mode": "tcp",
+   "algorithm": "roundrobin",
+   "health": "pgsql-check user haproxy",
+   "servers": [
+    {
+     "name": "pg1",
+     "host": "10.10.0.11",
+     "port": 5432,
+     "backup": false,
+     "down": false,
+     "checked": true,
+     "params": [
+      "check",
+      "inter 5s"
+     ]
+    },
+    {
+     "name": "pg2",
+     "host": "10.10.0.12",
+     "port": 5432,
+     "backup": true,
+     "down": false,
+     "checked": true,
+     "params": [
+      "check",
+      "inter 5s",
+      "backup"
+     ]
+    }
+   ],
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 26
+  },
+  {
+   "id": "haproxy:upstream:be_static",
+   "name": "be_static",
+   "service": "haproxy",
+   "mode": "http",
+   "algorithm": "roundrobin",
+   "servers": [
+    {
+     "name": "static1",
+     "host": "127.0.0.1",
+     "port": 8082,
+     "backup": false,
+     "down": false,
+     "checked": true,
+     "params": [
+      "check"
+     ]
+    }
+   ],
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 40
+  }
+ ],
+ "containers": [
+  {
+   "id": "9e0d1c2b3a4958677889aabbccddeeff00112233445566778899aabbccddeeff",
+   "name": "acme-api",
+   "image": "ghcr.io/acme/api:2.1.0",
+   "state": "running",
+   "status": "Up N days",
+   "created": 1784520060,
+   "project": "acme",
+   "service_name": "api",
+   "compose_file": "/srv/docker/docker-compose.yml",
+   "restart": "unless-stopped",
+   "ports": [
+    {
+     "host_ip": "127.0.0.1",
+     "host_port": 8081,
+     "container_port": 8080,
+     "protocol": "tcp"
+    }
+   ],
+   "networks": [
+    {
+     "name": "acme_backend",
+     "ip_address": "172.19.0.3",
+     "gateway": "172.19.0.1"
+    }
+   ],
+   "depends_on": [
+    "postgres"
+   ],
+   "declared": true,
+   "running": true,
+   "os_info": {
+    "id": "alpine",
+    "name": "Alpine Linux v3.20",
+    "source": "os-release"
+   }
+  },
+  {
+   "id": "8f3a1c9e21b4d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+   "name": "acme-app",
+   "image": "ghcr.io/acme/app:1.24.3",
+   "state": "running",
+   "status": "Up N days (healthy)",
+   "created": 1784520000,
+   "project": "acme",
+   "service_name": "app",
+   "compose_file": "/srv/docker/docker-compose.yml",
+   "restart": "unless-stopped",
+   "ports": [
+    {
+     "host_ip": "127.0.0.1",
+     "host_port": 8080,
+     "container_port": 8080,
+     "protocol": "tcp"
+    }
+   ],
+   "networks": [
+    {
+     "name": "acme_backend",
+     "ip_address": "172.19.0.2",
+     "gateway": "172.19.0.1"
+    }
+   ],
+   "depends_on": [
+    "postgres",
+    "redis"
+   ],
+   "declared": true,
+   "running": true,
+   "os_info": {
+    "id": "debian",
+    "name": "Debian GNU/Linux 12 (bookworm)",
+    "source": "os-release"
+   }
+  },
+  {
+   "id": "c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2",
+   "name": "acme-grafana",
+   "image": "grafana/grafana:11.1.0",
+   "state": "running",
+   "status": "Up N days",
+   "created": 1784520240,
+   "project": "acme",
+   "service_name": "grafana",
+   "compose_file": "/srv/docker/docker-compose.yml",
+   "restart": "unless-stopped",
+   "ports": [
+    {
+     "host_ip": "127.0.0.1",
+     "host_port": 3000,
+     "container_port": 3000,
+     "protocol": "tcp"
+    }
+   ],
+   "networks": [
+    {
+     "name": "acme_backend",
+     "ip_address": "172.19.0.6",
+     "gateway": "172.19.0.1"
+    },
+    {
+     "name": "acme_monitoring",
+     "ip_address": "172.20.0.3",
+     "gateway": "172.20.0.1"
+    }
+   ],
+   "declared": true,
+   "running": true,
+   "os_info": {
+    "id": "ubuntu",
+    "name": "Ubuntu 22.04.4 LTS",
+    "like": "debian",
+    "source": "os-release"
+   }
+  },
+  {
+   "id": "e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4",
+   "name": "acme-minio",
+   "image": "quay.io/minio/minio:RELEASE.2024-06-13T22-53-53Z",
+   "state": "restarting",
+   "status": "Restarting (1) 14 seconds ago",
+   "created": 1784520360,
+   "project": "acme",
+   "service_name": "minio",
+   "compose_file": "/srv/docker/docker-compose.yml",
+   "restart": "unless-stopped",
+   "ports": [
+    {
+     "host_ip": "",
+     "host_port": 8443,
+     "container_port": 9000,
+     "protocol": "tcp"
+    },
+    {
+     "host_ip": "127.0.0.1",
+     "host_port": 9002,
+     "container_port": 9002,
+     "protocol": "tcp"
+    }
+   ],
+   "networks": [
+    {
+     "name": "acme_backend",
+     "ip_address": "172.19.0.8",
+     "gateway": "172.19.0.1"
+    }
+   ],
+   "declared": true,
+   "running": true
+  },
+  {
+   "id": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+   "name": "acme-postgres",
+   "image": "postgres:16-alpine",
+   "state": "running",
+   "status": "Up N days (healthy)",
+   "created": 1784520180,
+   "project": "acme",
+   "service_name": "postgres",
+   "compose_file": "/srv/docker/docker-compose.yml",
+   "restart": "unless-stopped",
+   "networks": [
+    {
+     "name": "acme_backend",
+     "ip_address": "172.19.0.5",
+     "gateway": "172.19.0.1"
+    }
+   ],
+   "declared": true,
+   "running": true,
+   "os_info": {
+    "id": "alpine",
+    "name": "Alpine Linux v3.20",
+    "source": "os-release"
+   }
+  },
+  {
+   "id": "d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3",
+   "name": "acme-prometheus",
+   "image": "prom/prometheus:v2.53.0",
+   "state": "running",
+   "status": "Up N days",
+   "created": 1784520300,
+   "project": "acme",
+   "service_name": "prometheus",
+   "compose_file": "/srv/docker/docker-compose.yml",
+   "restart": "unless-stopped",
+   "ports": [
+    {
+     "host_ip": "127.0.0.1",
+     "host_port": 9090,
+     "container_port": 9090,
+     "protocol": "tcp"
+    }
+   ],
+   "networks": [
+    {
+     "name": "acme_monitoring",
+     "ip_address": "172.20.0.2",
+     "gateway": "172.20.0.1"
+    }
+   ],
+   "declared": true,
+   "running": true,
+   "os_info": {
+    "id": "linux",
+    "name": "Linux",
+    "source": "image"
+   }
+  },
+  {
+   "id": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+   "name": "acme-redis",
+   "image": "redis:7-alpine",
+   "state": "running",
+   "status": "Up N days",
+   "created": 1784520120,
+   "project": "acme",
+   "service_name": "redis",
+   "compose_file": "/srv/docker/docker-compose.yml",
+   "restart": "unless-stopped",
+   "ports": [
+    {
+     "host_ip": "0.0.0.0",
+     "host_port": 6379,
+     "container_port": 6379,
+     "protocol": "tcp"
+    }
+   ],
+   "networks": [
+    {
+     "name": "acme_backend",
+     "ip_address": "172.19.0.4",
+     "gateway": "172.19.0.1"
+    }
+   ],
+   "declared": true,
+   "running": true,
+   "os_info": {
+    "id": "alpine",
+    "name": "Alpine Linux v3.20",
+    "source": "os-release"
+   }
+  }
+ ],
+ "networks": [
+  {
+   "id": "b1acme00backend0000000000000000000000000000000000000000000000000",
+   "name": "acme_backend",
+   "driver": "bridge",
+   "scope": "local",
+   "internal": false,
+   "subnets": [
+    "172.19.0.0/16"
+   ],
+   "gateway": "172.19.0.1",
+   "bridge": "br-acme-backend",
+   "project": "acme"
+  },
+  {
+   "id": "b2acme00monitoring000000000000000000000000000000000000000000000",
+   "name": "acme_monitoring",
+   "driver": "bridge",
+   "scope": "local",
+   "internal": false,
+   "subnets": [
+    "172.20.0.0/16"
+   ],
+   "gateway": "172.20.0.1",
+   "bridge": "br-acme-monitoring",
+   "project": "acme"
+  },
+  {
+   "id": "a0default0bridge00000000000000000000000000000000000000000000000",
+   "name": "bridge",
+   "driver": "bridge",
+   "scope": "local",
+   "internal": false,
+   "subnets": [
+    "172.17.0.0/16"
+   ],
+   "gateway": "172.17.0.1",
+   "bridge": "docker0"
+  }
+ ],
+ "malware": {
+  "checked": true,
+  "hits": [
+   {
+    "kind": "miner-process",
+    "severity": "critical",
+    "object": "31337 /tmp/.X11-unix/.kdevtmpfsi",
+    "pid": 31337,
+    "user": "www-data",
+    "path": "/tmp/.X11-unix/.kdevtmpfsi",
+    "evidence": "stratum+tcp://: /tmp/.X11-unix/.kdevtmpfsi -o stratum+tcp://pool.minexmr.com:4444 -u 44AfUx… --donate-level 1"
+   },
+   {
+    "kind": "stratum",
+    "severity": "critical",
+    "object": "31337 kdevtmpfsi → 94.130.12.34:4444",
+    "pid": 31337,
+    "user": "www-data",
+    "path": "/tmp/.X11-unix/.kdevtmpfsi",
+    "evidence": "94.130.12.34:4444"
+   },
+   {
+    "kind": "tmp-exe",
+    "severity": "high",
+    "object": "31337 /tmp/.X11-unix/.kdevtmpfsi",
+    "pid": 31337,
+    "user": "www-data",
+    "path": "/tmp/.X11-unix/.kdevtmpfsi",
+    "evidence": "/tmp: /tmp/.X11-unix/.kdevtmpfsi -o stratum+tcp://pool.minexmr.com:4444 -u 44AfUx… --donate-level 1"
+   }
+  ],
+  "warnings": [
+   "find -perm -4000: the snapshot has no canned output for command: sh -c if command -v timeout \u003e/dev/null 2\u003e\u00261; then timeout 60 find / -xdev -type f -perm -4000 2\u003e/dev/null; else find / -xdev -type f -perm -4000 2\u003e/dev/null; fi; true"
+  ],
+  "duration_ms": 0
+ },
+ "podman_containers": [
+  {
+   "id": "r5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
+   "name": "adhoc-backup",
+   "image": "docker.io/library/restic:0.16.4",
+   "state": "exited",
+   "status": "Exited (0) 2 hours ago",
+   "created": 1784580000
+  },
+  {
+   "id": "p1a2b3c4d5e6f7081920a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2",
+   "name": "monitoring-grafana",
+   "image": "docker.io/grafana/grafana:11.1.0",
+   "state": "running",
+   "status": "Up 3 hours",
+   "created": 1784600000,
+   "pod": "monitoring",
+   "ports": [
+    {
+     "host_ip": "0.0.0.0",
+     "host_port": 3000,
+     "container_port": 3000,
+     "protocol": "tcp"
+    }
+   ],
+   "networks": [
+    {
+     "name": "podman"
+    }
+   ],
+   "os_info": {
+    "id": "ubuntu",
+    "name": "Ubuntu 22.04.4 LTS",
+    "like": "debian",
+    "source": "os-release"
+   }
+  },
+  {
+   "id": "q9e8d7c6b5a493827160f9e8d7c6b5a493827160f9e8d7c6b5a493827160f9e8",
+   "name": "monitoring-prometheus",
+   "image": "docker.io/prom/prometheus:v2.53.0",
+   "state": "running",
+   "status": "Up 3 hours",
+   "created": 1784599950,
+   "pod": "monitoring",
+   "ports": [
+    {
+     "host_ip": "127.0.0.1",
+     "host_port": 9090,
+     "container_port": 9090,
+     "protocol": "tcp"
+    }
+   ],
+   "networks": [
+    {
+     "name": "podman"
+    }
+   ],
+   "os_info": {
+    "id": "linux",
+    "name": "Linux",
+    "source": "image"
+   }
+  }
+ ],
+ "lxd_instances": [
+  {
+   "name": "build-runner",
+   "type": "container",
+   "status": "running",
+   "architecture": "x86_64",
+   "ipv4": [
+    "10.90.10.11"
+   ],
+   "autostart": true,
+   "limit_cpu": "2",
+   "limit_memory": "2GiB",
+   "memory_bytes": 412000000,
+   "disk_bytes": 1800000000,
+   "processes": 37,
+   "ports": [
+    {
+     "device": "http",
+     "listen": "tcp:0.0.0.0:8088",
+     "connect": "tcp:127.0.0.1:80"
+    }
+   ],
+   "snapshots": 2,
+   "profiles": [
+    "default"
+   ],
+   "networks": [
+    "lxdbr0"
+   ],
+   "os_info": {
+    "id": "ubuntu",
+    "name": "Ubuntu noble amd64 (20240901_07:42)",
+    "source": "image"
+   }
+  },
+  {
+   "name": "dns-cache",
+   "type": "container",
+   "status": "running",
+   "architecture": "x86_64",
+   "ipv4": [
+    "10.90.10.15"
+   ],
+   "autostart": false,
+   "limit_memory": "256MiB",
+   "memory_bytes": 48000000,
+   "disk_bytes": 310000000,
+   "processes": 9,
+   "profiles": [
+    "default"
+   ],
+   "os_info": {
+    "id": "alpine",
+    "name": "Alpinelinux 3.20 amd64 (20240901_13:00)",
+    "source": "image"
+   }
+  },
+  {
+   "name": "win-testbed",
+   "type": "virtual-machine",
+   "status": "stopped",
+   "architecture": "x86_64",
+   "autostart": false,
+   "limit_cpu": "4",
+   "limit_memory": "8GiB",
+   "profiles": [
+    "default"
+   ],
+   "os_info": {
+    "id": "windows",
+    "name": "Windows 11 Pro",
+    "source": "image"
+   }
+  }
+ ],
+ "vms": [
+  {
+   "name": "web-vm",
+   "uuid": "4b3f9b1e-1234-4a2b-9c3d-abcdef123456",
+   "state": "running",
+   "persistent": true,
+   "autostart": true,
+   "vcpus": 2,
+   "memory_kb": 2097152,
+   "disks": [
+    {
+     "device": "disk",
+     "source": "/var/lib/libvirt/images/web-vm.qcow2",
+     "bus": "virtio"
+    }
+   ],
+   "networks": [
+    {
+     "source": "br0",
+     "mac": "52:54:00:12:34:56",
+     "model": "virtio",
+     "ip": "192.168.122.45"
+    }
+   ],
+   "graphics": [
+    "vnc"
+   ],
+   "os_info": {
+    "id": "ubuntu",
+    "name": "Ubuntu 24.04.1 LTS",
+    "source": "agent"
+   }
+  },
+  {
+   "name": "db-vm",
+   "uuid": "7c1a2b3d-4567-4e8f-9a0b-fedcba987654",
+   "state": "shut off",
+   "persistent": true,
+   "autostart": false,
+   "vcpus": 4,
+   "memory_kb": 4194304,
+   "disks": [
+    {
+     "device": "disk",
+     "source": "/var/lib/libvirt/images/db-vm.qcow2",
+     "bus": "virtio"
+    }
+   ],
+   "networks": [
+    {
+     "source": "br0",
+     "mac": "52:54:00:65:43:21",
+     "model": "virtio"
+    }
+   ],
+   "graphics": [
+    "spice"
+   ],
+   "os_info": {
+    "id": "debian",
+    "name": "Debian 12",
+    "source": "libosinfo"
+   }
+  }
+ ],
+ "k8s": {
+  "flavor": "k3s",
+  "pods": [
+   {
+    "namespace": "kube-system",
+    "name": "coredns-7b98449c4-x9k2p",
+    "node": "lab-cp-1",
+    "ip": "10.42.0.3",
+    "phase": "Running",
+    "restarts": 0,
+    "ready": true,
+    "created": "TIME",
+    "labels": {
+     "k8s-app": "kube-dns"
+    },
+    "owner": "ReplicaSet/coredns-7b98449c4",
+    "images": [
+     "rancher/mirrored-coredns-coredns:1.11.3"
+    ]
+   },
+   {
+    "namespace": "kube-system",
+    "name": "traefik-5d45f7b9d-abcde",
+    "node": "lab-w-1",
+    "ip": "10.42.1.4",
+    "phase": "Running",
+    "restarts": 1,
+    "ready": true,
+    "created": "TIME",
+    "labels": {
+     "app.kubernetes.io/name": "traefik"
+    },
+    "owner": "ReplicaSet/traefik-5d45f7b9d",
+    "images": [
+     "rancher/mirrored-library-traefik:2.11.10"
+    ]
+   },
+   {
+    "namespace": "kube-system",
+    "name": "metrics-server-6f7c9d-zz",
+    "node": "lab-w-1",
+    "ip": "10.42.1.5",
+    "phase": "Running",
+    "restarts": 0,
+    "ready": true,
+    "created": "TIME",
+    "labels": {
+     "k8s-app": "metrics-server"
+    },
+    "owner": "ReplicaSet/metrics-server-6f7c9d",
+    "images": [
+     "rancher/mirrored-metrics-server:v0.7.2"
+    ]
+   },
+   {
+    "namespace": "kube-system",
+    "name": "node-exporter-lab-cp-1",
+    "node": "lab-cp-1",
+    "ip": "192.168.122.10",
+    "phase": "Running",
+    "restarts": 0,
+    "ready": true,
+    "created": "TIME",
+    "labels": {
+     "app": "node-exporter"
+    },
+    "privileged": [
+     "node-exporter"
+    ],
+    "host_network": true,
+    "images": [
+     "quay.io/prometheus/node-exporter:v1.8.2"
+    ]
+   },
+   {
+    "namespace": "default",
+    "name": "web-6c9d8f-qwert",
+    "node": "lab-w-1",
+    "ip": "10.42.1.10",
+    "phase": "Running",
+    "restarts": 0,
+    "ready": true,
+    "created": "TIME",
+    "labels": {
+     "app": "web"
+    },
+    "owner": "ReplicaSet/web-6c9d8f",
+    "no_limits": [
+     "web"
+    ],
+    "images": [
+     "nginx"
+    ]
+   },
+   {
+    "namespace": "default",
+    "name": "web-6c9d8f-asdfg",
+    "node": "lab-w-2",
+    "phase": "Pending",
+    "restarts": 0,
+    "ready": false,
+    "created": "TIME",
+    "labels": {
+     "app": "web"
+    },
+    "owner": "ReplicaSet/web-6c9d8f",
+    "no_limits": [
+     "web"
+    ],
+    "images": [
+     "nginx"
+    ]
+   },
+   {
+    "namespace": "shop",
+    "name": "api-7c9d8-a1b2c",
+    "node": "lab-w-1",
+    "ip": "10.42.1.20",
+    "phase": "Running",
+    "restarts": 0,
+    "ready": true,
+    "created": "TIME",
+    "labels": {
+     "app": "api"
+    },
+    "owner": "ReplicaSet/api-7c9d8",
+    "images": [
+     "ghcr.io/acme/api:2.1.0"
+    ]
+   },
+   {
+    "namespace": "shop",
+    "name": "api-7c9d8-d3e4f",
+    "node": "lab-cp-1",
+    "ip": "10.42.0.21",
+    "phase": "Running",
+    "restarts": 0,
+    "ready": true,
+    "created": "TIME",
+    "labels": {
+     "app": "api"
+    },
+    "owner": "ReplicaSet/api-7c9d8",
+    "images": [
+     "ghcr.io/acme/api:2.1.0"
+    ]
+   },
+   {
+    "namespace": "shop",
+    "name": "api-7c9d8-x2kq1",
+    "node": "lab-w-1",
+    "ip": "10.42.1.22",
+    "phase": "Running",
+    "reason": "CrashLoopBackOff",
+    "restarts": 14,
+    "ready": false,
+    "created": "TIME",
+    "labels": {
+     "app": "api"
+    },
+    "owner": "ReplicaSet/api-7c9d8",
+    "images": [
+     "ghcr.io/acme/api:2.1.0"
+    ]
+   }
+  ],
+  "workloads": [
+   {
+    "kind": "Deployment",
+    "namespace": "kube-system",
+    "name": "coredns",
+    "desired": 1,
+    "available": 1,
+    "selector": {
+     "app": "coredns"
+    }
+   },
+   {
+    "kind": "Deployment",
+    "namespace": "kube-system",
+    "name": "traefik",
+    "desired": 1,
+    "available": 1,
+    "selector": {
+     "app": "traefik"
+    }
+   },
+   {
+    "kind": "Deployment",
+    "namespace": "kube-system",
+    "name": "metrics-server",
+    "desired": 1,
+    "available": 1,
+    "selector": {
+     "app": "metrics-server"
+    }
+   },
+   {
+    "kind": "Deployment",
+    "namespace": "default",
+    "name": "web",
+    "desired": 2,
+    "available": 1,
+    "selector": {
+     "app": "web"
+    }
+   },
+   {
+    "kind": "Deployment",
+    "namespace": "shop",
+    "name": "api",
+    "desired": 3,
+    "available": 2,
+    "selector": {
+     "app": "api"
+    }
+   },
+   {
+    "kind": "Deployment",
+    "namespace": "cert-manager",
+    "name": "cert-manager",
+    "desired": 1,
+    "available": 1,
+    "selector": {
+     "app": "cert-manager"
+    }
+   },
+   {
+    "kind": "StatefulSet",
+    "namespace": "shop",
+    "name": "postgres",
+    "desired": 1,
+    "available": 1
+   }
+  ],
+  "nodes": [
+   {
+    "name": "lab-cp-1",
+    "ready": true,
+    "ip": "192.168.122.10",
+    "control_plane": true
+   },
+   {
+    "name": "lab-w-1",
+    "ready": true,
+    "ip": "192.168.122.11"
+   },
+   {
+    "name": "lab-w-2",
+    "ready": false,
+    "ip": "192.168.122.12"
+   }
+  ],
+  "pvcs": [
+   {
+    "namespace": "shop",
+    "name": "postgres-data",
+    "phase": "Bound",
+    "created": "TIME"
+   },
+   {
+    "namespace": "shop",
+    "name": "uploads",
+    "phase": "Pending",
+    "created": "TIME"
+   }
+  ],
+  "services": [
+   {
+    "namespace": "default",
+    "name": "kubernetes",
+    "type": "ClusterIP",
+    "ports": [
+     {
+      "port": 443,
+      "protocol": "TCP"
+     }
+    ]
+   },
+   {
+    "namespace": "default",
+    "name": "web",
+    "type": "ClusterIP",
+    "ports": [
+     {
+      "port": 80,
+      "protocol": "TCP"
+     }
+    ]
+   },
+   {
+    "namespace": "shop",
+    "name": "api",
+    "type": "NodePort",
+    "ports": [
+     {
+      "port": 8080,
+      "node_port": 30080,
+      "protocol": "TCP"
+     }
+    ]
+   },
+   {
+    "namespace": "shop",
+    "name": "postgres",
+    "type": "ClusterIP",
+    "ports": [
+     {
+      "port": 5432,
+      "protocol": "TCP"
+     }
+    ]
+   },
+   {
+    "namespace": "kube-system",
+    "name": "traefik",
+    "type": "LoadBalancer",
+    "ports": [
+     {
+      "port": 80,
+      "node_port": 31080,
+      "protocol": "TCP"
+     },
+     {
+      "port": 443,
+      "node_port": 31443,
+      "protocol": "TCP"
+     }
+    ],
+    "external": [
+     "192.168.122.31"
+    ]
+   }
+  ],
+  "ingresses": [
+   {
+    "namespace": "default",
+    "name": "web",
+    "hosts": [
+     "shop.example.com"
+    ]
+   }
+  ],
+  "admin_bindings": [
+   {
+    "name": "cluster-admin",
+    "role": "cluster-admin",
+    "subjects": [
+     "Group:system:masters"
+    ]
+   },
+   {
+    "name": "helm-kube-system-traefik",
+    "role": "cluster-admin",
+    "subjects": [
+     "ServiceAccount:kube-system/helm-traefik"
+    ]
+   },
+   {
+    "name": "ci-deployer-admin",
+    "role": "cluster-admin",
+    "subjects": [
+     "ServiceAccount:shop/ci-deployer"
+    ]
+   }
+  ],
+  "netpol_namespaces": [
+   "cert-manager"
+  ]
+ },
+ "firewall": {
+  "backends": [
+   "iptables",
+   "ip6tables",
+   "ufw",
+   "firewalld"
+  ],
+  "managers": [
+   {
+    "name": "ufw",
+    "installed": true,
+    "active": true,
+    "policy": "deny (incoming), allow (outgoing), disabled (routed)"
+   },
+   {
+    "name": "firewalld",
+    "installed": true,
+    "active": true,
+    "policy": "public"
+   }
+  ],
+  "policies": [
+   {
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "policy": "DROP",
+    "packets": 1024,
+    "bytes": 65536
+   },
+   {
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "FORWARD",
+    "policy": "DROP",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "OUTPUT",
+    "policy": "ACCEPT",
+    "packets": 982340,
+    "bytes": 148293010
+   },
+   {
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "DOCKER",
+    "policy": "-",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "DOCKER-ISOLATION-STAGE-1",
+    "policy": "-",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "DOCKER-ISOLATION-STAGE-2",
+    "policy": "-",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "DOCKER-USER",
+    "policy": "-",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "PREROUTING",
+    "policy": "ACCEPT",
+    "packets": 8123,
+    "bytes": 487380
+   },
+   {
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "INPUT",
+    "policy": "ACCEPT",
+    "packets": 412,
+    "bytes": 24720
+   },
+   {
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "OUTPUT",
+    "policy": "ACCEPT",
+    "packets": 1204,
+    "bytes": 72240
+   },
+   {
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "POSTROUTING",
+    "policy": "ACCEPT",
+    "packets": 1204,
+    "bytes": 72240
+   },
+   {
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "DOCKER",
+    "policy": "-",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "INPUT",
+    "policy": "DROP",
+    "packets": 12,
+    "bytes": 960
+   },
+   {
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "FORWARD",
+    "policy": "DROP",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "OUTPUT",
+    "policy": "ACCEPT",
+    "packets": 4820,
+    "bytes": 392100
+   },
+   {
+    "backend": "firewalld",
+    "table": "",
+    "chain": "block",
+    "policy": "REJECT",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "firewalld",
+    "table": "",
+    "chain": "public",
+    "policy": "default",
+    "packets": 0,
+    "bytes": 0
+   },
+   {
+    "backend": "firewalld",
+    "table": "",
+    "chain": "trusted",
+    "policy": "ACCEPT",
+    "packets": 0,
+    "bytes": 0
+   }
+  ],
+  "rules": [
+   {
+    "id": "iptables:filter:INPUT:1",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 1,
+    "action": "ACCEPT",
+    "in_iface": "lo",
+    "packets": 421031,
+    "bytes": 58291043,
+    "raw": "[421031:58291043] -A INPUT -i lo -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:INPUT:2",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 2,
+    "action": "ACCEPT",
+    "packets": 821300,
+    "bytes": 120483200,
+    "raw": "[821300:120483200] -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:INPUT:3",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 3,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "22",
+    "ports": [
+     22
+    ],
+    "packets": 12040,
+    "bytes": 722400,
+    "raw": "[12040:722400] -A INPUT -p tcp -m tcp --dport 22 -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:INPUT:4",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 4,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "80",
+    "ports": [
+     80
+    ],
+    "packets": 98211,
+    "bytes": 5892660,
+    "raw": "[98211:5892660] -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:INPUT:5",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 5,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "443",
+    "ports": [
+     443
+    ],
+    "packets": 1849220,
+    "bytes": 110953200,
+    "raw": "[1849220:110953200] -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:INPUT:6",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 6,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "8443",
+    "ports": [
+     8443
+    ],
+    "source": "10.10.0.0/24",
+    "packets": 4220,
+    "bytes": 253200,
+    "raw": "[4220:253200] -A INPUT -s 10.10.0.0/24 -p tcp -m tcp --dport 8443 -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:INPUT:7",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 7,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "25",
+    "ports": [
+     25
+    ],
+    "packets": 0,
+    "bytes": 0,
+    "raw": "[0:0] -A INPUT -p tcp -m tcp --dport 25 -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:INPUT:8",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 8,
+    "action": "ACCEPT",
+    "protocol": "icmp",
+    "packets": 1204,
+    "bytes": 72240,
+    "raw": "[1204:72240] -A INPUT -p icmp -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:INPUT:9",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 9,
+    "action": "LOG",
+    "packets": 318,
+    "bytes": 19080,
+    "raw": "[318:19080] -A INPUT -j LOG --log-prefix \"IPT-DROP-IN: \" --log-level 4",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:FORWARD:10",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "FORWARD",
+    "order": 10,
+    "action": "DOCKER-USER",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "[0:0] -A FORWARD -j DOCKER-USER",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:FORWARD:11",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "FORWARD",
+    "order": 11,
+    "action": "DOCKER-ISOLATION-STAGE-1",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "[0:0] -A FORWARD -j DOCKER-ISOLATION-STAGE-1",
+    "managed_by": "manual"
+   },
+   {
+    "id": "iptables:filter:FORWARD:12",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "FORWARD",
+    "order": 12,
+    "action": "ACCEPT",
+    "out_iface": "br-acme-backend",
+    "packets": 64210,
+    "bytes": 9203400,
+    "raw": "[64210:9203400] -A FORWARD -o br-acme-backend -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:filter:FORWARD:13",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "FORWARD",
+    "order": 13,
+    "action": "DOCKER",
+    "out_iface": "br-acme-backend",
+    "packets": 64210,
+    "bytes": 4820300,
+    "raw": "[64210:4820300] -A FORWARD -o br-acme-backend -j DOCKER",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:filter:FORWARD:14",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "FORWARD",
+    "order": 14,
+    "action": "ACCEPT",
+    "in_iface": "br-acme-backend",
+    "out_iface": "br-acme-backend",
+    "packets": 58230,
+    "bytes": 8203400,
+    "raw": "[58230:8203400] -A FORWARD -i br-acme-backend ! -o br-acme-backend -j ACCEPT",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:filter:DOCKER:15",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "DOCKER",
+    "order": 15,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "6379",
+    "ports": [
+     6379
+    ],
+    "destination": "172.19.0.4/32",
+    "in_iface": "br-acme-backend",
+    "out_iface": "br-acme-backend",
+    "packets": 9821,
+    "bytes": 1203400,
+    "raw": "[9821:1203400] -A DOCKER -d 172.19.0.4/32 ! -i br-acme-backend -o br-acme-backend -p tcp -m tcp --dport 6379 -j ACCEPT",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:filter:DOCKER:16",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "DOCKER",
+    "order": 16,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "8080",
+    "ports": [
+     8080
+    ],
+    "destination": "172.19.0.2/32",
+    "in_iface": "br-acme-backend",
+    "out_iface": "br-acme-backend",
+    "packets": 3204,
+    "bytes": 392100,
+    "raw": "[3204:392100] -A DOCKER -d 172.19.0.2/32 ! -i br-acme-backend -o br-acme-backend -p tcp -m tcp --dport 8080 -j ACCEPT",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:filter:DOCKER-USER:17",
+    "backend": "iptables",
+    "table": "filter",
+    "chain": "DOCKER-USER",
+    "order": 17,
+    "action": "RETURN",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "[0:0] -A DOCKER-USER -j RETURN",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:PREROUTING:18",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "PREROUTING",
+    "order": 18,
+    "action": "DOCKER",
+    "packets": 8123,
+    "bytes": 487380,
+    "raw": "[8123:487380] -A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:OUTPUT:19",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "OUTPUT",
+    "order": 19,
+    "action": "DOCKER",
+    "destination": "127.0.0.0/8",
+    "packets": 412,
+    "bytes": 24720,
+    "raw": "[412:24720] -A OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:POSTROUTING:20",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "POSTROUTING",
+    "order": 20,
+    "action": "MASQUERADE",
+    "source": "172.19.0.0/16",
+    "out_iface": "br-acme-backend",
+    "packets": 1204,
+    "bytes": 72240,
+    "raw": "[1204:72240] -A POSTROUTING -s 172.19.0.0/16 ! -o br-acme-backend -j MASQUERADE",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:DOCKER:21",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "DOCKER",
+    "order": 21,
+    "action": "RETURN",
+    "in_iface": "br-acme-backend",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "[0:0] -A DOCKER -i br-acme-backend -j RETURN",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:DOCKER:22",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "DOCKER",
+    "order": 22,
+    "action": "DNAT",
+    "protocol": "tcp",
+    "port_spec": "6379",
+    "ports": [
+     6379
+    ],
+    "in_iface": "br-acme-backend",
+    "dnat_to": "172.19.0.4:6379",
+    "packets": 8120,
+    "bytes": 487200,
+    "raw": "[8120:487200] -A DOCKER ! -i br-acme-backend -p tcp -m tcp --dport 6379 -j DNAT --to-destination 172.19.0.4:6379",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:DOCKER:23",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "DOCKER",
+    "order": 23,
+    "action": "DNAT",
+    "protocol": "tcp",
+    "port_spec": "8080",
+    "ports": [
+     8080
+    ],
+    "in_iface": "br-acme-backend",
+    "dnat_to": "172.19.0.2:8080",
+    "packets": 3204,
+    "bytes": 192240,
+    "raw": "[3204:192240] -A DOCKER ! -i br-acme-backend -p tcp -m tcp --dport 8080 -j DNAT --to-destination 172.19.0.2:8080",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:DOCKER:24",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "DOCKER",
+    "order": 24,
+    "action": "DNAT",
+    "protocol": "tcp",
+    "port_spec": "8081",
+    "ports": [
+     8081
+    ],
+    "in_iface": "br-acme-backend",
+    "dnat_to": "172.19.0.3:8080",
+    "packets": 2891,
+    "bytes": 173460,
+    "raw": "[2891:173460] -A DOCKER ! -i br-acme-backend -p tcp -m tcp --dport 8081 -j DNAT --to-destination 172.19.0.3:8080",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:DOCKER:25",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "DOCKER",
+    "order": 25,
+    "action": "DNAT",
+    "protocol": "tcp",
+    "port_spec": "3000",
+    "ports": [
+     3000
+    ],
+    "in_iface": "br-acme-backend",
+    "dnat_to": "172.19.0.6:3000",
+    "packets": 1420,
+    "bytes": 85200,
+    "raw": "[1420:85200] -A DOCKER ! -i br-acme-backend -p tcp -m tcp --dport 3000 -j DNAT --to-destination 172.19.0.6:3000",
+    "managed_by": "docker"
+   },
+   {
+    "id": "iptables:nat:DOCKER:26",
+    "backend": "iptables",
+    "table": "nat",
+    "chain": "DOCKER",
+    "order": 26,
+    "action": "DNAT",
+    "protocol": "tcp",
+    "port_spec": "9090",
+    "ports": [
+     9090
+    ],
+    "in_iface": "br-acme-monitoring",
+    "dnat_to": "172.20.0.2:9090",
+    "packets": 820,
+    "bytes": 49200,
+    "raw": "[820:49200] -A DOCKER ! -i br-acme-monitoring -p tcp -m tcp --dport 9090 -j DNAT --to-destination 172.20.0.2:9090",
+    "managed_by": "docker"
+   },
+   {
+    "id": "ip6tables:filter:INPUT:1",
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 1,
+    "action": "ACCEPT",
+    "in_iface": "lo",
+    "packets": 8210,
+    "bytes": 721400,
+    "raw": "[8210:721400] -A INPUT -i lo -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "ip6tables:filter:INPUT:2",
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 2,
+    "action": "ACCEPT",
+    "packets": 19203,
+    "bytes": 1820400,
+    "raw": "[19203:1820400] -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "ip6tables:filter:INPUT:3",
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 3,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "22",
+    "ports": [
+     22
+    ],
+    "packets": 420,
+    "bytes": 33600,
+    "raw": "[420:33600] -A INPUT -p tcp -m tcp --dport 22 -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "ip6tables:filter:INPUT:4",
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 4,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "80",
+    "ports": [
+     80
+    ],
+    "packets": 3120,
+    "bytes": 249600,
+    "raw": "[3120:249600] -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "ip6tables:filter:INPUT:5",
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 5,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "443",
+    "ports": [
+     443
+    ],
+    "packets": 8921,
+    "bytes": 713680,
+    "raw": "[8921:713680] -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "ip6tables:filter:INPUT:6",
+    "backend": "ip6tables",
+    "table": "filter",
+    "chain": "INPUT",
+    "order": 6,
+    "action": "ACCEPT",
+    "protocol": "ipv6-icmp",
+    "packets": 92,
+    "bytes": 7360,
+    "raw": "[92:7360] -A INPUT -p ipv6-icmp -j ACCEPT",
+    "managed_by": "manual"
+   },
+   {
+    "id": "ufw:1",
+    "backend": "ufw",
+    "chain": "ufw-user-input",
+    "order": 1,
+    "action": "ALLOW",
+    "protocol": "tcp",
+    "port_spec": "22",
+    "ports": [
+     22
+    ],
+    "source": "Anywhere",
+    "comment": "IN",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "22/tcp                     ALLOW IN    Anywhere",
+    "managed_by": "ufw"
+   },
+   {
+    "id": "ufw:2",
+    "backend": "ufw",
+    "chain": "ufw-user-input",
+    "order": 2,
+    "action": "ALLOW",
+    "protocol": "tcp",
+    "port_spec": "80",
+    "ports": [
+     80
+    ],
+    "source": "Anywhere",
+    "comment": "IN",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "80/tcp                     ALLOW IN    Anywhere",
+    "managed_by": "ufw"
+   },
+   {
+    "id": "ufw:3",
+    "backend": "ufw",
+    "chain": "ufw-user-input",
+    "order": 3,
+    "action": "ALLOW",
+    "protocol": "tcp",
+    "port_spec": "443",
+    "ports": [
+     443
+    ],
+    "source": "Anywhere",
+    "comment": "IN",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "443/tcp                    ALLOW IN    Anywhere",
+    "managed_by": "ufw"
+   },
+   {
+    "id": "ufw:4",
+    "backend": "ufw",
+    "chain": "ufw-user-input",
+    "order": 4,
+    "action": "ALLOW",
+    "protocol": "tcp",
+    "port_spec": "8443",
+    "ports": [
+     8443
+    ],
+    "source": "10.10.0.0/24",
+    "comment": "IN",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "8443/tcp                   ALLOW IN    10.10.0.0/24",
+    "managed_by": "ufw"
+   },
+   {
+    "id": "ufw:5",
+    "backend": "ufw",
+    "chain": "ufw-user-input",
+    "order": 5,
+    "action": "ALLOW",
+    "protocol": "tcp",
+    "port_spec": "25",
+    "ports": [
+     25
+    ],
+    "source": "Anywhere",
+    "comment": "IN",
+    "packets": 0,
+    "bytes": 0,
+    "raw": "25/tcp                     ALLOW IN    Anywhere",
+    "managed_by": "ufw"
+   },
+   {
+    "id": "firewalld:public:run:service:dhcpv6-client",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 1,
+    "action": "ACCEPT",
+    "port_spec": "dhcpv6-client",
+    "zone": "public",
+    "runtime": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "",
+    "managed_by": "firewalld"
+   },
+   {
+    "id": "firewalld:public:run:service:ssh",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 2,
+    "action": "ACCEPT",
+    "port_spec": "ssh",
+    "zone": "public",
+    "runtime": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "",
+    "managed_by": "firewalld"
+   },
+   {
+    "id": "firewalld:public:run:port:8443/tcp",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 3,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "8443",
+    "ports": [
+     8443
+    ],
+    "zone": "public",
+    "runtime": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "",
+    "managed_by": "firewalld"
+   },
+   {
+    "id": "firewalld:public:run:rich:4",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 4,
+    "action": "ACCEPT",
+    "zone": "public",
+    "runtime": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "rule family=\"ipv4\" source address=\"10.10.0.0/24\" port port=\"9000\" protocol=\"tcp\" accept",
+    "managed_by": "firewalld"
+   },
+   {
+    "id": "firewalld:public:perm:service:dhcpv6-client",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 1,
+    "action": "ACCEPT",
+    "port_spec": "dhcpv6-client",
+    "zone": "public",
+    "permanent": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "",
+    "managed_by": "firewalld"
+   },
+   {
+    "id": "firewalld:public:perm:service:ssh",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 2,
+    "action": "ACCEPT",
+    "port_spec": "ssh",
+    "zone": "public",
+    "permanent": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "",
+    "managed_by": "firewalld"
+   },
+   {
+    "id": "firewalld:public:perm:port:8443/tcp",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 3,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "8443",
+    "ports": [
+     8443
+    ],
+    "zone": "public",
+    "permanent": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "",
+    "managed_by": "firewalld"
+   },
+   {
+    "id": "firewalld:public:perm:port:9090/tcp",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 4,
+    "action": "ACCEPT",
+    "protocol": "tcp",
+    "port_spec": "9090",
+    "ports": [
+     9090
+    ],
+    "zone": "public",
+    "permanent": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "",
+    "managed_by": "firewalld"
+   },
+   {
+    "id": "firewalld:public:perm:rich:5",
+    "backend": "firewalld",
+    "chain": "public",
+    "order": 5,
+    "action": "ACCEPT",
+    "zone": "public",
+    "permanent": true,
+    "packets": 0,
+    "bytes": 0,
+    "raw": "rule family=\"ipv4\" source address=\"10.10.0.0/24\" port port=\"9000\" protocol=\"tcp\" accept",
+    "managed_by": "firewalld"
+   }
+  ]
+ },
+ "listeners": [
+  {
+   "protocol": "tcp",
+   "address": "0.0.0.0",
+   "port": 22,
+   "process": "sshd",
+   "pid": 701,
+   "raw": "tcp   LISTEN 0      128          0.0.0.0:22          0.0.0.0:*    users:((\"sshd\",pid=701,fd=3))",
+   "command": "sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups",
+   "user": "root",
+   "uptime_s": 864198,
+   "unit": "ssh.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "udp",
+   "address": "127.0.0.53",
+   "port": 53,
+   "process": "systemd-resolve",
+   "pid": 602,
+   "raw": "udp   UNCONN 0      0          127.0.0.53:53         0.0.0.0:*    users:((\"systemd-resolve\",pid=602,fd=12))",
+   "command": "/lib/systemd/systemd-resolved",
+   "user": "systemd-resolve",
+   "uptime_s": 864240,
+   "unit": "systemd-resolved.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "udp",
+   "address": "0.0.0.0",
+   "port": 68,
+   "process": "dhclient",
+   "pid": 590,
+   "raw": "udp   UNCONN 0      0            0.0.0.0:68          0.0.0.0:*    users:((\"dhclient\",pid=590,fd=6))",
+   "command": "/sbin/dhclient -1 -4 -v -pf /run/dhclient.eth0.pid -lf /var/lib/dhcp/dhclient.eth0.leases -I -df /var/lib/dhcp/dhclient6.eth0.leases eth0",
+   "user": "root",
+   "uptime_s": 864233,
+   "unit": "networking.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "0.0.0.0",
+   "port": 80,
+   "process": "nginx",
+   "pid": 812,
+   "raw": "tcp   LISTEN 0      511          0.0.0.0:80          0.0.0.0:*    users:((\"nginx\",pid=812,fd=6),(\"nginx\",pid=811,fd=6))",
+   "command": "nginx: master process /usr/sbin/nginx -g daemon on; master_process on;",
+   "user": "root",
+   "uptime_s": 86392,
+   "unit": "nginx.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "0.0.0.0",
+   "port": 443,
+   "process": "nginx",
+   "pid": 812,
+   "raw": "tcp   LISTEN 0      511          0.0.0.0:443         0.0.0.0:*    users:((\"nginx\",pid=812,fd=8),(\"nginx\",pid=811,fd=8))",
+   "command": "nginx: master process /usr/sbin/nginx -g daemon on; master_process on;",
+   "user": "root",
+   "uptime_s": 86392,
+   "unit": "nginx.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "127.0.0.1",
+   "port": 3000,
+   "process": "docker-proxy",
+   "pid": 1288,
+   "raw": "tcp   LISTEN 0      4096       127.0.0.1:3000        0.0.0.0:*    users:((\"docker-proxy\",pid=1288,fd=4))",
+   "command": "/usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 3000 -container-ip 172.18.0.7 -container-port 3000",
+   "user": "root",
+   "uptime_s": 79201,
+   "unit": "docker.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "10.10.0.2",
+   "port": 5432,
+   "process": "haproxy",
+   "pid": 933,
+   "raw": "tcp   LISTEN 0      2000       10.10.0.2:5432        0.0.0.0:*    users:((\"haproxy\",pid=933,fd=7))",
+   "command": "/usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock",
+   "user": "haproxy",
+   "uptime_s": 81044,
+   "unit": "haproxy.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "127.0.0.1",
+   "port": 5433,
+   "process": "docker-proxy",
+   "pid": 1455,
+   "raw": "tcp   LISTEN 0      4096       127.0.0.1:5433        0.0.0.0:*    users:((\"docker-proxy\",pid=1455,fd=4))",
+   "command": "/usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 5433 -container-ip 172.18.0.10 -container-port 5432",
+   "user": "root",
+   "uptime_s": 79188,
+   "unit": "docker.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "0.0.0.0",
+   "port": 6379,
+   "process": "docker-proxy",
+   "pid": 1255,
+   "raw": "tcp   LISTEN 0      4096         0.0.0.0:6379        0.0.0.0:*    users:((\"docker-proxy\",pid=1255,fd=4))",
+   "command": "/usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 6379 -container-ip 172.18.0.6 -container-port 6379",
+   "user": "root",
+   "uptime_s": 79205,
+   "unit": "docker.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "127.0.0.1",
+   "port": 8080,
+   "process": "docker-proxy",
+   "pid": 1201,
+   "raw": "tcp   LISTEN 0      4096       127.0.0.1:8080        0.0.0.0:*    users:((\"docker-proxy\",pid=1201,fd=4))",
+   "command": "/usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 8080 -container-ip 172.18.0.4 -container-port 8080",
+   "user": "root",
+   "uptime_s": 79210,
+   "unit": "docker.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "127.0.0.1",
+   "port": 8081,
+   "process": "docker-proxy",
+   "pid": 1233,
+   "raw": "tcp   LISTEN 0      4096       127.0.0.1:8081        0.0.0.0:*    users:((\"docker-proxy\",pid=1233,fd=4))",
+   "command": "/usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 8081 -container-ip 172.18.0.5 -container-port 80",
+   "user": "root",
+   "uptime_s": 79208,
+   "unit": "docker.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "127.0.0.1",
+   "port": 8082,
+   "process": "static-server",
+   "pid": 1400,
+   "raw": "tcp   LISTEN 0      4096       127.0.0.1:8082        0.0.0.0:*    users:((\"static-server\",pid=1400,fd=3))",
+   "command": "python3 -m http.server 8082 --directory /srv/tmp-share",
+   "user": "deploy",
+   "uptime_s": 932,
+   "origin": "manual"
+  },
+  {
+   "protocol": "tcp",
+   "address": "0.0.0.0",
+   "port": 8090,
+   "process": "haproxy",
+   "pid": 933,
+   "raw": "tcp   LISTEN 0      2000         0.0.0.0:8090        0.0.0.0:*    users:((\"haproxy\",pid=933,fd=8))",
+   "command": "/usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock",
+   "user": "haproxy",
+   "uptime_s": 81044,
+   "unit": "haproxy.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "0.0.0.0",
+   "port": 8443,
+   "process": "nginx",
+   "pid": 812,
+   "raw": "tcp   LISTEN 0      511          0.0.0.0:8443        0.0.0.0:*    users:((\"nginx\",pid=812,fd=10))",
+   "command": "nginx: master process /usr/sbin/nginx -g daemon on; master_process on;",
+   "user": "root",
+   "uptime_s": 86392,
+   "unit": "nginx.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "0.0.0.0",
+   "port": 9001,
+   "process": "haproxy",
+   "pid": 933,
+   "raw": "tcp   LISTEN 0      2000         0.0.0.0:9001        0.0.0.0:*    users:((\"haproxy\",pid=933,fd=9))",
+   "command": "/usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock",
+   "user": "haproxy",
+   "uptime_s": 81044,
+   "unit": "haproxy.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "127.0.0.1",
+   "port": 9002,
+   "process": "docker-proxy",
+   "pid": 1322,
+   "raw": "tcp   LISTEN 0      4096       127.0.0.1:9002        0.0.0.0:*    users:((\"docker-proxy\",pid=1322,fd=4))",
+   "command": "/usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 9002 -container-ip 172.18.0.9 -container-port 9002",
+   "user": "root",
+   "uptime_s": 79194,
+   "unit": "docker.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "127.0.0.1",
+   "port": 9090,
+   "process": "docker-proxy",
+   "pid": 1301,
+   "raw": "tcp   LISTEN 0      4096       127.0.0.1:9090        0.0.0.0:*    users:((\"docker-proxy\",pid=1301,fd=4))",
+   "command": "/usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 9090 -container-ip 172.18.0.8 -container-port 9090",
+   "user": "root",
+   "uptime_s": 79198,
+   "unit": "docker.service",
+   "origin": "service"
+  },
+  {
+   "protocol": "tcp",
+   "address": "127.0.0.1",
+   "port": 11211,
+   "process": "memcached",
+   "pid": 655,
+   "raw": "tcp   LISTEN 0      511        127.0.0.1:11211       0.0.0.0:*    users:((\"memcached\",pid=655,fd=6))",
+   "command": "/usr/bin/memcached -m 64 -p 11211 -u memcache -l 127.0.0.1 -P /var/run/memcached/memcached.pid",
+   "user": "memcache",
+   "uptime_s": 864102,
+   "unit": "memcached.service",
+   "origin": "service"
+  }
+ ],
+ "interfaces": [
+  {
+   "name": "lo",
+   "mac": "00:00:00:00:00:00",
+   "mtu": 65536,
+   "up": true,
+   "lower_up": true,
+   "loopback": true,
+   "addresses": [
+    "127.0.0.1/8",
+    "::1/128"
+   ],
+   "rx_bytes": 8842219,
+   "tx_bytes": 8842219
+  },
+  {
+   "name": "eth0",
+   "mac": "52:54:00:1a:2b:3c",
+   "mtu": 1500,
+   "up": true,
+   "lower_up": true,
+   "addresses": [
+    "203.0.113.10/24",
+    "fe80::5054:ff:fe1a:2b3c/64"
+   ],
+   "rx_bytes": 4293102934,
+   "tx_bytes": 812934021,
+   "rx_errors": 3,
+   "rx_dropped": 145,
+   "tx_dropped": 12
+  },
+  {
+   "name": "docker0",
+   "mac": "02:42:8f:1c:9d:11",
+   "mtu": 1500,
+   "up": true,
+   "lower_up": true,
+   "addresses": [
+    "172.17.0.1/16"
+   ],
+   "rx_bytes": 9482310,
+   "tx_bytes": 40123098,
+   "docker_network": "bridge"
+  },
+  {
+   "name": "wg0",
+   "mtu": 1420,
+   "up": true,
+   "lower_up": true,
+   "addresses": [
+    "10.8.0.1/24"
+   ],
+   "rx_bytes": 1029384,
+   "tx_bytes": 2094821
+  },
+  {
+   "name": "br-acme-backend",
+   "mac": "02:42:1a:2b:3c:01",
+   "mtu": 1500,
+   "up": true,
+   "lower_up": true,
+   "addresses": [
+    "172.19.0.1/16"
+   ],
+   "rx_bytes": 302981233,
+   "tx_bytes": 198239123,
+   "docker_network": "acme_backend",
+   "attached_containers": 6
+  },
+  {
+   "name": "br-acme-monitoring",
+   "mac": "02:42:1a:2b:3c:02",
+   "mtu": 1500,
+   "up": true,
+   "lower_up": true,
+   "addresses": [
+    "172.20.0.1/16"
+   ],
+   "rx_bytes": 40921834,
+   "tx_bytes": 20918234,
+   "docker_network": "acme_monitoring",
+   "attached_containers": 2
+  }
+ ],
+ "certificates": [
+  {
+   "id": "cert:/etc/letsencrypt/live/api.example.com/fullchain.pem",
+   "path": "/etc/letsencrypt/live/api.example.com/fullchain.pem",
+   "service": "nginx",
+   "endpoints": [
+    "0.0.0.0:443"
+   ],
+   "sites": [
+    "api.example.com"
+   ],
+   "subject": "CN=api.example.com,O=Example",
+   "issuer": "CN=Example Test CA,O=Example",
+   "serial": "1785304773945386700",
+   "names": [
+    "api.example.com"
+   ],
+   "not_before": "TIME",
+   "not_after": "TIME",
+   "days_left": 0,
+   "key_algorithm": "RSA",
+   "key_bits": 2048,
+   "sig_algorithm": "SHA256-RSA",
+   "self_signed": false,
+   "chain_length": 2,
+   "fingerprint": "fd3aebaa24a791347531dee7ba6bf9373943281e86763049988fe665eaeb2168",
+   "renewal": {
+    "tool": "certbot",
+    "managed": false,
+    "automatic": false,
+    "detail": "сертификат лежит в /etc/letsencrypt/live/api.example.com, но файла обновления /etc/letsencrypt/renewal/api.example.com.conf нет — certbot его не продлит",
+    "lineage": "api.example.com"
+   },
+   "serving": {
+    "checked": false,
+    "match": false,
+    "served_not_after": "TIME"
+   }
+  },
+  {
+   "id": "cert:/etc/haproxy/certs/api.internal.pem",
+   "path": "/etc/haproxy/certs/api.internal.pem",
+   "service": "haproxy",
+   "endpoints": [
+    "0.0.0.0:8443"
+   ],
+   "subject": "CN=grafana.internal,O=Internal",
+   "issuer": "CN=grafana.internal,O=Internal",
+   "serial": "42",
+   "names": [
+    "grafana.internal"
+   ],
+   "not_before": "TIME",
+   "not_after": "TIME",
+   "days_left": 0,
+   "key_algorithm": "RSA",
+   "key_bits": 1024,
+   "sig_algorithm": "SHA256-RSA",
+   "self_signed": true,
+   "chain_length": 1,
+   "fingerprint": "3a5ed0f18b6138d18c23838f3d86d3c155eee49707b98fe01af2320932afa088",
+   "renewal": {
+    "tool": "manual",
+    "managed": false,
+    "automatic": false,
+    "detail": "путь вне /etc/letsencrypt — обновление, скорее всего, ручное"
+   },
+   "serving": {
+    "checked": false,
+    "match": false,
+    "served_not_after": "TIME"
+   }
+  },
+  {
+   "id": "cert:/etc/haproxy/certs/app.internal.pem",
+   "path": "/etc/haproxy/certs/app.internal.pem",
+   "service": "haproxy",
+   "endpoints": [
+    "0.0.0.0:8443"
+   ],
+   "subject": "CN=grafana.internal,O=Internal",
+   "issuer": "CN=grafana.internal,O=Internal",
+   "serial": "42",
+   "names": [
+    "grafana.internal"
+   ],
+   "not_before": "TIME",
+   "not_after": "TIME",
+   "days_left": 0,
+   "key_algorithm": "RSA",
+   "key_bits": 1024,
+   "sig_algorithm": "SHA256-RSA",
+   "self_signed": true,
+   "chain_length": 1,
+   "fingerprint": "3a5ed0f18b6138d18c23838f3d86d3c155eee49707b98fe01af2320932afa088",
+   "renewal": {
+    "tool": "manual",
+    "managed": false,
+    "automatic": false,
+    "detail": "путь вне /etc/letsencrypt — обновление, скорее всего, ручное"
+   },
+   "serving": {
+    "checked": false,
+    "match": false,
+    "served_not_after": "TIME"
+   }
+  },
+  {
+   "id": "cert:/etc/haproxy/certs-le/app.example.com.pem",
+   "path": "/etc/haproxy/certs-le/app.example.com.pem",
+   "service": "haproxy",
+   "endpoints": [
+    "0.0.0.0:8444"
+   ],
+   "subject": "CN=app.example.com,O=Example",
+   "issuer": "CN=Example Test CA,O=Example",
+   "serial": "1785304773904242100",
+   "names": [
+    "app.example.com",
+    "www.app.example.com"
+   ],
+   "not_before": "TIME",
+   "not_after": "TIME",
+   "days_left": 0,
+   "key_algorithm": "RSA",
+   "key_bits": 2048,
+   "sig_algorithm": "SHA256-RSA",
+   "self_signed": false,
+   "chain_length": 2,
+   "fingerprint": "f43b4caa18599210e8a7b82b3acdf3b6d0c4d3e9a3436fdd0ad8b507dbf8d977",
+   "renewal": {
+    "tool": "certbot",
+    "managed": true,
+    "automatic": false,
+    "detail": "тот же сертификат, что и /etc/letsencrypt/live/app.example.com/fullchain.pem — похоже, объединён с приватным ключом для другого сервиса (типично для haproxy, которому certbot не пишет напрямую). certbot renew --cert-name app.example.com продлит оригинал, но этот файл нужно пересобрать отдельно — deploy-hook'ом certbot или вручную.",
+    "lineage": "app.example.com",
+    "derived": true,
+    "source_path": "/etc/letsencrypt/live/app.example.com/fullchain.pem"
+   },
+   "serving": {
+    "checked": false,
+    "match": false,
+    "served_not_after": "TIME"
+   }
+  },
+  {
+   "id": "cert:/etc/letsencrypt/live/app.example.com/fullchain.pem",
+   "path": "/etc/letsencrypt/live/app.example.com/fullchain.pem",
+   "service": "nginx",
+   "endpoints": [
+    "0.0.0.0:443"
+   ],
+   "sites": [
+    "app.example.com"
+   ],
+   "subject": "CN=app.example.com,O=Example",
+   "issuer": "CN=Example Test CA,O=Example",
+   "serial": "1785304773904242100",
+   "names": [
+    "app.example.com",
+    "www.app.example.com"
+   ],
+   "not_before": "TIME",
+   "not_after": "TIME",
+   "days_left": 0,
+   "key_algorithm": "RSA",
+   "key_bits": 2048,
+   "sig_algorithm": "SHA256-RSA",
+   "self_signed": false,
+   "chain_length": 2,
+   "fingerprint": "f43b4caa18599210e8a7b82b3acdf3b6d0c4d3e9a3436fdd0ad8b507dbf8d977",
+   "renewal": {
+    "tool": "certbot",
+    "managed": true,
+    "automatic": false,
+    "detail": "certbot знает о сертификате, но ни таймер certbot.timer, ни задание cron не найдены — продление не запустится само",
+    "lineage": "app.example.com"
+   },
+   "serving": {
+    "checked": false,
+    "match": false,
+    "served_not_after": "TIME"
+   }
+  },
+  {
+   "id": "cert:/etc/ssl/certs/internal.pem",
+   "path": "/etc/ssl/certs/internal.pem",
+   "service": "nginx",
+   "endpoints": [
+    "0.0.0.0:8443"
+   ],
+   "sites": [
+    "grafana.internal"
+   ],
+   "subject": "CN=grafana.internal,O=Internal",
+   "issuer": "CN=grafana.internal,O=Internal",
+   "serial": "42",
+   "names": [
+    "grafana.internal"
+   ],
+   "not_before": "TIME",
+   "not_after": "TIME",
+   "days_left": 0,
+   "key_algorithm": "RSA",
+   "key_bits": 1024,
+   "sig_algorithm": "SHA256-RSA",
+   "self_signed": true,
+   "chain_length": 1,
+   "fingerprint": "3a5ed0f18b6138d18c23838f3d86d3c155eee49707b98fe01af2320932afa088",
+   "renewal": {
+    "tool": "manual",
+    "managed": false,
+    "automatic": false,
+    "detail": "путь вне /etc/letsencrypt — обновление, скорее всего, ручное"
+   },
+   "serving": {
+    "checked": false,
+    "match": false,
+    "served_not_after": "TIME"
+   }
+  }
+ ],
+ "package_updates": {
+  "packages": [
+   {
+    "name": "openssl",
+    "old_version": "3.0.2-0ubuntu1.14",
+    "new_version": "3.0.2-0ubuntu1.15"
+   },
+   {
+    "name": "curl",
+    "old_version": "7.81.0-1ubuntu1.15",
+    "new_version": "7.81.0-1ubuntu1.16"
+   }
+  ],
+  "reboot_required": false
+ },
+ "capacity": {
+  "mem_total_bytes": 16779694080,
+  "cpu_cores": 4
+ },
+ "fail2ban": {
+  "installed": true,
+  "running": true,
+  "version": "1.0.2",
+  "jails": [
+   {
+    "name": "nginx-http-auth",
+    "log_paths": [
+     "/var/log/nginx/error.log"
+    ],
+    "max_retry": 5,
+    "find_time": 600,
+    "ban_time": 3600,
+    "failed": 0,
+    "total_failed": 17,
+    "banned": 1,
+    "total_banned": 6,
+    "ignore_ip": [
+     "127.0.0.0/8",
+     "::1",
+     "10.0.0.0/8"
+    ],
+    "bans": [
+     {
+      "ip": "203.0.113.99",
+      "jail": "nginx-http-auth",
+      "since": "TIME",
+      "until": "TIME"
+     }
+    ]
+   },
+   {
+    "name": "nkt-manual",
+    "log_paths": [
+     "/dev/null"
+    ],
+    "max_retry": 1,
+    "find_time": 600,
+    "ban_time": 604800,
+    "failed": 0,
+    "total_failed": 0,
+    "banned": 1,
+    "total_banned": 2,
+    "ignore_ip": [
+     "127.0.0.0/8",
+     "::1",
+     "10.0.0.0/8"
+    ],
+    "bans": [
+     {
+      "ip": "198.51.100.200",
+      "jail": "nkt-manual",
+      "since": "TIME",
+      "until": "TIME"
+     }
+    ]
+   },
+   {
+    "name": "sshd",
+    "log_paths": [
+     "/var/log/auth.log"
+    ],
+    "max_retry": 5,
+    "find_time": 600,
+    "ban_time": 3600,
+    "failed": 2,
+    "total_failed": 148,
+    "banned": 3,
+    "total_banned": 41,
+    "ignore_ip": [
+     "127.0.0.0/8",
+     "::1",
+     "10.0.0.0/8"
+    ],
+    "bans": [
+     {
+      "ip": "203.0.113.45",
+      "jail": "sshd",
+      "since": "TIME",
+      "until": "TIME"
+     },
+     {
+      "ip": "198.51.100.23",
+      "jail": "sshd",
+      "since": "TIME",
+      "until": "TIME"
+     },
+     {
+      "ip": "192.0.2.77",
+      "jail": "sshd",
+      "since": "TIME",
+      "until": "TIME"
+     }
+    ]
+   }
+  ],
+  "banned_now": 5
+ },
+ "findings": [
+  {
+   "id": "docker-bypasses-firewall:acme-redis:6379",
+   "rule": "docker-bypasses-firewall",
+   "severity": "critical",
+   "title": "Контейнер acme-redis публикует порт 6379 на 0.0.0.0 в обход firewall",
+   "detail": "Docker добавляет правила DNAT в цепочку PREROUTING/FORWARD, поэтому опубликованный порт 6379 не проходит через INPUT и не закрывается правилами ufw. На этом порту работает Redis — публиковать его наружу почти наверняка не нужно.",
+   "service": "docker",
+   "object": "acme-redis:6379",
+   "file": "/srv/docker/docker-compose.yml",
+   "suggestion": "Привяжите публикацию к localhost (\"127.0.0.1:6379:6379\") или используйте цепочку DOCKER-USER для фильтрации."
+  },
+  {
+   "id": "sensitive-port-public:6379",
+   "rule": "sensitive-port-public",
+   "severity": "critical",
+   "title": "Redis слушает порт 6379 на всех интерфейсах",
+   "detail": "Процесс docker-proxy принимает подключения на 0.0.0.0:6379. Порт при этом не закрыт правилами firewall. Такие сервисы обычно не рассчитаны на публичный доступ и не имеют собственной защиты от перебора.",
+   "service": "host",
+   "object": "0.0.0.0:6379",
+   "suggestion": "Привяжите сервис к 127.0.0.1 или к внутренней сети и закройте порт на firewall."
+  },
+  {
+   "id": "tls-cert-expired:/etc/letsencrypt/live/api.example.com/fullchain.pem",
+   "rule": "tls-cert-expired",
+   "severity": "critical",
+   "title": "Сертификат api.example.com просрочен на N дн.",
+   "detail": "Срок действия истёк 01.06.2024. Обслуживает 0.0.0.0:443. Браузеры показывают ошибку и не пускают пользователей дальше.",
+   "service": "nginx",
+   "object": "/etc/letsencrypt/live/api.example.com/fullchain.pem",
+   "file": "/etc/letsencrypt/live/api.example.com/fullchain.pem",
+   "suggestion": "Продлите сейчас: certbot renew --cert-name api.example.com, затем перезагрузите сервис."
+  },
+  {
+   "id": "malware-miner-process:31337 /tmp/.X11-unix/.kdevtmpfsi",
+   "rule": "malware-miner-process",
+   "severity": "critical",
+   "title": "Процесс майнера: 31337 /tmp/.X11-unix/.kdevtmpfsi",
+   "detail": "Имя или аргументы процесса совпадают с известным майнером: stratum+tcp://: /tmp/.X11-unix/.kdevtmpfsi -o stratum+tcp://pool.minexmr.com:4444 -u 44AfUx… --donate-level 1. Обычно это результат взлома через уязвимый сервис, слабый пароль SSH или открытый Redis/Docker API.",
+   "service": "system",
+   "object": "31337 /tmp/.X11-unix/.kdevtmpfsi",
+   "file": "/tmp/.X11-unix/.kdevtmpfsi",
+   "suggestion": "Остановите процесс (kill -9), найдите, откуда он запускается (cron, systemd, ~/.bashrc, ld.so.preload), смените пароли и ключи, закройте дыру, через которую попали. Если хост важный — переустановите его: убедиться, что зловред вычищен полностью, почти невозможно."
+  },
+  {
+   "id": "malware-stratum:31337 kdevtmpfsi → 94.130.12.34:4444",
+   "rule": "malware-stratum",
+   "severity": "critical",
+   "title": "Соединение с пулом майнинга: 31337 kdevtmpfsi → 94.130.12.34:4444",
+   "detail": "Установленное TCP-соединение на порт, характерный для stratum-пулов: 94.130.12.34:4444. Легитимные сервисы такими портами почти не пользуются.",
+   "service": "system",
+   "object": "31337 kdevtmpfsi → 94.130.12.34:4444",
+   "file": "/tmp/.X11-unix/.kdevtmpfsi",
+   "suggestion": "Найдите процесс (ss -tnp), остановите его и ищите, откуда он запускается. Закройте исходящие соединения на этот порт правилом firewall."
+  },
+  {
+   "id": "port-conflict:8443:docker:acme-minio:0.0.0.0:8443:haproxy:fe_https:0.0.0.0:8443",
+   "rule": "port-conflict",
+   "severity": "high",
+   "title": "Конфликт порта 8443 между docker и haproxy",
+   "detail": "docker (acme-minio, 0.0.0.0:8443) и haproxy (fe_https, 0.0.0.0:8443) объявляют один и тот же порт. Второй сервис не сможет занять сокет и будет падать при старте.",
+   "service": "docker",
+   "object": "0.0.0.0:8443",
+   "file": "/srv/docker/docker-compose.yml",
+   "suggestion": "Разведите сервисы по разным портам или адресам привязки.",
+   "refs": [
+    "/srv/docker/docker-compose.yml",
+    "/etc/haproxy/haproxy.cfg"
+   ]
+  },
+  {
+   "id": "port-conflict:8443:docker:acme-minio:0.0.0.0:8443:nginx:0.0.0.0:8443:grafana.internal",
+   "rule": "port-conflict",
+   "severity": "high",
+   "title": "Конфликт порта 8443 между docker и nginx",
+   "detail": "docker (acme-minio, 0.0.0.0:8443) и nginx (grafana.internal, 0.0.0.0:8443) объявляют один и тот же порт. Второй сервис не сможет занять сокет и будет падать при старте.",
+   "service": "docker",
+   "object": "0.0.0.0:8443",
+   "file": "/srv/docker/docker-compose.yml",
+   "suggestion": "Разведите сервисы по разным портам или адресам привязки.",
+   "refs": [
+    "/srv/docker/docker-compose.yml",
+    "/etc/nginx/sites-enabled/grafana.internal.conf"
+   ]
+  },
+  {
+   "id": "container-restarting:acme-minio",
+   "rule": "container-restarting",
+   "severity": "high",
+   "title": "Контейнер acme-minio в цикле перезапуска",
+   "detail": "Статус: Restarting (1) 14 seconds ago. Обычно это конфликт порта, ошибка конфигурации или падение процесса на старте.",
+   "service": "docker",
+   "object": "acme-minio",
+   "file": "/srv/docker/docker-compose.yml",
+   "suggestion": "Посмотрите журнал: docker logs acme-minio."
+  },
+  {
+   "id": "docker-bypasses-firewall:acme-minio:8443",
+   "rule": "docker-bypasses-firewall",
+   "severity": "high",
+   "title": "Контейнер acme-minio публикует порт 8443 на 0.0.0.0 в обход firewall",
+   "detail": "Docker добавляет правила DNAT в цепочку PREROUTING/FORWARD, поэтому опубликованный порт 8443 не проходит через INPUT и не закрывается правилами ufw.",
+   "service": "docker",
+   "object": "acme-minio:8443",
+   "file": "/srv/docker/docker-compose.yml",
+   "suggestion": "Привяжите публикацию к localhost (\"127.0.0.1:8443:9000\") или используйте цепочку DOCKER-USER для фильтрации."
+  },
+  {
+   "id": "port-conflict:8443:haproxy:fe_https:0.0.0.0:8443:nginx:0.0.0.0:8443:grafana.internal",
+   "rule": "port-conflict",
+   "severity": "high",
+   "title": "Конфликт порта 8443 между haproxy и nginx",
+   "detail": "haproxy (fe_https, 0.0.0.0:8443) и nginx (grafana.internal, 0.0.0.0:8443) объявляют один и тот же порт. Второй сервис не сможет занять сокет и будет падать при старте.",
+   "service": "haproxy",
+   "object": "0.0.0.0:8443",
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 59,
+   "suggestion": "Разведите сервисы по разным портам или адресам привязки.",
+   "refs": [
+    "/etc/haproxy/haproxy.cfg",
+    "/etc/nginx/sites-enabled/grafana.internal.conf"
+   ]
+  },
+  {
+   "id": "declared-not-listening:haproxy:fe_https_le:0.0.0.0:8444",
+   "rule": "declared-not-listening",
+   "severity": "high",
+   "title": "Порт 8444 объявлен в конфиге, но никто его не слушает",
+   "detail": "haproxy (fe_https_le) объявляет 0.0.0.0:8444, но в выводе ss такого слушателя нет. Либо конфиг не применён (нужен reload), либо сервис не смог занять порт.",
+   "service": "haproxy",
+   "object": "0.0.0.0:8444",
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 68,
+   "suggestion": "Проверьте, применён ли конфиг: перезагрузите haproxy и посмотрите журнал."
+  },
+  {
+   "id": "admin-interface-open:haproxy:stats:0.0.0.0:9001",
+   "rule": "admin-interface-open",
+   "severity": "high",
+   "title": "Панель статистики stats доступна без пароля",
+   "detail": "Секция \"stats\" включает stats и слушает 0.0.0.0:9001, но директивы stats auth нет. Любой, кто дотянется до порта, увидит состав backend-ов и состояние сервисов.",
+   "service": "haproxy",
+   "object": "0.0.0.0:9001",
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 52,
+   "suggestion": "Добавьте stats auth \u003cuser\u003e:\u003cpassword\u003e и привяжите bind к внутреннему адресу."
+  },
+  {
+   "id": "k8s-node-notready:lab-w-2",
+   "rule": "k8s-node-notready",
+   "severity": "high",
+   "title": "Узел кластера lab-w-2 не готов (NotReady)",
+   "detail": "Kubelet на lab-w-2 не отчитывается: поды с него будут выселены, новые туда не попадут.",
+   "service": "kubernetes",
+   "object": "lab-w-2",
+   "suggestion": "Проверьте, включена ли машина и работает ли служба k3s-agent/kubelet (журнал службы на узле)."
+  },
+  {
+   "id": "k8s-pod-failing:shop/api-7c9d8-x2kq1",
+   "rule": "k8s-pod-failing",
+   "severity": "high",
+   "title": "Под shop/api-7c9d8-x2kq1: CrashLoopBackOff",
+   "detail": "Контейнер не запускается (CrashLoopBackOff), перезапусков: 14, узел lab-w-1.",
+   "service": "kubernetes",
+   "object": "shop/api-7c9d8-x2kq1",
+   "suggestion": "Откройте журнал пода с галочкой «предыдущий запуск» и «Описание» (Kubernetes → Поды): там причина падения или ошибки загрузки образа."
+  },
+  {
+   "id": "k8s-cluster-admin:ci-deployer-admin:ServiceAccount:shop/ci-deployer",
+   "rule": "k8s-cluster-admin",
+   "severity": "high",
+   "title": "ServiceAccount shop/ci-deployer — администратор кластера (ci-deployer-admin)",
+   "detail": "ClusterRoleBinding на cluster-admin даёт полный доступ ко всему кластеру, включая секреты всех namespace. У ServiceAccount это значит: любой, кто попал в под с этим аккаунтом, — администратор кластера.",
+   "service": "kubernetes",
+   "object": "shop/ci-deployer",
+   "suggestion": "Замените на Role/RoleBinding с нужными правами в своём namespace (раздел RBAC)."
+  },
+  {
+   "id": "tls-cert-orphan-lineage:/etc/letsencrypt/live/api.example.com/fullchain.pem",
+   "rule": "tls-cert-orphan-lineage",
+   "severity": "high",
+   "title": "Сертификат certbot остался без файла обновления",
+   "detail": "сертификат лежит в /etc/letsencrypt/live/api.example.com, но файла обновления /etc/letsencrypt/renewal/api.example.com.conf нет — certbot его не продлит",
+   "service": "nginx",
+   "object": "/etc/letsencrypt/live/api.example.com/fullchain.pem",
+   "file": "/etc/letsencrypt/live/api.example.com/fullchain.pem",
+   "suggestion": "Выпустите сертификат заново через certbot certonly, чтобы восстановить запись обновления."
+  },
+  {
+   "id": "malware-tmp-exe:31337 /tmp/.X11-unix/.kdevtmpfsi",
+   "rule": "malware-tmp-exe",
+   "severity": "high",
+   "title": "Процесс запущен из временного или скрытого каталога: 31337 /tmp/.X11-unix/.kdevtmpfsi",
+   "detail": "Бинарник лежит в /tmp: /tmp/.X11-unix/.kdevtmpfsi -o stratum+tcp://pool.minexmr.com:4444 -u 44AfUx… --donate-level 1. Службы так не ставят; из /tmp и /dev/shm запускают то, что скачали и не хотят показывать.",
+   "service": "system",
+   "object": "31337 /tmp/.X11-unix/.kdevtmpfsi",
+   "file": "/tmp/.X11-unix/.kdevtmpfsi",
+   "suggestion": "Посмотрите файл и его владельца, остановите процесс, найдите, что его запускает (cron, systemd, автозагрузка пользователя)."
+  },
+  {
+   "id": "tls-cert-renewal-not-automatic:/etc/haproxy/certs-le/app.example.com.pem",
+   "rule": "tls-cert-renewal-not-automatic",
+   "severity": "medium",
+   "title": "Автообновление сертификата не запускается: app.example.com, www.app.example.com",
+   "detail": "тот же сертификат, что и /etc/letsencrypt/live/app.example.com/fullchain.pem — похоже, объединён с приватным ключом для другого сервиса (типично для haproxy, которому certbot не пишет напрямую). certbot renew --cert-name app.example.com продлит оригинал, но этот файл нужно пересобрать отдельно — deploy-hook'ом certbot или вручную.",
+   "service": "haproxy",
+   "object": "/etc/haproxy/certs-le/app.example.com.pem",
+   "file": "/etc/haproxy/certs-le/app.example.com.pem",
+   "suggestion": "Включите таймер: systemctl enable --now certbot.timer — либо добавьте задание cron."
+  },
+  {
+   "id": "tls-cert-weak-key:/etc/haproxy/certs/api.internal.pem",
+   "rule": "tls-cert-weak-key",
+   "severity": "medium",
+   "title": "Слабый ключ RSA 1024 бит",
+   "detail": "Сертификат /etc/haproxy/certs/api.internal.pem использует ключ короче 2048 бит. Современные клиенты такие соединения отклоняют.",
+   "service": "haproxy",
+   "object": "/etc/haproxy/certs/api.internal.pem",
+   "file": "/etc/haproxy/certs/api.internal.pem",
+   "suggestion": "Перевыпустите сертификат с ключом RSA 2048+ или ECDSA P-256."
+  },
+  {
+   "id": "tls-cert-weak-key:/etc/haproxy/certs/app.internal.pem",
+   "rule": "tls-cert-weak-key",
+   "severity": "medium",
+   "title": "Слабый ключ RSA 1024 бит",
+   "detail": "Сертификат /etc/haproxy/certs/app.internal.pem использует ключ короче 2048 бит. Современные клиенты такие соединения отклоняют.",
+   "service": "haproxy",
+   "object": "/etc/haproxy/certs/app.internal.pem",
+   "file": "/etc/haproxy/certs/app.internal.pem",
+   "suggestion": "Перевыпустите сертификат с ключом RSA 2048+ или ECDSA P-256."
+  },
+  {
+   "id": "public-port-blocked:haproxy:fe_http:0.0.0.0:8090",
+   "rule": "public-port-blocked",
+   "severity": "medium",
+   "title": "Порт 8090 открыт сервисом, но закрыт firewall",
+   "detail": "haproxy (fe_http) слушает 0.0.0.0:8090 на всех интерфейсах, но правил, разрешающих входящий трафик на этот порт, нет, а политика INPUT — DROP. Снаружи сервис недоступен.",
+   "service": "haproxy",
+   "object": "0.0.0.0:8090",
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 32,
+   "suggestion": "Если сервис должен быть доступен: ufw allow 8090/tcp."
+  },
+  {
+   "id": "public-plaintext-proxy:haproxy:fe_http:0.0.0.0:8090",
+   "rule": "public-plaintext-proxy",
+   "severity": "medium",
+   "title": "fe_http проксирует трафик по HTTP без TLS",
+   "detail": "Слушатель 0.0.0.0:8090 принимает запросы на всех интерфейсах без шифрования и передаёт их дальше. Заголовки, cookie и токены идут открытым текстом.",
+   "service": "haproxy",
+   "object": "0.0.0.0:8090",
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 32,
+   "suggestion": "Переведите сервис на https (для быстрого теста можно сгенерировать самоподписанный сертификат на странице «Сертификаты») или оставьте на 80 только редирект на https."
+  },
+  {
+   "id": "public-port-blocked:haproxy:fe_https_le:0.0.0.0:8444",
+   "rule": "public-port-blocked",
+   "severity": "medium",
+   "title": "Порт 8444 открыт сервисом, но закрыт firewall",
+   "detail": "haproxy (fe_https_le) слушает 0.0.0.0:8444 на всех интерфейсах, но правил, разрешающих входящий трафик на этот порт, нет, а политика INPUT — DROP. Снаружи сервис недоступен.",
+   "service": "haproxy",
+   "object": "0.0.0.0:8444",
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 68,
+   "suggestion": "Если сервис должен быть доступен: ufw allow 8444/tcp."
+  },
+  {
+   "id": "public-port-blocked:haproxy:stats:0.0.0.0:9001",
+   "rule": "public-port-blocked",
+   "severity": "medium",
+   "title": "Порт 9001 открыт сервисом, но закрыт firewall",
+   "detail": "haproxy (stats) слушает 0.0.0.0:9001 на всех интерфейсах, но правил, разрешающих входящий трафик на этот порт, нет, а политика INPUT — DROP. Снаружи сервис недоступен.",
+   "service": "haproxy",
+   "object": "0.0.0.0:9001",
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 52,
+   "suggestion": "Если сервис должен быть доступен: ufw allow 9001/tcp."
+  },
+  {
+   "id": "listening-not-declared:0.0.0.0:22",
+   "rule": "listening-not-declared",
+   "severity": "medium",
+   "title": "Неучтённый слушатель на порту 22 (sshd)",
+   "detail": "Процесс sshd слушает 0.0.0.0:22, но этот порт не описан ни в одном из разобранных конфигов. Сокет открыт на всех интерфейсах.",
+   "service": "host",
+   "object": "0.0.0.0:22",
+   "suggestion": "Убедитесь, что сервис нужен, и опишите его в конфигурации или закройте порт."
+  },
+  {
+   "id": "listening-not-declared:0.0.0.0:68",
+   "rule": "listening-not-declared",
+   "severity": "medium",
+   "title": "Неучтённый слушатель на порту 68 (dhclient)",
+   "detail": "Процесс dhclient слушает 0.0.0.0:68, но этот порт не описан ни в одном из разобранных конфигов. Сокет открыт на всех интерфейсах.",
+   "service": "host",
+   "object": "0.0.0.0:68",
+   "suggestion": "Убедитесь, что сервис нужен, и опишите его в конфигурации или закройте порт."
+  },
+  {
+   "id": "k8s-workload-unavailable:Deployment:default/web",
+   "rule": "k8s-workload-unavailable",
+   "severity": "medium",
+   "title": "Deployment default/web: доступно 1 из 2 реплик",
+   "detail": "Часть реплик не готова — приложение работает с урезанной ёмкостью или не работает вовсе.",
+   "service": "kubernetes",
+   "object": "default/web",
+   "suggestion": "Посмотрите поды этого объекта: их состояние и журнал обычно показывают причину."
+  },
+  {
+   "id": "k8s-pod-pending:default/web-6c9d8f-asdfg",
+   "rule": "k8s-pod-pending",
+   "severity": "medium",
+   "title": "Под default/web-6c9d8f-asdfg давно в Pending",
+   "detail": "Под не размещён на узле дольше 15 минут: не хватает ресурсов, не подходит ни один узел или не привязан том.",
+   "service": "kubernetes",
+   "object": "default/web-6c9d8f-asdfg",
+   "suggestion": "Посмотрите «Описание» пода — события FailedScheduling называют причину."
+  },
+  {
+   "id": "k8s-port-bypasses-firewall:kube-system/traefik:31080",
+   "rule": "k8s-port-bypasses-firewall",
+   "severity": "medium",
+   "title": "Сервис kube-system/traefik (LoadBalancer) открывает порт 31080 мимо файрвола",
+   "detail": "kube-proxy публикует порт 31080 на всех узлах правилами nat PREROUTING: запрет в ufw/firewalld его не закрывает.",
+   "service": "kubernetes",
+   "object": "kube-system/traefik:31080",
+   "suggestion": "Если порт не должен быть доступен снаружи — тип ClusterIP и Ingress, либо NetworkPolicy; иначе разрешите его в файрволе явно, чтобы намерение было видно."
+  },
+  {
+   "id": "k8s-port-bypasses-firewall:kube-system/traefik:31443",
+   "rule": "k8s-port-bypasses-firewall",
+   "severity": "medium",
+   "title": "Сервис kube-system/traefik (LoadBalancer) открывает порт 31443 мимо файрвола",
+   "detail": "kube-proxy публикует порт 31443 на всех узлах правилами nat PREROUTING: запрет в ufw/firewalld его не закрывает.",
+   "service": "kubernetes",
+   "object": "kube-system/traefik:31443",
+   "suggestion": "Если порт не должен быть доступен снаружи — тип ClusterIP и Ingress, либо NetworkPolicy; иначе разрешите его в файрволе явно, чтобы намерение было видно."
+  },
+  {
+   "id": "k8s-workload-unavailable:Deployment:shop/api",
+   "rule": "k8s-workload-unavailable",
+   "severity": "medium",
+   "title": "Deployment shop/api: доступно 2 из 3 реплик",
+   "detail": "Часть реплик не готова — приложение работает с урезанной ёмкостью или не работает вовсе.",
+   "service": "kubernetes",
+   "object": "shop/api",
+   "suggestion": "Посмотрите поды этого объекта: их состояние и журнал обычно показывают причину."
+  },
+  {
+   "id": "k8s-port-bypasses-firewall:shop/api:30080",
+   "rule": "k8s-port-bypasses-firewall",
+   "severity": "medium",
+   "title": "Сервис shop/api (NodePort) открывает порт 30080 мимо файрвола",
+   "detail": "kube-proxy публикует порт 30080 на всех узлах правилами nat PREROUTING: запрет в ufw/firewalld его не закрывает.",
+   "service": "kubernetes",
+   "object": "shop/api:30080",
+   "suggestion": "Если порт не должен быть доступен снаружи — тип ClusterIP и Ingress, либо NetworkPolicy; иначе разрешите его в файрволе явно, чтобы намерение было видно."
+  },
+  {
+   "id": "k8s-pvc-pending:shop/uploads",
+   "rule": "k8s-pvc-pending",
+   "severity": "medium",
+   "title": "Том shop/uploads не привязан (Pending)",
+   "detail": "Заявка на том ждёт дольше 15 минут: нет подходящего PV или StorageClass не создаёт тома.",
+   "service": "kubernetes",
+   "object": "shop/uploads",
+   "suggestion": "Проверьте StorageClass заявки и события PVC («Описание»)."
+  },
+  {
+   "id": "tls-cert-renewal-not-automatic:/etc/letsencrypt/live/app.example.com/fullchain.pem",
+   "rule": "tls-cert-renewal-not-automatic",
+   "severity": "medium",
+   "title": "Автообновление сертификата не запускается: app.example.com, www.app.example.com",
+   "detail": "certbot знает о сертификате, но ни таймер certbot.timer, ни задание cron не найдены — продление не запустится само",
+   "service": "nginx",
+   "object": "/etc/letsencrypt/live/app.example.com/fullchain.pem",
+   "file": "/etc/letsencrypt/live/app.example.com/fullchain.pem",
+   "suggestion": "Включите таймер: systemctl enable --now certbot.timer — либо добавьте задание cron."
+  },
+  {
+   "id": "tls-cert-weak-key:/etc/ssl/certs/internal.pem",
+   "rule": "tls-cert-weak-key",
+   "severity": "medium",
+   "title": "Слабый ключ RSA 1024 бит",
+   "detail": "Сертификат /etc/ssl/certs/internal.pem использует ключ короче 2048 бит. Современные клиенты такие соединения отклоняют.",
+   "service": "nginx",
+   "object": "/etc/ssl/certs/internal.pem",
+   "file": "/etc/ssl/certs/internal.pem",
+   "suggestion": "Перевыпустите сертификат с ключом RSA 2048+ или ECDSA P-256."
+  },
+  {
+   "id": "weak-tls:nginx:0.0.0.0:443:api.example.com",
+   "rule": "weak-tls",
+   "severity": "medium",
+   "title": "Включены устаревшие версии TLS: TLSv1, TLSv1.1",
+   "detail": "ssl_protocols = \"TLSv1 TLSv1.1 TLSv1.2 TLSv1.3\". Эти версии считаются небезопасными и отключены в современных браузерах.",
+   "service": "nginx",
+   "object": "0.0.0.0:443",
+   "file": "/etc/nginx/sites-enabled/api.example.com.conf",
+   "line": 2,
+   "suggestion": "Оставьте только TLSv1.2 и TLSv1.3: ssl_protocols TLSv1.2 TLSv1.3;"
+  },
+  {
+   "id": "weak-tls:nginx:0.0.0.0:443:app.example.com",
+   "rule": "weak-tls",
+   "severity": "medium",
+   "title": "Включены устаревшие версии TLS: TLSv1, TLSv1.1",
+   "detail": "ssl_protocols = \"TLSv1 TLSv1.1 TLSv1.2 TLSv1.3\". Эти версии считаются небезопасными и отключены в современных браузерах.",
+   "service": "nginx",
+   "object": "0.0.0.0:443",
+   "file": "/etc/nginx/sites-enabled/app.example.com.conf",
+   "line": 16,
+   "suggestion": "Оставьте только TLSv1.2 и TLSv1.3: ssl_protocols TLSv1.2 TLSv1.3;"
+  },
+  {
+   "id": "public-plaintext-proxy:nginx:0.0.0.0:80:metrics.example.com",
+   "rule": "public-plaintext-proxy",
+   "severity": "medium",
+   "title": "metrics.example.com проксирует трафик по HTTP без TLS",
+   "detail": "Слушатель 0.0.0.0:80 принимает запросы на всех интерфейсах без шифрования и передаёт их дальше. Заголовки, cookie и токены идут открытым текстом.",
+   "service": "nginx",
+   "object": "0.0.0.0:80",
+   "file": "/etc/nginx/sites-enabled/metrics.conf",
+   "line": 2,
+   "suggestion": "Переведите сервис на https (для быстрого теста можно сгенерировать самоподписанный сертификат на странице «Сертификаты») или оставьте на 80 только редирект на https."
+  },
+  {
+   "id": "weak-tls:nginx:0.0.0.0:8443:grafana.internal",
+   "rule": "weak-tls",
+   "severity": "medium",
+   "title": "Включены устаревшие версии TLS: TLSv1, TLSv1.1",
+   "detail": "ssl_protocols = \"TLSv1 TLSv1.1 TLSv1.2 TLSv1.3\". Эти версии считаются небезопасными и отключены в современных браузерах.",
+   "service": "nginx",
+   "object": "0.0.0.0:8443",
+   "file": "/etc/nginx/sites-enabled/grafana.internal.conf",
+   "line": 2,
+   "suggestion": "Оставьте только TLSv1.2 и TLSv1.3: ssl_protocols TLSv1.2 TLSv1.3;"
+  },
+  {
+   "id": "backend-no-healthcheck:nginx:upstream:api_backend",
+   "rule": "backend-no-healthcheck",
+   "severity": "medium",
+   "title": "В пуле \"api_backend\" нет проверки здоровья серверов",
+   "detail": "Из 2 серверов проверку имеют 0. Балансировщик будет продолжать отправлять запросы на упавший backend.",
+   "service": "nginx",
+   "object": "api_backend",
+   "file": "/etc/nginx/conf.d/upstreams.conf",
+   "line": 8,
+   "suggestion": "Задайте max_fails и fail_timeout для пассивной проверки."
+  },
+  {
+   "id": "tls-cert-self-signed:/etc/haproxy/certs/api.internal.pem",
+   "rule": "tls-cert-self-signed",
+   "severity": "low",
+   "title": "Самоподписанный сертификат на 0.0.0.0:8443",
+   "detail": "Издатель совпадает с субъектом (CN=grafana.internal,O=Internal). Такому сертификату не доверяет ни один браузер; для внутренних сервисов это допустимо, для публичных — нет.",
+   "service": "haproxy",
+   "object": "/etc/haproxy/certs/api.internal.pem",
+   "file": "/etc/haproxy/certs/api.internal.pem",
+   "suggestion": "Для публичного сервиса выпустите сертификат в доверенном центре."
+  },
+  {
+   "id": "tls-cert-self-signed:/etc/haproxy/certs/app.internal.pem",
+   "rule": "tls-cert-self-signed",
+   "severity": "low",
+   "title": "Самоподписанный сертификат на 0.0.0.0:8443",
+   "detail": "Издатель совпадает с субъектом (CN=grafana.internal,O=Internal). Такому сертификату не доверяет ни один браузер; для внутренних сервисов это допустимо, для публичных — нет.",
+   "service": "haproxy",
+   "object": "/etc/haproxy/certs/app.internal.pem",
+   "file": "/etc/haproxy/certs/app.internal.pem",
+   "suggestion": "Для публичного сервиса выпустите сертификат в доверенном центре."
+  },
+  {
+   "id": "stale-firewall-rule:25",
+   "rule": "stale-firewall-rule",
+   "severity": "low",
+   "title": "Правило firewall для порта 25 не используется",
+   "detail": "Правило разрешает входящий трафик на порт 25, но на хосте нет процесса, который его слушает. Счётчик правила равен нулю — трафика по нему не было.",
+   "service": "iptables",
+   "object": "ufw 25/tcp",
+   "suggestion": "Удалите правило, если сервис больше не нужен: ufw delete allow 25/tcp.",
+   "refs": [
+    "25/tcp                     ALLOW IN    Anywhere"
+   ]
+  },
+  {
+   "id": "k8s-no-networkpolicy:default",
+   "rule": "k8s-no-networkpolicy",
+   "severity": "low",
+   "title": "В namespace default нет NetworkPolicy",
+   "detail": "Без NetworkPolicy любой под кластера может подключиться к любому поду этого namespace — взлом одного приложения открывает остальные.",
+   "service": "kubernetes",
+   "object": "default",
+   "suggestion": "Добавьте политику «запрет входящих по умолчанию» и разрешения для нужных связей (шаблон — в «Новом объекте»)."
+  },
+  {
+   "id": "k8s-no-limits:default/web",
+   "rule": "k8s-no-limits",
+   "severity": "low",
+   "title": "default/web: контейнеры без ограничения памяти (web)",
+   "detail": "Без limits.memory контейнер может занять всю память узла, и ядро начнёт убивать соседние поды.",
+   "service": "kubernetes",
+   "object": "default/web",
+   "suggestion": "Задайте resources.limits.memory (и requests) — в YAML объекта или блоком «контейнер»."
+  },
+  {
+   "id": "k8s-image-latest:default/web",
+   "rule": "k8s-image-latest",
+   "severity": "low",
+   "title": "default/web: образ без версии (nginx)",
+   "detail": "Тег latest (или его отсутствие) — каждый перезапуск может поднять другую версию, а откат на прежнюю ревизию ничего не откатит.",
+   "service": "kubernetes",
+   "object": "default/web",
+   "suggestion": "Укажите конкретную версию образа или дайджест (@sha256:…)."
+  },
+  {
+   "id": "k8s-pod-privileged:kube-system/node-exporter-lab-cp-1",
+   "rule": "k8s-pod-privileged",
+   "severity": "low",
+   "title": "Под kube-system/node-exporter-lab-cp-1 с правами узла (privileged: node-exporter; hostNetwork)",
+   "detail": "Привилегированный контейнер или сеть узла дают поду доступ к хосту: побег из контейнера равен root на узле.",
+   "service": "kubernetes",
+   "object": "kube-system/node-exporter-lab-cp-1",
+   "suggestion": "Уберите privileged и hostNetwork, если они не нужны (агентам мониторинга и CNI — нужны); оставьте такие поды в отдельном namespace."
+  },
+  {
+   "id": "k8s-no-networkpolicy:shop",
+   "rule": "k8s-no-networkpolicy",
+   "severity": "low",
+   "title": "В namespace shop нет NetworkPolicy",
+   "detail": "Без NetworkPolicy любой под кластера может подключиться к любому поду этого namespace — взлом одного приложения открывает остальные.",
+   "service": "kubernetes",
+   "object": "shop",
+   "suggestion": "Добавьте политику «запрет входящих по умолчанию» и разрешения для нужных связей (шаблон — в «Новом объекте»)."
+  },
+  {
+   "id": "tls-cert-self-signed:/etc/ssl/certs/internal.pem",
+   "rule": "tls-cert-self-signed",
+   "severity": "low",
+   "title": "Самоподписанный сертификат на 0.0.0.0:8443",
+   "detail": "Издатель совпадает с субъектом (CN=grafana.internal,O=Internal). Такому сертификату не доверяет ни один браузер; для внутренних сервисов это допустимо, для публичных — нет.",
+   "service": "nginx",
+   "object": "/etc/ssl/certs/internal.pem",
+   "file": "/etc/ssl/certs/internal.pem",
+   "suggestion": "Для публичного сервиса выпустите сертификат в доверенном центре."
+  },
+  {
+   "id": "missing-hsts:nginx:0.0.0.0:443:api.example.com",
+   "rule": "missing-hsts",
+   "severity": "low",
+   "title": "Нет заголовка HSTS на api.example.com",
+   "detail": "TLS-сервер не отдаёт Strict-Transport-Security, поэтому клиент может быть возвращён на http.",
+   "service": "nginx",
+   "object": "0.0.0.0:443",
+   "file": "/etc/nginx/sites-enabled/api.example.com.conf",
+   "line": 2,
+   "suggestion": "add_header Strict-Transport-Security \"max-age=31536000\" always;"
+  },
+  {
+   "id": "missing-hsts:nginx:0.0.0.0:8443:grafana.internal",
+   "rule": "missing-hsts",
+   "severity": "low",
+   "title": "Нет заголовка HSTS на grafana.internal",
+   "detail": "TLS-сервер не отдаёт Strict-Transport-Security, поэтому клиент может быть возвращён на http.",
+   "service": "nginx",
+   "object": "0.0.0.0:8443",
+   "file": "/etc/nginx/sites-enabled/grafana.internal.conf",
+   "line": 2,
+   "suggestion": "add_header Strict-Transport-Security \"max-age=31536000\" always;"
+  },
+  {
+   "id": "single-backend:haproxy:upstream:be_static",
+   "rule": "single-backend",
+   "severity": "info",
+   "title": "В пуле \"be_static\" один сервер — нет резерва",
+   "detail": "Отказ единственного backend приведёт к полной недоступности маршрута.",
+   "service": "haproxy",
+   "object": "be_static",
+   "file": "/etc/haproxy/haproxy.cfg",
+   "line": 40,
+   "suggestion": "Добавьте второй сервер или явный backup."
+  },
+  {
+   "id": "listening-not-declared:127.0.0.1:11211",
+   "rule": "listening-not-declared",
+   "severity": "info",
+   "title": "Неучтённый слушатель на порту 11211 (memcached)",
+   "detail": "Процесс memcached слушает 127.0.0.1:11211, но этот порт не описан ни в одном из разобранных конфигов.",
+   "service": "host",
+   "object": "127.0.0.1:11211",
+   "suggestion": "Убедитесь, что сервис нужен, и опишите его в конфигурации или закройте порт."
+  },
+  {
+   "id": "listening-not-declared:127.0.0.1:8082",
+   "rule": "listening-not-declared",
+   "severity": "info",
+   "title": "Неучтённый слушатель на порту 8082 (static-server)",
+   "detail": "Процесс static-server слушает 127.0.0.1:8082, но этот порт не описан ни в одном из разобранных конфигов.",
+   "service": "host",
+   "object": "127.0.0.1:8082",
+   "suggestion": "Убедитесь, что сервис нужен, и опишите его в конфигурации или закройте порт."
+  },
+  {
+   "id": "listening-not-declared:127.0.0.53:53",
+   "rule": "listening-not-declared",
+   "severity": "info",
+   "title": "Неучтённый слушатель на порту 53 (systemd-resolve)",
+   "detail": "Процесс systemd-resolve слушает 127.0.0.53:53, но этот порт не описан ни в одном из разобранных конфигов.",
+   "service": "host",
+   "object": "127.0.0.53:53",
+   "suggestion": "Убедитесь, что сервис нужен, и опишите его в конфигурации или закройте порт."
+  },
+  {
+   "id": "single-backend:nginx:upstream:static_backend",
+   "rule": "single-backend",
+   "severity": "info",
+   "title": "В пуле \"static_backend\" один сервер — нет резерва",
+   "detail": "Отказ единственного backend приведёт к полной недоступности маршрута.",
+   "service": "nginx",
+   "object": "static_backend",
+   "file": "/etc/nginx/conf.d/upstreams.conf",
+   "line": 13,
+   "suggestion": "Добавьте второй сервер или явный backup."
+  }
+ ],
+ "digest": "",
+ "scan_ms": 0
+}

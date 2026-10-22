@@ -1,0 +1,15 @@
+# Встроенный разборщик fail2ban (Go). Разбор — в nkt; описание задаёт
+# приоритет его файлов и даёт перекрыть пути или выключить его
+# описанием с тем же именем на хосте или в профиле:
+#
+#   name: fail2ban
+#   engine: fail2ban
+#   options:
+#     root: /etc/fail2ban  # NKT_FAIL2BAN_ROOT
+#
+#   name: fail2ban
+#   disabled: true
+name: fail2ban
+title: fail2ban
+engine: fail2ban
+priority: 100

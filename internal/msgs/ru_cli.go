@@ -32,6 +32,8 @@ var ruCLICatalog = map[string]string{
 	"cli.servicesNotFound":           "не найден",
 	"cli.servicesFallback":           "найден, прошлая исправная версия",
 	"cli.servicesFound":              "найден",
+	"cli.servicesEngine":             "встроенный разборщик%s",
+	"cli.servicesEngineOff":          "встроенный разборщик выключен",
 	"cli.servicesEndpoint":           "адрес",
 	"cli.servicesUpstream":           "пул",
 	"cli.servicesFinding":            "находка",

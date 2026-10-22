@@ -32,6 +32,8 @@ var enCLICatalog = map[string]string{
 	"cli.servicesNotFound":           "not found",
 	"cli.servicesFallback":           "found, last good version",
 	"cli.servicesFound":              "found",
+	"cli.servicesEngine":             "built-in parser%s",
+	"cli.servicesEngineOff":          "built-in parser turned off",
 	"cli.servicesEndpoint":           "address",
 	"cli.servicesUpstream":           "pool",
 	"cli.servicesFinding":            "finding",

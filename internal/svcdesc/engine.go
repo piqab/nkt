@@ -216,6 +216,9 @@ type Result struct {
 	Sources   []model.SourceStatus
 	// Detected — найденные сервисы (для раздела «Сервисы»).
 	Detected []Detected
+	// Replaced — файлы встроенных разборщиков, которые забрало описание с
+	// большим priority (из snap.Files убрать).
+	Replaced []string
 }
 
 // Detected — найденный сервис.
@@ -245,6 +248,18 @@ func (e *Engine) Run(ctx context.Context, snap *model.Snapshot) Result {
 
 // RunLoaded — то же для заданного списка (nkt services test).
 func (e *Engine) RunLoaded(ctx context.Context, snap *model.Snapshot, list []Loaded) Result {
+	// Описания встроенных разборщиков не исполняются здесь: их запускает
+	// сканер (Engines), здесь — только приоритет их файлов.
+	enginePrio := map[string]int{}
+	var plain []Loaded
+	for _, l := range list {
+		if l.Desc != nil && l.Desc.Engine != "" {
+			enginePrio[l.Desc.Engine] = l.Desc.Priority
+			continue
+		}
+		plain = append(plain, l)
+	}
+	list = plain
 	outs := make([]runOut, len(list))
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
@@ -279,6 +294,20 @@ func (e *Engine) RunLoaded(ctx context.Context, snap *model.Snapshot, list []Loa
 			}
 		}
 	}
+	// Файл встроенного разборщика забирает описание с priority выше его.
+	nativePrio := func(p string) int {
+		if pr, ok := enginePrio[nativeOwner(snap, p)]; ok {
+			return pr
+		}
+		return EnginePriority
+	}
+	for p, i := range owner {
+		if native[p] && outs[i].l.Desc.Priority > nativePrio(p) {
+			delete(native, p)
+			res.Replaced = append(res.Replaced, p)
+		}
+	}
+	sort.Strings(res.Replaced)
 	for i, o := range outs {
 		if o.l.Desc != nil && (o.found || o.l.Origin != OriginBuiltin || o.l.Err != nil) {
 			res.Sources = append(res.Sources, o.status)
@@ -313,6 +342,9 @@ func (e *Engine) RunLoaded(ctx context.Context, snap *model.Snapshot, list []Loa
 		winner := outs[owner[p]].l.Desc.Name
 		if native[p] {
 			winner = nativeOwner(snap, p)
+		}
+		if replaced := sort.SearchStrings(res.Replaced, p); replaced < len(res.Replaced) && res.Replaced[replaced] == p {
+			names = append(names, nativeOwner(snap, p))
 		}
 		sort.Strings(names)
 		res.Findings = append(res.Findings, model.Finding{
@@ -728,4 +760,73 @@ func describeFile(c collect.Collector, path, service string, editable bool) mode
 		f.Readable, f.Editable, f.Note = false, false, err.Error()
 	}
 	return f
+}
+
+// EngineConf — как запускать встроенный разборщик.
+type EngineConf struct {
+	Enabled  bool
+	Options  map[string]string
+	Priority int
+	Origin   string
+	File     string
+	// Reason — почему выключен: disabled (описанием) или detect.
+	Reason string
+}
+
+// EngineConfs — настройки всех встроенных разборщиков.
+type EngineConfs map[string]EngineConf
+
+// On — разборщик включён (неизвестный — включён).
+func (m EngineConfs) On(name string) bool {
+	c, ok := m[name]
+	return !ok || c.Enabled
+}
+
+// Opt — настройка разборщика или значение по умолчанию (из окружения).
+func (m EngineConfs) Opt(name, key, def string) string {
+	if v := m[name].Options[key]; v != "" {
+		return v
+	}
+	return def
+}
+
+// List — настройка-список через запятую.
+func (m EngineConfs) List(name, key string, def []string) []string {
+	v := m[name].Options[key]
+	if v == "" {
+		return def
+	}
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Engines — настройки встроенных разборщиков из описаний: выключенное
+// имя — разборщик не запускается; detect не сработал — тоже.
+func (e *Engine) Engines(ctx context.Context, effective, all []Loaded) EngineConfs {
+	out := EngineConfs{}
+	for name := range EngineOptions {
+		out[name] = EngineConf{Enabled: true, Priority: EnginePriority, Origin: OriginBuiltin}
+	}
+	for _, l := range all {
+		if l.Desc != nil && l.Desc.Engine != "" && l.Desc.Disabled {
+			out[l.Desc.Engine] = EngineConf{Enabled: false, Priority: EnginePriority, Origin: l.Origin, File: l.File, Reason: "disabled"}
+		}
+	}
+	for _, l := range effective {
+		if l.Desc == nil || l.Desc.Engine == "" {
+			continue
+		}
+		d := l.Desc
+		c := EngineConf{Enabled: true, Options: d.Options, Priority: d.Priority, Origin: l.Origin, File: l.File}
+		if (len(d.Detect.Any) > 0 || len(d.Detect.All) > 0) && !e.detect(ctx, nil, d) {
+			c.Enabled, c.Reason = false, "detect"
+		}
+		out[d.Engine] = c
+	}
+	return out
 }

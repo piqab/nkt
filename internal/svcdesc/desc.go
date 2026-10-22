@@ -43,6 +43,11 @@ type Descriptor struct {
 	Priority int    `yaml:"priority,omitempty" json:"priority,omitempty"`
 	// Disabled — выключить описание с этим именем (например, встроенное).
 	Disabled bool `yaml:"disabled,omitempty" json:"disabled,omitempty"`
+	// Engine — встроенный разборщик на Go (nginx, docker…): описание задаёт
+	// его пути (Options), приоритет файлов и обнаружение, разбор — Go.
+	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
+	// Options — настройки встроенного разборщика (см. EngineOptions).
+	Options map[string]string `yaml:"options,omitempty" json:"options,omitempty"`
 	// Unit — юнит systemd: обнаружение и раздел «Сервисы».
 	Unit    string   `yaml:"unit,omitempty" json:"unit,omitempty"`
 	Detect  Detect   `yaml:"detect,omitempty" json:"detect,omitempty"`
@@ -310,6 +315,9 @@ func formatByExt(file string) string {
 func (d *Descriptor) compile() error {
 	if !nameRe.MatchString(d.Name) {
 		return msgs.Errorf("svcdesc.badName", d.Name)
+	}
+	if d.Engine != "" || EngineOptions[d.Name] != nil {
+		return d.compileEngine()
 	}
 	if nativeNames[d.Name] {
 		return msgs.Errorf("svcdesc.nativeName", d.Name)
@@ -607,3 +615,82 @@ func CompileCond(s string) (fexpr, error) {
 
 // Errf — ошибка описания с указанием файла.
 func Errf(file string, err error) error { return fmt.Errorf("%s: %w", file, err) }
+
+// EngineOptions — встроенные разборщики и их настройки (пути). Пустая
+// настройка — значение из окружения (NKT_NGINX_MAIN_CONFIG и т. п.).
+var EngineOptions = map[string]map[string]string{
+	model.ServiceNginx:    {"main_config": "path"},
+	model.ServiceHAProxy:  {"main_config": "path"},
+	model.ServiceCaddy:    {"main_config": "path"},
+	model.ServiceDocker:   {"compose_files": "paths"},
+	model.ServicePodman:   {},
+	model.ServiceLXD:      {},
+	model.ServiceLibvirt:  {"uri": "uri"},
+	model.ServiceK8s:      {},
+	EngineFirewall:        {},
+	model.ServiceFail2ban: {"root": "path"},
+}
+
+// EngineFirewall — разборщик файрвола (iptables, ufw, firewalld вместе).
+const EngineFirewall = "firewall"
+
+// EnginePriority — приоритет файлов встроенного разборщика по умолчанию:
+// выше, чем у описаний (50).
+const EnginePriority = 100
+
+var libvirtURIRe = regexp.MustCompile(`^(qemu|lxc|xen|vbox|test)(\+[a-z]+)?://[A-Za-z0-9._@:/-]*(\?[A-Za-z0-9=&._/-]*)?$`)
+
+// compileEngine — описание встроенного разборщика: только имя, engine
+// (= имя), приоритет, disabled, options и detect (file, unit, binary).
+func (d *Descriptor) compileEngine() error {
+	opts, ok := EngineOptions[d.Engine]
+	if d.Engine == "" {
+		d.Engine = d.Name
+		opts, ok = EngineOptions[d.Engine]
+	}
+	if !ok || d.Engine != d.Name {
+		return msgs.Errorf("svcdesc.badEngine", d.Engine, d.Name)
+	}
+	if d.Priority == 0 {
+		d.Priority = EnginePriority
+	}
+	if d.Priority < 0 || d.Priority > 1000 {
+		return msgs.Errorf("svcdesc.badPriority", d.Priority)
+	}
+	if len(d.Sources) > 0 || d.Unit != "" || d.Version != nil || len(d.Extract.Endpoints) > 0 ||
+		len(d.Extract.Upstreams) > 0 || len(d.Rules) > 0 {
+		return msgs.Errorf("svcdesc.engineOnly", d.Name)
+	}
+	for k, v := range d.Options {
+		kind, ok := opts[k]
+		if !ok {
+			return msgs.Errorf("svcdesc.badOption", d.Name, k)
+		}
+		switch kind {
+		case "path":
+			if !strings.HasPrefix(v, "/") || Sensitive(v) || strings.ContainsAny(v, "\n\x00") {
+				return msgs.Errorf("svcdesc.badOptionValue", k, v)
+			}
+		case "paths":
+			for _, p := range strings.Split(v, ",") {
+				p = strings.TrimSpace(p)
+				if !strings.HasPrefix(p, "/") || Sensitive(p) {
+					return msgs.Errorf("svcdesc.badOptionValue", k, p)
+				}
+			}
+		case "uri":
+			if len(v) > 256 || !libvirtURIRe.MatchString(v) {
+				return msgs.Errorf("svcdesc.badOptionValue", k, v)
+			}
+		}
+	}
+	for _, p := range append(append([]Probe{}, d.Detect.Any...), d.Detect.All...) {
+		if err := p.check(); err != nil {
+			return err
+		}
+		if p.Image != "" || p.Process != "" || p.Port != 0 {
+			return msgs.Errorf("svcdesc.engineProbe")
+		}
+	}
+	return nil
+}

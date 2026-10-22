@@ -1,0 +1,15 @@
+# Встроенный разборщик nginx (Go). Разбор — в nkt; описание задаёт
+# приоритет его файлов и даёт перекрыть пути или выключить его
+# описанием с тем же именем на хосте или в профиле:
+#
+#   name: nginx
+#   engine: nginx
+#   options:
+#     main_config: /etc/nginx/nginx.conf  # NKT_NGINX_MAIN_CONFIG
+#
+#   name: nginx
+#   disabled: true
+name: nginx
+title: nginx
+engine: nginx
+priority: 100

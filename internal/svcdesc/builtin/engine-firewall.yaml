@@ -1,0 +1,13 @@
+# Встроенный разборщик iptables, ufw, firewalld (Go). Разбор — в nkt; описание задаёт
+# приоритет его файлов и даёт перекрыть пути или выключить его
+# описанием с тем же именем на хосте или в профиле:
+#
+#   name: firewall
+#   engine: firewall
+#
+#   name: firewall
+#   disabled: true
+name: firewall
+title: iptables, ufw, firewalld
+engine: firewall
+priority: 100
