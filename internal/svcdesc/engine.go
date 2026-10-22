@@ -697,8 +697,8 @@ func buildUpstream(d *Descriptor, r UpstreamRule, c Ctx) model.Upstream {
 		if p := portField(field(sf, "port", sc)); p > 0 {
 			srv.Port = p
 		}
-		if w, err := strconv.ParseUint(Text(field(sf, "weight", sc)), 10, 32); err == nil {
-			srv.Weight = int(w)
+		if w, err := strconv.Atoi(strings.TrimSpace(Text(field(sf, "weight", sc)))); err == nil && w >= 0 && w <= 1_000_000 {
+			srv.Weight = w
 		}
 		if e := sf["backup"]; e != nil {
 			srv.Backup = Truthy(e.Value(sc))
@@ -829,12 +829,12 @@ func (e *Engine) Engines(ctx context.Context, effective, all []Loaded) EngineCon
 	return out
 }
 
-// portField — порт из значения поля: целое 1…65535 (разбор в 16 бит —
-// преобразование без переполнения), иначе 0.
+// portField — порт из значения поля: целое 1…65535, иначе 0 (Atoi —
+// сразу int, без преобразования типов).
 func portField(v any) int {
-	p, err := strconv.ParseUint(strings.TrimSpace(Text(v)), 10, 16)
-	if err != nil || p == 0 {
+	p, err := strconv.Atoi(strings.TrimSpace(Text(v)))
+	if err != nil || p < 1 || p > 65535 {
 		return 0
 	}
-	return int(p)
+	return p
 }

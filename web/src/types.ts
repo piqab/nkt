@@ -17,7 +17,7 @@ export interface Me {
   hub_version?: string
   /** Hub only: что из экспериментального показывать («О системе»). Только
    * интерфейс — сами функции работают. */
-  experimental?: { map: boolean; clusters: boolean }
+  experimental?: { map: boolean; clusters: boolean; assistant?: boolean; mcp?: boolean }
 }
 
 /** GET/POST /hub/version's shape (internal/hub/handlers.go's versionInfoJSON). */

@@ -84,6 +84,13 @@ func TestAssistant(t *testing.T) {
 		}
 	}
 	session := func(r *http.Request) { r.AddCookie(cookie) }
+	// Ассистент выключен по умолчанию.
+	if rec := do("POST", "/api/hub/assistant", `{"messages":[{"role":"user","text":"x"}]}`, session); rec.Code != http.StatusForbidden {
+		t.Fatalf("assistant off: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do("PUT", "/api/hub/experimental", `{"map":false,"clusters":false,"assistant":true,"mcp":false}`, session); rec.Code != 200 {
+		t.Fatalf("turn assistant on: %d %s", rec.Code, rec.Body)
+	}
 	ask := func() assistantReply {
 		t.Helper()
 		rec := do("POST", "/api/hub/assistant", `{"messages":[{"role":"user","text":"что не так с web1?"}]}`, session)

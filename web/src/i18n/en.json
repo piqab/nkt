@@ -115,21 +115,26 @@
     "updateAllHostsHint": "The hub restarts, the page reloads and opens the “Update all” window listing the hosts that will be updated.",
     "restartStuck": "The hub has not answered with the new version within 3 minutes. Reload the page: if the version in About is still the old one, the install did not go through — check the service log on the hub machine (journalctl -u netknownsthat-hub and the transient run-… units).",
     "expTitle": "Experimental features",
-    "expHint": "What to show in the hub interface. The checkboxes only hide: the features keep working — created clusters live on, jobs run, the API answers. The setting is shared by the hub.",
+    "expHint": "What is on at the hub. “Map” and “Clusters” only hide: the features keep working — created clusters live, jobs run, the API answers. “Assistant” and “MCP” turn off for real. The setting is shared by the whole hub.",
     "expOn": "shown",
     "expOff": "hidden",
     "expHistory": "History",
     "expRestore": "restore",
     "exp": {
       "map": "Hosts map",
-      "clusters": "Kubernetes clusters"
+      "clusters": "Kubernetes clusters",
+      "assistant": "Hub assistant",
+      "mcp": "MCP for AI agents"
     },
     "expDesc": {
       "map": "The \"Map\" switch above the host list: Traffic Fly and deployment links, moving containers by dragging.",
-      "clusters": "The \"Clusters\" card in the host list, \"New cluster\" on a host's row and the \"Clusters\" menu item."
+      "clusters": "The \"Clusters\" card in the host list, \"New cluster\" on a host's row and the \"Clusters\" menu item.",
+      "assistant": "The “Assistant” menu item: a conversation with the model about the fleet, read only, changes as a script. Off — the section is hidden and doesn’t answer.",
+      "mcp": "POST /api/mcp and the nkt mcp bridge for Claude Code, Cursor and other agents with an API token. Off — MCP answers 403 to any token."
     },
     "aptCacheEnabled": "Use the hub package cache",
-    "aptCacheEnabledHint": "The hub serves apt packages from its cache to hosts marked \"packages via the hub\" — through the tunnel, no internet on the host. Off — an apt proxy job removes it from those hosts; the marks stay and work again once turned on."
+    "aptCacheEnabledHint": "The hub serves apt packages from its cache to hosts marked \"packages via the hub\" — through the tunnel, no internet on the host. Off — an apt proxy job removes it from those hosts; the marks stay and work again once turned on.",
+    "expMcpWarn": "An agent with an admin token runs actions right away, without confirmation. Give agents you don’t trust with actions a read token or a token limited to some hosts."
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",

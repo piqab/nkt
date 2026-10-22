@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.85 — 2026-10-22
+
+- **Assistant and MCP moved to “Experimental features”.** “About” has two
+  new checkboxes: “Hub assistant” (the menu item) and “MCP for AI agents”.
+  Both are **off by default** and turn off for real: when off they answer
+  403 with a hint where to turn them on. Turning MCP on, the window warns
+  that an agent with an admin token acts without confirmation. If you
+  already connected an agent over MCP — tick the box.
+- A pool server's weight in descriptions is parsed as an integer with no
+  type conversion (CodeQL).
+
 ## v1.13.84 — 2026-10-22
 
 - HTTP sources of service descriptions reach this host only

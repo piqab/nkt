@@ -11,9 +11,10 @@ import (
 )
 
 // Экспериментальные функции («О системе»): что показывать в интерфейсе.
-// Галочки только прячут — сами функции работают: созданные кластеры
-// живут, задания идут, API отвечает. Настройка общая для хаба, с историей,
-// уходит в экспорт (store.ExportedSettingKeys).
+// Галочки «Карта» и «Кластеры» только прячут — сами функции работают:
+// созданные кластеры живут, задания идут, API отвечает. «Ассистент» и
+// «MCP» выключают по-настоящему: их адреса отвечают 403. Настройка общая
+// для хаба, с историей, уходит в экспорт (store.ExportedSettingKeys).
 
 const (
 	experimentalKey        = "ui.experimental"
@@ -27,6 +28,11 @@ type Experimental struct {
 	// Clusters — карточка «Кластеры» в списке хостов, «Новый кластер» в
 	// строке хоста, пункт меню «Кластеры».
 	Clusters bool `json:"clusters"`
+	// Assistant — раздел «Ассистент» и POST /hub/assistant.
+	Assistant bool `json:"assistant"`
+	// MCP — POST /api/mcp для ИИ-агентов (по токену; администратор — без
+	// подтверждения): выключен — 403.
+	MCP bool `json:"mcp"`
 }
 
 type experimentalVersion struct {
@@ -66,7 +72,7 @@ func (s *Server) handleExperimentalGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.experimentalState(r.Context()))
 }
 
-// handleExperimentalSet — PUT /hub/experimental {map, clusters}
+// handleExperimentalSet — PUT /hub/experimental {map, clusters, assistant, mcp}
 // (администратор); прежнее значение — в историю.
 func (s *Server) handleExperimentalSet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

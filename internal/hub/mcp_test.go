@@ -111,6 +111,14 @@ func TestMCP(t *testing.T) {
 	admin := token(`{"name":"agent","role":"admin"}`)
 	scoped := token(`{"name":"prod-agent","role":"admin","groups":["prod"]}`)
 
+	// MCP выключен по умолчанию («О системе» → «Экспериментальные»).
+	if rec := do("POST", "/api/mcp", `{"jsonrpc":"2.0","id":1,"method":"ping"}`, admin); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "MCP") {
+		t.Fatalf("mcp off: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do("PUT", "/api/hub/experimental", `{"map":false,"clusters":false,"assistant":false,"mcp":true}`, session); rec.Code != 200 {
+		t.Fatalf("turn mcp on: %d %s", rec.Code, rec.Body)
+	}
+
 	init := rpc(read, "initialize", map[string]any{"protocolVersion": "2025-03-26"})
 	if b, _ := json.Marshal(init.Result); !strings.Contains(string(b), `"protocolVersion":"2025-03-26"`) || !strings.Contains(string(b), `"tools"`) {
 		t.Fatalf("initialize: %s", b)

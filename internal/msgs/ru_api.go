@@ -21,6 +21,7 @@ var ruAPICatalog = map[string]string{
 	"auth.tokenReadOnly":       "API-токен только для чтения: действия ему недоступны",
 	"auth.tokenFlyScoped":      "Карта Traffic Fly общая на все хосты — она доступна только токену без предела по хостам",
 	"mcp.tokenOnly":            "MCP хаба — только по API-токену (раздел «Токены API»), не по входу в интерфейс",
+	"mcp.disabled":             "MCP выключен: включите его в «О системе» → «Экспериментальные»",
 	"auth.tokenScriptHost":     "строка %d: хост «%s» вне предела токена",
 	"auth.tokenScriptGlobal":   "строка %d: «%s» — токену с пределом по хостам нельзя (хосты, группы, Traffic Fly, конвейер по группе или не compose)",
 	"auth.tokenScriptCluster":  "строка %d: кластер «%s» не целиком на хостах токена",
