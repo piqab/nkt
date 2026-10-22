@@ -449,6 +449,8 @@ var enCatalog = map[string]string{
 	"ai.scriptEmpty":                                      "nothing to give the model: the text or the task is empty",
 	"ai.scriptNoComment":                                  "the text has no “# AI: …” task lines — add what to do and press again",
 	"ai.scriptTooLong":                                    "the text is longer than %d characters — give the model less",
+	"ai.assistantTooLong":                                 "the conversation is too long — start a new one",
+	"ai.assistantNoAnswer":                                "The model gave no answer within the allowed turns — narrow the question.",
 	"ai.disabled":                                         "AI analysis is off: enable it in \"About\" and set a model",
 	"ai.limitReached":                                     "the daily model request limit is reached (%d)",
 	"ai.providerCodeAt":                                   "the provider replied %d to %s %s: %s",

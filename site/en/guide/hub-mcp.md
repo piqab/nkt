@@ -39,7 +39,8 @@ limited to some hosts. Everything the agent did is in the hub audit log
 as `token:<token name>`.
 :::
 
-The hub's built-in AI (finding analysis, AI in the script editor) still
+The hub's built-in AI (finding analysis, AI in the script editor, the
+[assistant](/en/guide/hub-assistant)) still
 runs nothing by itself — only MCP with an admin token executes.
 
 ## Tools
@@ -75,8 +76,11 @@ and the log tail — the agent doesn't have to poll.
 
 ```sh
 claude mcp add --transport http nkt https://hub.example.com/api/mcp \
-  --header "Authorization: Bearer nkt_…"
+  --header "Authorization: Bearer nkt_…" --header "X-NKT-Lang: en"
 ```
+
+`X-NKT-Lang` (`en` or `ru`) is the language of the hub's answers (errors,
+job logs); the `nkt mcp` bridge sets it from the locale.
 
 ## nkt mcp: stdio bridge
 

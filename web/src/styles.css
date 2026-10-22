@@ -1279,3 +1279,17 @@ span.vm-toggle {
   padding-left: 4px !important;
   padding-right: 4px !important;
 }
+
+/* Ассистент хаба: вопрос — плашкой справа, ответ — во всю ширину. */
+.assistant-q {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 0.45rem 0.7rem;
+  border-radius: 10px;
+  background: var(--wash);
+  white-space: pre-wrap;
+}
+.assistant-a {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 0.7rem;
+}

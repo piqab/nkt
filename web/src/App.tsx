@@ -16,7 +16,7 @@ import {
   PlayCircleOutlined,
   ProfileOutlined,
   SecurityScanOutlined,
-  LineChartOutlined, ApiOutlined } from '@ant-design/icons'
+  LineChartOutlined, ApiOutlined, RobotOutlined } from '@ant-design/icons'
 import { notifyNewEvents } from './notifications'
 import { NAV_ITEMS } from './navItems'
 import { applyNavLayout, type NavLayout } from './navLayout'
@@ -47,6 +47,7 @@ import HostEvents from './pages/HostEvents'
 import ClustersPage from './pages/ClustersPage'
 import Deployments from './pages/Deployments'
 import TrafficFlyPage from './pages/TrafficFlyPage'
+import Assistant from './pages/Assistant'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -385,7 +386,7 @@ function Shell({
     window.addEventListener('nkt-open-script', open)
     return () => window.removeEventListener('nkt-open-script', open)
   }, [])
-  const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'fly' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'fly' | 'assistant' | 'about'>('hosts')
   // Вкладка «Выкладок», которую открыть (события Traffic Fly ведут в неё).
   const [deployTab, setDeployTab] = useState<string | undefined>(undefined)
   // Polled independently of whichever section is actually showing, so the
@@ -584,6 +585,8 @@ function Shell({
       ...(me.experimental?.clusters ? [{ key: 'clusters', icon: <ClusterOutlined />, label: t('nav.clusters') }] : []),
       { key: 'deploy', icon: <RocketOutlined />, label: t('nav.deploy') },
       { key: 'fly', icon: <ApiOutlined />, label: 'Traffic Fly' },
+      // Ассистент — администратору: он открывает разделы хостов через хаб.
+      ...(me.is_admin ? [{ key: 'assistant', icon: <RobotOutlined />, label: t('nav.assistant') }] : []),
       {
         key: 'about',
         icon: navIcon(<InfoCircleOutlined />, hubUpdate.data?.update_available ? 1 : 0, false, collapsed),
@@ -665,6 +668,8 @@ function Shell({
                 <Deployments me={me} initialTab={deployTab} />
               ) : hubView === 'fly' ? (
                 <TrafficFlyPage me={me} />
+              ) : hubView === 'assistant' ? (
+                <Assistant />
               ) : (
                 <About admin={me.is_admin} />
               )}

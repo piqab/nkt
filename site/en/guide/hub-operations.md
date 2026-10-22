@@ -166,6 +166,10 @@ language reference and the names of hub objects; its answer goes through
 "Check" and gets into the editor only through a diff window, and a person
 runs the script.
 
+The [“Assistant”](/en/guide/hub-assistant) section is a conversation with
+the model about the fleet: it looks at the hub's data itself (read only)
+and sends changes as a script.
+
 An external AI agent (Claude Code, Claude Desktop, Cursor) connects to
 the hub over [MCP](/en/guide/hub-mcp) with an API token: with a read
 token it only looks, with an admin token it runs actions itself, without

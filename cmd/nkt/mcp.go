@@ -89,9 +89,8 @@ func mcpForward(client *http.Client, endpoint, token string, line []byte) *mcpRe
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+token)
-	if lang := os.Getenv("LANG"); strings.HasPrefix(lang, "ru") {
-		req.Header.Set("Accept-Language", "ru")
-	}
+	// Язык ответов хаба — по локали, как у остальных команд nkt.
+	req.Header.Set("X-NKT-Lang", string(cliLang()))
 	resp, err := client.Do(req)
 	if err != nil {
 		return &mcpReply{err: err.Error()}
