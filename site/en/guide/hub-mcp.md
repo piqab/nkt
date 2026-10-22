@@ -153,6 +153,18 @@ A hub with a self-signed certificate — `NKT_HUB_CA=/path/to/cert.pem`.
 Any `nkt` binary of the same version will do — the agent's machine needs
 no hub or service.
 
+## With a local model
+
+MCP doesn't need the hub's model: the agent's model does the thinking,
+the hub only provides tools. With a local model any MCP client that works
+with Ollama or an OpenAI-compatible address will do — for example Cline
+or Continue in VS Code, Goose, Open WebUI. Many of them describe an MCP
+server with the same `mcpServers` block as Claude Desktop above (with the
+`nkt mcp` bridge), or with the `https://hub/api/mcp` address and an
+`Authorization` header; the exact place is in the client's docs. The
+agent's model needs tool calling — the same model advice as for the
+[assistant](/en/guide/hub-operations#local-and-other-models).
+
 ## Checking by hand
 
 ```sh

@@ -208,6 +208,43 @@ request" button. The request is stored with the answer, and with the
 resource map architecture review too, including the review history.
 Answers received before v1.11.41 keep only the message.
 
+### Local and other models
+
+![Model analysis: ready addresses and the tools check](/screens/en/hub-ai-settings.png)
+
+Besides Anthropic, any server with the OpenAI API (`/v1/chat/completions`)
+works: the **“OpenAI-compatible”** provider, the address — from the
+**“Ready addresses”** buttons under the address field:
+
+| Server | Address | Key | Notes |
+|---|---|---|---|
+| Ollama | `http://127.0.0.1:11434/v1` | not needed | `ollama pull qwen2.5:14b`; the model — from “Get models” |
+| LM Studio | `http://127.0.0.1:1234/v1` | not needed | turn on the server on the Developer tab |
+| llama.cpp | `http://127.0.0.1:8080/v1` | not needed | `llama-server -m model.gguf --jinja` (`--jinja` — for tools) |
+| vLLM | `http://127.0.0.1:8000/v1` | as configured | for tools: `--enable-auto-tool-choice --tool-call-parser …` |
+| OpenRouter | `https://openrouter.ai/api/v1` | needed | hundreds of models with one key |
+| OpenAI and company gateways | their address with `/v1` | needed | |
+
+A local server button sets the answer wait to 300 s (a local model on a
+weak machine thinks for minutes) and clears “hide addresses and names” —
+the data goes nowhere; you can tick it back. Requests go **from the hub
+machine**: the local model must be reachable from it (`127.0.0.1` is the
+hub itself; a model on another machine — its network address).
+
+What works with any model: finding analysis and the fix script, the
+architecture review, config help, the address check, AI in the script
+editor. The [assistant](/en/guide/hub-assistant) needs **tool calling**:
+the **“Check tools”** button sends the model a short request with one
+probe tool and shows the result — “calls tools” or “doesn't call tools”
+(then the assistant answers from a hub snapshot). The result is kept for
+the “model + address” pair and shown on the assistant page; a question to
+the assistant updates it.
+
+Among local models, Qwen 2.5/3 and Llama 3.1 and newer usually handle
+tools; small ones (up to ~7B) often mix tools up — for the assistant 14B
+and larger is better. [MCP](/en/guide/hub-mcp) doesn't need the hub's
+model: the model there is the agent's.
+
 ## Privacy mode
 
 The **“hide sensitive data”** checkbox in “About” — for

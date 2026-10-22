@@ -56,7 +56,7 @@ function stepLabel(s: Step): string {
 
 export default function Assistant() {
   const { t } = useTranslation()
-  const status = useApi<{ enabled: boolean }>('/hub/ai')
+  const status = useApi<{ enabled: boolean; model?: string; tools?: { status: 'tools' | 'no_tools' } }>('/hub/ai')
   const [messages, setMessages] = useState<Message[]>(readStored)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -102,6 +102,13 @@ export default function Assistant() {
         <h1>
           {t('assistant.title')}
           <TitleHelp>{t('assistant.hint')}</TitleHelp>
+          {status.data?.tools && (
+            <Tooltip title={t(status.data.tools.status === 'tools' ? 'assistant.modelToolsHint' : 'assistant.summaryHint')}>
+              <Tag color={status.data.tools.status === 'tools' ? 'success' : 'orange'} style={{ marginLeft: 8, verticalAlign: 'middle' }}>
+                {status.data.model} · {t(`ai.tools.${status.data.tools.status}`)}
+              </Tag>
+            </Tooltip>
+          )}
         </h1>
         {messages.length > 0 && (
           <Button

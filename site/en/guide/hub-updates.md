@@ -186,6 +186,8 @@ A standalone host without a hub shows the default menu. API: `GET` and
 
 ## Experimental features
 
+![Experimental features](/screens/en/hub-experimental.png)
+
 The **Experimental features** card in "About" sets which experimental
 parts the hub interface shows (hidden by default):
 

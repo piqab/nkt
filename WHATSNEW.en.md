@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.86 — 2026-10-22
+
+- **Local models in two clicks.** The “Model analysis” card has ready
+  address buttons for the “OpenAI-compatible” provider: Ollama, LM Studio,
+  llama.cpp, vLLM, OpenRouter (local ones get a 300 s wait and no aliases
+  right away — the data goes nowhere). The **“Check tools”** button shows
+  whether the model can call tools: this decides whether the assistant
+  looks at the hub's data itself or answers from a snapshot. The result is
+  also shown on the assistant page. Docs: “Local and other models” and
+  “MCP with a local model”.
+- “Experimental features” now say “on / off”.
+
 ## v1.13.85 — 2026-10-22
 
 - **Assistant and MCP moved to “Experimental features”.** “About” has two

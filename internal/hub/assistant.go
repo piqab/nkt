@@ -188,6 +188,14 @@ func (s *Server) handleAssistant(w http.ResponseWriter, r *http.Request) {
 		reply.Script = true
 		reply.Issues = issuesJSON(lang, s.aiScriptCheck(ctx, mm[1]))
 	}
+	// Что модель показала об инструментах — в настройки ИИ («умеет» или
+	// «отвечает по сводке»); ответ без вызовов ничего не доказывает.
+	switch {
+	case reply.Mode == "summary":
+		m.aiRecordTools(ctx, set, "no_tools", "assistant")
+	case len(reply.Steps) > 0:
+		m.aiRecordTools(ctx, set, "tools", "assistant")
+	}
 	s.db.Audit(ctx, auth.Username(ctx), "ai.assistant", reply.Mode, "ok", map[string]any{"rounds": reply.Rounds, "tools": len(reply.Steps)})
 	writeJSON(w, http.StatusOK, reply)
 }
