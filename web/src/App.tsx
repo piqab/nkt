@@ -48,6 +48,7 @@ import ClustersPage from './pages/ClustersPage'
 import Deployments from './pages/Deployments'
 import TrafficFlyPage from './pages/TrafficFlyPage'
 import Assistant from './pages/Assistant'
+import ServiceDescriptions from './pages/ServiceDescriptions'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -660,6 +661,7 @@ function Shell({
                   items={[
                     { key: 'profiles', label: t('profiles.tabProfiles'), children: <Profiles me={me} hubLevel /> },
                     { key: 'scripts', label: t('profiles.tabScripts'), children: <Scripts me={me} /> },
+                    { key: 'services', label: t('profiles.tabServices'), children: <ServiceDescriptions me={me} /> },
                   ]}
                 />
               ) : hubView === 'clusters' ? (

@@ -187,6 +187,8 @@ type HubExport struct {
 	Profiles      []ProfileExport    `json:"profiles,omitempty"`
 	VMTemplates   []VMTemplateExport `json:"vm_templates,omitempty"`
 	Scripts       []ScriptExport     `json:"scripts,omitempty"`
+	// SvcDescs — описания сервисов хаба с историей.
+	SvcDescs []ScriptExport `json:"svc_descs,omitempty"`
 	// Settings — настройки хаба из таблицы kv по ключу (настройки
 	// оповещений, группа строки localhost, умолчания подготовки, лимит
 	// кэша пакетов, разбор моделью, бета-канал).
@@ -375,6 +377,25 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 		}
 		out.Scripts = append(out.Scripts, se)
 	}
+	descs, err := d.AllSvcDescs(ctx)
+	if err != nil {
+		return HubExport{}, err
+	}
+	for _, sd := range descs {
+		se := ScriptExport{Name: sd.Name, Content: sd.Content, Note: sd.Note, Author: sd.Author}
+		versions, err := d.SvcDescVersions(ctx, sd.ID, 200)
+		if err != nil {
+			return HubExport{}, err
+		}
+		for i := len(versions) - 1; i >= 0; i-- {
+			v, err := d.SvcDescVersion(ctx, versions[i].ID)
+			if err != nil {
+				return HubExport{}, err
+			}
+			se.Versions = append(se.Versions, ProfileVersionExport{TS: v.TS, Author: v.Author, Note: v.Note, Content: v.Content})
+		}
+		out.SvcDescs = append(out.SvcDescs, se)
+	}
 	presets, err := d.ListClusterPresets(ctx)
 	if err != nil {
 		return HubExport{}, err
@@ -402,6 +423,7 @@ const (
 	SectionHosts          = "hosts"
 	SectionProfiles       = "profiles"
 	SectionScripts        = "scripts"
+	SectionSvcDescs       = "svc_descs"
 	SectionVMTemplates    = "vm_templates"
 	SectionClusters       = "clusters"
 	SectionClusterPresets = "cluster_presets"
@@ -525,6 +547,14 @@ func (d *DB) ImportPlan(ctx context.Context, export HubExport) ([]PlanSection, e
 		}
 	}
 	out = append(out, planSection(SectionScripts, names(len(export.Scripts), func(i int) string { return export.Scripts[i].Name }), taken, true))
+
+	taken = map[string]bool{}
+	if list, err := d.ListSvcDescs(ctx); err == nil {
+		for _, p := range list {
+			taken[p.Name] = true
+		}
+	}
+	out = append(out, planSection(SectionSvcDescs, names(len(export.SvcDescs), func(i int) string { return export.SvcDescs[i].Name }), taken, true))
 
 	taken = map[string]bool{}
 	if list, err := d.ListVMTemplates(ctx); err == nil {
@@ -655,6 +685,7 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport, res ImportResolu
 	d.importProfiles(ctx, export.Profiles, res, &rep)
 	d.importVMTemplates(ctx, export.VMTemplates, res, &rep)
 	d.importScripts(ctx, export.Scripts, res, &rep)
+	d.importSvcDescs(ctx, export.SvcDescs, res, &rep)
 	d.importClusterPresets(ctx, export.ClusterPresets, res, &rep)
 	d.importPipelines(ctx, export.Pipelines, res, &rep)
 	d.importUsers(ctx, export.Users, res, &rep)
@@ -1047,4 +1078,55 @@ func DecodeHubExport(data []byte) (HubExport, error) {
 			export.Version, ExportFormatVersion)
 	}
 	return export, nil
+}
+
+// importSvcDescs — описания сервисов: как сценарии, по имени.
+func (d *DB) importSvcDescs(ctx context.Context, descs []ScriptExport, res ImportResolutions, rep *ImportReport) {
+	existing, err := d.ListSvcDescs(ctx)
+	if err != nil {
+		rep.Errors = append(rep.Errors, err.Error())
+		return
+	}
+	taken := map[string]int64{}
+	for _, s := range existing {
+		taken[s.Name] = s.ID
+	}
+	for _, s := range descs {
+		if s.Name == "" {
+			continue
+		}
+		cnt := rep.Count(SectionSvcDescs)
+		if oldID, ok := taken[s.Name]; ok {
+			if !res.Replace(SectionSvcDescs, s.Name) {
+				cnt.Skipped++
+				continue
+			}
+			if err := d.UpdateSvcDesc(ctx, SvcDesc{ID: oldID, Name: s.Name, Content: s.Content, Note: importNote(ctx), Author: s.Author}); err != nil {
+				rep.Err("%s: %v", s.Name, err)
+				continue
+			}
+			cnt.Replaced++
+			continue
+		}
+		id, err := d.CreateSvcDesc(ctx, SvcDesc{Name: s.Name, Content: s.Content, Note: s.Note, Author: s.Author})
+		if err != nil {
+			rep.Err("%s: %v", s.Name, err)
+			continue
+		}
+		if len(s.Versions) > 0 {
+			if _, err := d.ExecContext(ctx, `DELETE FROM svc_desc_versions WHERE desc_id = ?`, id); err != nil {
+				rep.Err("%s: %v", s.Name, err)
+			}
+			for _, v := range s.Versions {
+				if _, err := d.ExecContext(ctx, `
+					INSERT INTO svc_desc_versions (desc_id, ts, author, note, content)
+					VALUES (?, ?, ?, ?, ?)`, id, v.TS, v.Author, v.Note, v.Content); err != nil {
+					rep.Err("%s: %v", s.Name, err)
+					break
+				}
+			}
+		}
+		taken[s.Name] = id
+		cnt.Added++
+	}
 }

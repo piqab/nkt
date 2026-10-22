@@ -11,6 +11,9 @@ installed, which services must run, what must be in files, which ports are
 open, who has access, which compose stacks are up. It is not a programming
 language: no order, no conditions — a flat list of what should be.
 
+Next to it, the “Services” tab holds the hub's [service descriptions](/en/guide/service-descriptions):
+a YAML library with history and delivery to hosts.
+
 ```yaml
 version: 1
 name: web-base

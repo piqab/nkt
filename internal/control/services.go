@@ -14,6 +14,7 @@ import (
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/parse"
 	"github.com/piqab/nkt/internal/store"
+	"github.com/piqab/nkt/internal/svcdesc"
 )
 
 // ServiceManager performs systemd and docker actions.
@@ -196,6 +197,19 @@ func (s *ServiceManager) Validate(ctx context.Context, service string, paths ...
 		err error
 	)
 	switch service {
+	case model.ServiceSvcDesc:
+		// Описание сервиса проверяется разбором: тот же Parse, что у скана.
+		if len(paths) == 0 || paths[0] == "" {
+			return collect.CommandResult{}, false
+		}
+		data, rerr := s.c.ReadFile(paths[0])
+		if rerr == nil {
+			_, rerr = svcdesc.Parse(data)
+		}
+		if rerr != nil {
+			return collect.CommandResult{Argv: []string{"svcdesc", paths[0]}, ExitCode: 1, Stderr: rerr.Error()}, true
+		}
+		return collect.CommandResult{Argv: []string{"svcdesc", paths[0]}, Stdout: "ok"}, true
 	case model.ServiceNginx:
 		res, err = s.c.Run(ctx, "nginx", "-t")
 	case model.ServiceHAProxy:

@@ -1,5 +1,5 @@
-# PostgreSQL: postgresql.conf и pg_hba.conf всех кластеров Debian
-# (/etc/postgresql/<версия>/<кластер>/) и RHEL (/var/lib/pgsql/data).
+# PostgreSQL: postgresql.conf and pg_hba.conf of every Debian cluster
+# (/etc/postgresql/<version>/<cluster>/) and RHEL (/var/lib/pgsql/data).
 name: postgresql
 title: PostgreSQL
 unit: postgresql

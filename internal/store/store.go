@@ -396,6 +396,26 @@ CREATE TABLE IF NOT EXISTS script_versions (
     content   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_script_versions ON script_versions(script_id, id DESC);
+-- Описания сервисов хаба (internal/svcdesc): YAML с историей, доставляются
+-- на хосты уровнем «профиль».
+CREATE TABLE IF NOT EXISTS svc_descs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    content    TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    author     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS svc_desc_versions (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    desc_id INTEGER NOT NULL REFERENCES svc_descs(id) ON DELETE CASCADE,
+    ts      TEXT NOT NULL,
+    author  TEXT NOT NULL DEFAULT '',
+    note    TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_svc_desc_versions ON svc_desc_versions(desc_id, id DESC);
 -- Манифесты Kubernetes хаба (раздел «Кластеры» → «Применить YAML»):
 -- каждое применение — редакция с итогом по каждому кластеру.
 CREATE TABLE IF NOT EXISTS k8s_manifests (

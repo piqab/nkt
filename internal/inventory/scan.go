@@ -219,6 +219,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Endpoints = append(snap.Endpoints, descRes.Endpoints...)
 	snap.Upstreams = append(snap.Upstreams, descRes.Upstreams...)
 	snap.Files = append(snap.Files, descRes.Files...)
+	snap.Files = append(snap.Files, svcdesc.HostFiles(s.c, s.cfg.ServicesDir)...)
 	snap.Sources = append(snap.Sources, descRes.Sources...)
 
 	// A bridge interface's own data (ip addr) has no idea what's plugged

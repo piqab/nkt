@@ -82,7 +82,7 @@ in “Configs”.
 | From | Where | Precedence |
 |---|---|---|
 | host | `/etc/netknownsthat/services.d/*.yaml` | highest |
-| hub profile | nkt data directory, `services.d/profile/` (delivery from the hub comes with the “Services” section in profiles) | middle |
+| hub profile | nkt data directory, `services.d/profile/` — delivered by the hub (“Profiles” → “Services”) | middle |
 | built-in | inside nkt | lowest |
 
 A description with the same `name` **overrides** the lower one entirely;
@@ -97,6 +97,50 @@ disabled: true
 A broken description (a YAML error, a wrong path) doesn't break the scan:
 the **last good version** of that file is used, and the host sources show
 a warning with the error.
+
+## On the hub: “Profiles” → “Services”
+
+![Service descriptions on the hub](/screens/en/hub-svcdesc.png)
+
+On the hub descriptions are kept as a library with edit history — the
+**“Profiles” → “Services”** tab:
+
+- **Hub descriptions** — your own: “New description” (a template),
+  “Import .yaml”, editing in a window with a diff before writing,
+  “History” (any past revision goes back into the editor), “Download”,
+  deleting. The name comes from `name` in the description itself; saving
+  runs the same parse as on the host — a broken one isn't saved.
+- **Built-in** — for viewing; “Override” creates a hub description with
+  the same text: edit it and deliver. An overridden built-in is marked.
+
+In the edit window:
+
+- **“Check”** — parses the description without saving: an error naming
+  the field, or a summary of sources, addresses, pools, rules.
+- **“Parse log”** — the draft is parsed on the chosen host, like
+  `nkt services test`: which `detect` checks matched, what was read, how
+  many nodes each path gave, what came out — addresses, pools, findings,
+  the version. Nothing is saved on the hub or on the host.
+- **“Path builder”** — a source sample (a file, HTTP or a command) from
+  the chosen host shown as a tree; clicking a node gives its path, “each:
+  all like it” generalizes it to all siblings, “into the field (from
+  each)” gives the path from the item; `each`, `when` and the field are
+  computed over the sample right away. The sample obeys the same limits as
+  descriptions (closed paths, commands without a shell).
+
+![Path builder](/screens/en/hub-svcdesc-builder.png)
+
+**“Deliver to hosts”** is a hub job: each chosen host gets all hub
+descriptions as a whole, into the “profile” level (nkt data directory,
+`services.d/profile`), extra ones there are removed; the host rescans
+itself right away. A description on the host itself
+(`/etc/netknownsthat/services.d`) is still higher. Hub descriptions are
+part of the hub export and import (with history).
+
+On a host, descriptions from `/etc/netknownsthat/services.d` show in
+**“Configs”** as the “service descriptions” category: editing with
+history and rollback; writing parses the description — a broken one
+isn't written.
 
 ## Example
 

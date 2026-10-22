@@ -333,6 +333,8 @@ var tokenHostRead = map[string]bool{
 var tokenHostDeny = map[string]bool{
 	"terminal": true, "console": true, "files": true, "backups": true, "auth": true, "users": true,
 	"os-users": true, "ui": true, "k8s": true, "configs": true,
+	// Описания сервисов: образец читает файлы и команды хоста.
+	"svcdesc": true,
 }
 
 // tokenHubRoutes — вызовы хаба, открытые токену: маршрут → нужна ли роль

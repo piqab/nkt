@@ -194,7 +194,7 @@ export default function Configs({ me }: { me: Me }) {
     const unused = allFiles.filter((f) => !f.in_use).length
     const out = [{ value: 'all', label: `${t('configs.categoryAll')} (${allFiles.length})` }]
     for (const [service, count] of [...counts].sort((a, b) => a[0].localeCompare(b[0]))) {
-      out.push({ value: service, label: `${service} (${count})` })
+      out.push({ value: service, label: `${service === 'svcdesc' ? t('configs.categorySvcdesc') : service} (${count})` })
     }
     if (unused > 0) out.push({ value: 'unused', label: `${t('configs.categoryUnused')} (${unused})` })
     return out
