@@ -4,6 +4,11 @@ title: Hub assistant
 
 # Hub assistant
 
+::: tip Turned on in “About”
+The section shows when “Hub assistant” is on in “About” → “Experimental
+features” (off by default).
+:::
+
 ![Assistant](/screens/en/hub-assistant.png)
 
 The **“Assistant”** section in the hub menu (for an admin) is a

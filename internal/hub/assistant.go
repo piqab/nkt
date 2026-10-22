@@ -82,6 +82,10 @@ var nktBlock = regexp.MustCompile("(?s)```nkt[^\\n]*\\n(.*?)```")
 
 // handleAssistant — POST /hub/assistant.
 func (s *Server) handleAssistant(w http.ResponseWriter, r *http.Request) {
+	if !s.experimental(r.Context()).Assistant {
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("ai.assistantDisabled"))
+		return
+	}
 	var req assistantRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)

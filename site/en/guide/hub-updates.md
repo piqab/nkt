@@ -192,15 +192,22 @@ parts the hub interface shows (hidden by default):
 - **Hosts map** — the "Map" switch above the host list (Traffic Fly and
   deployment links, moving containers by dragging);
 - **Kubernetes clusters** — the "Clusters" card in the host list, "New
-  cluster" on a host's row and the "Clusters" menu item.
+  cluster" on a host's row and the "Clusters" menu item;
+- **Hub assistant** — the ["Assistant"](/en/guide/hub-assistant) menu item;
+- **MCP for AI agents** — [MCP](/en/guide/hub-mcp) with an API token and
+  the `nkt mcp` bridge. Turning it on, the window warns: an agent with an
+  admin token runs actions without confirmation.
 
-The checkboxes **only hide the interface**: created clusters live on,
-their jobs run, the API answers, deployments to clusters work. If the hub
+"Map" and "Clusters" **only hide the interface**: created clusters live
+on, their jobs run, the API answers, deployments to clusters work.
+"Assistant" and "MCP" turn off **for real**: when off they answer 403
+with a hint where to turn them on — to the interface and to any API
+token. If the hub
 already has clusters and the setting was never touched, "Clusters" is
 shown. An admin edits it with "Edit": a window with the "now → after"
 difference and history ("restore"); the setting is shared by the hub and
 travels in its export. API: `GET` and `PUT /api/hub/experimental` with
-`{"map": true, "clusters": false}`.
+`{"map": true, "clusters": false, "assistant": false, "mcp": false}`.
 
 ## Installing nkt on hosts
 

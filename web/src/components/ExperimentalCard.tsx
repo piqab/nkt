@@ -10,13 +10,15 @@ import { Banner, Card, DiffView, Modal, formatRelative } from './ui'
 interface Experimental {
   map: boolean
   clusters: boolean
+  assistant: boolean
+  mcp: boolean
 }
 interface State {
   value: Experimental
   history: { ts: string; author?: string; value: Experimental }[]
 }
 
-const KEYS: (keyof Experimental)[] = ['map', 'clusters']
+const KEYS: (keyof Experimental)[] = ['map', 'clusters', 'assistant', 'mcp']
 
 export function ExperimentalCard({ admin }: { admin: boolean }) {
   const { t } = useTranslation()
@@ -75,6 +77,11 @@ function ExperimentalModal({ state, onClose }: { state: State; onClose: () => vo
             <div className="muted" style={{ paddingLeft: '1.5rem' }}>
               {t(`about.expDesc.${k}`)}
             </div>
+            {k === 'mcp' && next.mcp && !state.value.mcp && (
+              <div style={{ paddingLeft: '1.5rem', marginTop: '0.3rem' }}>
+                <Banner kind="warn">{t('about.expMcpWarn')}</Banner>
+              </div>
+            )}
           </div>
         ))}
         {changed && <DiffView text={diff} />}

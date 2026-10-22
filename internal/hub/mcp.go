@@ -97,6 +97,10 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusForbidden, msgs.Errorf("mcp.tokenOnly"))
 		return
 	}
+	if !s.experimental(r.Context()).MCP {
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("mcp.disabled"))
+		return
+	}
 	var req mcpRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&req); err != nil || req.JSONRPC != "2.0" || req.Method == "" {
 		writeJSON(w, http.StatusOK, mcpResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &mcpError{Code: -32700, Message: "parse error"}})

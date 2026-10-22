@@ -4,6 +4,11 @@ title: MCP for AI agents
 
 # MCP: the hub as an AI agent's tools
 
+::: tip Turned on in “About”
+MCP works when “MCP for AI agents” is on in “About” → “Experimental
+features” (off by default; when off it answers 403 to any token).
+:::
+
 The hub is an [MCP](https://modelcontextprotocol.io) (Model Context
 Protocol) server: Claude Code, Claude Desktop, Cursor and other agents see
 nkt as a set of tools — hosts, findings, pipelines, scripts, stack moves,

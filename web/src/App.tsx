@@ -587,7 +587,7 @@ function Shell({
       { key: 'deploy', icon: <RocketOutlined />, label: t('nav.deploy') },
       { key: 'fly', icon: <ApiOutlined />, label: 'Traffic Fly' },
       // Ассистент — администратору: он открывает разделы хостов через хаб.
-      ...(me.is_admin ? [{ key: 'assistant', icon: <RobotOutlined />, label: t('nav.assistant') }] : []),
+      ...(me.is_admin && me.experimental?.assistant ? [{ key: 'assistant', icon: <RobotOutlined />, label: t('nav.assistant') }] : []),
       {
         key: 'about',
         icon: navIcon(<InfoCircleOutlined />, hubUpdate.data?.update_available ? 1 : 0, false, collapsed),
