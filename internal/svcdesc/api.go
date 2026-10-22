@@ -145,11 +145,21 @@ func SetProfile(dataDir string, items []Named) error {
 		return err
 	}
 	for _, it := range items {
-		tmp := filepath.Join(dir, "."+it.Name+".tmp")
+		// Имя уже проверено Parse (nameRe); здесь — ещё раз явно: только
+		// имя файла внутри каталога профиля.
+		name := filepath.Base(it.Name)
+		if name != it.Name || !nameRe.MatchString(name) {
+			return msgs.Errorf("svcdesc.badName", it.Name)
+		}
+		final := filepath.Join(dir, name+".yaml")
+		tmp := filepath.Join(dir, "."+name+".tmp")
+		if filepath.Dir(final) != filepath.Clean(dir) || filepath.Dir(tmp) != filepath.Clean(dir) {
+			return msgs.Errorf("svcdesc.badName", it.Name)
+		}
 		if err := os.WriteFile(tmp, []byte(it.Content), 0o644); err != nil {
 			return err
 		}
-		if err := os.Rename(tmp, filepath.Join(dir, it.Name+".yaml")); err != nil {
+		if err := os.Rename(tmp, final); err != nil {
 			return err
 		}
 	}

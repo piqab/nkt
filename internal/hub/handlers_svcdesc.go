@@ -37,7 +37,9 @@ type svcDescCheck struct {
 	Endpoints int    `json:"endpoints"`
 	Upstreams int    `json:"upstreams"`
 	Rules     int    `json:"rules"`
-	Error     string `json:"error,omitempty"`
+	// RootCommands — команды-источники с as_root (идут от root).
+	RootCommands []string `json:"root_commands,omitempty"`
+	Error        string   `json:"error,omitempty"`
 }
 
 func checkSvcDesc(lang msgs.Lang, content string) (svcDescCheck, *svcdesc.Descriptor) {
@@ -48,8 +50,14 @@ func checkSvcDesc(lang msgs.Lang, content string) (svcDescCheck, *svcdesc.Descri
 	if err != nil {
 		return svcDescCheck{Error: msgs.Localize(lang, err)}, nil
 	}
-	return svcDescCheck{Name: d.Name, Title: d.Title, Engine: d.Engine, Disabled: d.Disabled, Sources: len(d.Sources),
-		Endpoints: len(d.Extract.Endpoints), Upstreams: len(d.Extract.Upstreams), Rules: len(d.Rules)}, d
+	c := svcDescCheck{Name: d.Name, Title: d.Title, Engine: d.Engine, Disabled: d.Disabled, Sources: len(d.Sources),
+		Endpoints: len(d.Extract.Endpoints), Upstreams: len(d.Extract.Upstreams), Rules: len(d.Rules)}
+	for _, s := range d.Sources {
+		if s.AsRoot && len(s.Command) > 0 {
+			c.RootCommands = append(c.RootCommands, strings.Join(s.Command, " "))
+		}
+	}
+	return c, d
 }
 
 // svcDescBuiltin — встроенное описание (текст из nkt).
@@ -158,7 +166,7 @@ func (s *Server) svcDescSave(w http.ResponseWriter, r *http.Request, existing *s
 			writeErr(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		s.db.Audit(ctx, user, "svcdesc.create", d.Name, "ok", nil)
+		s.db.Audit(ctx, user, "svcdesc.create", d.Name, "ok", map[string]any{"root_commands": c.RootCommands})
 		writeJSON(w, http.StatusOK, map[string]any{"id": id, "name": d.Name})
 		return
 	}
@@ -166,7 +174,7 @@ func (s *Server) svcDescSave(w http.ResponseWriter, r *http.Request, existing *s
 		fail(w, r, err)
 		return
 	}
-	s.db.Audit(ctx, user, "svcdesc.update", d.Name, "ok", map[string]any{"was": existing.Name})
+	s.db.Audit(ctx, user, "svcdesc.update", d.Name, "ok", map[string]any{"was": existing.Name, "root_commands": c.RootCommands})
 	writeJSON(w, http.StatusOK, map[string]any{"id": existing.ID, "name": d.Name})
 }
 

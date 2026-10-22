@@ -602,18 +602,37 @@ func (l *Local) HTTPGet(ctx context.Context, url string, headers map[string]stri
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Только этот хост и внутренняя сеть (CheckLocalURL): и по адресу, и
+	// при соединении; перенаправления не идут.
+	u, err := CheckLocalURL(url)
+	if err != nil {
+		return nil, 0, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, 0, err
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := localHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
 	return body, resp.StatusCode, err
+}
+
+// RealPath implements Collector.
+func (l *Local) RealPath(p string) (string, error) { return filepath.EvalSymlinks(p) }
+
+// localHTTPClient — клиент HTTP-источников: соединения только к адресам
+// LocalAddr, без перенаправлений.
+var localHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy:       nil,
+		DialContext: (&net.Dialer{Timeout: 10 * time.Second, Control: localOnlyControl}).DialContext,
+	},
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }

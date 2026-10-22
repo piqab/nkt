@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.83 — 2026-10-22
+
+- **Your own services, secured.** Description command sources now run as
+  the nobody user — even a wrong command changes nothing on the host; as
+  root only with an explicit `as_root: true` (the built-in RabbitMQ
+  description has it), and the hub marks such descriptions (“commands as
+  root”) and writes them to the audit log. HTTP sources reach only this
+  host and the internal network, with no redirects. Password and token
+  files can't be in closed paths, and a symlink to a closed file isn't
+  read.
+- CodeQL and gosec findings fixed: the HTTP source address check, an
+  explicit file name check when writing descriptions, number bounds, the
+  rescan context.
+
 ## v1.13.82 — 2026-10-22
 
 - **Docs with examples for everything new.** “Your own services” → “More

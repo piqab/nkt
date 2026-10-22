@@ -1,6 +1,6 @@
-# RabbitMQ: listeners — rabbitmq-diagnostics listeners (read-only; the
-# Debian wrapper runs the CLI as the rabbitmq user), version —
-# server_version, settings — rabbitmq.conf.
+# RabbitMQ: listeners — rabbitmq-diagnostics listeners (read-only;
+# as_root: the Debian wrapper switches the CLI to the rabbitmq user and
+# needs root for that), version — server_version, settings — rabbitmq.conf.
 name: rabbitmq
 title: RabbitMQ
 unit: rabbitmq-server
@@ -11,11 +11,13 @@ detect:
 sources:
   - id: listeners
     command: [rabbitmq-diagnostics, -q, listeners, --formatter, json]
+    as_root: true
     interval: 5m
     timeout: 30s
     optional: true
   - id: version
     command: [rabbitmq-diagnostics, -q, server_version]
+    as_root: true
     format: text
     interval: 1h
     timeout: 30s

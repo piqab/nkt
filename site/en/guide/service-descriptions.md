@@ -138,23 +138,32 @@ A source has an `id` and exactly one of:
   own document. A file is re-read only when its modification time or size
   changes; over 8 MB it isn't read. Files go to “Configs”
   (`editable: false` — view only).
-- **`http`** — the program's API address. `interval` — how long the
+- **`http`** — the program's API address **on this host or in the
+  internal network**: `localhost` or an IP from 127.0.0.0/8, ::1, 10/8,
+  172.16/12, 192.168/16, fc00::/7, link-local; the address is checked on
+  connect too, redirects are not followed. `interval` — how long the
   answer lives (every scan by default), `timeout` — 5 s by default, at
   most a minute. No login and password in the address and no
   `Authorization`/`Cookie` headers: `basic_auth: {user: …, password_file:
   /path}` or `bearer_file: /path` — the secret is read from a file on the
-  host and is not stored in the description (and so not on the hub).
-- **`command`** — a **read-only** command as an argument list:
-  `[rabbitmqctl, list_queues, --formatter, json]`. No shell: `sh`, `bash`,
-  `sudo`, `env`, interpreters and anything that runs other commands are
-  forbidden. It runs as the same user as the nkt service, with `timeout`
-  and an 8 MB output limit; `interval` works as for HTTP.
+  host and is not stored in the description (and so not on the hub); the
+  secret file can't be a closed path.
+- **`command`** — a command as an argument list:
+  `[consul, members, -format=json]`. No shell: `sh`, `bash`, `sudo`,
+  `env`, interpreters and anything that runs other commands are forbidden.
+  The command runs **as the nobody user** (`setpriv`, no groups, no new
+  privileges): even a wrong command changes nothing on the host. If the
+  program needs root (or switches to its own user, like
+  `rabbitmq-diagnostics`), set `as_root: true`: the hub marks such
+  descriptions (“commands as root”) and writes them to the audit log.
+  `timeout` and an 8 MB output limit; `interval` works as for HTTP.
 
 `optional: true` — a missing file or answer is not a warning.
 
 Closed paths are never read: `/etc/shadow`, sudoers, private keys (`.ssh`,
 `ssh_host_*`, `*.key`, `privkey`), `/root`, `/proc`, nkt's settings and
-data.
+data. The real path is checked: a symlink to a closed file isn't read,
+just like the file itself.
 
 ### Formats
 
@@ -521,7 +530,9 @@ rules:
     object: "@.Name"
 ```
 
-The command is an argument list, no shell; its output is JSON. Result:
+The command is an argument list, no shell; its output is JSON. It runs as
+nobody: `consul members` asks the local agent over the network and needs
+no root, so `as_root` isn't set. Result:
 version 1.18.1, the finding “node node-2 is failed” for every node not
 `alive`.
 
@@ -593,7 +604,7 @@ overridden with your own with the same `name` or turned off
 | Service | What it reads | Findings |
 |---|---|---|
 | **Traefik** | `/etc/traefik/traefik.yml` or `.toml` — entryPoints (tcp/udp, TLS); `/etc/traefik/dynamic/*.yml` and, if the API is open on 127.0.0.1:8080, `/api/rawdata` — services of every provider (Docker too) with backend addresses; version — `/api/version` | dashboard and API without protection (`api.insecure`); backend certificates not verified (`insecureSkipVerify`) |
-| **RabbitMQ** | `rabbitmq-diagnostics listeners` — every listener (AMQP, TLS, management, MQTT, STOMP); version — `server_version`; `rabbitmq.conf` | guest can log in over the network; management over HTTP on all addresses |
+| **RabbitMQ** | `rabbitmq-diagnostics listeners` (`as_root`) — every listener (AMQP, TLS, management, MQTT, STOMP); version — `server_version`; `rabbitmq.conf` | guest can log in over the network; management over HTTP on all addresses |
 | **Redis** | `redis.conf` (Debian and RHEL) — bind, port, tls-port | all addresses without a password; protected-mode off without a password |
 | **PostgreSQL** | `postgresql.conf` and `pg_hba.conf` of every cluster (`/etc/postgresql/*/*`, `/var/lib/pgsql`) | network login without a password (trust) — critical; login from every address; cleartext password; all addresses without SSL |
 | **Mosquitto** | `mosquitto.conf` and `conf.d` — listeners with their settings (TLS, websockets) | login without credentials (`allow_anonymous true`) — global and per listener |

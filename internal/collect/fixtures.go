@@ -470,6 +470,9 @@ func (f *Fixtures) HostInfo(ctx context.Context) HostInfo {
 // HTTPGet implements Collector: ответы — из .http/index.json
 // ({"адрес": "файл в .http"}); нет адреса — 404.
 func (f *Fixtures) HTTPGet(_ context.Context, url string, _ map[string]string, _ time.Duration) ([]byte, int, error) {
+	if _, err := CheckLocalURL(url); err != nil {
+		return nil, 0, err
+	}
 	dir := filepath.Join(f.root, ".http")
 	raw, err := os.ReadFile(filepath.Join(dir, "index.json"))
 	if err != nil {
@@ -492,4 +495,32 @@ func (f *Fixtures) HTTPGet(_ context.Context, url string, _ map[string]string, _
 		}
 	}
 	return nil, 0, msgs.Errorf("collect.httpFixture", url)
+}
+
+// RealPath implements Collector: путь внутри снимка после ссылок; ссылка
+// за пределы снимка — ошибка (как закрытый путь).
+func (f *Fixtures) RealPath(p string) (string, error) {
+	local, err := f.resolve(p)
+	if err != nil {
+		return "", err
+	}
+	if local, err = filepath.Abs(local); err != nil {
+		return "", err
+	}
+	real, err := filepath.EvalSymlinks(local)
+	if err != nil {
+		return "", err
+	}
+	rootAbs, err := filepath.Abs(f.root)
+	if err != nil {
+		return "", err
+	}
+	if rootAbs, err = filepath.EvalSymlinks(rootAbs); err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(rootAbs, real)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+		return "", msgs.Errorf("collect.outsideFixtures", p)
+	}
+	return "/" + filepath.ToSlash(rel), nil
 }

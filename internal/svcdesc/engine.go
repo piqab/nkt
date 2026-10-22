@@ -627,7 +627,7 @@ func fieldText(fields map[string]*Expr, name string, c Ctx) string {
 func buildEndpoint(d *Descriptor, r EndpointRule, c Ctx) (model.Endpoint, bool) {
 	f := r.fields
 	port := 0
-	if v, ok := num(field(f, "port", c)); ok {
+	if v, ok := num(field(f, "port", c)); ok && v >= 1 && v <= 65535 {
 		port = int(v)
 	}
 	if port <= 0 || port > 65535 {
@@ -696,10 +696,10 @@ func buildUpstream(d *Descriptor, r UpstreamRule, c Ctx) model.Upstream {
 				srv.Port = p
 			}
 		}
-		if v, ok := num(field(sf, "port", sc)); ok && v > 0 {
+		if v, ok := num(field(sf, "port", sc)); ok && v >= 1 && v <= 65535 {
 			srv.Port = int(v)
 		}
-		if v, ok := num(field(sf, "weight", sc)); ok {
+		if v, ok := num(field(sf, "weight", sc)); ok && v >= 0 && v <= 1e6 {
 			srv.Weight = int(v)
 		}
 		if e := sf["backup"]; e != nil {

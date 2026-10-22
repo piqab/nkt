@@ -105,8 +105,13 @@ type Source struct {
 	File string `yaml:"file,omitempty" json:"file,omitempty"`
 	// HTTP — адрес (http/https, без логина и пароля в адресе).
 	HTTP string `yaml:"http,omitempty" json:"http,omitempty"`
-	// Command — команда только для чтения: argv, без оболочки.
+	// Command — команда только для чтения: argv, без оболочки. Идёт от
+	// пользователя nobody (setpriv), если служба nkt — root.
 	Command []string `yaml:"command,omitempty" json:"command,omitempty"`
+	// AsRoot — команда от root (CLI, которым нужен root или которые сами
+	// переключаются на своего пользователя, как rabbitmq-diagnostics).
+	// Хаб помечает такие описания и пишет это в журнал действий.
+	AsRoot bool `yaml:"as_root,omitempty" json:"as_root,omitempty"`
 	// Format — см. Formats; у файла по умолчанию — по расширению, у HTTP
 	// и команды — json.
 	Format  string        `yaml:"format,omitempty" json:"format,omitempty"`

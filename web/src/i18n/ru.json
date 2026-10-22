@@ -5108,6 +5108,7 @@
     "asEachExact": "each: этот узел",
     "asField": "в поле (от each)",
     "field": "поле",
-    "items": "элементов: {{count}}"
+    "items": "элементов: {{count}}",
+    "asRoot": "команды от root: {{count}}"
   }
 }

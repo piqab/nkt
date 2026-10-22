@@ -5086,6 +5086,7 @@
     "asEachExact": "each: this node",
     "asField": "into the field (from each)",
     "field": "field",
-    "items": "{{count}} items"
+    "items": "{{count}} items",
+    "asRoot": "commands as root: {{count}}"
   }
 }
