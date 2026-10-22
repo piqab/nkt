@@ -193,10 +193,21 @@ func (a *tokenAuth) Authenticate(r *http.Request) (context.Context, error) {
 		return nil, tokenDeny(http.StatusTooManyRequests, "auth.tokenTooMany")
 	}
 	edgeName, byEdge := viaEdge(r.Context())
-	if byEdge && r.Header.Get("X-NKT-API-Signature") == "" {
-		return nil, tokenDeny(http.StatusUnauthorized, "auth.tokenEdgeSigned")
+	// Внутренний вызов MCP: запрос агента уже проверен (подпись, edge).
+	t, internal, err := a.mcpInternalToken(r)
+	if internal {
+		if err != nil {
+			return nil, err
+		}
+		// Дальше (прокси на хост) пометка не уходит.
+		r.Header.Del(mcpInternalHeader)
+		byEdge = false
+	} else {
+		if byEdge && r.Header.Get("X-NKT-API-Signature") == "" {
+			return nil, tokenDeny(http.StatusUnauthorized, "auth.tokenEdgeSigned")
+		}
+		t, err = a.verify(r)
 	}
-	t, err := a.verify(r)
 	if err != nil {
 		var te *auth.TokenError
 		if errors.As(err, &te) && te.Code == http.StatusUnauthorized {
@@ -365,6 +376,9 @@ var tokenHubRoutes = map[string]bool{
 	"POST /hub/fly/ops":                true,
 	"POST /hub/fly/routes/{id}/switch": true,
 	"POST /hub/fly/apply":              true,
+	// MCP: инструменты — внутренние вызовы этого же API под тем же
+	// токеном (mcp.go), права — их.
+	"POST /mcp": false,
 	// Кластеры: смотреть и применять манифесты; создание, удаление,
 	// обновление, kubeconfig и Helm — нет.
 	"GET /hub/clusters":             false,

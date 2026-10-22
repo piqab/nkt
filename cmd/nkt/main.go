@@ -139,6 +139,9 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 	case "version":
 		fmt.Printf("netknownsthat %s\n", version)
 		return nil
+	case "mcp":
+		// MCP для ИИ-агентов: stdio → хаб (NKT_HUB_URL, NKT_API_TOKEN).
+		return runMCP(os.Stdin, os.Stdout)
 	case "health":
 		// Проверка здоровья контейнера: HTTP или HTTPS (NKT_TLS_ENABLED).
 		return runHealth()

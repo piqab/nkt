@@ -1,0 +1,424 @@
+package hub
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
+)
+
+// MCP-сервер хаба (Model Context Protocol, транспорт Streamable HTTP,
+// POST /api/mcp): ИИ-агенты (Claude Code, Claude Desktop, Cursor…) видят
+// nkt как набор инструментов. Только по API-токену, и каждый инструмент —
+// внутренний вызов того же API хаба под тем же токеном: роли, пределы по
+// хостам и закрытые вызовы — те же, что у токена (tokenPolicy), отдельной
+// копии проверок здесь нет. Токен администратора выполняет действия сразу,
+// без подтверждения человеком — так задумано для агентов; журнал действий
+// пишет их как token:<имя>.
+
+// mcpProtocol — версия протокола, которую сервер знает.
+const mcpProtocol = "2025-06-18"
+
+// mcpInternalHeader — пометка внутреннего вызова: «<секрет>:<id токена>».
+// Секрет живёт только в памяти процесса: подписанный запрос агента второй
+// раз не предъявить (nonce), а внутренний вызов идёт уже проверенным.
+const mcpInternalHeader = "X-NKT-MCP-Internal"
+
+var mcpSecret = func() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}()
+
+// mcpInternalToken — токен внутреннего вызова (ok=false — заголовка нет).
+func (a *tokenAuth) mcpInternalToken(r *http.Request) (store.APIToken, bool, error) {
+	v := r.Header.Get(mcpInternalHeader)
+	if v == "" {
+		return store.APIToken{}, false, nil
+	}
+	secret, id, ok := strings.Cut(v, ":")
+	if !ok || subtle.ConstantTimeCompare([]byte(secret), []byte(mcpSecret)) != 1 {
+		return store.APIToken{}, true, tokenDeny(http.StatusUnauthorized, "auth.tokenInvalid")
+	}
+	n, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return store.APIToken{}, true, tokenDeny(http.StatusUnauthorized, "auth.tokenInvalid")
+	}
+	t, err := a.s.db.APITokenByID(r.Context(), n)
+	if err != nil {
+		return store.APIToken{}, true, tokenDeny(http.StatusUnauthorized, "auth.tokenInvalid")
+	}
+	return t, true, nil
+}
+
+type mcpRequest struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id,omitempty"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+type mcpError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+type mcpResponse struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Result  any             `json:"result,omitempty"`
+	Error   *mcpError       `json:"error,omitempty"`
+}
+
+// handleMCP — POST /api/mcp: JSON-RPC 2.0 одним сообщением; уведомления —
+// 202 без тела. GET (поток событий от сервера) не поддерживается — 405.
+func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeError(w, http.StatusMethodNotAllowed, "POST")
+		return
+	}
+	tok, ok := tokenFromContext(r.Context())
+	if !ok {
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("mcp.tokenOnly"))
+		return
+	}
+	var req mcpRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&req); err != nil || req.JSONRPC != "2.0" || req.Method == "" {
+		writeJSON(w, http.StatusOK, mcpResponse{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &mcpError{Code: -32700, Message: "parse error"}})
+		return
+	}
+	if len(req.ID) == 0 { // уведомление (notifications/initialized и т. п.)
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	resp := mcpResponse{JSONRPC: "2.0", ID: req.ID}
+	switch req.Method {
+	case "initialize":
+		var p struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		version := mcpProtocol
+		if p.ProtocolVersion != "" && p.ProtocolVersion <= mcpProtocol {
+			version = p.ProtocolVersion
+		}
+		resp.Result = map[string]any{
+			"protocolVersion": version,
+			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+			"serverInfo":      map[string]any{"name": "nkt-hub", "version": s.hub.Version()},
+			"instructions":    mcpInstructions,
+		}
+	case "ping":
+		resp.Result = map[string]any{}
+	case "tools/list":
+		var tools []map[string]any
+		for _, t := range mcpTools {
+			if t.allowed(tok) {
+				tools = append(tools, t.describe())
+			}
+		}
+		resp.Result = map[string]any{"tools": tools}
+	case "tools/call":
+		var p struct {
+			Name      string         `json:"name"`
+			Arguments map[string]any `json:"arguments"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			resp.Error = &mcpError{Code: -32602, Message: "invalid params"}
+			break
+		}
+		resp.Result = s.mcpCall(r, tok, p.Name, p.Arguments)
+	default:
+		resp.Error = &mcpError{Code: -32601, Message: "method not found: " + req.Method}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+const mcpInstructions = `nkt hub: Linux hosts, their findings, services, containers, deployments (pipelines), saved scripts, stack moves between hosts, Traffic Fly (ingress through a VPS gateway) and Kubernetes clusters. Tools act with the API token's role and host scope. Prefer the dry-run variants before changing anything; long operations return a job_id — pass "wait": true to get the outcome and log.`
+
+// mcpText — ответ инструмента текстом.
+func mcpText(text string, isError bool) map[string]any {
+	return map[string]any{"content": []map[string]any{{"type": "text", "text": text}}, "isError": isError}
+}
+
+// mcpCall — инструмент: внутренний вызов API хаба под тем же токеном.
+func (s *Server) mcpCall(r *http.Request, tok store.APIToken, name string, args map[string]any) map[string]any {
+	var tool *mcpTool
+	for i := range mcpTools {
+		if mcpTools[i].Name == name {
+			tool = &mcpTools[i]
+		}
+	}
+	if tool == nil || !tool.allowed(tok) {
+		return mcpText("unknown or not allowed tool: "+name, true)
+	}
+	path, body, err := tool.build(args)
+	if err != nil {
+		return mcpText(err.Error(), true)
+	}
+	code, out := s.mcpInternal(r, tok, tool.Method, path, body)
+	if code >= 400 {
+		return mcpText(fmt.Sprintf("HTTP %d: %s", code, out), true)
+	}
+	if wait, _ := args["wait"].(bool); wait && tool.Job {
+		var started struct {
+			JobID int64 `json:"job_id"`
+		}
+		if json.Unmarshal([]byte(out), &started) == nil && started.JobID > 0 {
+			return s.mcpWaitJob(r, tok, started.JobID, args)
+		}
+	}
+	return mcpText(out, false)
+}
+
+// mcpWaitJob — задание хаба до конца (или до timeout): состояние и хвост
+// журнала.
+func (s *Server) mcpWaitJob(r *http.Request, tok store.APIToken, id int64, args map[string]any) map[string]any {
+	timeout := 600 * time.Second
+	if v, ok := args["timeout"].(float64); ok && v > 0 {
+		timeout = min(time.Duration(v)*time.Second, time.Hour)
+	}
+	deadline := time.Now().Add(timeout)
+	path := "/hub/jobs/" + strconv.FormatInt(id, 10)
+	var job struct {
+		Status string `json:"status"`
+		Error  string `json:"error"`
+	}
+	for {
+		code, out := s.mcpInternal(r, tok, http.MethodGet, path, nil)
+		if code >= 400 {
+			return mcpText(fmt.Sprintf("job %d: HTTP %d: %s", id, code, out), true)
+		}
+		_ = json.Unmarshal([]byte(out), &job)
+		if job.Status != store.JobQueued && job.Status != store.JobRunning && job.Status != store.JobInterrupted {
+			break
+		}
+		if time.Now().After(deadline) {
+			return mcpText(fmt.Sprintf(`{"job_id":%d,"status":%q,"timed_out":true}`, id, job.Status), false)
+		}
+		select {
+		case <-r.Context().Done():
+			return mcpText("cancelled", true)
+		case <-time.After(3 * time.Second):
+		}
+	}
+	_, logRaw := s.mcpInternal(r, tok, http.MethodGet, path+"/log?after=0", nil)
+	var log struct {
+		Lines []struct {
+			Text string `json:"text"`
+		} `json:"lines"`
+	}
+	_ = json.Unmarshal([]byte(logRaw), &log)
+	lines := make([]string, 0, len(log.Lines))
+	for _, l := range log.Lines {
+		lines = append(lines, l.Text)
+	}
+	if len(lines) > 200 {
+		lines = append([]string{"…"}, lines[len(lines)-200:]...)
+	}
+	res, _ := json.Marshal(map[string]any{"job_id": id, "status": job.Status, "error": job.Error, "succeeded": job.Status == store.JobSucceeded, "log": lines})
+	return mcpText(string(res), job.Status != store.JobSucceeded)
+}
+
+// mcpResultLimit — предел ответа инструмента.
+const mcpResultLimit = 200 << 10
+
+// mcpInternal — вызов API хаба под токеном агента: тот же роутер, те же
+// проверки прав.
+func (s *Server) mcpInternal(r *http.Request, tok store.APIToken, method, path string, body any) (int, string) {
+	var rd io.Reader
+	if body != nil {
+		raw, _ := json.Marshal(body)
+		rd = bytes.NewReader(raw)
+	}
+	// Чистый контекст: с пользователем из исходного запроса RequireAuth
+	// пропустил бы вызов без проверок токена (tokenPolicy).
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer context.AfterFunc(r.Context(), cancel)()
+	sub, err := http.NewRequestWithContext(ctx, method, "/api"+path, rd)
+	if err != nil {
+		return http.StatusBadRequest, err.Error()
+	}
+	// Адрес клиента — тот, что проверен у исходного запроса (список
+	// адресов токена).
+	sub.RemoteAddr = net.JoinHostPort(tokenClientIP(r), "0")
+	sub.Header.Set("Content-Type", "application/json")
+	sub.Header.Set(mcpInternalHeader, mcpSecret+":"+strconv.FormatInt(tok.ID, 10))
+	sub.Header.Set("Accept-Language", r.Header.Get("Accept-Language"))
+	rec := httptest.NewRecorder()
+	s.apiRouter.ServeHTTP(rec, sub)
+	out := rec.Body.String()
+	if len(out) > mcpResultLimit {
+		out = out[:mcpResultLimit] + "\n…(truncated)"
+	}
+	return rec.Code, out
+}
+
+// mcpTool — инструмент: имя, описание, схема входа и вызов API.
+type mcpTool struct {
+	Name, Description string
+	// Method, Path — вызов; {имя} в пути — из аргументов (числа или имена).
+	Method, Path string
+	// Props — свойства схемы входа: имя → {type, description}; Required.
+	Props    map[string]map[string]any
+	Required []string
+	// Body — какие аргументы уходят телом JSON (пусто — без тела).
+	Body []string
+	// Admin — нужен токен администратора; Fly — только токен без предела.
+	Admin, Fly bool
+	// Job — вызов возвращает job_id: доступен «wait».
+	Job bool
+	// ReadOnly / Destructive — подсказки агенту (annotations).
+	ReadOnly, Destructive bool
+}
+
+func (t mcpTool) allowed(tok store.APIToken) bool {
+	if t.Admin && tok.Role != store.TokenRoleAdmin {
+		return false
+	}
+	return !(t.Fly && tok.Scoped())
+}
+
+func (t mcpTool) describe() map[string]any {
+	props := map[string]any{}
+	for k, v := range t.Props {
+		props[k] = v
+	}
+	if t.Job {
+		props["wait"] = map[string]any{"type": "boolean", "description": "Wait for the hub job to finish and return its status and log"}
+		props["timeout"] = map[string]any{"type": "number", "description": "Seconds to wait (default 600, max 3600)"}
+	}
+	schema := map[string]any{"type": "object", "properties": props}
+	if len(t.Required) > 0 {
+		schema["required"] = t.Required
+	}
+	return map[string]any{
+		"name": t.Name, "description": t.Description, "inputSchema": schema,
+		"annotations": map[string]any{"readOnlyHint": t.ReadOnly, "destructiveHint": t.Destructive, "openWorldHint": false},
+	}
+}
+
+var mcpPathArg = regexp.MustCompile(`\{([a-z_]+)\}`)
+var mcpSafeSegment = regexp.MustCompile(`^-?[A-Za-z0-9._-]{1,128}$`)
+
+// build — путь (с подставленными аргументами) и тело.
+func (t mcpTool) build(args map[string]any) (string, any, error) {
+	var bad error
+	path := mcpPathArg.ReplaceAllStringFunc(t.Path, func(m string) string {
+		name := m[1 : len(m)-1]
+		v := fmt.Sprint(args[name])
+		if f, ok := args[name].(float64); ok {
+			v = strconv.FormatInt(int64(f), 10)
+		}
+		if args[name] == nil || !mcpSafeSegment.MatchString(v) {
+			bad = fmt.Errorf("argument %s: missing or not a plain value", name)
+		}
+		return v
+	})
+	if bad != nil {
+		return "", nil, bad
+	}
+	if q, ok := args["after"].(float64); ok && t.Method == http.MethodGet {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		path += sep + "after=" + strconv.FormatInt(int64(q), 10)
+	}
+	if len(t.Body) == 0 {
+		return path, nil, nil
+	}
+	body := map[string]any{}
+	for _, k := range t.Body {
+		if v, ok := args[k]; ok {
+			body[k] = v
+		}
+	}
+	return path, body, nil
+}
+
+func prop(typ, desc string) map[string]any { return map[string]any{"type": typ, "description": desc} }
+
+// mcpTools — инструменты: то, что открыто API-токену (apitokens.go).
+var mcpTools = []mcpTool{
+	{Name: "list_hosts", Description: "Hosts in the token's scope: status, nkt version, problem counts.", Method: "GET", Path: "/hub/hosts", ReadOnly: true},
+	{Name: "host_overview", Description: "Overview of a host: OS, uptime, counts of findings, listeners, containers.", Method: "GET", Path: "/hosts/{host_id}/overview",
+		Props: map[string]map[string]any{"host_id": prop("integer", "Host id from list_hosts; the hub machine is -1")}, Required: []string{"host_id"}, ReadOnly: true},
+	{Name: "host_findings", Description: "Findings (configuration problems) of a host with severity, detail and suggestion.", Method: "GET", Path: "/hosts/{host_id}/findings",
+		Props: map[string]map[string]any{"host_id": prop("integer", "Host id")}, Required: []string{"host_id"}, ReadOnly: true},
+	{Name: "host_services", Description: "systemd services of a host.", Method: "GET", Path: "/hosts/{host_id}/services",
+		Props: map[string]map[string]any{"host_id": prop("integer", "Host id")}, Required: []string{"host_id"}, ReadOnly: true},
+	{Name: "host_containers", Description: "Docker containers of a host.", Method: "GET", Path: "/hosts/{host_id}/containers",
+		Props: map[string]map[string]any{"host_id": prop("integer", "Host id")}, Required: []string{"host_id"}, ReadOnly: true},
+	{Name: "list_alerts", Description: "Hub alerts newer than an id.", Method: "GET", Path: "/hub/events",
+		Props: map[string]map[string]any{"after": prop("integer", "Return alerts with id greater than this (0 — recent)")}, ReadOnly: true},
+	{Name: "list_pipelines", Description: "Deployment pipelines with their last deployment.", Method: "GET", Path: "/hub/pipelines", ReadOnly: true},
+	{Name: "job_status", Description: "A hub job: status (queued, running, succeeded, failed) and error.", Method: "GET", Path: "/hub/jobs/{job_id}",
+		Props: map[string]map[string]any{"job_id": prop("integer", "Job id")}, Required: []string{"job_id"}, ReadOnly: true},
+	{Name: "job_log", Description: "Log lines of a hub job.", Method: "GET", Path: "/hub/jobs/{job_id}/log",
+		Props: map[string]map[string]any{"job_id": prop("integer", "Job id"), "after": prop("integer", "Line number to continue after (0 — from the start)")}, Required: []string{"job_id"}, ReadOnly: true},
+	{Name: "list_scripts", Description: "Saved hub scripts.", Method: "GET", Path: "/hub/scripts", ReadOnly: true},
+	{Name: "get_script", Description: "Text of a saved hub script.", Method: "GET", Path: "/hub/scripts/{script_id}",
+		Props: map[string]map[string]any{"script_id": prop("integer", "Script id")}, Required: []string{"script_id"}, ReadOnly: true},
+	{Name: "list_migrations", Description: "Record of stack moves between hosts.", Method: "GET", Path: "/hub/migrations", ReadOnly: true},
+	{Name: "list_clusters", Description: "Kubernetes clusters and their nodes.", Method: "GET", Path: "/hub/clusters", ReadOnly: true},
+	{Name: "fly_map", Description: "Traffic Fly map: routes, targets, gateways.", Method: "GET", Path: "/hub/fly", ReadOnly: true, Fly: true},
+	{Name: "fly_status", Description: "Traffic Fly status: target health, tunnels, certificates.", Method: "GET", Path: "/hub/fly/status", ReadOnly: true, Fly: true},
+
+	{Name: "check_script", Description: "Parse and check a script text against the hub (steps, errors, questions asked at start). Changes nothing.", Method: "POST", Path: "/hub/scripts/check",
+		Props: map[string]map[string]any{"content": prop("string", "Script text")}, Required: []string{"content"}, Body: []string{"content"}, Admin: true, ReadOnly: true},
+	{Name: "run_script", Description: "Run a saved hub script. dry_run=true only asks the hosts for plans. values — answers to the start questions, e.g. {\"param:FROM\":\"web1\"}.", Method: "POST", Path: "/hub/scripts/{script_id}/run",
+		Props:    map[string]map[string]any{"script_id": prop("integer", "Script id"), "dry_run": prop("boolean", "Only plan, change nothing"), "values": prop("object", "Answers to the script's questions")},
+		Required: []string{"script_id"}, Body: []string{"dry_run", "values"}, Admin: true, Job: true, Destructive: true},
+	{Name: "deploy_pipeline", Description: "Deploy a pipeline (optionally a ref or tag).", Method: "POST", Path: "/hub/pipelines/{pipeline_id}/deploy",
+		Props:    map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id"), "ref": prop("string", "Branch (empty — the pipeline's)"), "tag": prop("string", "Tag (empty — branch head)")},
+		Required: []string{"pipeline_id"}, Body: []string{"ref", "tag"}, Admin: true, Job: true, Destructive: true},
+	{Name: "dry_run_pipeline", Description: "Dry run of a saved pipeline: checks hosts, images, ports, site; changes nothing.", Method: "POST", Path: "/hub/pipelines/dryrun",
+		Props: map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id")}, Required: []string{"pipeline_id"}, Body: []string{"pipeline_id"}, Admin: true, Job: true, ReadOnly: true},
+	{Name: "migrate_preview", Description: "Plan of moving a container's stack to another host: what travels, obstacles, Traffic Fly routes, pipeline.", Method: "POST", Path: "/hub/migrate/preview",
+		Props:    map[string]map[string]any{"from": prop("integer", "Host id the stack runs on"), "to": prop("integer", "Target host id"), "container": prop("string", "A container of the stack")},
+		Required: []string{"from", "to", "container"}, Body: []string{"from", "to", "container"}, Admin: true, ReadOnly: true},
+	{Name: "migrate_stack", Description: "Move a container's stack to another host (stops it during the data copy; rolls back on error).", Method: "POST", Path: "/hub/migrate",
+		Props: map[string]map[string]any{"from": prop("integer", "Host id"), "to": prop("integer", "Target host id"), "container": prop("string", "A container of the stack"),
+			"switch_fly": prop("boolean", "Switch Traffic Fly targets to the new host"), "switch_pipeline": prop("boolean", "Switch the stack's pipeline to the new host"), "clean_leftovers": prop("boolean", "Remove leftovers of an earlier copy on the new host")},
+		Required: []string{"from", "to", "container"}, Body: []string{"from", "to", "container", "switch_fly", "switch_pipeline", "clean_leftovers"}, Admin: true, Job: true, Destructive: true},
+	{Name: "migration_action", Description: "After a move: rollback, remove (the stopped old copy; data=true also its volumes) or stopnew (stop the second copy).", Method: "POST", Path: "/hub/migrations/{migration_id}/{action}",
+		Props: map[string]map[string]any{"migration_id": prop("string", "Move record id from list_migrations"), "action": prop("string", "rollback | remove | stopnew"), "data": prop("boolean", "remove: also the volumes"),
+			"skip_new": prop("boolean", "rollback: the new host does not answer — do not stop the copy there")},
+		Required: []string{"migration_id", "action"}, Body: []string{"data", "skip_new"}, Admin: true, Job: true, Destructive: true},
+	{Name: "fly_apply", Description: "Apply the Traffic Fly map to gateways and hosts (dry_run=true only checks).", Method: "POST", Path: "/hub/fly/apply",
+		Props: map[string]map[string]any{"dry_run": prop("boolean", "Only check")}, Body: []string{"dry_run"}, Admin: true, Fly: true, Job: true, Destructive: true},
+	{Name: "fly_ops", Description: "Point changes to Traffic Fly route targets: [{op: add|remove|active|reserve|drain, route, target?, host_id?, kind?, ref?, port?}].", Method: "POST", Path: "/hub/fly/ops",
+		Props: map[string]map[string]any{"ops": prop("array", "Operations"), "note": prop("string", "Version note")}, Required: []string{"ops"}, Body: []string{"ops", "note"}, Admin: true, Fly: true, Job: true, Destructive: true},
+	{Name: "manifest_diff", Description: "kubectl diff of a manifest against clusters.", Method: "POST", Path: "/hub/k8s/manifests/diff",
+		Props:    map[string]map[string]any{"name": prop("string", "Manifest name"), "content": prop("string", "YAML"), "clusters": prop("array", "Cluster ids")},
+		Required: []string{"name", "content", "clusters"}, Body: []string{"name", "content", "clusters"}, Admin: true, ReadOnly: true},
+	{Name: "manifest_apply", Description: "kubectl apply of a manifest to clusters (saved on the hub with the result).", Method: "POST", Path: "/hub/k8s/manifests/apply?job=1",
+		Props:    map[string]map[string]any{"name": prop("string", "Manifest name"), "content": prop("string", "YAML"), "clusters": prop("array", "Cluster ids"), "note": prop("string", "Note")},
+		Required: []string{"name", "content", "clusters"}, Body: []string{"name", "content", "clusters", "note"}, Admin: true, Job: true, Destructive: true},
+	{Name: "service_action", Description: "start, stop, restart or reload a systemd service on a host.", Method: "POST", Path: "/hosts/{host_id}/services/{name}/{action}",
+		Props:    map[string]map[string]any{"host_id": prop("integer", "Host id"), "name": prop("string", "Service name"), "action": prop("string", "start | stop | restart | reload")},
+		Required: []string{"host_id", "name", "action"}, Admin: true, Destructive: true},
+	{Name: "container_action", Description: "start, stop or restart a Docker container on a host.", Method: "POST", Path: "/hosts/{host_id}/containers/{name}/{action}",
+		Props:    map[string]map[string]any{"host_id": prop("integer", "Host id"), "name": prop("string", "Container name"), "action": prop("string", "start | stop | restart")},
+		Required: []string{"host_id", "name", "action"}, Admin: true, Destructive: true},
+	{Name: "fail2ban_ban", Description: "Ban (action=ban) or unban (action=unban) IP addresses on hosts with fail2ban.", Method: "POST", Path: "/hub/fail2ban/fleet",
+		Props:    map[string]map[string]any{"action": prop("string", "ban | unban"), "ips": prop("array", "IP addresses"), "host_ids": prop("array", "Host ids (empty — all with fail2ban)")},
+		Required: []string{"action", "ips"}, Body: []string{"action", "ips", "host_ids"}, Admin: true, Job: true, Destructive: true},
+}
