@@ -96,3 +96,14 @@ func ScriptFixPrompt(lang msgs.Lang, text, issues string) string {
 	}
 	return "Проверка хаба нашла ошибки в твоём сценарии:\n" + issues + "\nИсправь их. Сценарий:\n```\n" + text + "```\nОтвет — весь исправленный сценарий одним блоком ``` и больше ничего."
 }
+
+// FixScriptHint — к разбору находки на хосте: исправление ещё и сценарием
+// nkt в отдельном блоке ```nkt (только командами из списка).
+func FixScriptHint(lang msgs.Lang, host, syntax string) string {
+	if lang == msgs.EN {
+		return "\n\nIf the fix can be done with nkt script commands (below), add at the very end a block ```nkt with such a script for host " + host +
+			" — only these commands, one line per action, a comment line on top. No shell commands inside the block. If it cannot be done with them, do not add the block.\n" + syntax
+	}
+	return "\n\nЕсли исправление делается командами сценария nkt (ниже), добавь в самом конце блок ```nkt с таким сценарием для хоста " + host +
+		" — только этими командами, по строке на действие, сверху строка-комментарий. Команд оболочки в блоке быть не должно. Если ими не сделать — блок не добавляй.\n" + syntax
+}

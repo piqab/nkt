@@ -281,6 +281,12 @@ func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingConte
 	mapper.Learn("host", hostNames)
 	user := mapper.Hide(ai.UserPrompt(fc, lang))
 	system := ai.SystemWith(m.aiPromptOverrides(ctx), kind, lang)
+	if hostID != 0 && aiFixKinds[kind] {
+		// Исправление — ещё и сценарием nkt для этого хоста: под ответом
+		// «Открыть как сценарий» (дальше «Проверить», сухой прогон, запуск
+		// человеком).
+		system += ai.FixScriptHint(lang, m.aiHostName(ctx, hostID), aiOnHostSyntax(lang))
+	}
 
 	used, _ := m.db.AIUsageToday(ctx)
 	if ai.LimitReached(set, ai.Usage{Requests: used}) {

@@ -132,7 +132,11 @@ When on, a bulb button appears in the row of a finding (including
 a malware hit (both heuristic hits and ClamAV findings), an alert and
 next to a job error: what it means, why it
 matters here, what to do — with commands. Commands are only shown; you
-apply them.
+apply them. When the fix can be done with nkt script commands (packages,
+services, firewall, files, certificates), the model also adds a **fix
+script** for this host: under it an **"Open as a script"** button (for an
+admin) opens a new script in "Profiles" → "Scripts" with that text; then
+"Check", "Dry run" and "Run" — by you.
 
 The "Resource map" page gets an **architecture review**: single points
 of failure, needless exposure, inconsistencies, where to start; on the

@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Button, Input, Spin, Tooltip } from 'antd'
 import { BulbFilled, BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api'
+import { api, useApi } from '../api'
+import type { Me } from '../types'
 import { Banner, Modal, formatDateTime } from './ui'
 import { blurText } from '../privacy'
 import { aiAnswerState, currentAIHostID, invalidateAIAnswers, useAIAnswers } from '../aiAnswers'
@@ -393,22 +394,55 @@ export function useElapsed(running: boolean): number {
 }
 
 /** Текст ответа: блоки ```…``` показываются моноширинно, чтобы команду
- * было видно и можно было выделить целиком. */
+ * было видно и можно было выделить целиком. Блок ```nkt — сценарий
+ * исправления: под ним «Открыть как сценарий» (администратору) — редактор
+ * сценария с этим текстом, дальше «Проверить», сухой прогон, запуск
+ * человеком. */
 export function AIBody({ text }: { text: string }) {
-  const parts = text.split(/```(?:bash|sh|shell)?\n?/)
+  const { t } = useTranslation()
+  const me = useApi<Me>('/auth/me')
+  const parts: { code: boolean; lang: string; body: string }[] = []
+  const re = /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)(?:```|$)/g
+  let last = 0
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    parts.push({ code: false, lang: '', body: text.slice(last, m.index) })
+    parts.push({ code: true, lang: m[1].toLowerCase(), body: m[2] })
+    last = re.lastIndex
+  }
+  parts.push({ code: false, lang: '', body: text.slice(last) })
   return (
     <>
-      {parts.map((part, i) =>
-        i % 2 === 1 ? (
-          <pre key={i} className="diff mono small sensitive-area" style={{ whiteSpace: 'pre-wrap', margin: '0.3rem 0' }}>
-            {part.replace(/\n?$/, '')}
-          </pre>
-        ) : (
+      {parts.map((p, i) =>
+        p.code ? (
+          <div key={i}>
+            <pre className="diff mono small sensitive-area" style={{ whiteSpace: 'pre-wrap', margin: '0.3rem 0' }}>
+              {p.body.replace(/\n?$/, '')}
+            </pre>
+            {p.lang === 'nkt' && me.data?.is_admin && (
+              <Tooltip title={t('ai.openScriptHint')}>
+                <Button size="small" onClick={() => openAsScript(p.body)}>
+                  {t('ai.openScript')}
+                </Button>
+              </Tooltip>
+            )}
+          </div>
+        ) : p.body.trim() ? (
           <p key={i} className="small" style={{ whiteSpace: 'pre-wrap', margin: '0.2rem 0' }}>
-            {blurText(part.trim())}
+            {blurText(p.body.trim())}
           </p>
-        ),
+        ) : null,
       )}
     </>
   )
+}
+
+/** Открыть текст новым сценарием в «Профили» → «Сценарии» (App ловит
+ * событие, страница сценариев берёт текст при открытии). */
+export function openAsScript(content: string) {
+  try {
+    sessionStorage.setItem('nkt-script-draft', content.endsWith('\n') ? content : content + '\n')
+  } catch {
+    /* без хранилища — откроется пустой */
+  }
+  window.dispatchEvent(new CustomEvent('nkt-open-script'))
 }

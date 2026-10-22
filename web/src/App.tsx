@@ -372,6 +372,19 @@ function Shell({
   // depends on the address bar staying whatever it was from a previous
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
+  // Вкладка раздела «Профили» и переход «Открыть как сценарий» из ответа
+  // модели (событие nkt-open-script): хаб → «Профили» → «Сценарии».
+  const [profilesTab, setProfilesTab] = useState('profiles')
+  useEffect(() => {
+    const open = () => {
+      setSelectedHost(null)
+      writeSelectedHost(null)
+      setHubView('profiles')
+      setProfilesTab('scripts')
+    }
+    window.addEventListener('nkt-open-script', open)
+    return () => window.removeEventListener('nkt-open-script', open)
+  }, [])
   const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'fly' | 'about'>('hosts')
   // Вкладка «Выкладок», которую открыть (события Traffic Fly ведут в неё).
   const [deployTab, setDeployTab] = useState<string | undefined>(undefined)
@@ -639,6 +652,8 @@ function Shell({
                 <JobsPage me={me} />
               ) : hubView === 'profiles' ? (
                 <Tabs
+                  activeKey={profilesTab}
+                  onChange={setProfilesTab}
                   items={[
                     { key: 'profiles', label: t('profiles.tabProfiles'), children: <Profiles me={me} hubLevel /> },
                     { key: 'scripts', label: t('profiles.tabScripts'), children: <Scripts me={me} /> },

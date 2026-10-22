@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.74 — 2026-10-22
+
+- **A fix script with a finding analysis.** When the fix can be done with
+  nkt script commands (packages, services, firewall, files, certificates),
+  the model adds a script block for this host, with **"Open as a script"**
+  under it: a new script in "Profiles" → "Scripts" with that text. Checking,
+  the dry run and running are up to a person.
+
 ## v1.13.73 — 2026-10-22
 
 - **"AI ▾" in the script editor:** explain the selection (or the whole

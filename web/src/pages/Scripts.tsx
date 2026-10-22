@@ -163,6 +163,20 @@ export default function Scripts({ me }: { me: Me }) {
   }
 
   const [editing, setEditing] = useState(false)
+  // Текст из «Открыть как сценарий» (ответ модели) — новым сценарием.
+  useEffect(() => {
+    let text: string | null = null
+    try {
+      text = sessionStorage.getItem('nkt-script-draft')
+      sessionStorage.removeItem('nkt-script-draft')
+    } catch {
+      text = null
+    }
+    if (!text || !canEdit) return
+    startNew()
+    setDraft(text)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // Готовые сценарии — и прямо в окне редактора («Готовые сценарии ▾»):
   // вкладка «Справка» страницы под окном не видна.
   const helpData = useApi<HelpData>('/hub/scripts/help')
