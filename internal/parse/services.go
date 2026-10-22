@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -139,7 +140,13 @@ func Services(ctx context.Context, c collect.Collector, specs []ServiceSpec) ([]
 			ActiveState: "unknown",
 			ConfigFiles: spec.ConfigFiles,
 			Actions:     spec.Actions,
-			Installed:   collect.Which(ctx, c, spec.Binary),
+		}
+		// Описанный сервис (svcdesc) без программы для проверки уже найден
+		// своим detect.
+		if spec.Binary == "" {
+			unit.Installed = true
+		} else {
+			unit.Installed = collect.Which(ctx, c, spec.Binary)
 		}
 
 		args := append([]string{"show", spec.Unit}, propertyFlags()...)
@@ -217,4 +224,33 @@ func applyUnitProperties(unit *model.ServiceUnit, stdout string) {
 	case unit.Enabled != "" || unit.ActiveState == "active":
 		unit.Installed = true
 	}
+}
+
+// Сервисы из описаний (svcdesc): их юниты в разделе «Сервисы» — рядом со
+// встроенными. Список задаёт скан; управление службами берёт его отсюда.
+var (
+	describedMu    sync.RWMutex
+	describedSpecs []ServiceSpec
+)
+
+// DescribedActions — действия юнита описанного сервиса.
+var DescribedActions = []string{"reload", "restart", "start", "stop", "enable", "disable"}
+
+// SetDescribedServiceSpecs — найденные описанные сервисы с юнитом.
+func SetDescribedServiceSpecs(specs []ServiceSpec) {
+	describedMu.Lock()
+	describedSpecs = append([]ServiceSpec(nil), specs...)
+	describedMu.Unlock()
+}
+
+// DescribedServiceSpec — описанный сервис по имени.
+func DescribedServiceSpec(name string) (ServiceSpec, bool) {
+	describedMu.RLock()
+	defer describedMu.RUnlock()
+	for _, s := range describedSpecs {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return ServiceSpec{}, false
 }

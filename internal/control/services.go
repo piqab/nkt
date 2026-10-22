@@ -68,6 +68,10 @@ var allowedActions = map[string]bool{
 func (s *ServiceManager) Action(ctx context.Context, user, service, action string) (collect.CommandResult, error) {
 	spec, ok := s.specs[service]
 	if !ok {
+		// Сервис из описания (svcdesc), найденный последним сканом.
+		spec, ok = parse.DescribedServiceSpec(service)
+	}
+	if !ok {
 		return collect.CommandResult{}, msgs.Errorf("control.unknownService", service)
 	}
 	if !allowedActions[action] {

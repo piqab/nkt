@@ -1,0 +1,100 @@
+# PostgreSQL: postgresql.conf и pg_hba.conf всех кластеров Debian
+# (/etc/postgresql/<версия>/<кластер>/) и RHEL (/var/lib/pgsql/data).
+name: postgresql
+title: PostgreSQL
+unit: postgresql
+detect:
+  any:
+    - file: /etc/postgresql/*/*/postgresql.conf
+    - file: /var/lib/pgsql/data/postgresql.conf
+    - file: /var/lib/pgsql/*/data/postgresql.conf
+    - unit: postgresql
+sources:
+  - id: conf
+    file: /etc/postgresql/*/*/postgresql.conf
+    format: lines
+    optional: true
+  - id: conf_rhel
+    file: /var/lib/pgsql/*data/postgresql.conf
+    format: lines
+    optional: true
+  - id: hba
+    file: /etc/postgresql/*/*/pg_hba.conf
+    format: regex
+    options: &hba
+      pattern: '^[ \t]*(?P<type>host|hostssl|hostnossl|hostgssenc|hostnogssenc)[ \t]+(?P<db>\S+)[ \t]+(?P<user>\S+)[ \t]+(?P<addr>\S+)(?:[ \t]+(?P<mask>\d+\.\d+\.\d+\.\d+))?[ \t]+(?P<method>trust|reject|md5|password|scram-sha-256|gss|sspi|ident|pam|ldap|radius|cert)\b'
+    optional: true
+  - id: hba_rhel
+    file: /var/lib/pgsql/*data/pg_hba.conf
+    format: regex
+    options: *hba
+    optional: true
+extract:
+  endpoints:
+    - from: conf
+      fields: &ep
+        address: "@.listen_addresses | default(localhost) | split(,) | first | trim | replace(localhost,127.0.0.1)"
+        port: "@.port | default(5432)"
+        tls: "@.ssl | bool"
+        label: "@file | replace(/etc/postgresql/,) | replace(/var/lib/pgsql/,) | replace(/postgresql.conf,) | prefix('PostgreSQL ')"
+    - from: conf_rhel
+      fields: *ep
+rules:
+  - id: hba-trust
+    from: hba
+    each: "$[?@.method == 'trust']"
+    when: &trust "@.method == 'trust'"
+    severity: critical
+    title: &trustTitle
+      ru: "pg_hba.conf: вход по сети без пароля (trust) для {{@.addr}}"
+      en: "pg_hba.conf: network login without a password (trust) for {{@.addr}}"
+    detail: &trustDetail
+      ru: "Строка «{{@['#match']}}» в {{@file}}: подключение с этих адресов к базам {{@.db}} от имени {{@.user}} без проверки пароля."
+      en: "The line “{{@['#match']}}” in {{@file}}: connections from these addresses to {{@.db}} as {{@.user}} with no password check."
+    suggestion: &trustFix
+      ru: "Метод scram-sha-256 вместо trust; trust — только для local."
+      en: "scram-sha-256 instead of trust; trust only for local."
+    object: "@.addr"
+  - id: hba-trust-rhel
+    from: hba_rhel
+    each: "$[?@.method == 'trust']"
+    when: *trust
+    severity: critical
+    title: *trustTitle
+    detail: *trustDetail
+    suggestion: *trustFix
+    object: "@.addr"
+  - id: hba-everyone
+    from: hba
+    each: "$[?@.addr == '0.0.0.0/0' || @.addr == '::/0' || @.addr == 'all']"
+    when: "@.method != 'reject' && @.method != 'trust'"
+    severity: medium
+    title:
+      ru: "pg_hba.conf: вход открыт со всех адресов ({{@.addr}})"
+      en: "pg_hba.conf: login is open from every address ({{@.addr}})"
+    suggestion:
+      ru: "Ограничьте адреса подсетями клиентов; снаружи — hostssl."
+      en: "Limit the addresses to the client subnets; from outside — hostssl."
+    object: "@.addr"
+  - id: hba-cleartext
+    from: hba
+    each: "$[?@.method == 'password']"
+    when: "@.type != 'hostssl'"
+    severity: medium
+    title:
+      ru: "pg_hba.conf: пароль открытым текстом по сети ({{@.addr}})"
+      en: "pg_hba.conf: cleartext password over the network ({{@.addr}})"
+    suggestion:
+      ru: "scram-sha-256 вместо password."
+      en: "scram-sha-256 instead of password."
+    object: "@.addr"
+  - id: listen-all-no-ssl
+    from: conf
+    when: "@.listen_addresses == '*' && @.ssl != 'on'"
+    severity: medium
+    title:
+      ru: "PostgreSQL слушает все адреса без SSL"
+      en: "PostgreSQL listens on all addresses without SSL"
+    suggestion:
+      ru: "ssl = on с сертификатом или listen_addresses только нужных адресов."
+      en: "ssl = on with a certificate, or listen_addresses with only the needed addresses."

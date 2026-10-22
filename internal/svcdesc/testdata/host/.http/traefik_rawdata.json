@@ -1,0 +1,3 @@
+{"routers":{"whoami@docker":{"rule":"Host(`who.example.com`)","service":"whoami-app"}},
+ "services":{"whoami-app@docker":{"loadBalancer":{"servers":[{"url":"http://172.18.0.4:80"}]}},
+             "api@internal":{}}}

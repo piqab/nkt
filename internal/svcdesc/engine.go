@@ -232,6 +232,8 @@ type runOut struct {
 	ups      []model.Upstream
 	files    []model.ManagedFile
 	findings []model.Finding
+	// unit — загруженный юнит сервиса (unit описания или из detect).
+	unit string
 }
 
 // Run применяет действующие описания к снимку (адреса, контейнеры и
@@ -289,7 +291,7 @@ func (e *Engine) RunLoaded(ctx context.Context, snap *model.Snapshot, list []Loa
 		res.Endpoints = append(res.Endpoints, o.eps...)
 		res.Upstreams = append(res.Upstreams, o.ups...)
 		res.Findings = append(res.Findings, o.findings...)
-		det := Detected{Name: o.l.Desc.Name, Title: o.l.Desc.Title, Unit: o.l.Desc.Unit, Origin: o.l.Origin}
+		det := Detected{Name: o.l.Desc.Name, Title: o.l.Desc.Title, Unit: o.unit, Origin: o.l.Origin}
 		for _, f := range o.files {
 			det.Files = append(det.Files, f.Path)
 			if owner[f.Path] == i && !native[f.Path] {
@@ -378,6 +380,7 @@ func (e *Engine) runOne(ctx context.Context, snap *model.Snapshot, l Loaded) (o 
 	}
 	o.found = true
 	o.status.Available = true
+	o.unit = e.loadedUnit(ctx, d)
 	docs := map[string][]Doc{}
 	for _, s := range d.Sources {
 		docs[s.ID] = e.read(ctx, d, s, warn)
@@ -492,6 +495,26 @@ func (e *Engine) detect(ctx context.Context, snap *model.Snapshot, d *Descriptor
 		}
 	}
 	return false
+}
+
+// loadedUnit — первый загруженный юнит: unit описания, затем из detect
+// (redis-server в Debian, redis в RHEL).
+func (e *Engine) loadedUnit(ctx context.Context, d *Descriptor) string {
+	cands := []string{}
+	if d.Unit != "" {
+		cands = append(cands, d.Unit)
+	}
+	for _, p := range append(append([]Probe{}, d.Detect.Any...), d.Detect.All...) {
+		if p.Unit != "" && p.Unit != d.Unit {
+			cands = append(cands, p.Unit)
+		}
+	}
+	for _, u := range cands {
+		if e.probe(ctx, nil, Probe{Unit: u}) {
+			return u
+		}
+	}
+	return ""
 }
 
 func probeText(p Probe) string {

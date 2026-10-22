@@ -1,0 +1,53 @@
+# Envoy: статическая конфигурация /etc/envoy/envoy.yaml — слушатели,
+# кластеры и admin.
+name: envoy
+title: Envoy
+unit: envoy
+detect:
+  any:
+    - unit: envoy
+    - file: /etc/envoy/envoy.y*ml
+sources:
+  - id: static
+    file: /etc/envoy/envoy.y*ml
+    format: yaml
+    optional: true
+extract:
+  endpoints:
+    - each: "$.static_resources.listeners[*]"
+      fields:
+        address: "@.address.socket_address.address"
+        port: "@.address.socket_address.port_value"
+        protocol: "@.address.socket_address.protocol | lower | default(tcp)"
+        tls: "@.filter_chains[*].transport_socket | exists"
+        label: "@.name | default(listener) | prefix('Envoy ')"
+    - each: "$.admin"
+      fields:
+        address: "@.address.socket_address.address"
+        port: "@.address.socket_address.port_value"
+        label: Envoy admin
+  upstreams:
+    - each: "$.static_resources.clusters[*]"
+      fields:
+        name: "@.name"
+        algorithm: "@.lb_policy"
+      servers:
+        each: "@.load_assignment.endpoints[*].lb_endpoints[*].endpoint.address.socket_address"
+        fields:
+          host: "@.address"
+          port: "@.port_value"
+rules:
+  - id: admin-public
+    each: "$.admin"
+    when: "@.address.socket_address.address != '127.0.0.1' && @.address.socket_address.address != '::1' && @.address.socket_address.address != 'localhost'"
+    severity: high
+    title:
+      ru: "Admin-интерфейс Envoy слушает не только localhost ({{@.address.socket_address.address}}:{{@.address.socket_address.port_value}})"
+      en: "The Envoy admin interface listens beyond localhost ({{@.address.socket_address.address}}:{{@.address.socket_address.port_value}})"
+    detail:
+      ru: "Через admin можно менять уровень логов, сбрасывать счётчики и останавливать Envoy (/quitquitquit) — без авторизации."
+      en: "The admin interface changes log levels, resets counters and stops Envoy (/quitquitquit) — with no auth."
+    suggestion:
+      ru: "admin.address.socket_address.address: 127.0.0.1."
+      en: "admin.address.socket_address.address: 127.0.0.1."
+    object: admin

@@ -1,0 +1,15 @@
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+    http:
+      tls: {}
+  dns:
+    address: "127.0.0.1:53/udp"
+api:
+  insecure: true
+  dashboard: true
+providers:
+  file:
+    directory: /etc/traefik/dynamic

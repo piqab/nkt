@@ -1,0 +1,72 @@
+# Mosquitto: mosquitto.conf и conf.d; настройки после «listener» относятся
+# к этому слушателю (blocks).
+name: mosquitto
+title: Mosquitto
+unit: mosquitto
+detect:
+  any:
+    - unit: mosquitto
+    - file: /etc/mosquitto/mosquitto.conf
+sources:
+  - id: main
+    file: /etc/mosquitto/mosquitto.conf
+    format: lines
+    options: &opt
+      blocks: [listener]
+    optional: true
+  - id: confd
+    file: /etc/mosquitto/conf.d/*.conf
+    format: lines
+    options: *opt
+    optional: true
+extract:
+  endpoints:
+    - from: main
+      each: "$.listener"
+      fields: &listener
+        port: "@['@value'] | split(' ') | first"
+        address: "@['@value'] | split(' ') | nth(1)"
+        tls: "@.certfile | exists"
+        label: "@.protocol | default(mqtt) | prefix('Mosquitto ')"
+    - from: confd
+      each: "$.listener"
+      fields: *listener
+    - from: main
+      when: "@.port"
+      fields:
+        port: "@.port"
+        address: "@.bind_address"
+        label: Mosquitto mqtt
+rules:
+  - id: anonymous
+    from: main
+    when: "@.allow_anonymous == true"
+    severity: high
+    title: &anonTitle
+      ru: "Mosquitto пускает без логина (allow_anonymous true)"
+      en: "Mosquitto lets clients in without a login (allow_anonymous true)"
+    suggestion: &anonFix
+      ru: "allow_anonymous false и password_file (mosquitto_passwd) или плагин авторизации."
+      en: "allow_anonymous false and password_file (mosquitto_passwd) or an auth plugin."
+  - id: anonymous-listener
+    from: main
+    each: "$.listener"
+    when: "@.allow_anonymous == true"
+    severity: high
+    title: *anonTitle
+    suggestion: *anonFix
+    object: "@['@value']"
+  - id: anonymous-confd
+    from: confd
+    when: "@.allow_anonymous == true"
+    severity: high
+    title: *anonTitle
+    suggestion: *anonFix
+  - id: anonymous-confd-listener
+    from: confd
+    each: "$.listener"
+    when: "@.allow_anonymous == true"
+    severity: high
+    title: *anonTitle
+    suggestion: *anonFix
+    object: "@['@value']"

@@ -1,0 +1,11 @@
+http:
+  routers:
+    app:
+      rule: Host(`app.example.com`)
+      service: app
+  services:
+    app:
+      loadBalancer:
+        servers:
+          - url: http://10.0.0.5:8080
+          - url: http://10.0.0.6:8080

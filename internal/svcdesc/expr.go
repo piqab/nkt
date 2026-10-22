@@ -53,7 +53,7 @@ var exprCache sync.Map
 var pipeArity = map[string]int{
 	"port": 0, "host": 0, "scheme": 0, "lower": 0, "upper": 0, "trim": 0,
 	"first": 0, "last": 0, "exists": 0, "int": 0, "bool": 0, "not": 0, "count": 0, "keys": 0,
-	"split": 1, "join": 1, "default": 1, "prefix": 1, "suffix": 1, "contains": 1, "matches": 1,
+	"split": 1, "join": 1, "nth": 1, "default": 1, "prefix": 1, "suffix": 1, "contains": 1, "matches": 1,
 	"replace": 2,
 }
 
@@ -274,6 +274,19 @@ func applyPipe(p pipe, vals []any) []any {
 			return vals[len(vals)-1:]
 		}
 		return nil
+	case "nth":
+		// nth(i) — элемент списка по номеру с нуля (отрицательный — с конца).
+		i, err := strconv.Atoi(p.args[0])
+		if err != nil {
+			return nil
+		}
+		if i < 0 {
+			i += len(vals)
+		}
+		if i >= 0 && i < len(vals) {
+			return vals[i : i+1]
+		}
+		return nil
 	case "count":
 		return []any{float64(len(vals))}
 	case "exists":
@@ -379,6 +392,12 @@ func applyPipe(p pipe, vals []any) []any {
 // «unix:…» (0) или URL (порт по схеме, если не указан).
 func portOf(s string) int {
 	s = strings.TrimSpace(s)
+	// «:53/udp» (Traefik) — протокол после порта.
+	if i := strings.LastIndexByte(s, '/'); i > 0 && !strings.Contains(s, "://") {
+		if p := strings.ToLower(s[i+1:]); p == "udp" || p == "tcp" {
+			s = s[:i]
+		}
+	}
 	if s == "" {
 		return 0
 	}
@@ -407,6 +426,11 @@ func portOf(s string) int {
 // hostOf — адрес из тех же форм; «:8080» — пусто (все адреса).
 func hostOf(s string) string {
 	s = strings.TrimSpace(s)
+	if i := strings.LastIndexByte(s, '/'); i > 0 && !strings.Contains(s, "://") {
+		if p := strings.ToLower(s[i+1:]); p == "udp" || p == "tcp" {
+			s = s[:i]
+		}
+	}
 	if strings.Contains(s, "://") {
 		if u, err := url.Parse(s); err == nil {
 			return u.Hostname()

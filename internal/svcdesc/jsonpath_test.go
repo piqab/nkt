@@ -117,6 +117,10 @@ func TestExprPipes(t *testing.T) {
 		{"$.ep | keys", `["web","tls"]`},
 		{"$.ep..address | last | port", `[8443]`},
 		{"tcp", `["tcp"]`},
+		{"$.list | split(,) | nth(1)", `["b"]`},
+		{"$.list | split(,) | nth(-1)", `["c"]`},
+		{"':53/udp' | port", `[53]`},
+		{"'10.0.0.1:53/udp' | host", `["10.0.0.1"]`},
 		{"'a | b'", `["a | b"]`},
 	}
 	for _, c := range cases {

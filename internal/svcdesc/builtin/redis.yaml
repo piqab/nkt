@@ -1,0 +1,69 @@
+# Redis: redis.conf (Debian /etc/redis/redis.conf, RHEL /etc/redis.conf).
+name: redis
+title: Redis
+unit: redis-server
+detect:
+  any:
+    - unit: redis-server
+    - unit: redis
+    - file: /etc/redis/redis.conf
+    - file: /etc/redis.conf
+sources:
+  - id: conf
+    file: /etc/redis/redis.conf
+    format: lines
+    optional: true
+  - id: conf_rhel
+    file: /etc/redis.conf
+    format: lines
+    optional: true
+extract:
+  endpoints:
+    - from: conf
+      fields: &plain
+        address: "@.bind | split(' ') | first | replace(-,)"
+        port: "@.port | default(6379)"
+        label: Redis
+    - from: conf
+      when: "@['tls-port']"
+      fields: &tls
+        address: "@.bind | split(' ') | first | replace(-,)"
+        port: "@['tls-port']"
+        tls: true
+        label: Redis TLS
+    - from: conf_rhel
+      fields: *plain
+    - from: conf_rhel
+      when: "@['tls-port']"
+      fields: *tls
+rules:
+  - id: no-auth-public
+    from: conf
+    when: &noauth "!@.requirepass && !@.aclfile && (!@.bind || search(@.bind, '(^|\\s)(0\\.0\\.0\\.0|\\*|::)(\\s|$)'))"
+    severity: high
+    title: &noauthTitle
+      ru: "Redis принимает соединения на всех адресах без пароля"
+      en: "Redis accepts connections on all addresses without a password"
+    detail: &noauthDetail
+      ru: "В {{@file}} нет requirepass и aclfile, а bind не ограничен локальными адресами: любой, кто достучится до порта, читает и меняет данные, а через CONFIG — и файлы на хосте."
+      en: "{{@file}} has no requirepass or aclfile, and bind isn't limited to local addresses: anyone who reaches the port reads and changes data, and through CONFIG — files on the host."
+    suggestion: &noauthFix
+      ru: "bind 127.0.0.1 -::1 и requirepass (или ACL), порт закрыть файрволом."
+      en: "bind 127.0.0.1 -::1 and requirepass (or ACL), close the port with the firewall."
+  - id: no-auth-public-rhel
+    from: conf_rhel
+    when: *noauth
+    severity: high
+    title: *noauthTitle
+    detail: *noauthDetail
+    suggestion: *noauthFix
+  - id: protected-mode-off
+    from: conf
+    when: "@['protected-mode'] == 'no' && !@.requirepass && !@.aclfile"
+    severity: medium
+    title:
+      ru: "Redis: protected-mode выключен, пароля нет"
+      en: "Redis: protected-mode is off and there is no password"
+    suggestion:
+      ru: "protected-mode yes или requirepass."
+      en: "protected-mode yes or requirepass."
