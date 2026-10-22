@@ -72,6 +72,46 @@ them will ask you before a dangerous call themselves.
 minutes by default, `timeout` — up to an hour) and returns the outcome
 and the log tail — the agent doesn't have to poll.
 
+## Example: a job with waiting
+
+The agent runs a dry run of a saved script and waits for the outcome in
+one call:
+
+```json
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{
+  "name":"run_script",
+  "arguments":{"script_id":4,"dry_run":true,
+    "values":{"param:FROM":"web1","param:TO":"web2"},"wait":true,"timeout":900}}}
+```
+
+The answer arrives when the job has finished (or the time ran out — then
+`"timed_out": true` and the `job_id` to ask later with `job_status`):
+
+```json
+{"jsonrpc":"2.0","id":7,"result":{"isError":false,"content":[{"type":"text",
+  "text":"{\"job_id\":123,\"status\":\"succeeded\",\"succeeded\":true,\"log\":[\"…\"]}"}]}}
+```
+
+`log` holds the last 200 lines of the job log. A job that ended with an
+error comes with `"isError": true` and the error text — the agent sees
+what went wrong and can read the whole log with `job_log`.
+
+## An agent at work
+
+A request in Claude Code: “why does the app deployment fail on web-2 and
+what do I do?”. The agent calls the tools itself:
+
+1. `list_hosts` — finds `web-2` and its `host_id`;
+2. `list_pipelines` — the `app` pipeline and its last deployment;
+3. `job_log` — the failed job's log: “port 8080 is taken”;
+4. `host_containers` — who holds 8080 on web-2;
+
+and answers with the cause and the fix. With a read token that's all;
+with an admin token the agent can stop the extra container itself
+(`container_action`) and rerun the deployment (`deploy_pipeline` with
+`"wait": true`) — without confirmation, all in the audit log as
+`token:<name>`.
+
 ## Claude Code
 
 ```sh

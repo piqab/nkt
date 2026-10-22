@@ -1,0 +1,28 @@
+name: tomcat
+title: Tomcat
+unit: tomcat10
+sources:
+  - id: server
+    file: /etc/tomcat*/server.xml
+extract:
+  endpoints:
+    - from: server
+      each: "$.Server.Service.Connector"
+      fields:
+        address: "@['@address']"
+        port: "@['@port']"
+        tls: "@['@SSLEnabled'] | bool"
+        label: "@['@protocol'] | prefix('Tomcat ')"
+rules:
+  - id: ajp-no-secret
+    from: server
+    each: "$.Server.Service.Connector"
+    when: "search(@['@protocol'], 'AJP') && @['@secretRequired'] == false"
+    severity: high
+    title:
+      ru: "Tomcat: AJP без секрета на порту {{@['@port']}}"
+      en: "Tomcat: AJP without a secret on port {{@['@port']}}"
+    suggestion:
+      ru: "secretRequired=\"true\" и secret, или уберите коннектор AJP."
+      en: "secretRequired=\"true\" and a secret, or remove the AJP connector."
+    object: "@['@port']"

@@ -92,6 +92,28 @@ new text gets into the editor only through a diff window ("Insert into the
 editor"); **AI does not run the script** — then the usual "Save", "Dry run",
 "Run".
 
+Example. The editor has one task line:
+
+```
+# AI: install nginx on web1 and open 443
+```
+
+"AI ▾" → "Write from „# AI: …“ lines" — the diff window shows commands
+under the line, the task line stays a comment:
+
+```
+# AI: install nginx on web1 and open 443
+on web1 packages install nginx
+on web1 service nginx enable
+on web1 firewall allow 443/tcp
+wait web1 port 443 1m
+```
+
+Under the diff is the "Check" result (no errors here); "Insert into the
+editor" — and on as with any text. The script-from-a-task item does the
+same for the whole script: "nginx on web1 and web2, ports 80 and 443, wait
+for 80 on web1" → a whole script.
+
 ## Through the API and n8n
 
 A saved script also runs without the UI — with an admin API token

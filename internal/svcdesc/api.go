@@ -335,7 +335,7 @@ func Eval(tree []byte, each, when, expr string, lang msgs.Lang) EvalResult {
 	if each == "" {
 		each = "$"
 	}
-	p, err := CompilePath(each)
+	p, err := compileEach(each)
 	if err != nil {
 		res.Error = msgs.Localize(lang, err)
 		return res
@@ -354,7 +354,7 @@ func Eval(tree []byte, each, when, expr string, lang msgs.Lang) EvalResult {
 			return res
 		}
 	}
-	nodes := p.Eval(root, root)
+	nodes := p.nodes(root, root)
 	if len(nodes) == 1 {
 		if _, isList := nodes[0].Value.([]any); isList {
 			nodes = children(nodes[0].Value)

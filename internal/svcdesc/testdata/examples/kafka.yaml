@@ -1,0 +1,25 @@
+name: kafka
+title: Kafka
+unit: kafka
+sources:
+  - id: server
+    file: /opt/kafka/config/server.properties
+extract:
+  endpoints:
+    - from: server
+      each: "$.listeners | split(,)"
+      fields:
+        address: "@ | host"
+        port: "@ | port"
+        tls: "@ | scheme | contains(ssl)"
+        label: "@ | scheme | upper | prefix('Kafka ')"
+rules:
+  - id: plaintext-all
+    from: server
+    each: "$.listeners | split(,)"
+    when: "match(@, 'PLAINTEXT://(0\\.0\\.0\\.0)?:[0-9]+')"
+    severity: medium
+    title:
+      ru: "Kafka: PLAINTEXT на всех адресах ({{@}})"
+      en: "Kafka: PLAINTEXT on all addresses ({{@}})"
+    object: "@"

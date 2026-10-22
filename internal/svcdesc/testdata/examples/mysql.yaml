@@ -1,0 +1,33 @@
+name: mysql
+title: MySQL
+unit: mysql
+sources:
+  - id: cnf
+    file: /etc/mysql/*.conf.d/*.cnf
+extract:
+  endpoints:
+    - from: cnf
+      each: "$.mysqld"
+      fields:
+        address: "@['bind-address'] | default(127.0.0.1)"
+        port: "@.port | default(3306)"
+rules:
+  - id: listen-all
+    from: cnf
+    each: "$.mysqld"
+    when: "@['bind-address'] == '0.0.0.0' || @['bind-address'] == '*'"
+    severity: medium
+    title:
+      ru: "MySQL слушает все адреса"
+      en: "MySQL listens on all addresses"
+    suggestion:
+      ru: "bind-address = 127.0.0.1 или адрес внутренней сети."
+      en: "bind-address = 127.0.0.1 or an internal network address."
+  - id: skip-grant-tables
+    from: cnf
+    each: "$.mysqld"
+    when: "@['skip-grant-tables']"
+    severity: critical
+    title:
+      ru: "MySQL без проверки паролей (skip-grant-tables)"
+      en: "MySQL without password checks (skip-grant-tables)"

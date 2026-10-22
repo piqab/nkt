@@ -1,0 +1,24 @@
+name: rabbitmq-api
+title: RabbitMQ API
+detect:
+  any:
+    - port: 15672
+sources:
+  - id: overview
+    http: http://127.0.0.1:15672/api/overview
+    basic_auth:
+      user: nkt-monitor
+      password_file: /etc/rabbitmq/nkt-monitor.pass
+    interval: 1m
+    timeout: 5s
+version:
+  from: overview
+  value: "$.rabbitmq_version"
+rules:
+  - id: many-queues
+    from: overview
+    when: "@.object_totals.queues > 1000"
+    severity: low
+    title:
+      ru: "RabbitMQ: очередей {{@.object_totals.queues}}"
+      en: "RabbitMQ: {{@.object_totals.queues}} queues"

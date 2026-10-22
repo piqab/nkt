@@ -1,0 +1,28 @@
+{
+ "commands": [
+  {
+   "match": [
+    "consul",
+    "members",
+    "-format=json"
+   ],
+   "stdout_file": "consul_members.json"
+  },
+  {
+   "match": [
+    "consul",
+    "version",
+    "-format=json"
+   ],
+   "stdout": "{\"Version\":\"1.18.1\"}"
+  },
+  {
+   "match": [
+    "sh",
+    "-c",
+    "command -v consul"
+   ],
+   "stdout": "/usr/bin/consul\n"
+  }
+ ]
+}

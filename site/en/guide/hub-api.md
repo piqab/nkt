@@ -164,11 +164,14 @@ to the hub through the tunnel. Conditions:
 | `GET /api/hub/k8s/manifests`, `/{id}` | admin | saved manifests |
 | `POST /api/hub/k8s/manifests/diff` | admin | `kubectl diff` per cluster (`{"name":"…","content":"…","clusters":[1,2]}`) |
 | `POST /api/hub/k8s/manifests/apply?job=1` | admin | `kubectl apply` per cluster as a job (body as for diff, plus `note`) → `job_id` |
+| `POST /api/mcp` | read | [MCP for AI agents](/en/guide/hub-mcp): JSON-RPC; tools by the token's role and scope |
 
 Still closed to any token: creating, editing and deleting scripts;
 creating, deleting and upgrading clusters, adding workers, the
 **kubeconfig**, Helm; restoring an old Traffic Fly map version; hosts,
-groups, profiles, "About", users, export.
+groups, profiles, service descriptions, the assistant, "About", users,
+export; on hosts — the service descriptions section
+(`/api/hosts/{id}/svcdesc*`: the sample reads the host's files and commands).
 
 The hub machine is `/api/hosts/local/…`; in a token's scope its number is
 `-1`. A scoped token sees only its hosts, their alerts and sites; only

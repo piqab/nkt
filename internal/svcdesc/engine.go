@@ -437,7 +437,7 @@ func (e *Engine) runOne(ctx context.Context, snap *model.Snapshot, l Loaded) (o 
 	items := func(it Item) []Ctx {
 		var out []Ctx
 		for _, doc := range docs[it.From] {
-			nodes := it.each.Eval(doc.Root, doc.Root)
+			nodes := it.each.nodes(doc.Root, doc.Root)
 			if len(nodes) == 1 {
 				if _, isList := nodes[0].Value.([]any); isList {
 					nodes = children(nodes[0].Value)
@@ -677,7 +677,7 @@ func buildUpstream(d *Descriptor, r UpstreamRule, c Ctx) model.Upstream {
 		Servers:   []model.UpstreamServer{},
 	}
 	up.ID = d.Name + ":" + up.Name
-	nodes := r.Servers.each.Eval(c.Root, c.Item.Value)
+	nodes := r.Servers.each.nodes(c.Root, c.Item.Value)
 	if len(nodes) == 1 {
 		if _, isList := nodes[0].Value.([]any); isList {
 			nodes = children(nodes[0].Value)
