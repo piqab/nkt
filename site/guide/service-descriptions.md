@@ -197,8 +197,10 @@ disabled: true
 `true/false/yes/no/on/off/1/0`.
 
 `each` — путь к элементам (по умолчанию — весь документ). Если путь дал
-один список, перебираются его элементы. `when` — условие на элемент, то же
-выражение, что в фильтре `[?…]`, без `?`.
+один список, перебираются его элементы. `each` может кончаться
+преобразованиями: `"$.listeners | split(,)"` перебирает части строки
+(пример Kafka ниже). `when` — условие на элемент, то же выражение, что в
+фильтре `[?…]`, без `?`.
 
 ## Поля и преобразования
 
@@ -296,6 +298,280 @@ rules:
       en: "Traefik dashboard is open without protection"
     suggestion: "api.insecure: false и доступ через entryPoint с авторизацией"
 ```
+
+## Ещё примеры
+
+Каждый пример ниже проверен тестом nkt на таких же файлах: описание даёт
+ровно то, что написано под ним.
+
+### Tomcat — XML
+
+`/etc/tomcat10/server.xml`:
+
+```xml
+<Server port="8005" shutdown="SHUTDOWN">
+  <Service name="Catalina">
+    <Connector port="8080" protocol="HTTP/1.1" connectionTimeout="20000" redirectPort="8443"/>
+    <Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol" SSLEnabled="true"/>
+    <Connector port="8009" protocol="AJP/1.3" address="0.0.0.0" secretRequired="false"/>
+    <Engine name="Catalina" defaultHost="localhost"/>
+  </Service>
+</Server>
+```
+
+```yaml
+name: tomcat
+title: Tomcat
+unit: tomcat10
+sources:
+  - id: server
+    file: /etc/tomcat*/server.xml
+extract:
+  endpoints:
+    - from: server
+      each: "$.Server.Service.Connector"
+      fields:
+        address: "@['@address']"
+        port: "@['@port']"
+        tls: "@['@SSLEnabled'] | bool"
+        label: "@['@protocol'] | prefix('Tomcat ')"
+rules:
+  - id: ajp-no-secret
+    from: server
+    each: "$.Server.Service.Connector"
+    when: "search(@['@protocol'], 'AJP') && @['@secretRequired'] == false"
+    severity: high
+    title:
+      ru: "Tomcat: AJP без секрета на порту {{@['@port']}}"
+      en: "Tomcat: AJP without a secret on port {{@['@port']}}"
+    suggestion:
+      ru: "secretRequired=\"true\" и secret, или уберите коннектор AJP."
+      en: "secretRequired=\"true\" and a secret, or remove the AJP connector."
+    object: "@['@port']"
+```
+
+Атрибут — ключ `@имя`, поэтому путь к нему — `@['@port']`; три
+`<Connector>` — список, `each` перебирает его. Получится: адреса 8080,
+8443 (TLS) и 0.0.0.0:8009, находка «AJP без секрета на порту 8009»
+(Ghostcat).
+
+### Kafka — properties и несколько адресов в одной строке
+
+`/opt/kafka/config/server.properties`:
+
+```properties
+broker.id=0
+listeners=PLAINTEXT://:9092,SSL://:9093
+advertised.listeners=PLAINTEXT://kafka1.example.com:9092
+log.dirs=/var/lib/kafka
+```
+
+```yaml
+name: kafka
+title: Kafka
+unit: kafka
+sources:
+  - id: server
+    file: /opt/kafka/config/server.properties
+extract:
+  endpoints:
+    - from: server
+      each: "$.listeners | split(,)"
+      fields:
+        address: "@ | host"
+        port: "@ | port"
+        tls: "@ | scheme | contains(ssl)"
+        label: "@ | scheme | upper | prefix('Kafka ')"
+rules:
+  - id: plaintext-all
+    from: server
+    each: "$.listeners | split(,)"
+    when: "match(@, 'PLAINTEXT://(0\\.0\\.0\\.0)?:[0-9]+')"
+    severity: medium
+    title:
+      ru: "Kafka: PLAINTEXT на всех адресах ({{@}})"
+      en: "Kafka: PLAINTEXT on all addresses ({{@}})"
+    object: "@"
+```
+
+`each` с преобразованием: `$.listeners | split(,)` перебирает части
+строки, `@` — сама часть (`PLAINTEXT://:9092`). Получится: адреса 9092
+и 9093 (TLS), находка «PLAINTEXT на всех адресах».
+
+### MySQL — ini
+
+`/etc/mysql/mysql.conf.d/mysqld.cnf`:
+
+```ini
+[mysqld]
+user = mysql
+port = 3306
+bind-address = 0.0.0.0
+skip-name-resolve
+```
+
+```yaml
+name: mysql
+title: MySQL
+unit: mysql
+sources:
+  - id: cnf
+    file: /etc/mysql/*.conf.d/*.cnf
+extract:
+  endpoints:
+    - from: cnf
+      each: "$.mysqld"
+      fields:
+        address: "@['bind-address'] | default(127.0.0.1)"
+        port: "@.port | default(3306)"
+rules:
+  - id: listen-all
+    from: cnf
+    each: "$.mysqld"
+    when: "@['bind-address'] == '0.0.0.0' || @['bind-address'] == '*'"
+    severity: medium
+    title:
+      ru: "MySQL слушает все адреса"
+      en: "MySQL listens on all addresses"
+    suggestion:
+      ru: "bind-address = 127.0.0.1 или адрес внутренней сети."
+      en: "bind-address = 127.0.0.1 or an internal network address."
+  - id: skip-grant-tables
+    from: cnf
+    each: "$.mysqld"
+    when: "@['skip-grant-tables']"
+    severity: critical
+    title:
+      ru: "MySQL без проверки паролей (skip-grant-tables)"
+      en: "MySQL without password checks (skip-grant-tables)"
+```
+
+Секция `[mysqld]` — объект; ключ без значения (`skip-name-resolve`,
+`skip-grant-tables`) — `true`, поэтому `when: "@['skip-grant-tables']"`
+— «есть такой ключ». Каждый файл с `[mysqld]` даёт свой адрес.
+Получится: адрес 0.0.0.0:3306, находка «MySQL слушает все адреса».
+
+### RabbitMQ — HTTP API с паролем из файла
+
+```yaml
+name: rabbitmq-api
+title: RabbitMQ API
+detect:
+  any:
+    - port: 15672
+sources:
+  - id: overview
+    http: http://127.0.0.1:15672/api/overview
+    basic_auth:
+      user: nkt-monitor
+      password_file: /etc/rabbitmq/nkt-monitor.pass
+    interval: 1m
+    timeout: 5s
+version:
+  from: overview
+  value: "$.rabbitmq_version"
+rules:
+  - id: many-queues
+    from: overview
+    when: "@.object_totals.queues > 1000"
+    severity: low
+    title:
+      ru: "RabbitMQ: очередей {{@.object_totals.queues}}"
+      en: "RabbitMQ: {{@.object_totals.queues}} queues"
+```
+
+Пароль пользователя `nkt-monitor` лежит в
+`/etc/rabbitmq/nkt-monitor.pass` на хосте и в описании не появляется.
+Ответ `/api/overview` живёт минуту (`interval`), версия берётся из него.
+Получится: версия 3.13.7 в источниках, находка «очередей 1520».
+
+### Consul — команда
+
+```yaml
+name: consul
+title: Consul
+unit: consul
+detect:
+  any:
+    - binary: consul
+    - unit: consul
+sources:
+  - id: members
+    command: [consul, members, -format=json]
+    interval: 2m
+    timeout: 10s
+  - id: version
+    command: [consul, version, -format=json]
+    interval: 1h
+version:
+  from: version
+  value: "$.Version"
+rules:
+  - id: member-down
+    from: members
+    each: "$[?@.Status != 'alive']"
+    when: "@.Status != 'alive'"
+    severity: medium
+    title:
+      ru: "Consul: узел {{@.Name}} — {{@.Status}}"
+      en: "Consul: node {{@.Name}} is {{@.Status}}"
+    object: "@.Name"
+```
+
+Команда — списком аргументов, без оболочки; её вывод — JSON. Получится:
+версия 1.18.1, находка «узел node-2 — failed» на каждый узел не в
+состоянии `alive`.
+
+### memcached — regex для конфига без формата
+
+`/etc/memcached.conf` — флаги командной строки:
+
+```
+# memcached default config
+-d
+logfile /var/log/memcached.log
+-m 64
+-p 11211
+-u memcache
+```
+
+```yaml
+name: memcached
+title: memcached
+unit: memcached
+sources:
+  - id: conf
+    file: /etc/memcached.conf
+    format: regex
+    options:
+      pattern: '^-(?P<flag>[a-zA-Z])\s+(?P<value>\S+)'
+extract:
+  endpoints:
+    - from: conf
+      each: "$[0]"
+      fields:
+        address: "$[?@.flag == 'l'].value | split(,) | first"
+        port: "$[?@.flag == 'p'].value | default(11211)"
+        label: memcached
+rules:
+  - id: listen-all
+    from: conf
+    each: "$[0]"
+    when: "!$[?@.flag == 'l']"
+    severity: high
+    title:
+      ru: "memcached слушает все адреса (нет -l)"
+      en: "memcached listens on all addresses (no -l)"
+    suggestion:
+      ru: "-l 127.0.0.1 в /etc/memcached.conf; снаружи memcached используют для DDoS-усиления."
+      en: "-l 127.0.0.1 in /etc/memcached.conf; exposed memcached is used for DDoS amplification."
+    object: "$[?@.flag == 'p'].value | default(11211)"
+```
+
+`regex` превращает каждую строку `-флаг значение` в объект `{flag,
+value}`; поля берут значения от корня (`$[?@.flag == 'p']`). Нет `-l` —
+memcached слушает все адреса. Получится: адрес 11211, находка «слушает
+все адреса (нет -l)».
 
 ## Один файл — два описания
 

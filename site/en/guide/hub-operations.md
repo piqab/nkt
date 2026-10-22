@@ -138,6 +138,19 @@ script** for this host: under it an **"Open as a script"** button (for an
 admin) opens a new script in "Profiles" → "Scripts" with that text; then
 "Check", "Dry run" and "Run" — by you.
 
+For example, for the finding "Redis listens on port 6379 on all
+interfaces" on web-1 the answer ends with a block:
+
+```
+# Redis on web-1: close 6379 from outside
+on web-1 firewall deny 6379/tcp
+on web-1 service redis-server restart
+```
+
+with "Open as a script" under it. The block is an ordinary nkt script:
+before running it, check it with a "Dry run" — the model can get a
+service name or a rule wrong.
+
 The "Resource map" page gets an **architecture review**: single points
 of failure, needless exposure, inconsistencies, where to start; on the
 hub — across all hosts at once. Reviews are kept with their date.

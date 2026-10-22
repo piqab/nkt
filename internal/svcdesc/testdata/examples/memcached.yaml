@@ -1,0 +1,30 @@
+name: memcached
+title: memcached
+unit: memcached
+sources:
+  - id: conf
+    file: /etc/memcached.conf
+    format: regex
+    options:
+      pattern: '^-(?P<flag>[a-zA-Z])\s+(?P<value>\S+)'
+extract:
+  endpoints:
+    - from: conf
+      each: "$[0]"
+      fields:
+        address: "$[?@.flag == 'l'].value | split(,) | first"
+        port: "$[?@.flag == 'p'].value | default(11211)"
+        label: memcached
+rules:
+  - id: listen-all
+    from: conf
+    each: "$[0]"
+    when: "!$[?@.flag == 'l']"
+    severity: high
+    title:
+      ru: "memcached слушает все адреса (нет -l)"
+      en: "memcached listens on all addresses (no -l)"
+    suggestion:
+      ru: "-l 127.0.0.1 в /etc/memcached.conf; снаружи memcached используют для DDoS-усиления."
+      en: "-l 127.0.0.1 in /etc/memcached.conf; exposed memcached is used for DDoS amplification."
+    object: "$[?@.flag == 'p'].value | default(11211)"

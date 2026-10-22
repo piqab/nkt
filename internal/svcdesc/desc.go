@@ -170,7 +170,7 @@ type Item struct {
 	// When — условие на элемент: выражение фильтра RFC 9535 (@ — элемент).
 	When string `yaml:"when,omitempty" json:"when,omitempty"`
 
-	each *Path
+	each *eachSel
 	when fexpr
 }
 
@@ -196,7 +196,7 @@ type ServersRule struct {
 	Each   string         `yaml:"each" json:"each"`
 	Fields map[string]any `yaml:"fields" json:"fields"`
 
-	each   *Path
+	each   *eachSel
 	fields map[string]*Expr
 }
 
@@ -371,7 +371,7 @@ func (d *Descriptor) compile() error {
 		if each == "" {
 			each = "$"
 		}
-		p, err := CompilePath(each)
+		p, err := compileEach(each)
 		if err != nil {
 			return err
 		}
@@ -440,7 +440,7 @@ func (d *Descriptor) compile() error {
 		if r.Servers == nil {
 			return msgs.Errorf("svcdesc.inUpstream", i+1, msgs.Errorf("svcdesc.needField", "servers"))
 		}
-		if r.Servers.each, err = CompilePath(r.Servers.Each); err != nil {
+		if r.Servers.each, err = compileEach(r.Servers.Each); err != nil {
 			return msgs.Errorf("svcdesc.inUpstream", i+1, err)
 		}
 		if r.Servers.fields, err = exprs(r.Servers.Fields, serverFields); err != nil {
@@ -693,4 +693,41 @@ func (d *Descriptor) compileEngine() error {
 		}
 	}
 	return nil
+}
+
+// eachSel — путь к элементам или путь с преобразованиями: «$.listeners |
+// split(,)» перебирает части строки (Kafka: несколько адресов в одной).
+type eachSel struct {
+	src  string
+	path *Path
+	expr *Expr
+}
+
+func compileEach(s string) (*eachSel, error) {
+	if len(splitPipes(s)) > 1 {
+		e, err := CompileExpr(s)
+		if err != nil {
+			return nil, err
+		}
+		return &eachSel{src: s, expr: e}, nil
+	}
+	p, err := CompilePath(s)
+	if err != nil {
+		return nil, err
+	}
+	return &eachSel{src: s, path: p}, nil
+}
+
+func (e *eachSel) String() string { return e.src }
+
+// nodes — узлы: у пути — с ключами, у преобразования — с номерами.
+func (e *eachSel) nodes(root, cur any) []Node {
+	if e.path != nil {
+		return e.path.Eval(root, cur)
+	}
+	var out []Node
+	for i, v := range e.expr.Values(Ctx{Root: root, Item: Node{Value: cur}}) {
+		out = append(out, Node{Key: i, Value: v})
+	}
+	return out
 }

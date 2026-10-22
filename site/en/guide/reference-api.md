@@ -57,6 +57,7 @@ For example, `GET /api/hosts/3/services` — the services of host 3.
 | Jobs | `/jobs*` | List (`?q=&status=&kind=&limit=&offset=&order=asc`, the response carries `total` and `kinds`), log, log stream, cancel, retry (`/jobs/{id}/retry`) |
 | Configs | `/configs/*` | Files, blocks, validated write, versions, diff, rollback |
 | Profiles | `/profiles*` | Desired state, plan, apply |
+| Service descriptions | `GET /svcdesc`, `PUT /svcdesc/profile`, `POST /svcdesc/test`, `POST /svcdesc/sample` | The host's descriptions report, the “profile” level set (written by the hub), parse log, source sample — [your own services](/en/guide/service-descriptions) |
 | Firewall | `/firewall/*` | ufw and firewalld rules, install |
 | Certificates | `/certificates*` | Certificates, issuance, renewal, self-signed |
 | Monitoring | `/monitor/*` | Availability targets, usage, heatmaps, outages; `/monitor/summary?since=&until=` — hourly summaries (host, disks, containers and machines, targets) for the hub's "Monitoring" |
@@ -102,6 +103,7 @@ Under `/api/hub/`:
 | Groups | `/hub/groups*` | Groups, renaming, group profile |
 | Machines | `/hub/vm/provision`, `/hub/hosts/{id}/vm*` | Creating, finding and importing machines, access checks |
 | Scripts | `/hub/scripts*` | Scripts, check, run, versions, help |
+| Service descriptions | `/hub/svcdescs*` | Library with versions, `check`, `eval` (path builder), `deliver` (delivery job to hosts) |
 | Clusters | `/hub/clusters*`, `/hub/cluster-images*`, `/hub/cluster-presets*`, `/hub/k8s-versions` | Creation, dry run, workers, resume, upgrade, kubeconfig, images, presets |
 | Manifests and Helm | `/hub/k8s/manifests*`, `/hub/k8s/helm/install`, `/hub/k8s/findings` | One YAML or release into several clusters, findings across clusters |
 | Deployments | `/hub/pipelines*` | Pipelines, access, webhook secret, deploy, rollback, history |
@@ -110,7 +112,9 @@ Under `/api/hub/`:
 | nkt-edge | `/hub/edge`, `/hub/edge/install`, `/hub/edge/uninstall` | State, configuration, installation, removal from the VPS |
 | Alerts | `/hub/events*` | Log, mark seen, settings |
 | About | `/hub/version*`, `/hub/update`, `/hub/rollback`, `/hub/vulndb*`, `/hub/clamdb*`, `/hub/aptcache*` | Version, update, rollback, databases, cache |
-| AI | `/hub/ai*` | Settings, test, analysis, answers, instructions |
+| AI | `/hub/ai*` | Settings, test, analysis, answers, instructions; `POST /hub/ai/script` — AI in the script editor |
+| Assistant | `POST /hub/assistant` | A conversation with the model: `{"messages":[{"role":"user","text":"…"}]}` → the answer, what the model looked at, a check of the script in the answer |
+| MCP | `POST /mcp` | API token only: JSON-RPC 2.0 for AI agents ([MCP](/en/guide/hub-mcp)) |
 | Export | `/hub/export`, `/hub/import` | Registry export and import |
 
 Example — deploy pipeline 1 with a tag:
@@ -129,4 +133,6 @@ curl -s -b jar -H 'Content-Type: application/json' \
 | `nkt tui` | the terminal UI |
 | `nkt users`, `nkt passwd` | accounts without the web UI |
 | `nkt hub` | the hub; `nkt hub import` — restore the registry, `nkt hub delete` — wipe all hub data |
+| `nkt services` | service descriptions: the list and `nkt services test <file>` — the parse log |
+| `nkt mcp` | the MCP bridge for AI agents (stdio → hub, `NKT_HUB_URL`, `NKT_API_TOKEN`) |
 | `nkt version` | version |

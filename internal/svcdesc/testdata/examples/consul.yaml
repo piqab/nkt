@@ -1,0 +1,28 @@
+name: consul
+title: Consul
+unit: consul
+detect:
+  any:
+    - binary: consul
+    - unit: consul
+sources:
+  - id: members
+    command: [consul, members, -format=json]
+    interval: 2m
+    timeout: 10s
+  - id: version
+    command: [consul, version, -format=json]
+    interval: 1h
+version:
+  from: version
+  value: "$.Version"
+rules:
+  - id: member-down
+    from: members
+    each: "$[?@.Status != 'alive']"
+    when: "@.Status != 'alive'"
+    severity: medium
+    title:
+      ru: "Consul: узел {{@.Name}} — {{@.Status}}"
+      en: "Consul: node {{@.Name}} is {{@.Status}}"
+    object: "@.Name"

@@ -1,0 +1,2 @@
+[{"Name":"node-1","Addr":"10.0.0.1","Port":8301,"Status":"alive"},
+ {"Name":"node-2","Addr":"10.0.0.2","Port":8301,"Status":"failed"}]

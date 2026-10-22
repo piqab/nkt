@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.82 — 2026-10-22
+
+- **Docs with examples for everything new.** “Your own services” → “More
+  examples”: Tomcat (xml), Kafka (properties), MySQL (ini), the RabbitMQ
+  API with a password from a file, Consul (a command), memcached (regex) —
+  each checked by a test on the same files. Examples were also added for AI
+  in the script editor, the fix script in finding analysis, the assistant
+  (a sample conversation, a comparison with MCP) and MCP (a job with
+  waiting, an agent at work); the API reference lists MCP, the assistant,
+  service descriptions, `nkt services` and `nkt mcp`.
+- Service descriptions: `each` may end with transforms —
+  `"$.listeners | split(,)"` iterates the parts of a line (Kafka: several
+  addresses in one).
+
 ## v1.13.81 — 2026-10-22
 
 - The “Your own services” docs are rewritten: a step-by-step “your own

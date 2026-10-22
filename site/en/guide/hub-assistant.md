@@ -39,6 +39,56 @@ a script”**: “Profiles” → “Scripts” opens with that text, then “Ch
 dry run and the run — by you. A stack move (`migrate`) and a deployment
 (`deploy`) come the same way.
 
+## Example
+
+Question: “Which critical findings are on the hosts now and where do I
+start?”
+
+Above the answer — what the assistant looked at:
+
+```
+Looked at: list_hosts  host_findings host_id=1  list_alerts after=0
+```
+
+The answer:
+
+```
+web-1 has 5 critical and 24 high findings right now. The main ones:
+- Container acme-redis publishes port 6379 on 0.0.0.0, bypassing the firewall
+- Redis is listening on port 6379 on all interfaces
+- Certificate api.example.com expired
+
+Start with Redis: port 6379 is open to the outside. Close it:
+```
+
+```
+# Redis on web-1: close 6379 from outside
+on web-1 firewall deny 6379/tcp
+```
+
+Under the block — “Open as a script” and “The script from the answer
+passed “Check””. Then “Dry run” and “Run” in “Scripts”.
+
+More questions the assistant answers from the hub's data: “why did the
+last job fail and what do I do?” (reads the job and its log), “which
+stacks can move off the busiest host?” (hosts, containers, moves — the
+answer is a script with `migrate`), “what's wrong with Traffic Fly?” (the
+map and target state).
+
+## Assistant or MCP
+
+| | Assistant | [MCP](/en/guide/hub-mcp) |
+|---|---|---|
+| Who asks | an admin in the hub interface | an external agent (Claude Code, Cursor…) |
+| Access | the asker's rights | the API token's rights |
+| Actions | none — only a script you run | with an admin token — right away, without confirmation |
+| Model | the one set in “About” | the agent's model |
+
+Over the API: `POST /api/hub/assistant` with
+`{"messages":[{"role":"user","text":"…"}]}` (the whole conversation, the
+last message is the question) → `answer`, `steps` (what it looked at),
+`script` and `issues` (a script in the answer and the “Check” result).
+
 ## A model without tools
 
 Local models can't always call tools. If the provider refuses such a
