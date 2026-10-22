@@ -155,6 +155,13 @@ a bulb: "what is configured / what to fix / example", with a field for a
 task-specific question. Passwords, keys, tokens and password hashes are
 always cut from the text.
 
+The script editor has an **"AI ▾"** button: explain the selection, write
+commands from `# AI: …` lines, write a script from a task description
+([Scripts](/en/guide/hub-scripts#ai-in-the-editor)). The model sees the
+language reference and the names of hub objects; its answer goes through
+"Check" and gets into the editor only through a diff window, and a person
+runs the script.
+
 When writing a configuration fails (validation or apply), the failure
 banner carries the same bulb: the model gets the check output and the
 diff of the edit, with the task to explain and show a corrected

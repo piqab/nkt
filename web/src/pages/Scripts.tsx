@@ -10,6 +10,7 @@ import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 import ScriptScheme from '../components/ScriptScheme'
+import { AIScriptMenu } from '../components/AIScriptMenu'
 import { TitleHelp } from '../components/Docs'
 import { msg, tx, type Msg } from '../msg'
 
@@ -474,6 +475,16 @@ export default function Scripts({ me }: { me: Me }) {
                 <label style={{ flex: 1, minWidth: '14rem' }}>
                   {t('scripts.note')}
                   <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('scripts.notePlaceholder')} />
+                </label>
+                <label>
+                  {t('scripts.ai.label')}
+                  <AIScriptMenu
+                    draft={draft}
+                    onApply={(text) => {
+                      setDraft(text)
+                      setCheck(null)
+                    }}
+                  />
                 </label>
                 <label>
                   {t('scripts.examplesLabel')}

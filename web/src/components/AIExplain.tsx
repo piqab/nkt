@@ -394,7 +394,7 @@ export function useElapsed(running: boolean): number {
 
 /** Текст ответа: блоки ```…``` показываются моноширинно, чтобы команду
  * было видно и можно было выделить целиком. */
-function AIBody({ text }: { text: string }) {
+export function AIBody({ text }: { text: string }) {
   const parts = text.split(/```(?:bash|sh|shell)?\n?/)
   return (
     <>

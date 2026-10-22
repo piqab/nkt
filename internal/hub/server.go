@@ -343,6 +343,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/aptcache/settings", s.handleHubAptCacheSettings)
 					r.Post("/hub/aptcache/clear", s.handleHubAptCacheClear)
 					r.Post("/hub/ai/settings", s.handleAISettings)
+					r.Post("/hub/ai/script", s.handleAIScript)
 					r.Post("/hub/ai/cache/clear", s.handleAICacheClear)
 					r.Post("/hub/ai/answers/delete", s.handleAIAnswerDelete)
 					r.Post("/hub/ai/prompts", s.handleAIPromptSet)
