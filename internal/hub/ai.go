@@ -193,6 +193,10 @@ type AIAnswer struct {
 	// сохранён до того, как запрос стали хранить (есть только Prompt).
 	Request        *AIRequest `json:"request,omitempty"`
 	RequestMissing bool       `json:"request_missing,omitempty"`
+	// Script — в ответе есть сценарий исправления (```nkt); ScriptIssues —
+	// итог «Проверить» на сейчас (и для сохранённых ответов).
+	Script       bool              `json:"script,omitempty"`
+	ScriptIssues []scriptIssueJSON `json:"script_issues,omitempty"`
 }
 
 // AIRequest — запрос к модели целиком: кому, чем, что ушло.
@@ -300,6 +304,11 @@ func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingConte
 	}
 	_ = m.db.AIUsageAdd(ctx)
 	revealed := mapper.Reveal(answer)
+	if hostID != 0 && aiFixKinds[kind] {
+		// Сценарий исправления проходит «Проверить»; с ошибками — модели
+		// одна попытка исправить, сохраняется исправленный ответ.
+		revealed, _, _, _ = m.fixAnswerScript(ctx, client, set, mapper, revealed)
+	}
 	req := m.newAIRequest(ctx, set, kind, system, user, mapper)
 	if err := m.db.AIAnswerPut(ctx, store.AIAnswer{
 		Key: key, HostID: hostID, Kind: kind, Title: fc.Title, Object: object, File: fc.File,
@@ -455,7 +464,7 @@ func (m *Manager) aiAnswer(ctx context.Context, answer, model, prompt string, re
 		// Пустой список, а не null: интерфейс перебирает разделы.
 		sections = []ai.Section{}
 	}
-	return AIAnswer{
+	out := AIAnswer{
 		Answer:   answer,
 		Sections: sections,
 		Model:    model,
@@ -464,6 +473,11 @@ func (m *Manager) aiAnswer(ctx context.Context, answer, model, prompt string, re
 		Notice:  msgs.Tc(ctx, "ai.generated", model),
 		Request: req,
 	}
+	if mm := nktBlock.FindStringSubmatch(answer); mm != nil && m.scriptCheck != nil {
+		out.Script = true
+		out.ScriptIssues = issuesJSON(msgs.FromContext(ctx), m.scriptCheck(ctx, mm[1]))
+	}
+	return out
 }
 
 // AITestResult — итог проверки настроек.

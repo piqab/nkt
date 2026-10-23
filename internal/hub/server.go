@@ -96,6 +96,10 @@ func New(d Deps) *Server {
 	if s.auth != nil && s.hub != nil {
 		s.auth.SetTokenAuth(newTokenAuth(s))
 	}
+	if s.hub != nil {
+		s.hub.scriptCheck = s.aiScriptCheck
+		s.hub.scriptNames = s.aiScriptNames
+	}
 	return s
 }
 

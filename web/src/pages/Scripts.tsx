@@ -23,6 +23,7 @@ import { msg, tx, type Msg } from '../msg'
 export interface ScriptRow {
   id: number
   name: string
+  origin?: string
   color?: string
   content?: string
   note?: string
@@ -129,6 +130,8 @@ export default function Scripts({ me }: { me: Me }) {
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [color, setColor] = useState('')
+  // «ai» — черновик из ответа модели (ассистент, разбор находки).
+  const [origin, setOrigin] = useState('')
   const [tab, setTab] = useState<'text' | 'scheme' | 'help'>('text')
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
@@ -153,6 +156,7 @@ export default function Scripts({ me }: { me: Me }) {
 
   function startNew() {
     setSelected(null)
+    setOrigin('')
     setName('')
     setDraft(template(t('scripts.templateComment')))
     setNote('')
@@ -173,8 +177,21 @@ export default function Scripts({ me }: { me: Me }) {
       text = null
     }
     if (!text || !canEdit) return
+    let from: { kind: 'assistant' | 'finding'; label?: string } = { kind: 'assistant' }
+    try {
+      from = JSON.parse(sessionStorage.getItem('nkt-script-draft-origin') ?? '') ?? from
+      sessionStorage.removeItem('nkt-script-draft-origin')
+    } catch {
+      /* без пометки — как от ассистента */
+    }
     startNew()
     setDraft(text)
+    // Имя — само, латиницей; заметка — откуда сценарий; проверка — сразу.
+    setOrigin('ai')
+    setName(autoScriptName(from.kind, text, new Set(scripts.map((s) => s.name))))
+    const label = (from.label ?? '').replace(/\s+/g, ' ').slice(0, 200)
+    setNote(from.kind === 'finding' ? t('scripts.noteFromFinding', { label }) : t('scripts.noteFromAssistant', { label }))
+    void runCheck(text)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Готовые сценарии — и прямо в окне редактора («Готовые сценарии ▾»):
@@ -197,7 +214,7 @@ export default function Scripts({ me }: { me: Me }) {
       if (id) {
         await api(`/hub/scripts/${id}`, { method: 'PUT', body: { name, content: draft, note, color } })
       } else {
-        const res = await api<{ id: number }>('/hub/scripts', { method: 'POST', body: { name, content: draft, note, color } })
+        const res = await api<{ id: number }>('/hub/scripts', { method: 'POST', body: { name, content: draft, note, color, origin } })
         id = res.id
         setSelected(id)
       }
@@ -213,11 +230,11 @@ export default function Scripts({ me }: { me: Me }) {
     }
   }
 
-  async function runCheck(): Promise<CheckResult | null> {
+  async function runCheck(text: string = draft): Promise<CheckResult | null> {
     setBusy('check')
     setNotice(null)
     try {
-      const res = await api<CheckResult>('/hub/scripts/check', { method: 'POST', body: { content: draft } })
+      const res = await api<CheckResult>('/hub/scripts/check', { method: 'POST', body: { content: text } })
       setCheck(res)
       return res
     } catch (err) {
@@ -303,6 +320,11 @@ export default function Scripts({ me }: { me: Me }) {
                     <span className="profile-swatch" style={{ background: s.color || 'transparent' }} />
                     <span>
                       <strong>{s.name}</strong>
+                      {s.origin === 'ai' && (
+                        <Tag color="purple" style={{ marginLeft: 6 }}>
+                          {t('scripts.fromAI')}
+                        </Tag>
+                      )}
                       <div className="small muted">{t('scripts.updated', { when: formatDateTime(s.updated_at) })}</div>
                     </span>
                   </span>
@@ -351,12 +373,12 @@ export default function Scripts({ me }: { me: Me }) {
                     </Button>
                     {RUN_ENABLED && (
                       <>
-                        <Tooltip title={t('scripts.dryRunHint')}>
+                        <Tooltip title={!trimmedName ? t('scripts.needName') : t('scripts.dryRunHint')}>
                           <Button size="small" loading={busy === 'dry'} disabled={!trimmedName || busy !== null} onClick={() => void run(true)}>
                             {t('scripts.dryRun')}
                           </Button>
                         </Tooltip>
-                        <Tooltip title={t('scripts.runHint')}>
+                        <Tooltip title={!trimmedName ? t('scripts.needName') : t('scripts.runHint')}>
                           <Button size="small" type="primary" loading={busy === 'run'} disabled={!trimmedName || busy !== null} onClick={() => void run()}>
                             {t('scripts.run')}
                           </Button>
@@ -416,41 +438,8 @@ export default function Scripts({ me }: { me: Me }) {
           {/* Результат проверки относится к тексту — под справкой и схемой
               ему не место. */}
           {check && tab === 'text' && (
-            <Card
-              title={check.issues.length > 0 ? t('scripts.checkIssues', { count: check.issues.length }) : t('scripts.checkOk', { count: check.steps.length })}
-            >
-              {check.issues.length > 0 ? (
-                <ul className="col" style={{ gap: '0.2rem', margin: 0, paddingLeft: '1.2rem' }}>
-                  {check.issues.map((i, n) => (
-                    <li key={n}>
-                      <span className="mono muted">{t('scripts.line', { line: i.line })}</span> {i.error}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <>
-                  {check.asks.length > 0 && (
-                    <p className="small muted" style={{ marginTop: 0 }}>
-                      {t('scripts.willAsk', { items: check.asks.map((a) => a.prompt).join(', ') })}
-                    </p>
-                  )}
-                  <div className="table-wrap">
-                    <DataTable<ScriptStep>
-                      dataSource={check.steps}
-                      rowKey="line"
-                      columns={[
-                        { title: '#', key: 'line', width: 60, render: (_, s) => <span className="mono muted">{s.line}</span> },
-                        { title: t('scripts.colHost'), key: 'host', width: 140, render: (_, s) => {
-                            const hs = s.hosts && s.hosts.length > 0 ? s.hosts : s.host ? [s.host] : []
-                            return hs.length > 0 ? hs.map((h) => <Tag key={h}>{h}</Tag>) : <span className="muted">—</span>
-                          },
-                        },
-                        { title: t('scripts.colStep'), key: 'text', render: (_, s) => <code className="mono">{s.text}</code> },
-                      ]}
-                    />
-                  </div>
-                </>
-              )}
+            <Card title={checkTitle(t, check)}>
+              <CheckView check={check} />
             </Card>
           )}
         </div>
@@ -481,7 +470,21 @@ export default function Scripts({ me }: { me: Me }) {
             setCheck(null)
           }}
           busy={busy === 'save'}
+          saveBlocked={!trimmedName ? t('scripts.needName') : !check ? t('scripts.needCheck') : check.issues.length > 0 ? t('scripts.needFix') : undefined}
+          below={
+            check && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <Banner kind={check.issues.length > 0 ? 'error' : 'success'}>{checkTitle(t, check)}</Banner>
+                <div style={{ maxHeight: '30vh', overflow: 'auto' }}>
+                  <CheckView check={check} />
+                </div>
+              </div>
+            )
+          }
           fields={(<div className="filters" style={{ marginBottom: '0.5rem', alignItems: 'flex-end' }}>
+                <Button loading={busy === 'check'} onClick={() => void runCheck()}>
+                  {t('scripts.check')}
+                </Button>
                 <label style={{ minWidth: '12rem' }}>
                   {t('scripts.name')}
                   <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="web-farm" />
@@ -490,16 +493,14 @@ export default function Scripts({ me }: { me: Me }) {
                   {t('scripts.note')}
                   <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('scripts.notePlaceholder')} />
                 </label>
-                <label>
-                  {t('scripts.ai.label')}
-                  <AIScriptMenu
-                    draft={draft}
-                    onApply={(text) => {
-                      setDraft(text)
-                      setCheck(null)
-                    }}
-                  />
-                </label>
+                <AIScriptMenu
+                  label={t('scripts.ai.label')}
+                  draft={draft}
+                  onApply={(text) => {
+                    setDraft(text)
+                    setCheck(null)
+                  }}
+                />
                 <label>
                   {t('scripts.examplesLabel')}
                   <Dropdown
@@ -733,4 +734,63 @@ function ScriptHelp({ canInsert, onInsert }: { canInsert: boolean; onInsert: (te
       </section>
     </div>
   )
+}
+
+function checkTitle(t: (k: string, o?: Record<string, unknown>) => string, check: CheckResult) {
+  return check.issues.length > 0 ? t('scripts.checkIssues', { count: check.issues.length }) : t('scripts.checkOk', { count: check.steps.length })
+}
+
+/** Итог «Проверить»: ошибки по строкам или шаги и что спросит запуск —
+ * на странице и в окне редактора. */
+function CheckView({ check }: { check: CheckResult }) {
+  const { t } = useTranslation()
+  return (
+    <>
+              {check.issues.length > 0 ? (
+                <ul className="col" style={{ gap: '0.2rem', margin: 0, paddingLeft: '1.2rem' }}>
+                  {check.issues.map((i, n) => (
+                    <li key={n}>
+                      <span className="mono muted">{t('scripts.line', { line: i.line })}</span> {i.error}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <>
+                  {check.asks.length > 0 && (
+                    <p className="small muted" style={{ marginTop: 0 }}>
+                      {t('scripts.willAsk', { items: check.asks.map((a) => a.prompt).join(', ') })}
+                    </p>
+                  )}
+                  <div className="table-wrap">
+                    <DataTable<ScriptStep>
+                      dataSource={check.steps}
+                      rowKey="line"
+                      columns={[
+                        { title: '#', key: 'line', width: 60, render: (_, s) => <span className="mono muted">{s.line}</span> },
+                        { title: t('scripts.colHost'), key: 'host', width: 140, render: (_, s) => {
+                            const hs = s.hosts && s.hosts.length > 0 ? s.hosts : s.host ? [s.host] : []
+                            return hs.length > 0 ? hs.map((h) => <Tag key={h}>{h}</Tag>) : <span className="muted">—</span>
+                          },
+                        },
+                        { title: t('scripts.colStep'), key: 'text', render: (_, s) => <code className="mono">{s.text}</code> },
+                      ]}
+                    />
+                  </div>
+                </>
+              )}
+    </>
+  )
+}
+
+/** Имя черновика из ответа модели — латиницей, без пробелов: ai-ДАТА-ХОСТ
+ * (ассистент) или fix-ХОСТ-ДАТА (разбор находки); хост — из первой строки
+ * «on ХОСТ …»; занятое имя — с суффиксом -2, -3… */
+export function autoScriptName(kind: 'assistant' | 'finding', content: string, taken: Set<string>, now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
+  const host = (content.match(/^\s*on\s+([A-Za-z0-9._-]+)/m)?.[1] ?? '').toLowerCase()
+  const base = kind === 'finding' ? `fix-${host || 'host'}-${stamp}` : `ai-${stamp}${host ? `-${host}` : ''}`
+  let name = base
+  for (let n = 2; taken.has(name); n++) name = `${base}-${n}`
+  return name
 }

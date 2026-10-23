@@ -312,6 +312,7 @@ export default function ServiceDescriptions({ me }: { me: Me }) {
             setCheck(null)
           }}
           busy={busy}
+          saveBlocked={!check ? t('svcdesc.needCheck') : check.error ? t('svcdesc.needFix') : undefined}
           onSave={save}
           onHistory={editing.id !== null ? () => setHistory(editing.id) : undefined}
           onClose={() => setEditing(null)}

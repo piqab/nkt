@@ -2607,7 +2607,13 @@
       "checked": "“Check” passed without errors. AI does not run the script — after inserting: “Save”, “Dry run”, “Run”.",
       "apply": "Insert into the editor",
       "footer": "model {{model}}, requests: {{attempts}}"
-    }
+    },
+    "needName": "Name the script",
+    "needCheck": "Press “Check”: the checked text is what gets saved",
+    "needFix": "Fix the check errors",
+    "noteFromAssistant": "Suggested by the assistant: {{label}}",
+    "noteFromFinding": "From a finding analysis: {{label}}",
+    "fromAI": "AI"
   },
   "malware": {
     "tab": "Malware",
@@ -3168,7 +3174,9 @@
     "toolsOrigin": {
       "test": "by “Check tools”",
       "assistant": "by a question to the assistant"
-    }
+    },
+    "scriptChecked": "The script passed “Check”",
+    "scriptRetried": "the model fixed it after the check errors"
   },
   "editModal": {
     "saved": "saved",
@@ -5045,7 +5053,6 @@
     "looked": "Looked at:",
     "summary": "from a snapshot",
     "summaryHint": "The model cannot call tools: the answer is from a hub snapshot (hosts, alerts, pipelines, moves).",
-    "scriptChecked": "The script from the answer passed “Check”.",
     "footer": "Answer by {{model}} · turns: {{rounds}}",
     "disabled": "AI is off: turn it on in “About” → “Model analysis”.",
     "modelToolsHint": "The model calls tools: the assistant looks at the hub’s data itself."
@@ -5106,6 +5113,8 @@
     "asField": "into the field (from each)",
     "field": "field",
     "items": "{{count}} items",
-    "asRoot": "commands as root: {{count}}"
+    "asRoot": "commands as root: {{count}}",
+    "needCheck": "Press “Check”: the checked text is what gets saved",
+    "needFix": "Fix the check error"
   }
 }

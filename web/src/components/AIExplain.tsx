@@ -155,6 +155,15 @@ interface AIAnswer {
   stored_at?: string
   /** Ответ той же находки на другом хосте — своего ещё нет. */
   similar?: { host_id: number; host_name: string; created_at: string }
+  /** Сценарий исправления в ответе и итог «Проверить» на сейчас. */
+  script?: boolean
+  script_issues?: { line: number; error: string }[]
+}
+
+/** Итог «Проверить» сценария из ответа модели. */
+export interface ScriptCheckView {
+  issues: { line: number; error: string }[]
+  retried?: boolean
 }
 
 export function AIExplain({
@@ -314,13 +323,13 @@ export function AIExplain({
                 answer.sections.map((s, i) => (
                   <div key={i}>
                     {s.title && <h3 style={{ marginBottom: '0.3rem' }}>{s.title}</h3>}
-                    <AIBody text={s.body} />
+                    <AIBody text={s.body} origin={{ kind: 'finding', label: ctx.title }} check={answer.script ? { issues: answer.script_issues ?? [] } : undefined} />
                   </div>
                 ))
               ) : answer.answer?.trim() ? (
                 // Разделов не нашлось (модель ответила без заголовков «##»)
                 // — текст целиком, а не пустое окно.
-                <AIBody text={answer.answer} />
+                <AIBody text={answer.answer} origin={{ kind: 'finding', label: ctx.title }} check={answer.script ? { issues: answer.script_issues ?? [] } : undefined} />
               ) : (
                 <Banner kind="warn">{t('ai.emptyAnswer')}</Banner>
               )}
@@ -398,7 +407,13 @@ export function useElapsed(running: boolean): number {
  * исправления: под ним «Открыть как сценарий» (администратору) — редактор
  * сценария с этим текстом, дальше «Проверить», сухой прогон, запуск
  * человеком. */
-export function AIBody({ text }: { text: string }) {
+/** Откуда черновик сценария: ассистент (вопрос) или разбор находки. */
+export interface ScriptOrigin {
+  kind: 'assistant' | 'finding'
+  label?: string
+}
+
+export function AIBody({ text, origin, check }: { text: string; origin?: ScriptOrigin; check?: ScriptCheckView }) {
   const { t } = useTranslation()
   const me = useApi<Me>('/auth/me')
   const parts: { code: boolean; lang: string; body: string }[] = []
@@ -418,9 +433,10 @@ export function AIBody({ text }: { text: string }) {
             <pre className="diff mono small sensitive-area" style={{ whiteSpace: 'pre-wrap', margin: '0.3rem 0' }}>
               {p.body.replace(/\n?$/, '')}
             </pre>
+            {p.lang === 'nkt' && check && <ScriptCheckLine check={check} />}
             {p.lang === 'nkt' && me.data?.is_admin && (
               <Tooltip title={t('ai.openScriptHint')}>
-                <Button size="small" onClick={() => openAsScript(p.body)}>
+                <Button size="small" onClick={() => openAsScript(p.body, origin)}>
                   {t('ai.openScript')}
                 </Button>
               </Tooltip>
@@ -438,11 +454,38 @@ export function AIBody({ text }: { text: string }) {
 
 /** Открыть текст новым сценарием в «Профили» → «Сценарии» (App ловит
  * событие, страница сценариев берёт текст при открытии). */
-export function openAsScript(content: string) {
+export function openAsScript(content: string, origin?: ScriptOrigin) {
   try {
     sessionStorage.setItem('nkt-script-draft', content.endsWith('\n') ? content : content + '\n')
+    sessionStorage.setItem('nkt-script-draft-origin', JSON.stringify(origin ?? { kind: 'assistant' }))
   } catch {
     /* без хранилища — откроется пустой */
   }
   window.dispatchEvent(new CustomEvent('nkt-open-script'))
+}
+
+/** Под блоком сценария: прошёл «Проверить» или ошибки по строкам
+ * (модель уже исправляла один раз, если retried). */
+function ScriptCheckLine({ check }: { check: ScriptCheckView }) {
+  const { t } = useTranslation()
+  if (check.issues.length === 0) {
+    return (
+      <div className="small" style={{ color: 'var(--status-good)', margin: '0.2rem 0' }}>
+        ✓ {t('ai.scriptChecked')}
+        {check.retried && <span className="muted"> · {t('ai.scriptRetried')}</span>}
+      </div>
+    )
+  }
+  return (
+    <Banner kind="warn">
+      {t('scripts.ai.issues', { count: check.issues.length })}
+      <ul className="small" style={{ margin: '0.3rem 0 0', paddingLeft: '1.2rem' }}>
+        {check.issues.map((x, n) => (
+          <li key={n}>
+            {t('scripts.line', { line: x.line })} {x.error}
+          </li>
+        ))}
+      </ul>
+    </Banner>
+  )
 }

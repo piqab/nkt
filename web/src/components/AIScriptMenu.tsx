@@ -33,7 +33,8 @@ function editorSelection(): string {
   return ta.value.slice(ta.selectionStart, ta.selectionEnd)
 }
 
-export function AIScriptMenu({ draft, onApply }: { draft: string; onApply: (text: string) => void }) {
+/** label — подпись над кнопкой: ИИ выключен — нет ни кнопки, ни подписи. */
+export function AIScriptMenu({ draft, onApply, label }: { draft: string; onApply: (text: string) => void; label?: string }) {
   const { t } = useTranslation()
   const status = useApi<{ enabled: boolean }>('/hub/ai')
   const [busy, setBusy] = useState<Mode | null>(null)
@@ -62,7 +63,8 @@ export function AIScriptMenu({ draft, onApply }: { draft: string; onApply: (text
     setError(null)
   }
   return (
-    <>
+    <label>
+      {label}
       <Dropdown
         trigger={['click']}
         menu={{
@@ -146,6 +148,6 @@ export function AIScriptMenu({ draft, onApply }: { draft: string; onApply: (text
           </div>
         </Modal>
       )}
-    </>
+    </label>
   )
 }

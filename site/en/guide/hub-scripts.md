@@ -48,7 +48,7 @@ wait web1 http http://${ADDR}/ 200 1m
 | `on HOST… packages install\|remove …` | packages; several hosts may be listed in `on` |
 | `on HOST service NAME start\|stop\|restart\|reload\|enable\|disable` | services |
 | `on HOST firewall allow\|deny PORT [from CIDR]` | firewall |
-| `on HOST docker install`, `on HOST docker stack PATH up\|down … end` | Docker and a compose stack |
+| `on HOST docker install`, `on HOST docker stack PATH up\|down` | Docker and a compose stack: `up` without a block starts the file already on the host; with a block (compose YAML up to `end` right under the line) it writes it first; `down` takes no block |
 | `on HOST vm create NAME image IMAGE [cpu N] [mem MB] [disk GB] [profile …] [install]` | a machine on the host |
 | `on HOST apply profile PROFILE` | apply a profile |
 | `on HOST file put PATH … end` | write a file |
@@ -125,8 +125,22 @@ entirely on its hosts. Details — [Hub API](/en/guide/hub-api#what-a-token-can-
 
 ## Check, dry run, run
 
+![An assistant draft in the editor: name, note and check are filled in](/screens/en/hub-script-editor.png)
+
 - **Check** parses the text and verifies host, group and profile names
-  without changing anything.
+  without changing anything. The button is in the editor window too: the
+  result is under the text, errors by line. It also catches a block closed
+  in the wrong place: if script commands (`on …`, `wait …`) ended up in a
+  block's YAML — “`end` is misplaced”.
+- **Save** in the editor window is available when the script has a name
+  and the current text passed “Check”; any edit needs a new check. Next to
+  the disabled button it says what is missing.
+- **A draft from AI** (“Open as a script” in an assistant answer or a
+  finding analysis) opens with a Latin name (`ai-20261023-1532-web-1` or
+  `fix-web-1-20261023-1532`), a note “Suggested by the assistant: …” or
+  “From a finding analysis: …” and already checked — “Save” is available
+  right away. Such scripts carry an “AI” tag in the list. A downloaded
+  script's file name is in Latin letters.
 - **Dry run** walks the script: hosts are asked for plans (what would
   change), other steps are logged as “would do”; no hosts or machines are
   created.

@@ -25,6 +25,7 @@ export function EditTextModal({
   below,
   serverDiff,
   blocksEndpoint,
+  saveBlocked,
 }: {
   title: ReactNode
   /** Текст до правки — с ним сравнивается черновик. Для нового — ''. */
@@ -47,6 +48,9 @@ export function EditTextModal({
   /** Блочный режим YAML Kubernetes: адрес разбора на блоки (POST
    * {content}); задан — над редактором переключатель «Текст / Блоки». */
   blocksEndpoint?: string
+  /** Почему сохранить пока нельзя (не проверено, нет имени): кнопка
+   * неактивна, причина — рядом с ней. */
+  saveBlocked?: string
 }) {
   const { t } = useTranslation()
   const [preview, setPreview] = useState<{ diff: string; confirm: boolean } | null>(null)
@@ -89,9 +93,10 @@ export function EditTextModal({
           {t('configs.showChanges')}
         </Button>
         {onHistory && <Button onClick={onHistory}>{t('configs.versionHistoryTitle')}</Button>}
-        <Button type="primary" loading={busy} onClick={() => setPreview({ diff: diff(), confirm: true })}>
+        <Button type="primary" loading={busy} disabled={!!saveBlocked} title={saveBlocked} onClick={() => setPreview({ diff: diff(), confirm: true })}>
           {t('common.save')}
         </Button>
+        {saveBlocked && <span className="small muted">{saveBlocked}</span>}
       </div>
       {preview && (
         <Modal title={t(preview.confirm ? 'blocks.previewTitle' : 'editModal.changes')} onClose={() => setPreview(null)} width={900} maskClosable={false} sizeKey="diff">

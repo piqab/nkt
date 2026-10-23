@@ -115,3 +115,44 @@ func TestAIExplainFixScriptHint(t *testing.T) {
 		t.Error("у разбора без хоста — просьба о сценарии")
 	}
 }
+
+// Сценарий исправления с ошибкой «Проверить» — модели одна попытка
+// исправить; сохраняется и показывается исправленный, с итогом проверки.
+func TestAIExplainFixScriptRetry(t *testing.T) {
+	ctx := context.Background()
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct{ Role, Content string } `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		calls++
+		answer := "## Что сделать\nПерезапустить Redis.\n\n```nkt\n# Redis\non web9 service redis-server restart\n```\n"
+		if strings.Contains(body.Messages[len(body.Messages)-1].Content, "нашла ошибки") {
+			answer = "```\n# Redis\non web-1 service redis-server restart\n```"
+		}
+		a, _ := json.Marshal(answer)
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":`+string(a)+`}}]}`)
+	}))
+	defer srv.Close()
+	m, db := newTestManager(t)
+	s := &Server{hub: m, db: db}
+	m.scriptCheck, m.scriptNames = s.aiScriptCheck, s.aiScriptNames
+	if err := m.SetAISettings(ctx, ai.Settings{Enabled: true, Provider: ai.ProviderOpenAI, BaseURL: srv.URL, Model: "m"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	h, _ := m.AddHost(ctx, "web-1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	res, err := m.AIExplain(ctx, ai.KindFinding, ai.FindingContext{Title: "Redis слушает все адреса"}, nil, h, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || !strings.Contains(res.Answer, "on web-1 service redis-server restart") || strings.Contains(res.Answer, "web9") ||
+		!res.Script || len(res.ScriptIssues) != 0 || !strings.Contains(res.Answer, "Перезапустить Redis") {
+		t.Fatalf("calls=%d %+v", calls, res)
+	}
+	// Сохранённый ответ — тот же, исправленный.
+	again, err := m.AIExplain(ctx, ai.KindFinding, ai.FindingContext{Title: "Redis слушает все адреса"}, nil, h, false)
+	if err != nil || calls != 2 || !strings.Contains(again.Answer, "on web-1") || !again.Script {
+		t.Fatalf("stored: calls=%d %+v %v", calls, again, err)
+	}
+}

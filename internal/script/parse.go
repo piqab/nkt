@@ -1,6 +1,7 @@
 package script
 
 import (
+	"gopkg.in/yaml.v3"
 	"net"
 	"net/url"
 	"regexp"
@@ -155,7 +156,7 @@ func Parse(text string, values map[string]string) (Script, []Issue) {
 		}
 		step.Line = lineNo
 		step.Text = line
-		if doc := docByKind(step.Kind); doc != nil && doc.Block {
+		if doc := docByKind(step.Kind); doc != nil && doc.Block && blockFollows(step, lines, i) {
 			// Блок: строки как есть до «end» в начале строки. Отступы
 			// сохраняются — это может быть YAML.
 			var block []string
@@ -168,12 +169,13 @@ func Parse(text string, values map[string]string) (Script, []Issue) {
 				block = append(block, lines[i])
 			}
 			if !closed {
-				fail(step.Line, "script.blockNotClosed")
+				fail(step.Line, "script.blockNotClosed", line)
 			}
 			step.Block = expandKnown(strings.Join(block, "\n"), sc.Vars)
 			if len(block) > 0 {
 				step.Block += "\n"
 			}
+			checkBlock(step, block, lineNo, fail)
 		}
 		if step.Kind == KindSet {
 			sc.Vars[step.Name] = step.Args["value"]
@@ -960,4 +962,63 @@ func expandKnown(text string, vars map[string]string) string {
 		text = strings.ReplaceAll(text, "${"+name+"}", v)
 	}
 	return text
+}
+
+// yamlKeyRe — строка YAML-объекта верхнего уровня («services:», «name: x»):
+// команды сценария так не начинаются.
+var yamlKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]*:(\s|$)`)
+
+// blockFollows — у команды есть блок. У «docker stack» он необязателен:
+// down — без блока, up — с блоком, только если следующая значимая строка
+// похожа на YAML (отступ, «ключ:», «---») или это сразу «end»; иначе up
+// поднимает файл, который уже лежит на хосте.
+func blockFollows(step Step, lines []string, i int) bool {
+	if step.Kind != KindDockerStack {
+		return true
+	}
+	if step.Action == "down" {
+		return false
+	}
+	for j := i + 1; j < len(lines); j++ {
+		l := lines[j]
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		return t == "end" || t == "---" || l[0] == ' ' || l[0] == '\t' || yamlKeyRe.MatchString(t)
+	}
+	return false
+}
+
+// blockCommandRe — строка блока, похожая на команду сценария: блок,
+// скорее всего, закрыт не там (забытый или лишний «end»).
+var blockCommandRe = regexp.MustCompile(`^(on|wait|deploy|migrate|fly|host|group|install|set|param|pipeline|k8s|apply)\s`)
+
+// checkBlock — блок YAML (compose, манифест, конвейер) не содержит команд
+// сценария, compose — разбирается как YAML.
+func checkBlock(step Step, block []string, first int, fail func(int, string, ...any)) {
+	switch step.Kind {
+	case KindDockerStack, KindK8sApply, KindPipeline:
+	default:
+		return
+	}
+	from, to := 0, 0
+	for k, l := range block {
+		if blockCommandRe.MatchString(l) {
+			if from == 0 {
+				from = first + 1 + k
+			}
+			to = first + 1 + k
+		}
+	}
+	if from != 0 {
+		fail(step.Line, "script.blockHasCommands", from, to)
+		return
+	}
+	if step.Kind == KindDockerStack && len(block) > 0 {
+		var doc map[string]any
+		if err := yaml.Unmarshal([]byte(strings.Join(block, "\n")), &doc); err != nil {
+			fail(step.Line, "script.composeNotYAML", err)
+		}
+	}
 }
