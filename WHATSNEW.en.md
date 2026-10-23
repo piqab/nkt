@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.89 — 2026-10-23
+
+- **“Script commands” on the docs site.** A new page with every command
+  of the script language: syntax, arguments, an example for each, and
+  ready-made scripts. It is built from the same command descriptions in
+  code that “Check”, the reference and AI work from — a test keeps it
+  from falling behind the code.
+- **“?” in the editor and on the script.** An icon in the title of the
+  editor window and the script card opens that page.
+- **The “Reference” tab — from the site.** By default it shows the same
+  site page; the “Site / From nkt” switch gives the built-in help when
+  the site isn't reachable (its ready-made scripts still go into the
+  editor). The choice is remembered.
+
 ## v1.13.88 — 2026-10-23
 
 - **A script from an answer runs right in the window.** Under a script

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, ColorPicker, Dropdown, Input, Tabs, Tag, Tooltip } from 'antd'
-import { CopyOutlined, DownOutlined } from '@ant-design/icons'
+import { Button, ColorPicker, Dropdown, Input, Segmented, Space, Tabs, Tag, Tooltip } from 'antd'
+import { CopyOutlined, DownOutlined, ExportOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Job, Me } from '../types'
@@ -11,7 +11,8 @@ import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 import ScriptScheme from '../components/ScriptScheme'
 import { AIScriptMenu } from '../components/AIScriptMenu'
-import { TitleHelp } from '../components/Docs'
+import { DocsFrame, HelpButton, TitleHelp } from '../components/Docs'
+import { DOCS, docsURL, useDocsBase } from '../docs'
 import { msg, tx, type Msg } from '../msg'
 import { autoScriptName } from '../scriptName'
 
@@ -337,7 +338,11 @@ export default function Scripts({ me }: { me: Me }) {
 
         <div className="col">
           <Card
-            title={current.data?.name ?? (selected ? '…' : t('scripts.newScript'))}
+            title={
+              <span>
+                {current.data?.name ?? (selected ? '…' : t('scripts.newScript'))} <CommandsHelp me={me} />
+              </span>
+            }
             actions={
               <div className="row" style={{ gap: '0.3rem', flexWrap: 'wrap' }}>
                 {selected && (
@@ -421,7 +426,7 @@ export default function Scripts({ me }: { me: Me }) {
                   key: 'help',
                   label: t('scripts.tabHelp'),
                   children: (
-                    <ScriptHelp
+                    <ScriptHelpTab
                       canInsert={canEdit}
                       onInsert={(text) => {
                         setDraft(text)
@@ -463,7 +468,11 @@ export default function Scripts({ me }: { me: Me }) {
       {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
       {editing && (
         <EditTextModal
-          title={current.data?.name ?? t('scripts.newScript')}
+          title={
+            <span>
+              {current.data?.name ?? t('scripts.newScript')} <CommandsHelp me={me} />
+            </span>
+          }
           saved={selected ? current.data?.content ?? '' : ''}
           draft={draft}
           onDraft={(v) => {
@@ -651,6 +660,66 @@ function CopyButton({ text }: { text: string }) {
  * разбор, поэтому справка и парсер не расходятся. Примеры копируются в
  * буфер, готовые сценарии — ещё и вставляются в редактор.
  */
+/** «?» — страница «Команды сценариев» на сайте справки. */
+function CommandsHelp({ me }: { me: Me }) {
+  return <HelpButton docKey="hub:script-commands" isHub admin={me.is_admin} version={me.hub_version} compact />
+}
+
+const HELP_SOURCE = 'nkt-script-help-source'
+
+function readHelpSource(): 'site' | 'nkt' {
+  try {
+    return localStorage.getItem(HELP_SOURCE) === 'nkt' ? 'nkt' : 'site'
+  } catch {
+    return 'site'
+  }
+}
+
+/**
+ * Вкладка «Справка»: по умолчанию — страница «Команды сценариев» с сайта
+ * справки (её собирают из того же описания команд, что и разбор); без
+ * доступа к сайту — справка из nkt, она же умеет вставлять готовые
+ * сценарии в редактор. Выбор помнится в браузере.
+ */
+function ScriptHelpTab({ canInsert, onInsert }: { canInsert: boolean; onInsert: (text: string) => void }) {
+  const { t, i18n } = useTranslation()
+  const base = useDocsBase(true)
+  const url = docsURL(base, i18n.language, DOCS['hub:script-commands'])
+  const [source, setSource] = useState<'site' | 'nkt'>(readHelpSource)
+  function choose(v: 'site' | 'nkt') {
+    setSource(v)
+    try {
+      localStorage.setItem(HELP_SOURCE, v)
+    } catch {
+      /* без хранилища — выбор до перезагрузки */
+    }
+  }
+  return (
+    <div className="col" style={{ gap: '0.5rem' }}>
+      <Space wrap>
+        <Segmented
+          size="small"
+          value={source}
+          onChange={(v) => choose(v as 'site' | 'nkt')}
+          options={[
+            { value: 'site', label: t('scripts.help.fromSite') },
+            { value: 'nkt', label: t('scripts.help.fromNkt') },
+          ]}
+        />
+        {source === 'site' && (
+          <a href={url} target="_blank" rel="noreferrer">
+            <Button size="small" icon={<ExportOutlined />}>
+              {t('docs.newTab')}
+            </Button>
+          </a>
+        )}
+        <span className="small muted">{t(source === 'site' ? 'scripts.help.siteHint' : 'scripts.help.nktHint')}</span>
+      </Space>
+      {source === 'site' ? <DocsFrame url={url} height="70vh" /> : <ScriptHelp canInsert={canInsert} onInsert={onInsert} />}
+    </div>
+  )
+}
+
 function ScriptHelp({ canInsert, onInsert }: { canInsert: boolean; onInsert: (text: string) => void }) {
   const { t } = useTranslation()
   const help = useApi<HelpData>('/hub/scripts/help')

@@ -43,14 +43,7 @@ export function DocsModal({ target, isHub, admin, version, onClose }: { target: 
           </a>
           <span className="small muted mono">{url}</span>
         </Space>
-        <iframe
-          key={url}
-          src={url}
-          title={t('docs.title')}
-          referrerPolicy="no-referrer"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-          style={{ flex: 1, width: '100%', border: '1px solid var(--border)', borderRadius: 6, background: '#fff' }}
-        />
+        <DocsFrame url={url} />
         <div className="small muted">
           {t('docs.hint', { version: version || '—' })}{' '}
           {admin && (
@@ -62,6 +55,21 @@ export function DocsModal({ target, isHub, admin, version, onClose }: { target: 
       </div>
       {settings && <DocsSettingsModal isHub={isHub} onClose={() => setSettings(false)} />}
     </Modal>
+  )
+}
+
+/** Страница сайта справки внутри интерфейса (окно справки, вкладки). */
+export function DocsFrame({ url, height }: { url: string; height?: string }) {
+  const { t } = useTranslation()
+  return (
+    <iframe
+      key={url}
+      src={url}
+      title={t('docs.title')}
+      referrerPolicy="no-referrer"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+      style={{ flex: height ? undefined : 1, height, width: '100%', border: '1px solid var(--border)', borderRadius: 6, background: '#fff' }}
+    />
   )
 }
 
