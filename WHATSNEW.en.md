@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.96 — 2026-10-23
+
+- **`docker stack PATH start|stop` in scripts.** `start` brings up what is
+  already on the host without going to the registry: a stopped container
+  with a private image comes up without a key. `stop` stops it without
+  removing anything. Neither takes a block.
+- **“Check” hints about pipeline stacks.** `docker stack` on a stack
+  deployed by a pipeline is a yellow warning (it doesn't stop saving or
+  running): such a stack is better started and stopped with
+  `deploy PIPELINE start|stop`.
+- **A clear `unauthorized`.** If `docker stack … up` failed at the registry
+  without a key, the error says how to bring the stack up:
+  `deploy PIPELINE start` or `docker stack PATH start`.
+- **The assistant and finding analysis** bring a stopped stack back with
+  `start`, not `up`; a script with `up` on a pipeline's stack goes back to
+  the model to be fixed; they don't offer on their own to start a stopped
+  deployment.
+
 ## v1.13.95 — 2026-10-23
 
 - **“Stop” and “Start” a deployment.** For a compose pipeline that has

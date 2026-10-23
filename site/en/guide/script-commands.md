@@ -34,7 +34,7 @@ Every command of the hub script language — the same ones “Check”, the “R
 | [`on HOST service NAME start\|stop\|restart\|reload\|enable\|disable`](#cmd-service) | Controls a systemd service: start, stop, restart, reload, autostart. |
 | [`on HOST firewall allow\|deny PORT[/tcp\|udp]`](#cmd-firewall) | A ufw/firewalld rule: allow or deny a port, optionally only from an address. |
 | [`on HOST docker install`](#cmd-docker-install) | Installs Docker from the official docker.com repository. |
-| [`on HOST docker stack PATH up\|down`](#cmd-docker-stack) | Brings a compose stack up or down. |
+| [`on HOST docker stack PATH up\|down\|start\|stop`](#cmd-docker-stack) | Brings a compose stack up or down, starts or stops it. |
 | [`on HOST vm create NAME image …`](#cmd-vm-create) | Creates a virtual machine on the host from a cloud image — like the “New machine” dialog. |
 | [`on HOST vm start\|shutdown\|destroy NAME`](#cmd-vm-action) | Starts, shuts down or force-stops a machine on the host. |
 | [`on HOST apply profile PROFILE`](#cmd-apply) | Applies a hub profile to the host in full: builds the plan and executes every item. |
@@ -240,12 +240,12 @@ Example:
 on web1 docker install
 ```
 
-### `on HOST docker stack PATH up|down` {#cmd-docker-stack}
+### `on HOST docker stack PATH up|down|start|stop` {#cmd-docker-stack}
 
-Brings a compose stack up or down. Without a block, up starts the file already on the host; with a block (compose YAML up to “end”) it first writes it to the given path. down takes no block.
+Brings a compose stack up or down, starts or stops it. Without a block, up starts the file already on the host; with a block (compose YAML up to “end”) it first writes it to the given path. start brings up what is on the host without going to the registry (a stopped container with a private image comes up without a key); stop stops it without removing anything. down, start and stop take no block. A stack deployed by a pipeline is started and stopped with deploy PIPELINE start|stop — “Check” reminds you.
 
 ```
-on HOST docker stack PATH up|down
+on HOST docker stack PATH up|down|start|stop
 [compose file line by line
 end]
 ```
@@ -253,7 +253,7 @@ end]
 | Argument | Required | What it is |
 |---|---|---|
 | `PATH` | ✓ | full path to docker-compose.yml |
-| `up\|down` | ✓ | up — start, down — stop and remove |
+| `up\|down\|start\|stop` | ✓ | up — bring up (pulling images if needed), down — stop and remove, start — start what exists without the registry, stop — stop, keeping the containers |
 
 Example:
 

@@ -165,6 +165,57 @@ func (s *ServiceManager) ComposeDown(ctx context.Context, user, path string) (co
 	return res, nil
 }
 
+// ComposeStart поднимает стек тем, что уже есть на хосте: up -d --pull
+// never — без registry (закрытый образ без ключа не скачался бы, а
+// pull_policy: always пошёл бы за ним). Образа нет — ошибка с подсказкой.
+// compose без «up --pull» — start: поднимет уже созданные контейнеры.
+func (s *ServiceManager) ComposeStart(ctx context.Context, user, path string) (collect.CommandResult, error) {
+	base := append([]string{"compose"}, s.ComposeFiles(path)...)
+	res, err := s.c.Run(ctx, "docker", append(base, "up", "-d", "--pull", "never")...)
+	if err == nil && !res.OK() && strings.Contains(res.Output(), "unknown flag: --pull") {
+		res, err = s.c.Run(ctx, "docker", append(base, "start")...)
+	}
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	s.db.Audit(ctx, user, "docker.compose.start", path, outcome, map[string]any{
+		"exit_code": res.ExitCode, "output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+	if err != nil {
+		return res, err
+	}
+	if !res.OK() {
+		out := strings.TrimSpace(res.Output())
+		low := strings.ToLower(out)
+		if strings.Contains(low, "no such image") || strings.Contains(low, "not found") || strings.Contains(low, "pull_policy") {
+			return res, msgs.Errorf("control.dockerComposeStartNoImage", res.ExitCode, out)
+		}
+		return res, msgs.Errorf("control.dockerComposeStartCode", res.ExitCode, out)
+	}
+	return res, nil
+}
+
+// ComposeStop останавливает стек без удаления: контейнеры, сети и тома
+// остаются, ComposeStart поднимет их снова.
+func (s *ServiceManager) ComposeStop(ctx context.Context, user, path string) (collect.CommandResult, error) {
+	res, err := s.c.Run(ctx, "docker", append(append([]string{"compose"}, s.ComposeFiles(path)...), "stop")...)
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	s.db.Audit(ctx, user, "docker.compose.stop", path, outcome, map[string]any{
+		"exit_code": res.ExitCode, "output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+	if err != nil {
+		return res, err
+	}
+	if !res.OK() {
+		return res, msgs.Errorf("control.dockerComposeStopCode", res.ExitCode, strings.TrimSpace(res.Output()))
+	}
+	return res, nil
+}
+
 // DefineLibvirtDomain registers a domain's on-disk XML with libvirtd —
 // writing the file to LibvirtQEMUDir alone does not do this, libvirtd does
 // not watch that directory, so this is libvirt's equivalent of ApplyCompose:

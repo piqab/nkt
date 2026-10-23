@@ -60,6 +60,9 @@ export interface ScriptAsk {
 export interface CheckResult {
   steps: ScriptStep[]
   issues: { line: number; error: string }[]
+  /** Не мешают сохранить и выполнить: как сделать лучше (стек конвейера —
+   * его выкладкой). */
+  warnings?: { line: number; error: string }[]
   asks: ScriptAsk[]
   hosts: string[]
   groups: string[]
@@ -748,6 +751,17 @@ function CheckView({ check }: { check: CheckResult }) {
                 </ul>
               ) : (
                 <>
+                  {(check.warnings ?? []).length > 0 && (
+                    <Banner kind="warn">
+                      <ul className="col" style={{ gap: '0.2rem', margin: 0, paddingLeft: '1.2rem' }}>
+                        {check.warnings!.map((i, n) => (
+                          <li key={n}>
+                            <span className="mono muted">{t('scripts.line', { line: i.line })}</span> {i.error}
+                          </li>
+                        ))}
+                      </ul>
+                    </Banner>
+                  )}
                   {check.asks.length > 0 && (
                     <p className="small muted" style={{ marginTop: 0 }}>
                       {t('scripts.willAsk', { items: check.asks.map((a) => a.prompt).join(', ') })}
