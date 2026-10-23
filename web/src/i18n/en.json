@@ -5133,5 +5133,19 @@
     "failed": "Didn’t pass: {{error}}",
     "askButton": "Ask the assistant about the result",
     "askAbout": "I ran the suggested script ({{mode}}). Outcome: {{status}}. {{error}}\nJob log:\n{{log}}\n\nAnalyse the outcome: what happened and what to do next?"
+  },
+  "versions": {
+    "title": "Version history",
+    "content": "Content",
+    "diff": "Difference",
+    "empty": "No history yet.",
+    "restore": "Back to the editor",
+    "withCurrent": "with the current",
+    "withPrevious": "with the previous",
+    "thisOne": "version No. {{n}}",
+    "currentOne": "current (No. {{n}})",
+    "nothing": "(empty)",
+    "contentCaption": "Content of version No. {{n}}",
+    "diffCaption": "Difference of version No. {{n}}"
   }
 }

@@ -35,6 +35,8 @@ type ProfileVersion struct {
 	Author    string `json:"author,omitempty"`
 	Note      string `json:"note,omitempty"`
 	Content   string `json:"content,omitempty"`
+	// Size — длина текста в байтах (только в списке редакций).
+	Size int64 `json:"size,omitempty"`
 }
 
 // CreateProfile заводит профиль вместе с первой редакцией.
@@ -134,7 +136,7 @@ func (db *DB) ProfileVersions(ctx context.Context, profileID int64, limit int) (
 		limit = 50
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, profile_id, ts, author, note FROM profile_versions
+		SELECT id, profile_id, ts, author, note, COALESCE(length(CAST(content AS BLOB)), 0) FROM profile_versions
 		WHERE profile_id = ? ORDER BY id DESC LIMIT ?`, profileID, limit)
 	if err != nil {
 		return nil, err
@@ -143,7 +145,7 @@ func (db *DB) ProfileVersions(ctx context.Context, profileID int64, limit int) (
 	out := []ProfileVersion{}
 	for rows.Next() {
 		var v ProfileVersion
-		if err := rows.Scan(&v.ID, &v.ProfileID, &v.TS, &v.Author, &v.Note); err != nil {
+		if err := rows.Scan(&v.ID, &v.ProfileID, &v.TS, &v.Author, &v.Note, &v.Size); err != nil {
 			return nil, err
 		}
 		out = append(out, v)

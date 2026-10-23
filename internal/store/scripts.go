@@ -32,6 +32,8 @@ type ScriptVersion struct {
 	Author   string `json:"author,omitempty"`
 	Note     string `json:"note,omitempty"`
 	Content  string `json:"content,omitempty"`
+	// Size — длина текста в байтах (только в списке редакций).
+	Size int64 `json:"size,omitempty"`
 }
 
 // CreateScript заводит сценарий вместе с первой редакцией.
@@ -128,7 +130,7 @@ func (db *DB) ScriptVersions(ctx context.Context, scriptID int64, limit int) ([]
 		limit = 50
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, script_id, ts, author, note FROM script_versions
+		SELECT id, script_id, ts, author, note, COALESCE(length(CAST(content AS BLOB)), 0) FROM script_versions
 		WHERE script_id = ? ORDER BY id DESC LIMIT ?`, scriptID, limit)
 	if err != nil {
 		return nil, err
@@ -137,7 +139,7 @@ func (db *DB) ScriptVersions(ctx context.Context, scriptID int64, limit int) ([]
 	out := []ScriptVersion{}
 	for rows.Next() {
 		var v ScriptVersion
-		if err := rows.Scan(&v.ID, &v.ScriptID, &v.TS, &v.Author, &v.Note); err != nil {
+		if err := rows.Scan(&v.ID, &v.ScriptID, &v.TS, &v.Author, &v.Note, &v.Size); err != nil {
 			return nil, err
 		}
 		out = append(out, v)

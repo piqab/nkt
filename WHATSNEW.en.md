@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.90 — 2026-10-23
+
+- **Version history — as in the other editors.** For scripts, profiles
+  and service descriptions “History” is a table: No., time, author,
+  note, size, a “current” label. Each revision has **“Content”** (the
+  whole text), **“Difference”** with the current or the previous one,
+  and **“Back to the editor”**: the text goes into the editing window
+  and is written only by an ordinary save with a diff.
+
 ## v1.13.89 — 2026-10-23
 
 - **“Script commands” on the docs site.** A new page with every command

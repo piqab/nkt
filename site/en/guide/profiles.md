@@ -39,8 +39,11 @@ files:
   buttons.
 - **Drift** is checked on a schedule (`NKT_DRIFT_INTERVAL`) and shown in
   “Findings”.
-- Version history, export and import, a format reference in both languages
-  right in the UI (the “?” next to the title).
+- Version history (a table: No., time, author, note, size, a “current”
+  label; each has “Content”, “Difference” with the current or the
+  previous one, and “Back to the editor”), export and import, a format
+  reference in both languages right in the UI (the “?” next to the
+  title).
 
 ::: tip On the hub
 In the hub's “Profiles” section a profile gets a colour and is assigned to a
