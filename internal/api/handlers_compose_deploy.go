@@ -102,6 +102,10 @@ type ComposeDeployParams struct {
 	AuthUnused bool `json:"auth_unused,omitempty"`
 	// CAHosts — registry со своим CA (файлы — в AuthDir).
 	CAHosts []string `json:"ca_hosts,omitempty"`
+	// StartOnly — «Запустить» выкладку: файлы не пишутся, скачиваются
+	// только образы, которых нет на хосте (с ключом конвейера), up — с
+	// --pull never: тот же образ, что был выложен, а не новый того же тега.
+	StartOnly bool `json:"start_only,omitempty"`
 }
 
 func composeStackDir(project string) string { return parse.ComposeStacksDir + "/" + project }
@@ -388,7 +392,14 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			return msgs.Errorf("compose.image."+prob, sv.Name, sv.Image)
 		}
 	}
-	if p.Pull {
+	if p.StartOnly {
+		if err := d.pullMissing(ctx, jc, c, p, authDir, svcs, run, func(g []string) { global = g }); err != nil {
+			return err
+		}
+		if authDir != "" {
+			_ = os.RemoveAll(authDir)
+		}
+	} else if p.Pull {
 		if authDir != "" {
 			d.installRegistryCAs(ctx, jc, p.Engine, authDir, p.CAHosts)
 		}
@@ -451,7 +462,7 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// скачивает снова: при pull_policy: always он пошёл бы в registry уже
 	// без ключа.
 	pullNever := false
-	if p.Pull {
+	if p.Pull || p.StartOnly {
 		if pullNever = upKnowsPull(ctx, c, p.Engine); !pullNever {
 			jc.Log("compose.upNoPullFlag")
 		}
@@ -795,6 +806,53 @@ func (d *composeDeployRunner) podmanPullWithAuth(ctx context.Context, jc *jobs.C
 		if err != nil {
 			return composePullCause(out.Output(), err)
 		}
+	}
+	return nil
+}
+
+// pullMissing — «Запустить»: скачать только образы, которых нет на хосте
+// (их убрала очистка, или хост новый), с ключом конвейера; есть все —
+// registry не трогается вовсе.
+func (d *composeDeployRunner) pullMissing(ctx context.Context, jc *jobs.Context, c collect.Collector, p ComposeDeployParams,
+	authDir string, svcs []composeService, run func(time.Duration, ...string) error, setGlobal func([]string)) error {
+	var names, images []string
+	for _, sv := range svcs {
+		if sv.Image == "" {
+			continue
+		}
+		if res, err := c.RunTimeout(ctx, time.Minute, p.Engine, "image", "inspect", "--", sv.Image); err == nil && res.OK() {
+			continue
+		}
+		names = append(names, sv.Name)
+		images = append(images, sv.Image)
+	}
+	if len(names) == 0 {
+		jc.Log("compose.startImagesPresent")
+		return nil
+	}
+	jc.Log("compose.startPullMissing", strings.Join(images, ", "))
+	if authDir != "" {
+		d.installRegistryCAs(ctx, jc, p.Engine, authDir, p.CAHosts)
+	}
+	if authDir != "" && p.Engine == "podman" {
+		for _, img := range images {
+			jc.Logf("$ podman pull --authfile … %s", img)
+			out, err := c.RunTimeout(ctx, 20*time.Minute, "podman", "pull", "--authfile", filepath.Join(authDir, "config.json"), "--", img)
+			if err == nil && !out.OK() {
+				err = msgs.Errorf("compose.commandFailed", "podman pull "+img, out.ExitCode)
+			}
+			if err != nil {
+				return composePullCause(out.Output(), err)
+			}
+		}
+		return nil
+	}
+	if authDir != "" {
+		setGlobal([]string{"--config", authDir})
+		defer setGlobal(nil)
+	}
+	if err := run(20*time.Minute, append([]string{"pull"}, names...)...); err != nil {
+		return composePullCause("", err)
 	}
 	return nil
 }

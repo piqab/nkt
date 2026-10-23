@@ -103,6 +103,7 @@ func localFixtureHub(t *testing.T) (*Server, *store.DB, string) {
 	jm.Register(KindDeploy, NewDeployRunner(srv))
 	jm.Register(KindSiteRemove, NewSiteRemoveRunner(srv))
 	jm.Register(KindPipelineRemove, NewPipelineRemoveRunner(srv))
+	jm.Register(KindPipelinePower, NewPipelinePowerRunner(srv))
 
 	return srv, db, root
 }

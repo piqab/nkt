@@ -102,16 +102,26 @@ func (r *ScriptRunner) runDeploy(ctx context.Context, jc *jobs.Context, st scrip
 		return msgs.Errorf("script.unknownPipeline", st.Name)
 	}
 	user := jc.Job.Author
+	timeout, _ := time.ParseDuration(st.Args["timeout"])
+	if timeout <= 0 {
+		timeout = scriptStepTimeout
+	}
+	if action := st.Args["action"]; action != "" {
+		// deploy ИМЯ start|stop — та же версия на хостах выкладки, как
+		// кнопки «Запустить» и «Остановить».
+		id, err := r.s.startPipelinePower(ctx, p, action, user)
+		if err != nil {
+			return err
+		}
+		jc.Log("hub.scriptPowerJob", p.Name, action, id)
+		return r.waitHubJobFor(ctx, jc, id, timeout)
+	}
 	d, err := r.s.startDeployment(ctx, p, store.Deployment{Trigger: "script", Author: user}, false)
 	r.s.db.Audit(ctx, user, "pipeline.deploy", p.Name, auditOutcome(err), map[string]any{"job_id": d.JobID, "script_job": jc.Job.ID})
 	if err != nil {
 		return err
 	}
 	jc.Log("hub.scriptDeployJob", p.Name, d.JobID)
-	timeout, _ := time.ParseDuration(st.Args["timeout"])
-	if timeout <= 0 {
-		timeout = scriptStepTimeout
-	}
 	return r.waitHubJobFor(ctx, jc, d.JobID, timeout)
 }
 
@@ -121,6 +131,28 @@ func (r *ScriptRunner) runDeploy(ctx context.Context, jc *jobs.Context, st scrip
 // несохранённого описания в окне.
 func (r *ScriptRunner) dryDeploy(ctx context.Context, jc *jobs.Context, st script.Step, content string) error {
 	p, saved := r.pipelineByName(ctx, st.Name)
+	if action := st.Args["action"]; action != "" {
+		// Запуск/остановка: хосты и маршруты, которые затронет, —
+		// ничего не трогая.
+		if !saved {
+			jc.Log("hub.scriptDryWould", st.Text)
+			return nil
+		}
+		plan, err := r.s.pipelinePowerPlan(ctx, p)
+		if err != nil {
+			return err
+		}
+		var hosts []string
+		for _, h := range plan.Hosts {
+			hosts = append(hosts, h.Name)
+		}
+		routes := strings.Join(plan.Routes, ", ")
+		if routes == "" {
+			routes = "—"
+		}
+		jc.Log("hub.scriptDryPower."+action, p.Name, strings.Join(hosts, ", "), routes)
+		return nil
+	}
 	if content == "" {
 		if !saved {
 			return msgs.Errorf("script.unknownPipeline", st.Name)

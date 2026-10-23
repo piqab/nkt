@@ -63,6 +63,7 @@ runs nothing by itself — only MCP with an admin token executes.
 | `check_script` | admin | “Check” for a script text, changes nothing |
 | `run_script` | admin | run a script (`dry_run`; `dry_first` — a dry run, then the run if it passes; `values` — answers to its questions) |
 | `deploy_pipeline`, `dry_run_pipeline` | admin | deploy, dry run |
+| `pipeline_power` | admin | stop a deployment or bring up the same version (`action`: `stop` / `start`) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |
 | `fly_apply`, `fly_ops` | admin, no limit | apply the map, point edits of targets |
 | `manifest_diff`, `manifest_apply` | admin | a manifest to clusters |

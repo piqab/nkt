@@ -121,3 +121,22 @@ func TestForgejoFlyExampleFile(t *testing.T) {
 		t.Error("examples/scripts/forgejo-fly.nkt разошёлся с ForgejoFlyExample")
 	}
 }
+
+// deploy ИМЯ start|stop [ДЛИТЕЛЬНОСТЬ] — запуск и остановка выложенного.
+func TestParseDeployPower(t *testing.T) {
+	for line, want := range map[string][2]string{
+		"deploy shop stop":      {"stop", "30m"},
+		"deploy shop start 10m": {"start", "10m"},
+		"deploy shop 20m":       {"", "20m"},
+	} {
+		s, err := Parse(line, nil)
+		if err != nil || len(s.Steps) != 1 || s.Steps[0].Kind != KindDeploy || s.Steps[0].Args["action"] != want[0] || s.Steps[0].Args["timeout"] != want[1] {
+			t.Errorf("%s: %+v %v", line, s, err)
+		}
+	}
+	for _, bad := range []string{"deploy shop restart", "deploy shop stop 1m extra", "deploy shop 1m stop"} {
+		if _, err := Parse(bad, nil); err == nil {
+			t.Errorf("%s: accepted", bad)
+		}
+	}
+}

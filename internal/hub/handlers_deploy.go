@@ -31,6 +31,8 @@ type pipelineJSON struct {
 	Action string `json:"action,omitempty"`
 	// Leftovers — старый стек, оставшийся на прежнем хосте после переезда.
 	Leftovers []leftoverStack `json:"leftovers,omitempty"`
+	// Stopped — выкладка остановлена («Остановить»): кто, когда, где.
+	Stopped *pipelineStopped `json:"stopped,omitempty"`
 }
 
 // handlePipelines — GET /hub/pipelines: конвейеры с последней выкладкой.
@@ -55,6 +57,7 @@ func (s *Server) handlePipelines(w http.ResponseWriter, r *http.Request) {
 			row.Last = &ds[0]
 		}
 		row.Leftovers = s.loadLeftovers(r.Context(), p.ID)
+		row.Stopped = s.loadStopped(r.Context(), p.ID)
 		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pipelines": out})

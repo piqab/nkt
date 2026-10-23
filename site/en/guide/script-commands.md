@@ -477,19 +477,22 @@ compose:
 end
 ```
 
-### `deploy PIPELINE [DURATION]` {#cmd-deploy}
+### `deploy PIPELINE [start|stop] [DURATION]` {#cmd-deploy}
 
-Deploys a pipeline — like the “Deploy” button — and waits for the result; the deployment log goes into the script log. In a dry run — the pipeline's dry run (with the description from “pipeline” above, if there is one).
+Deploys a pipeline — like the “Deploy” button — and waits for the result; the deployment log goes into the script log. In a dry run — the pipeline's dry run (with the description from “pipeline” above, if there is one). With start or stop — starts or stops what is already deployed on all its hosts, like the “Start” and “Stop” buttons.
 
 | Argument | Required | What it is |
 |---|---|---|
 | `PIPELINE` | ✓ | a pipeline name on the hub or from “pipeline” above |
+| `start\|stop` |  | start — start what is deployed (the same version, images from the host), stop — stop without removing (containers and data stay); like the pipeline buttons |
 | `DURATION` |  | how long to wait for the result (30m by default) |
 
 Example:
 
 ```
 deploy hello 20m
+deploy shop stop
+deploy shop start
 ```
 
 ### `migrate HOST CONTAINER to HOST [switch-fly] [switch-pipeline] [clean-leftovers]` {#cmd-migrate}

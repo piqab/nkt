@@ -56,6 +56,15 @@ interface Pipeline {
   dry_skip?: string
   /** Старый стек, оставшийся на прежнем хосте после переезда (хост был недоступен). */
   leftovers?: { host_id: number; host: string; project: string; reason?: string; at: string }[]
+  /** Выкладка остановлена («Остановить»): кто, когда, на каких хостах. */
+  stopped?: { by: string; at: string; project: string; hosts: { id: number; name: string }[] }
+}
+
+/** Что затронет «Запустить» / «Остановить»: хосты выкладки и маршруты Traffic Fly. */
+interface PowerPlan {
+  project: string
+  hosts: { id: number; name: string }[]
+  routes: string[]
 }
 interface PipelineVersion {
   id: number
@@ -145,6 +154,40 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
       setError(errText(err))
     }
   }
+  // «Остановить» спрашивает дважды: первое окно — что затронет (хосты,
+  // маршруты, оповещения), второе — что сервис станет недоступен.
+  async function power(p: Pipeline, action: 'start' | 'stop') {
+    let plan: PowerPlan
+    try {
+      plan = await api<PowerPlan>(`/hub/pipelines/${p.id}/power`)
+    } catch (err) {
+      setError(errText(err))
+      return
+    }
+    const hosts = plan.hosts.map((h) => h.name).join(', ')
+    const routes = plan.routes.join(', ')
+    if (action === 'stop') {
+      const first = (
+        <div className="col" style={{ gap: '0.4rem' }}>
+          <span>{t('deploy.power.stopConfirm1', { name: p.name, hosts })}</span>
+          {routes && <span>{t('deploy.power.stopRoutes', { routes })}</span>}
+          <span className="small muted">{t('deploy.power.stopKeeps')}</span>
+        </div>
+      )
+      if (!(await confirmAction(first, { title: t('deploy.power.stopTitle', { name: p.name }), okText: t('deploy.power.next') }))) return
+      if (!(await confirmAction(t('deploy.power.stopConfirm2', { name: p.name, count: plan.hosts.length }), { title: t('deploy.power.stopTitle', { name: p.name }), okText: t('deploy.power.stop') }))) return
+    } else if (!(await confirmAction(t('deploy.power.startConfirm', { name: p.name, hosts }), { title: t('deploy.power.startTitle', { name: p.name }), okText: t('deploy.power.start'), danger: false }))) {
+      return
+    }
+    try {
+      const res = await api<{ job_id: number }>(`/hub/pipelines/${p.id}/${action}`, { method: 'POST' })
+      void list.reload()
+      void openJob(res.job_id)
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  const canPower = (p: Pipeline) => me.is_admin && p.action === 'compose' && !!p.last && !removalOf(p)
   const tableRef = useRef<HTMLDivElement>(null)
   const tableW = useWidth(tableRef)
   const narrow = tableW > 0 && tableW < 1000
@@ -158,6 +201,11 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
           {!p.enabled && (
             <Tooltip title={t('deploy.enabledHint')}>
               <Tag>{t('deploy.manualOnly')}</Tag>
+            </Tooltip>
+          )}
+          {p.stopped && (
+            <Tooltip title={t('deploy.power.stoppedHint', { by: p.stopped.by, when: formatRelative(p.stopped.at), hosts: p.stopped.hosts.map((h) => h.name).join(', ') })}>
+              <Tag color="default">{t('deploy.power.stopped')}</Tag>
             </Tooltip>
           )}
           {removalOf(p)?.error ? (
@@ -257,6 +305,11 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
                   { key: 'description', label: t('deploy.description'), onClick: () => void api<Pipeline>(`/hub/pipelines/${p.id}`).then((full) => setEdit({ pipeline: full })) },
                   { key: 'access', label: t('deploy.access'), onClick: () => setDialog({ type: 'access', p }) },
                   { key: 'hook', label: t('deploy.hook'), onClick: () => setDialog({ type: 'hook', p }) },
+                  ...(canPower(p)
+                    ? [p.stopped
+                        ? { key: 'start', label: t('deploy.power.start'), onClick: () => void power(p, 'start') }
+                        : { key: 'stop', label: t('deploy.power.stop'), onClick: () => void power(p, 'stop') }]
+                    : []),
                   { type: 'divider' as const },
                   { key: 'delete', danger: true, label: p.action === 'compose' && removalOf(p) ? t('deploy.deleteRetry') : t('deploy.delete'), onClick: () => void deletePipeline(p) },
                 ],
@@ -282,6 +335,16 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
           <Button size="small" onClick={() => setDialog({ type: 'hook', p })}>
             {t('deploy.hook')}
           </Button>
+          {canPower(p) &&
+            (p.stopped ? (
+              <Button size="small" onClick={() => void power(p, 'start')}>
+                {t('deploy.power.start')}
+              </Button>
+            ) : (
+              <Button size="small" onClick={() => void power(p, 'stop')}>
+                {t('deploy.power.stop')}
+              </Button>
+            ))}
           <Button size="small" danger onClick={() => void deletePipeline(p)}>
             {p.action === 'compose' && removalOf(p) ? t('deploy.deleteRetry') : t('deploy.delete')}
           </Button>

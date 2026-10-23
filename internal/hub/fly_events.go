@@ -108,6 +108,10 @@ func (s *Server) flyNoteChanges(ctx context.Context, d FlyDoc, prev, now *flySee
 			}
 			if is {
 				s.hub.recordEventLink(ctx, h, store.EventFlyTargetUp, "", "/deploy?tab=fly", "hub.flyTargetUp", r.ID, label, t.Port)
+			} else if pl, st := s.stoppedTarget(ctx, t.HostID, t.Ref); pl != nil {
+				// Цель легла вместе с остановленной выкладкой — оповещение
+				// приходит, но с объяснением, а не как поломка.
+				s.hub.recordEventLink(ctx, h, store.EventFlyTargetDown, "", "/deploy?tab=fly", "hub.flyTargetDownStopped", r.ID, label, t.Port, pl.Name, st.By, st.At)
 			} else {
 				s.hub.recordEventLink(ctx, h, store.EventFlyTargetDown, "", "/deploy?tab=fly", "hub.flyTargetDown", r.ID, label, t.Port)
 			}

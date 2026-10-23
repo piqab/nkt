@@ -3421,6 +3421,20 @@
     "hint": "One chart and one set of values into the chosen clusters: a hub job installs the release on each control plane (helm upgrade --install) in turn; an error in one cluster does not stop the others."
   },
   "deploy": {
+    "power": {
+      "start": "Start",
+      "stop": "Stop",
+      "next": "Next",
+      "stopped": "stopped",
+      "stoppedHint": "{{by}} stopped the deployment {{when}} on hosts: {{hosts}}. Containers and data are in place — “Start” brings up the same version.",
+      "stopTitle": "Stop deployment {{name}}",
+      "startTitle": "Start deployment {{name}}",
+      "stopConfirm1": "The {{name}} deployment's stack will stop on hosts: {{hosts}}.",
+      "stopRoutes": "Traffic Fly routes with targets in this stack: {{routes}} — their targets will leave the pool, alerts will come marked “deployment stopped”.",
+      "stopKeeps": "Containers, volumes and .env stay: “Start” brings up the same version without a new deployment.",
+      "stopConfirm2": "Really stop {{name}} on hosts ({{count}})? While the deployment is stopped, the service is unavailable.",
+      "startConfirm": "Bring up deployment {{name}} with the same version on hosts: {{hosts}}? Images come from the host; missing ones are pulled with the pipeline key."
+    },
     "title": "Deployments",
     "pageHint": "A pipeline takes a Git repository and deploys it as a manifest into clusters, a Helm release or a hub script — by a button, a webhook, repository polling or a new image tag in a registry. Images are built by your CI (GitHub Actions, GitLab CI) or by you; this is the deployment of what is ready.",
     "new": "New pipeline",

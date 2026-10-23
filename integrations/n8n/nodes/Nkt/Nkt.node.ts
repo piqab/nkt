@@ -181,10 +181,12 @@ export class Nkt implements INodeType {
           { name: 'Get', value: 'get', action: 'Get a pipeline' },
           { name: 'Get Deployments', value: 'deployments', action: 'Get the deployments of a pipeline' },
           { name: 'Get Many', value: 'getAll', action: 'Get pipelines' },
+          { name: 'Start', value: 'start', action: 'Start a stopped deployment' },
+          { name: 'Stop', value: 'stop', action: 'Stop a deployment' },
         ],
         default: 'deploy',
       },
-      pipelineField(['deploy', 'dryRun', 'get', 'deployments']),
+      pipelineField(['deploy', 'dryRun', 'get', 'deployments', 'start', 'stop']),
       {
         displayName: 'Ref',
         name: 'ref',
@@ -216,7 +218,7 @@ export class Nkt implements INodeType {
         type: 'boolean',
         default: true,
         description: 'Whether to wait for the hub job to finish and return its status and log',
-        displayOptions: { show: { resource: ['pipeline'], operation: ['deploy', 'dryRun'] } },
+        displayOptions: { show: { resource: ['pipeline'], operation: ['deploy', 'dryRun', 'start', 'stop'] } },
       },
       {
         displayName: 'Timeout (Seconds)',
@@ -224,7 +226,7 @@ export class Nkt implements INodeType {
         type: 'number',
         default: 900,
         typeOptions: { minValue: 10 },
-        displayOptions: { show: { resource: ['pipeline'], operation: ['deploy', 'dryRun'], wait: [true] } },
+        displayOptions: { show: { resource: ['pipeline'], operation: ['deploy', 'dryRun', 'start', 'stop'], wait: [true] } },
       },
 
       // --- script
@@ -650,12 +652,18 @@ export class Nkt implements INodeType {
             const res = (await nktRequest.call(this, 'GET', `/api/hub/pipelines/${id}/deployments`)) as IDataObject
             push((res.deployments as IDataObject[]) ?? [])
           } else {
-            const ref = this.getNodeParameter('ref', i) as string
-            const tag = this.getNodeParameter('tag', i) as string
-            const res =
-              operation === 'deploy'
-                ? ((await nktRequest.call(this, 'POST', `/api/hub/pipelines/${id}/deploy`, { ref, tag })) as IDataObject)
-                : ((await nktRequest.call(this, 'POST', '/api/hub/pipelines/dryrun', { pipeline_id: id, ref, tag, skip: this.getNodeParameter('skip', i) as string[] })) as IDataObject)
+            let res: IDataObject
+            if (operation === 'start' || operation === 'stop') {
+              // The same version on the deployment's hosts, like the Start / Stop buttons.
+              res = (await nktRequest.call(this, 'POST', `/api/hub/pipelines/${id}/${operation}`, {})) as IDataObject
+            } else {
+              const ref = this.getNodeParameter('ref', i) as string
+              const tag = this.getNodeParameter('tag', i) as string
+              res =
+                operation === 'deploy'
+                  ? ((await nktRequest.call(this, 'POST', `/api/hub/pipelines/${id}/deploy`, { ref, tag })) as IDataObject)
+                  : ((await nktRequest.call(this, 'POST', '/api/hub/pipelines/dryrun', { pipeline_id: id, ref, tag, skip: this.getNodeParameter('skip', i) as string[] })) as IDataObject)
+            }
             const jobId = Number(res.job_id)
             if (this.getNodeParameter('wait', i)) {
               push({ job_id: jobId, ...(await waitJob.call(this, jobId, this.getNodeParameter('timeout', i) as number)) })
