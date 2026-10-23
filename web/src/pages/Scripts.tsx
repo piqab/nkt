@@ -11,6 +11,7 @@ import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 import ScriptScheme from '../components/ScriptScheme'
 import { AIScriptMenu } from '../components/AIScriptMenu'
+import { TextVersions } from '../components/TextVersions'
 import { DocsFrame, HelpButton, TitleHelp } from '../components/Docs'
 import { DOCS, docsURL, useDocsBase } from '../docs'
 import { msg, tx, type Msg } from '../msg'
@@ -32,15 +33,6 @@ export interface ScriptRow {
   author?: string
   created_at: string
   updated_at: string
-}
-
-interface ScriptVersion {
-  id: number
-  script_id: number
-  ts: string
-  author?: string
-  note?: string
-  content?: string
 }
 
 export interface ScriptStep {
@@ -452,9 +444,11 @@ export default function Scripts({ me }: { me: Me }) {
       </div>
 
       {showVersions && selected && (
-        <Modal title={t('scripts.history')} onClose={() => setShowVersions(false)} width={720}>
-          <ScriptVersions
-            scriptID={selected}
+        <Modal title={t('scripts.history')} onClose={() => setShowVersions(false)} width={960} sizeKey="versions">
+          <TextVersions
+            listPath={`/hub/scripts/${selected}/versions`}
+            itemPath={(id) => `/hub/scripts/versions/${id}`}
+            canRestore={canEdit}
             onRestore={(content) => {
               setDraft(content)
               setShowVersions(false)
@@ -563,32 +557,6 @@ export default function Scripts({ me }: { me: Me }) {
   )
 }
 
-function ScriptVersions({ scriptID, onRestore }: { scriptID: number; onRestore: (content: string) => void }) {
-  const { t } = useTranslation()
-  const versions = useApi<{ versions: ScriptVersion[] }>(`/hub/scripts/${scriptID}/versions`)
-  if (versions.loading && !versions.data) return <Loading what={t('scripts.history')} />
-  return (
-    <div className="col" style={{ gap: '0.35rem' }}>
-      {(versions.data?.versions ?? []).map((v) => (
-        <div key={v.id} className="row spread">
-          <span className="small">
-            {formatDateTime(v.ts)} · {v.author || '—'}
-            {v.note ? ` · ${v.note}` : ''}
-          </span>
-          <Button
-            size="small"
-            onClick={async () => {
-              const full = await api<ScriptVersion>(`/hub/scripts/versions/${v.id}`)
-              onRestore(full.content ?? '')
-            }}
-          >
-            {t('profiles.restoreVersion')}
-          </Button>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 /** Значения, которые сценарий просит перед запуском: пароли хостов,
  * параметры, «set … ask», токены git. Секреты — скрытым полем; всё

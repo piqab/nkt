@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Checkbox, Input, Select, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { TextVersions } from '../components/TextVersions'
 import { api, apiURL, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
@@ -42,14 +43,6 @@ interface OwnRow {
 interface BuiltinRow extends Check {
   file: string
   content: string
-}
-
-interface Version {
-  id: number
-  ts: string
-  author?: string
-  note?: string
-  content?: string
 }
 
 const NEW_TEMPLATE = `name: myservice
@@ -341,9 +334,10 @@ export default function ServiceDescriptions({ me }: { me: Me }) {
       )}
 
       {history !== null && (
-        <Modal title={t('svcdesc.history')} onClose={() => setHistory(null)} width={720}>
-          <Versions
-            id={history}
+        <Modal title={t('svcdesc.history')} onClose={() => setHistory(null)} width={960} sizeKey="versions">
+          <TextVersions
+            listPath={`/hub/svcdescs/${history}/versions`}
+            itemPath={(id) => `/hub/svcdescs/versions/${id}`}
             onRestore={async (content) => {
               setHistory(null)
               if (editing) setDraft(content)
@@ -377,32 +371,6 @@ export default function ServiceDescriptions({ me }: { me: Me }) {
   )
 }
 
-function Versions({ id, onRestore }: { id: number; onRestore: (content: string) => void }) {
-  const { t } = useTranslation()
-  const versions = useApi<{ versions: Version[] }>(`/hub/svcdescs/${id}/versions`)
-  if (versions.loading && !versions.data) return <Loading what={t('svcdesc.history')} />
-  return (
-    <div className="col" style={{ gap: '0.35rem' }}>
-      {(versions.data?.versions ?? []).map((v) => (
-        <div key={v.id} className="row spread">
-          <span className="small">
-            {formatDateTime(v.ts)} · {v.author || '—'}
-            {v.note ? ` · ${v.note}` : ''}
-          </span>
-          <Button
-            size="small"
-            onClick={async () => {
-              const full = await api<Version>(`/hub/svcdescs/versions/${v.id}`)
-              onRestore(full.content ?? '')
-            }}
-          >
-            {t('profiles.restoreVersion')}
-          </Button>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 /** Выбор хоста хаба (машина хаба — первой). */
 function HostSelect({ value, onChange }: { value: number | null; onChange: (id: number) => void }) {

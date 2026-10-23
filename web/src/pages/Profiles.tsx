@@ -3,8 +3,9 @@ import { blurText } from '../privacy'
 import { Button, Checkbox, ColorPicker, Input, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { QuestionCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { TextVersions } from '../components/TextVersions'
 import { api, useApi } from '../api'
-import type { Job, Me, Profile, ProfilePlan, PlanChange, ProfileVersion } from '../types'
+import type { Job, Me, Profile, ProfilePlan, PlanChange } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
@@ -472,7 +473,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
       )}
 
       {showVersions && selected && (
-        <VersionsModal profileID={selected} onClose={() => setShowVersions(false)} onRestore={(content) => {
+        <VersionsModal profileID={selected} canRestore={canEdit} onClose={() => setShowVersions(false)} onRestore={(content) => {
           setDraft(content)
           setShowVersions(false)
         }} />
@@ -528,41 +529,20 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
 /** История правок профиля: посмотреть и вернуть прошлую редакцию. */
 function VersionsModal({
   profileID,
+  canRestore,
   onClose,
   onRestore,
 }: {
   profileID: number
+  canRestore: boolean
   onClose: () => void
   onRestore: (content: string) => void
 }) {
   const { t } = useTranslation()
-  const versions = useApi<{ versions: ProfileVersion[] }>(`/profiles/${profileID}/versions`)
 
   return (
-    <Modal title={t('profiles.history')} onClose={onClose} width={720}>
-      {versions.loading && !versions.data ? (
-        <Loading what={t('profiles.history')} />
-      ) : (
-        <div className="col" style={{ gap: '0.35rem' }}>
-          {(versions.data?.versions ?? []).map((v) => (
-            <div key={v.id} className="row spread">
-              <span className="small">
-                {formatDateTime(v.ts)} · {v.author || '—'}
-                {v.note ? ` · ${v.note}` : ''}
-              </span>
-              <Button
-                size="small"
-                onClick={async () => {
-                  const full = await api<ProfileVersion>(`/profiles/versions/${v.id}`)
-                  onRestore(full.content ?? '')
-                }}
-              >
-                {t('profiles.restoreVersion')}
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
+    <Modal title={t('profiles.history')} onClose={onClose} width={960} sizeKey="versions">
+      <TextVersions listPath={`/profiles/${profileID}/versions`} itemPath={(id) => `/profiles/versions/${id}`} canRestore={canRestore} onRestore={onRestore} />
     </Modal>
   )
 }

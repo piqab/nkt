@@ -28,6 +28,8 @@ type SvcDescVersion struct {
 	Author  string `json:"author,omitempty"`
 	Note    string `json:"note,omitempty"`
 	Content string `json:"content,omitempty"`
+	// Size — длина текста в байтах (только в списке редакций).
+	Size int64 `json:"size,omitempty"`
 }
 
 // CreateSvcDesc заводит описание вместе с первой редакцией.
@@ -124,7 +126,7 @@ func (db *DB) SvcDescVersions(ctx context.Context, descID int64, limit int) ([]S
 		limit = 50
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, desc_id, ts, author, note FROM svc_desc_versions
+		SELECT id, desc_id, ts, author, note, COALESCE(length(CAST(content AS BLOB)), 0) FROM svc_desc_versions
 		WHERE desc_id = ? ORDER BY id DESC LIMIT ?`, descID, limit)
 	if err != nil {
 		return nil, err
@@ -133,7 +135,7 @@ func (db *DB) SvcDescVersions(ctx context.Context, descID int64, limit int) ([]S
 	out := []SvcDescVersion{}
 	for rows.Next() {
 		var v SvcDescVersion
-		if err := rows.Scan(&v.ID, &v.DescID, &v.TS, &v.Author, &v.Note); err != nil {
+		if err := rows.Scan(&v.ID, &v.DescID, &v.TS, &v.Author, &v.Note, &v.Size); err != nil {
 			return nil, err
 		}
 		out = append(out, v)

@@ -659,7 +659,8 @@ On the hub descriptions are kept as a library with edit history — the
 
 - **Hub descriptions** — your own: “New description” (a template),
   “Import .yaml”, editing in a window with a diff before writing,
-  “History” (any past revision goes back into the editor), “Download”,
+  “History” (the content and difference of any revision with the
+  current or previous one, “Back to the editor”), “Download”,
   deleting. The name comes from `name` in the description itself; saving
   runs the same parse as on the host — a broken one isn't saved.
 - **Built-in** — for viewing; “Override” creates a hub description with

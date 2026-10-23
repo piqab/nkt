@@ -135,6 +135,23 @@ entirely on its hosts. Details — [Hub API](/en/guide/hub-api#what-a-token-can-
   job resumes from the same line; hosts already registered are not
   registered twice.
 
+## Version history
+
+![A script's version history: the difference with the previous one](/screens/en/hub-script-history.png)
+
+Each save is a new revision. “History” (on the script card and in the
+editor window) is a table: No., time, author, change note, size, a
+“current” label. Each revision has:
+
+- **“Content”** — the revision's whole text, read only;
+- **“Difference”** — a diff with the current or the previous revision
+  (a switch above the diff);
+- **“Back to the editor”** — the revision's text goes into the editing
+  window; nothing changes on the hub until you press “Check” and “Save”
+  (with a diff before writing) — so a rollback is a new revision too.
+
+Profile and service description histories work the same way.
+
 ## Scheme
 
 ![Script scheme](/screens/en/hub-script-scheme.png)
