@@ -8,6 +8,62 @@ title: Script commands
 
 Every command of the hub script language — the same ones “Check”, the “Reference” tab and AI know: the page is built from the command descriptions in nkt code and never falls behind it. How scripts are stored, checked and run — [Scripts](/en/guide/hub-scripts).
 
+## In short
+
+**Variables and questions at start**
+
+| Command | What it does |
+|---|---|
+| [`set NAME value`](#cmd-set) | A variable: ${NAME} further down is replaced with the value. |
+| [`param NAME "prompt"`](#cmd-param) | A parameter: its value is asked at run time, ${NAME} below is replaced with it. |
+
+**The hub: groups, hosts, install, waiting**
+
+| Command | What it does |
+|---|---|
+| [`group NAME`](#cmd-group) | Creates a host group on the hub; with a profile, machines created in it are built from it. |
+| [`host NAME ADDR[:PORT] user USER`](#cmd-host) | Registers a host on the hub by address and SSH credentials — the same as “Add host”. |
+| [`install HOST…`](#cmd-install) | Installs nkt on the listed hosts and waits until each one answers. |
+| [`wait HOST online`](#cmd-wait) | Waits until the host is “online” (after an install or a reboot). |
+
+**On a host (on HOST …)**
+
+| Command | What it does |
+|---|---|
+| [`on HOST… packages install\|remove PACKAGE…`](#cmd-packages) | Installs or removes apt packages on the host in one transaction. |
+| [`on HOST service NAME start\|stop\|restart\|reload\|enable\|disable`](#cmd-service) | Controls a systemd service: start, stop, restart, reload, autostart. |
+| [`on HOST firewall allow\|deny PORT[/tcp\|udp]`](#cmd-firewall) | A ufw/firewalld rule: allow or deny a port, optionally only from an address. |
+| [`on HOST docker install`](#cmd-docker-install) | Installs Docker from the official docker.com repository. |
+| [`on HOST docker stack PATH up\|down`](#cmd-docker-stack) | Brings a compose stack up or down. |
+| [`on HOST vm create NAME image …`](#cmd-vm-create) | Creates a virtual machine on the host from a cloud image — like the “New machine” dialog. |
+| [`on HOST vm start\|shutdown\|destroy NAME`](#cmd-vm-action) | Starts, shuts down or force-stops a machine on the host. |
+| [`on HOST apply profile PROFILE`](#cmd-apply) | Applies a hub profile to the host in full: builds the plan and executes every item. |
+| [`on HOST file put PATH`](#cmd-file-put) | Writes a file to the host from the block (through the config editor: with a check and history when it knows the path). |
+| [`on HOST user add NAME`](#cmd-user-add) | Creates an account on the host with an SSH key and, optionally, passwordless sudo. |
+| [`on HOST system hostname NAME`](#cmd-system) | System settings: machine name, time zone, default locale (generated if needed), NTP servers with an immediate sync. |
+| [`on HOST cert issue DOMAIN…`](#cmd-cert) | A Let's Encrypt certificate via certbot --standalone: services and processes on 80/443 are stopped for the validation and started again. |
+| [`on HOST git clone URL /DIR`](#cmd-git-clone) | Clones a repository onto the host as a file-browser job; private ones with a token asked at run time or the host's deploy key. |
+| [`on HOST k8s create NAME`](#cmd-k8s-create) | Creates a Kubernetes cluster on the host's virtual machines — like “new cluster” in the host list: machines from a cloud image with nkt, control plane, joining nodes, waiting for Ready, port forward and kubeconfig (downloadable on the hub in the cluster card). |
+| [`on HOST k8s destroy NAME`](#cmd-k8s-destroy) | Deletes the cluster: all its machines with disks and the record on the hub. |
+
+**Pipelines, deployments, moves**
+
+| Command | What it does |
+|---|---|
+| [`pipeline NAME`](#cmd-pipeline) | Saves a deployment pipeline — like “Save” in the pipeline window: creates it if missing, otherwise a new version of the description. |
+| [`deploy PIPELINE`](#cmd-deploy) | Deploys a pipeline — like the “Deploy” button — and waits for the result; the deployment log goes into the script log. |
+| [`migrate HOST CONTAINER to HOST`](#cmd-migrate) | Moves a stack to another host — like dragging on the hosts map: a plan (obstacles are an error before the stack stops), stop, data through the hub, start on the new host; a failed move rolls back by itself. |
+
+**Clusters and Traffic Fly**
+
+| Command | What it does |
+|---|---|
+| [`k8s CLUSTER ingress cilium`](#cmd-k8s-ingress) | Turns on the Cilium Ingress controller in host network mode: Envoy listens on the port on every node (no LoadBalancer), Cilium is the default controller; the Cilium version stays the same. |
+| [`k8s CLUSTER apply`](#cmd-k8s-apply) | Applies a manifest (kubectl apply) on the first control plane — like “Manifests” in “Clusters”; in a dry run — kubectl diff. |
+| [`k8s CLUSTER wait deployment NAME`](#cmd-k8s-wait) | Waits until all replicas of a deployment are ready. |
+| [`fly route ID KIND`](#cmd-fly-route) | Creates or updates a Traffic Fly route and applies it — like a pipeline's fly: block: a new one is saved and applied, an existing one changes targets smoothly (new ones added and checked, old ones drained). |
+| [`fly apply`](#cmd-fly-apply) | Applies the Traffic Fly map — like “Apply”; in a dry run — the apply dry run. |
+
 ## Commands
 
 ### `set NAME value | set NAME ask` {#cmd-set}

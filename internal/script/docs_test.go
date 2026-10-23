@@ -28,3 +28,17 @@ func TestScriptCommandsPage(t *testing.T) {
 		}
 	}
 }
+
+// У каждой команды — группа в обзоре «Коротко»: новая команда без неё
+// пропала бы из обзора молча.
+func TestEveryCommandHasDocGroup(t *testing.T) {
+	groups := map[string]bool{}
+	for _, g := range docGroups {
+		groups[g] = true
+	}
+	for _, c := range Commands {
+		if !groups[docGroup[c.Kind]] {
+			t.Errorf("command %s: no overview group", c.Kind)
+		}
+	}
+}

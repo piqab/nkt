@@ -34,7 +34,7 @@ import type { HostEvent, HubVersionInfo, Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
 import About from './pages/About'
-import { DOCS, DocsContext } from './docs'
+import { DOCS, DocsContext, hubDocsKey } from './docs'
 import Profiles from './pages/Profiles'
 import Scripts from './pages/Scripts'
 import OverviewPage from './pages/Overview'
@@ -504,7 +504,7 @@ function Shell({
     if (knownHosts.data) setKnownNames(knownHosts.data.map((h) => h.name))
   }, [knownHosts.data])
   // Справка — раздел документации для того, что открыто сейчас.
-  const docKey = showingHostPicker ? `hub:${hubView}` : docsKeyFor(location.pathname)
+  const docKey = showingHostPicker ? hubDocsKey(hubView, profilesTab) : docsKeyFor(location.pathname)
   const docsPlace = { docKey, isHub, admin: me.is_admin, version: me.hub_version }
   const foot = (
     <div className={`sidebar-foot${collapsed ? ' sidebar-foot-collapsed' : ''}`}>

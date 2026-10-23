@@ -12,6 +12,10 @@ with a hub script. Building images and running tests is up to your CI
 
 ![Deployments](/screens/en/deployments.png)
 
+Each tab of the section has its own “?” next to its name: “Pipelines” —
+this page, “Sites” — the [Sites](#sites) section, “nkt-edge” — the
+[nkt-edge](/en/guide/edge) page.
+
 Why this way: keys to hosts and clusters stay on the hub. CI only gets
 the right to "poke" one pipeline's webhook, and what goes where is
 decided by the description on the hub — only the branch, commit and tag
