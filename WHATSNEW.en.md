@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.92 — 2026-10-23
+
+- **A draft from a model answer — without browser storage.** “Open as a
+  script” passes the script text and the question to the model in the
+  tab's memory, not through sessionStorage.
+
 ## v1.13.91 — 2026-10-23
 
 - **Assistant: an answer instead of “tools unsupported”.** If the

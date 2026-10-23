@@ -88,8 +88,13 @@ const (
 func NewRuntime() *Runtime {
 	d := &net.Dialer{Timeout: dialTimeout}
 	return &Runtime{
-		Dial:      d.DialContext,
-		Listen:    func(port int) (net.Listener, error) { return net.Listen("tcp", ":"+strconv.Itoa(port)) },
+		Dial: d.DialContext,
+		// Шлюз — публичный вход Traffic Fly: порты маршрутов слушаются на
+		// всех адресах намеренно, доступ режут белый список маршрута и
+		// ограничения на клиента.
+		Listen: func(port int) (net.Listener, error) {
+			return net.Listen("tcp", ":"+strconv.Itoa(port)) // #nosec G102 -- публичный вход шлюза, см. выше
+		},
 		listeners: map[int]net.Listener{},
 		health:    map[string]*targetState{},
 		routes:    map[string]*routeCounters{},

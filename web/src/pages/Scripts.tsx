@@ -16,6 +16,7 @@ import { DocsFrame, HelpButton, TitleHelp } from '../components/Docs'
 import { DOCS, docsURL, useDocsBase } from '../docs'
 import { msg, tx, type Msg } from '../msg'
 import { autoScriptName } from '../scriptName'
+import { takePendingScript } from '../scriptDraft'
 
 /**
  * Сценарии хаба: короткий построчный язык, которым описывают, что
@@ -163,21 +164,10 @@ export default function Scripts({ me }: { me: Me }) {
   const [editing, setEditing] = useState(false)
   // Текст из «Открыть как сценарий» (ответ модели) — новым сценарием.
   useEffect(() => {
-    let text: string | null = null
-    try {
-      text = sessionStorage.getItem('nkt-script-draft')
-      sessionStorage.removeItem('nkt-script-draft')
-    } catch {
-      text = null
-    }
+    const pending = takePendingScript()
+    const text = pending?.content
     if (!text || !canEdit) return
-    let from: { kind: 'assistant' | 'finding'; label?: string } = { kind: 'assistant' }
-    try {
-      from = JSON.parse(sessionStorage.getItem('nkt-script-draft-origin') ?? '') ?? from
-      sessionStorage.removeItem('nkt-script-draft-origin')
-    } catch {
-      /* без пометки — как от ассистента */
-    }
+    const from = pending.origin
     startNew()
     setDraft(text)
     // Имя — само, латиницей; заметка — откуда сценарий; проверка — сразу.
