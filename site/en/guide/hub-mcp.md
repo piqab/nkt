@@ -61,7 +61,7 @@ runs nothing by itself — only MCP with an admin token executes.
 | `list_migrations`, `list_clusters` | read | stack moves, clusters |
 | `fly_map`, `fly_status` | read, no limit | Traffic Fly map and state |
 | `check_script` | admin | “Check” for a script text, changes nothing |
-| `run_script` | admin | run a script (`dry_run`, `values` — answers to its questions) |
+| `run_script` | admin | run a script (`dry_run`; `dry_first` — a dry run, then the run if it passes; `values` — answers to its questions) |
 | `deploy_pipeline`, `dry_run_pipeline` | admin | deploy, dry run |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |
 | `fly_apply`, `fly_ops` | admin, no limit | apply the map, point edits of targets |

@@ -169,6 +169,7 @@ export default function Assistant() {
                   text={m.text}
                   origin={{ kind: 'assistant', label: messages[i - 1]?.text }}
                   check={m.reply?.script ? { issues: m.reply.issues, retried: m.reply.script_retried } : undefined}
+                  onAskAbout={(text) => void send(text)}
                 />
                 {m.reply && <div className="small muted">{t('assistant.footer', { model: m.reply.model, rounds: m.reply.rounds })}</div>}
               </div>

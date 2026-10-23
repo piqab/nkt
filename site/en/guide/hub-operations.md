@@ -135,7 +135,10 @@ matters here, what to do — with commands. Commands are only shown; you
 apply them. When the fix can be done with nkt script commands (packages,
 services, firewall, files, certificates), the model also adds a **fix
 script** for this host — it passes "Check" right away (on errors the model
-fixes it once, the result is written under the block); under it an
+fixes it once, the result is written under the block); for an admin it
+has **"Dry run"** and **"Run"** (a dry run, then the run if it passes, as
+one job, with progress and the outcome right in the window, as [in the
+assistant](/en/guide/hub-assistant#running-from-the-answer)) and an
 **"Open as a script"** button (for an
 admin) opens a new script in "Profiles" → "Scripts" with that text; then
 "Check", "Dry run" and "Run" — by you.

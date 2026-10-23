@@ -320,6 +320,8 @@ func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
 		// Values — ответы на вопросы запуска по ключам script.Ask.
 		Values map[string]string `json:"values"`
 		DryRun bool              `json:"dry_run"`
+		// DryFirst — сухой прогон, затем сразу выполнение одним заданием.
+		DryFirst bool `json:"dry_first"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -350,8 +352,13 @@ func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
 	}
 	ticket := s.ScriptRunner().keep(req.Values)
 	title := msgs.Tc(r.Context(), "hub.scriptRunTitle", sc.Name)
-	if req.DryRun {
+	steps := len(parsed.Steps)
+	switch {
+	case req.DryRun:
 		title = msgs.Tc(r.Context(), "hub.scriptDryRunTitle", sc.Name)
+	case req.DryFirst:
+		title = msgs.Tc(r.Context(), "hub.scriptDryFirstTitle", sc.Name)
+		steps *= 2
 	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
@@ -361,14 +368,14 @@ func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
 		// бы друг другу, разные идут параллельно.
 		Queue:  "script:" + strconv.FormatInt(sc.ID, 10),
 		Author: user,
-		Steps:  len(parsed.Steps),
-		Params: ScriptRunParams{ScriptID: sc.ID, Name: sc.Name, Content: sc.Content, Ticket: ticket, DryRun: req.DryRun},
+		Steps:  steps,
+		Params: ScriptRunParams{ScriptID: sc.ID, Name: sc.Name, Content: sc.Content, Ticket: ticket, DryRun: req.DryRun, DryFirst: req.DryFirst && !req.DryRun},
 	})
 	if err != nil {
 		s.ScriptRunner().forget(ticket)
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	s.db.Audit(r.Context(), user, "script.run", sc.Name, "ok", map[string]any{"job_id": id})
+	s.db.Audit(r.Context(), user, "script.run", sc.Name, "ok", map[string]any{"job_id": id, "dry_run": req.DryRun, "dry_first": req.DryFirst})
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }

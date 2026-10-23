@@ -45,6 +45,9 @@ type ScriptRunParams struct {
 	// DryRun — сухой прогон: ничего не менять, а спросить у хостов
 	// планы и записать в журнал, что изменилось бы.
 	DryRun bool `json:"dry_run,omitempty"`
+	// DryFirst — сначала сухой прогон всего сценария, при успехе — сразу
+	// выполнение (кнопка «Выполнить» в ответе ассистента).
+	DryFirst bool `json:"dry_first,omitempty"`
 }
 
 type scriptRunResume struct {
@@ -53,6 +56,8 @@ type scriptRunResume struct {
 	// HostIDs — хосты, заведённые сценарием: имя → идентификатор. После
 	// перезапуска по ним же продолжаем, не заводя вторых.
 	HostIDs map[string]int64 `json:"host_ids,omitempty"`
+	// DryDone — сухой прогон перед выполнением (DryFirst) уже прошёл.
+	DryDone bool `json:"dry_done,omitempty"`
 	// Сухой прогон: описания «pipeline» (имя → текст) — для «deploy» ниже,
 	// и была ли выше выкладка — «migrate» тогда не находит стек на хосте.
 	DryPipelines  map[string]string `json:"-"`
@@ -149,6 +154,31 @@ func (r *ScriptRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 	if done.HostIDs == nil {
 		done.HostIDs = map[string]int64{}
 	}
+	// «Выполнить» из ответа ассистента: сначала сухой прогон целиком; с
+	// ошибкой — до хостов не доходит.
+	total, offset := len(sc.Steps), 0
+	if p.DryFirst && !p.DryRun {
+		total, offset = 2*len(sc.Steps), len(sc.Steps)
+		if !done.DryDone {
+			jc.Log("hub.scriptDryFirstStart")
+			dry := p
+			dry.DryRun = true
+			dd := scriptRunResume{HostIDs: map[string]int64{}}
+			for i, st := range sc.Steps {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				jc.Step(i+1, total, st.Text)
+				jc.Logf("[%d/%d] %s", i+1, len(sc.Steps), st.Text)
+				if err := r.dryStep(ctx, jc, &dry, &dd, st); err != nil {
+					return msgs.Errorf("hub.scriptDryFirstFailed", st.Line, err)
+				}
+			}
+			done.DryDone = true
+			jc.SaveResume(done)
+			jc.Log("hub.scriptDryFirstOK")
+		}
+	}
 	if done.Done > 0 {
 		jc.Log("hub.scriptResuming", done.Done+1, len(sc.Steps))
 	}
@@ -157,7 +187,7 @@ func (r *ScriptRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 			return err
 		}
 		st := sc.Steps[i]
-		jc.Step(i+1, len(sc.Steps), st.Text)
+		jc.Step(offset+i+1, total, st.Text)
 		jc.Logf("[%d/%d] %s", i+1, len(sc.Steps), st.Text)
 		var err error
 		if p.DryRun {

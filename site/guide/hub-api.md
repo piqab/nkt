@@ -160,6 +160,7 @@ function sign(secret, method, uri, body = '') {
 | `GET /api/hub/k8s/manifests`, `/{id}` | администратор | сохранённые манифесты |
 | `POST /api/hub/k8s/manifests/diff` | администратор | `kubectl diff` по кластерам (`{"name":"…","content":"…","clusters":[1,2]}`) |
 | `POST /api/hub/k8s/manifests/apply?job=1` | администратор | `kubectl apply` по кластерам заданием (тело — как у diff, плюс `note`) → `job_id` |
+| `POST /api/hub/scripts/{id}/run` с `"dry_first": true` | администратор | сухой прогон, при успехе — выполнение, одним заданием → `job_id` |
 | `POST /api/mcp` | чтение | [MCP для ИИ-агентов](/guide/hub-mcp): JSON-RPC; инструменты — по роли и пределу токена |
 
 Закрыто любому токену и после этого: создание, правка и удаление

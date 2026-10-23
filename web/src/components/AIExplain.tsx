@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Modal, formatDateTime } from './ui'
+import { ScriptRunInline } from './ScriptRunInline'
 import { blurText } from '../privacy'
 import { aiAnswerState, currentAIHostID, invalidateAIAnswers, useAIAnswers } from '../aiAnswers'
 
@@ -413,7 +414,18 @@ export interface ScriptOrigin {
   label?: string
 }
 
-export function AIBody({ text, origin, check }: { text: string; origin?: ScriptOrigin; check?: ScriptCheckView }) {
+export function AIBody({
+  text,
+  origin,
+  check,
+  onAskAbout,
+}: {
+  text: string
+  origin?: ScriptOrigin
+  check?: ScriptCheckView
+  /** Ассистент: вопрос о результате запуска сценария. */
+  onAskAbout?: (text: string) => void
+}) {
   const { t } = useTranslation()
   const me = useApi<Me>('/auth/me')
   const parts: { code: boolean; lang: string; body: string }[] = []
@@ -434,6 +446,10 @@ export function AIBody({ text, origin, check }: { text: string; origin?: ScriptO
               {p.body.replace(/\n?$/, '')}
             </pre>
             {p.lang === 'nkt' && check && <ScriptCheckLine check={check} />}
+            {/* Проверенный сценарий запускается тут же — администратором. */}
+            {p.lang === 'nkt' && me.data?.is_admin && origin && check && check.issues.length === 0 && (
+              <ScriptRunInline content={p.body} origin={origin} onAskAbout={onAskAbout} />
+            )}
             {p.lang === 'nkt' && me.data?.is_admin && (
               <Tooltip title={t('ai.openScriptHint')}>
                 <Button size="small" onClick={() => openAsScript(p.body, origin)}>
