@@ -52,7 +52,10 @@ type assistantReply struct {
 	// с инструментами (или с их результатами).
 	ToolsError string `json:"tools_error,omitempty"`
 	Model      string `json:"model"`
-	Rounds     int    `json:"rounds"`
+	// Seen — контейнеры и службы, которые модель прочитала инструментами:
+	// их имена в ответе — ссылки с меню действий.
+	Seen   []assistantObject `json:"seen,omitempty"`
+	Rounds int               `json:"rounds"`
 }
 
 const (
@@ -197,10 +200,24 @@ func (s *Server) handleAssistant(w http.ResponseWriter, r *http.Request) {
 		if len(turn.Calls) > assistantCallsPerRound {
 			turn.Calls = turn.Calls[:assistantCallsPerRound]
 		}
-		history = append(history, ai.ChatMessage{Role: "assistant", Text: turn.Text, Calls: turn.Calls})
+		history = append(history, ai.ChatMessage{Role: "assistant", Text: turn.Text, Calls: turn.Calls, Reasoning: turn.Reasoning})
 		for _, call := range turn.Calls {
-			text, isErr := s.assistantCall(ctx, who, call.Name, json.RawMessage(mapper.Reveal(string(call.Args))))
+			args := json.RawMessage(mapper.Reveal(string(call.Args)))
+			text, isErr := s.assistantCall(ctx, who, call.Name, args)
 			reply.Steps = append(reply.Steps, assistantStep{Tool: call.Name, Args: call.Args, Error: isErr})
+			if !isErr && (call.Name == "host_containers" || call.Name == "host_services") {
+				var a struct {
+					HostID int64 `json:"host_id"`
+				}
+				_ = json.Unmarshal(args, &a)
+				host := ""
+				if h, err := s.db.HostByID(ctx, a.HostID); err == nil {
+					host = h.Name
+				} else if a.HostID == localHostID {
+					host = "localhost"
+				}
+				reply.Seen = append(reply.Seen, seenObjects(call.Name, a.HostID, host, text)...)
+			}
 			history = append(history, ai.ChatMessage{Role: "tool", CallID: call.ID, Text: mapper.Hide(text)})
 		}
 	}

@@ -17,6 +17,7 @@ import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TabHelp, TitleHelp } from '../components/Docs'
+import { pipelinePower } from '../components/pipelinePower'
 import { EXAMPLE_WARNING, PIPELINE_EXAMPLES, type PipelineExample } from '../pipelineExamples'
 import { msg, tx, type Msg } from '../msg'
 
@@ -60,12 +61,7 @@ interface Pipeline {
   stopped?: { by: string; at: string; project: string; hosts: { id: number; name: string }[] }
 }
 
-/** Что затронет «Запустить» / «Остановить»: хосты выкладки и маршруты Traffic Fly. */
-interface PowerPlan {
-  project: string
-  hosts: { id: number; name: string }[]
-  routes: string[]
-}
+
 interface PipelineVersion {
   id: number
   ts: string
@@ -154,35 +150,12 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
       setError(errText(err))
     }
   }
-  // «Остановить» спрашивает дважды: первое окно — что затронет (хосты,
-  // маршруты, оповещения), второе — что сервис станет недоступен.
   async function power(p: Pipeline, action: 'start' | 'stop') {
-    let plan: PowerPlan
     try {
-      plan = await api<PowerPlan>(`/hub/pipelines/${p.id}/power`)
-    } catch (err) {
-      setError(errText(err))
-      return
-    }
-    const hosts = plan.hosts.map((h) => h.name).join(', ')
-    const routes = plan.routes.join(', ')
-    if (action === 'stop') {
-      const first = (
-        <div className="col" style={{ gap: '0.4rem' }}>
-          <span>{t('deploy.power.stopConfirm1', { name: p.name, hosts })}</span>
-          {routes && <span>{t('deploy.power.stopRoutes', { routes })}</span>}
-          <span className="small muted">{t('deploy.power.stopKeeps')}</span>
-        </div>
-      )
-      if (!(await confirmAction(first, { title: t('deploy.power.stopTitle', { name: p.name }), okText: t('deploy.power.next') }))) return
-      if (!(await confirmAction(t('deploy.power.stopConfirm2', { name: p.name, count: plan.hosts.length }), { title: t('deploy.power.stopTitle', { name: p.name }), okText: t('deploy.power.stop') }))) return
-    } else if (!(await confirmAction(t('deploy.power.startConfirm', { name: p.name, hosts }), { title: t('deploy.power.startTitle', { name: p.name }), okText: t('deploy.power.start'), danger: false }))) {
-      return
-    }
-    try {
-      const res = await api<{ job_id: number }>(`/hub/pipelines/${p.id}/${action}`, { method: 'POST' })
+      const id = await pipelinePower(p.id, p.name, action)
+      if (id === null) return
       void list.reload()
-      void openJob(res.job_id)
+      void openJob(id)
     } catch (err) {
       setError(errText(err))
     }

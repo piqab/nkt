@@ -8,6 +8,33 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.97 — 2026-10-23
+
+- **The assistant is a chat.** Questions on the right, answers on the
+  left, each with its time; the feed takes the full height, the input
+  sits at the bottom; what the assistant looked at — a “looked at: N ▾”
+  line. “Clear the conversation” — with a confirmation.
+- **“Dry run” and “Run” — in a job window:** hosts and steps, the
+  script's questions, progress and log. A successful “Run” closes the
+  window by itself, the message keeps the outcome with a link to the log;
+  on failure the window stays with the error. The same in finding
+  analysis.
+- **Names as links with a menu.** Hosts, containers, services, pipelines,
+  scripts, clusters, routes and groups in messages: open in the section,
+  ask the assistant, restart, deploy, start or stop — for an admin and
+  with a confirmation.
+- **Favorites on the right:** a star on a question, sections, dragging,
+  deleting; a click sends the question. Kept on the hub for each user.
+- **Hints while typing:** “host”, “container”, “service”, “pipeline”… and
+  “@” open a list; hosts have “all hosts”, containers and services come
+  from the named host.
+- **DeepSeek in thinking mode** no longer fails on the second turn:
+  `reasoning_content` goes back to the provider as it requires.
+- **The hub export** carries assistant favorites (with user accounts),
+  the deployments' “stopped” tag, the edited monitoring instruction and
+  the “Check tools” result; a test keeps new settings from dropping out
+  of the export.
+
 ## v1.13.96 — 2026-10-23
 
 - **`docker stack PATH start|stop` in scripts.** `start` brings up what is

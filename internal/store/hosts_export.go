@@ -257,6 +257,9 @@ var ExportedSettingKeys = []string{
 	"ai.settings", "ai.api_key_enc",
 	"ai.prompt.finding/ru", "ai.prompt.finding/en", "ai.prompt.map/ru", "ai.prompt.map/en",
 	"ai.prompt.config/ru", "ai.prompt.config/en", "ai.prompt.ip/ru", "ai.prompt.ip/en",
+	"ai.prompt.monitoring/ru", "ai.prompt.monitoring/en",
+	// Итог «Проверить инструменты» для пары «модель + адрес».
+	"ai.tools",
 	// Бета-канал обновлений.
 	"update.beta",
 	// Адрес сайта справки и его история («О системе»).

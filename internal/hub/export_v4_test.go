@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -46,6 +47,15 @@ func TestExportImportV4(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = db1.KVSet(ctx, "ai.prompt.ip/ru", "Своя инструкция проверки адреса.")
+	// 1.13.97: избранное ассистента едет с учётной записью; метка
+	// «остановлена» — с конвейером (хосты по именам); инструкция
+	// мониторинга и итог проверки инструментов — в настройках.
+	_ = db1.KVSet(ctx, store.AssistantFavoritesKey("ops"), `{"sections":[{"id":"s1","title":"Общее","items":[{"id":"i1","text":"Проверь хост edge-host"}]}]}`)
+	_ = db1.KVSet(ctx, "ai.prompt.monitoring/ru", "Своя инструкция мониторинга.")
+	_ = db1.KVSet(ctx, "ai.tools", `{"provider":"openai","model":"m","status":"tools"}`)
+	stopped, _ := json.Marshal(pipelineStopped{By: "admin", At: "2026-10-23T10:00:00Z", Project: "app", Hosts: []deployedHost{{ID: hid, Name: "edge-host"}},
+		Containers: map[string][]string{strconv.FormatInt(hid, 10): {"app-web-1"}}})
+	_ = db1.KVSet(ctx, stoppedKey(pid), string(stopped))
 	tpl := fail2ban.Template{Name: "myapp", Description: "d", Jail: "[myapp]\nenabled = true\n"}
 	list, _ := json.Marshal([]fail2ban.Template{tpl})
 	_ = db1.KVSet(ctx, api.F2BTemplatesKey, string(list))
@@ -117,6 +127,21 @@ func TestExportImportV4(t *testing.T) {
 	}
 	if v, _, _ := db2.KVGet(ctx, "ai.prompt.ip/ru"); v != "Своя инструкция проверки адреса." {
 		t.Fatalf("ai prompt: %q", v)
+	}
+	if v, _, _ := db2.KVGet(ctx, "ai.prompt.monitoring/ru"); v != "Своя инструкция мониторинга." {
+		t.Fatalf("monitoring prompt: %q", v)
+	}
+	if v, _, _ := db2.KVGet(ctx, "ai.tools"); !strings.Contains(v, `"tools"`) {
+		t.Fatalf("ai tools state: %q", v)
+	}
+	if v, _, _ := db2.KVGet(ctx, store.AssistantFavoritesKey("ops")); !strings.Contains(v, "Проверь хост edge-host") {
+		t.Fatalf("favorites: %q", v)
+	}
+	// Метка «остановлена» — с id хоста и конвейера второго хаба.
+	m2srv := &Server{db: db2, hub: m2}
+	st2 := m2srv.loadStopped(ctx, p.ID)
+	if st2 == nil || st2.By != "admin" || len(st2.Hosts) != 1 || st2.Hosts[0].ID != hosts[0].ID || len(st2.Containers[strconv.FormatInt(hosts[0].ID, 10)]) != 1 {
+		t.Fatalf("stopped: %+v", st2)
 	}
 	if got := m2.f2bTemplates(ctx); len(got) != 1 || got[0].Name != "myapp" {
 		t.Fatalf("f2b templates: %+v", got)

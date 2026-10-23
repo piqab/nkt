@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"regexp"
 
 	"github.com/piqab/nkt/internal/msgs"
@@ -38,6 +39,18 @@ type PipelineExport struct {
 	// не удалось убрать (хосты — по именам).
 	Deployed  *DeployedExport  `json:"deployed,omitempty"`
 	Leftovers []LeftoverExport `json:"leftovers,omitempty"`
+	// Stopped — выкладка остановлена («Остановить»): кто, когда, на каких
+	// хостах (по именам) и контейнеры стека на них.
+	Stopped *StoppedExport `json:"stopped,omitempty"`
+}
+
+// StoppedExport — метка остановленной выкладки.
+type StoppedExport struct {
+	By         string              `json:"by"`
+	At         string              `json:"at"`
+	Project    string              `json:"project"`
+	Hosts      []string            `json:"hosts"`
+	Containers map[string][]string `json:"containers,omitempty"`
 }
 
 // DeployedExport — стек последней удачной выкладки конвейера.
@@ -91,7 +104,13 @@ type UserExport struct {
 	Disabled     bool   `json:"disabled,omitempty"`
 	PasswordHash string `json:"password_hash"`
 	CreatedAt    string `json:"created_at,omitempty"`
+	// AssistantFavorites — избранное ассистента (JSON разделов), едет с
+	// учётной записью.
+	AssistantFavorites string `json:"assistant_favorites,omitempty"`
 }
+
+// AssistantFavoritesKey — ключ kv с избранным ассистента пользователя.
+func AssistantFavoritesKey(user string) string { return "assistant.favorites." + user }
 
 // F2BTemplateExport — свой шаблон fail2ban с историей (текст версии —
 // тот же документ, что в общей истории: описание, джейл, фильтр).
@@ -172,7 +191,11 @@ func (db *DB) ExportUsers(ctx context.Context) ([]UserExport, error) {
 	}
 	out := make([]UserExport, 0, len(list))
 	for _, u := range list {
-		out = append(out, UserExport{Username: u.Username, Role: u.Role, Disabled: u.Disabled, PasswordHash: u.PasswordHash, CreatedAt: u.CreatedAt})
+		ue := UserExport{Username: u.Username, Role: u.Role, Disabled: u.Disabled, PasswordHash: u.PasswordHash, CreatedAt: u.CreatedAt}
+		if v, ok, err := db.KVGet(ctx, AssistantFavoritesKey(u.Username)); err == nil && ok {
+			ue.AssistantFavorites = v
+		}
+		out = append(out, ue)
 	}
 	return out, nil
 }
@@ -326,6 +349,9 @@ func (db *DB) importUsers(ctx context.Context, users []UserExport, res ImportRes
 			}
 			_ = db.SetUserRole(ctx, u.Username, u.Role)
 			_ = db.SetUserDisabled(ctx, u.Username, u.Disabled)
+			if u.AssistantFavorites != "" && json.Valid([]byte(u.AssistantFavorites)) {
+				_ = db.KVSet(ctx, AssistantFavoritesKey(u.Username), u.AssistantFavorites)
+			}
 			cnt.Replaced++
 			continue
 		}
@@ -335,6 +361,9 @@ func (db *DB) importUsers(ctx context.Context, users []UserExport, res ImportRes
 		}
 		if u.Disabled {
 			_ = db.SetUserDisabled(ctx, u.Username, true)
+		}
+		if u.AssistantFavorites != "" && json.Valid([]byte(u.AssistantFavorites)) {
+			_ = db.KVSet(ctx, AssistantFavoritesKey(u.Username), u.AssistantFavorites)
 		}
 		cnt.Added++
 	}

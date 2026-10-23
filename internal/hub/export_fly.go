@@ -380,6 +380,23 @@ func (m *Manager) exportDeployed(ctx context.Context, export *store.HubExport) {
 				export.Pipelines[i].Deployed = de
 			}
 		}
+		if raw, ok, err := m.db.KVGet(ctx, stoppedKey(id)); err == nil && ok && raw != "" {
+			var st pipelineStopped
+			if json.Unmarshal([]byte(raw), &st) == nil && len(st.Hosts) > 0 {
+				se := &store.StoppedExport{By: st.By, At: st.At, Project: st.Project, Hosts: []string{}, Containers: map[string][]string{}}
+				for _, h := range st.Hosts {
+					name := h.Name
+					if n, ok := byID[h.ID]; ok {
+						name = n
+					}
+					se.Hosts = append(se.Hosts, name)
+					if cs := st.Containers[strconv.FormatInt(h.ID, 10)]; len(cs) > 0 {
+						se.Containers[name] = cs
+					}
+				}
+				export.Pipelines[i].Stopped = se
+			}
+		}
 		if raw, ok, err := m.db.KVGet(ctx, leftoversKey(id)); err == nil && ok && raw != "" {
 			var ls []leftoverStack
 			if json.Unmarshal([]byte(raw), &ls) == nil {
@@ -408,7 +425,7 @@ func (m *Manager) importDeployed(ctx context.Context, list []store.PipelineExpor
 	}
 	_, byName := m.hostNames(ctx)
 	for _, p := range list {
-		if p.Deployed == nil && len(p.Leftovers) == 0 {
+		if p.Deployed == nil && len(p.Leftovers) == 0 && p.Stopped == nil {
 			continue
 		}
 		if existing[p.Name] && !res.Replace(store.SectionPipelines, p.Name) {
@@ -431,6 +448,23 @@ func (m *Manager) importDeployed(ctx context.Context, list []store.PipelineExpor
 			raw, _ := json.Marshal(d)
 			if err := m.db.KVSet(ctx, deployedKey(id), string(raw)); err != nil {
 				rep.Err("%s: %v", p.Name, err)
+			}
+		}
+		if p.Stopped != nil {
+			st := pipelineStopped{By: p.Stopped.By, At: p.Stopped.At, Project: p.Stopped.Project, Containers: map[string][]string{}}
+			for _, h := range p.Stopped.Hosts {
+				if hid, ok := byName[h]; ok {
+					st.Hosts = append(st.Hosts, deployedHost{ID: hid, Name: h})
+					if cs := p.Stopped.Containers[h]; len(cs) > 0 {
+						st.Containers[strconv.FormatInt(hid, 10)] = cs
+					}
+				}
+			}
+			if len(st.Hosts) > 0 {
+				raw, _ := json.Marshal(st)
+				if err := m.db.KVSet(ctx, stoppedKey(id), string(raw)); err != nil {
+					rep.Err("%s: %v", p.Name, err)
+				}
 			}
 		}
 		if len(p.Leftovers) > 0 {

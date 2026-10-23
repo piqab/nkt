@@ -603,11 +603,11 @@ it answers, otherwise goes through the host; *direct*; *via host*.
 "Export" saves everything that takes long to set up again: hosts with
 encrypted SSH and admin secrets and settings, groups (empty ones too),
 machine-to-host links, Kubernetes clusters (nodes, API address,
-kubeconfig, WireGuard plan), profiles and scripts with history, machine
+kubeconfig, WireGuard plan), profiles, scripts and service descriptions with history, machine
 templates, **deployment pipelines** with their revision history, secrets
 (webhook signature, git and registry tokens), webhook address, the
 selected dry run checks, the `.env` history and where the stack is
-deployed now (plus old stacks not yet removed), deployment **sites**
+deployed now (plus old stacks not yet removed and the “stopped” tag), deployment **sites**
 (domains, proxy, stack or address, firewall, state; the host and the
 pipeline go by name: a site whose host is missing is not imported, and a
 site without its pipeline becomes a manual one), **fail2ban templates** with version history, every **nkt-edge** with its
@@ -616,12 +616,12 @@ roles (address, domain, token, pinned certificate, the host it runs on),
 webhooks** and the Telegram and Slack **bots** (tokens and secrets; hosts
 in a scope go by name, and a token or recipient whose host is missing is
 not imported), hub settings
-(alerts, package cache, model analysis with the API key and every edited
-instruction, beta channel, the help site address with its history, the hub and host menu layouts), saved cluster form presets, fallback channel
+(alerts, package cache, model analysis with the API key, every edited
+instruction and the “Check tools” result, beta channel, the help site address with its history, the hub and host menu layouts), saved cluster form presets, fallback channel
 switches and tokens, **Traffic Fly routes** with their version history
 and the tunnel address and port allocation, **container move records**
 (map marks, "Roll back" and "Remove old"). With the "Web interface user accounts" checkbox it
-also carries logins, roles and password hashes. The file is JSON version
+also carries logins, roles, password hashes and assistant favorites. The file is JSON version
 5; versions 1 to 4 import too.
 
 - **The hub's encryption key travels in the file**: the receiving hub

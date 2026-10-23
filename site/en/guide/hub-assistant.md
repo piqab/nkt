@@ -23,8 +23,8 @@ without it the section points to where to turn it on.
 The assistant doesn't guess: it **looks at the hub's data** itself — the
 host list, a host's findings, services and containers, alerts, jobs and
 their logs, pipelines, scripts, moves, clusters, the Traffic Fly map and
-state. Above the answer you see what it looked at (“Looked at: list_hosts,
-host_findings host_id=1 …”); a red tag is a call that failed.
+state. The answer has a line “looked at: N ▾”: a click unfolds what exactly
+(list_hosts, host_findings host_id=1 …); a red tag is a call that failed.
 
 - **Read only** and **with your rights**: each look is the same request
   the interface makes when you open the section.
@@ -56,41 +56,83 @@ stopped on purpose.
 
 ## Running from the answer
 
-![Dry run and run right in the assistant's answer](/screens/en/hub-assistant-run.png)
+![The “Run” window: hosts, steps and the start](/screens/en/hub-assistant-run.png)
 
-Under a script that passed “Check”, an admin gets two buttons right in
-the assistant window:
+Under a script that passed “Check”, an admin gets **“Dry run”** and
+**“Run”**. Each opens a job window:
 
-- **“Dry run”** — the script is saved by itself (a Latin name
-  `ai-DATE-HOST`, the note “Suggested by the assistant: …”, an “AI” tag in
-  “Scripts”) and a dry run starts: hosts are asked for plans, nothing
-  changes. The job's progress and log are right there.
-- **“Run”** — a confirmation with the hosts and steps, then **one job**:
-  a dry run, and if it passes — the run right away. If the dry run fails,
-  the hosts aren't touched. The hub holds the chain: a closed tab doesn't
-  stop it.
+- the window shows what the script will do (hosts and steps) and fields
+  if it asks for something (a password, a parameter); you start it with a
+  button in the window;
+- the script is saved by itself (a Latin name `ai-DATE-HOST`, the note
+  “Suggested by the assistant: …”, an “AI” tag in “Scripts”);
+- **“Dry run”** asks the hosts for plans and changes nothing; the window
+  stays open — the result is there to read;
+- **“Run”** is **one job**: a dry run, and if it passes — the run right
+  away. If the dry run fails, the hosts aren't touched. **If it
+  succeeds, the window closes by itself** after a couple of seconds, and
+  the message keeps a line “✓ dry run → run · done · log”: it opens the
+  window again. If it fails, the window stays with the error.
 
-If the script asks for something (a password, a parameter), the fields
-appear above the buttons. The outcome is “Done” or “Didn't pass: …”,
-“Open the job” shows the whole log. **“Ask the assistant about the
-result”** adds the outcome and the log to the conversation: the assistant
-analyses what happened and, if needed, suggests a fixed script — with the
-same buttons.
+The window shows the progress and the log, “Open the job” shows the whole
+log. **“Ask the assistant about the result”** adds the outcome and the log
+to the conversation: the assistant analyses what happened and, if needed,
+suggests a fixed script. The hub holds the chain: a closed tab doesn't
+stop it.
 
-The assistant itself still runs nothing: you run it with a button, after a
+The assistant itself still runs nothing: you run it, after a
 confirmation; each run is an ordinary hub job with an author and an audit
-log entry. The same buttons are under the fix script in
+log entry. The same buttons and window are under the fix script in
 [finding analysis](/en/guide/hub-operations#model-analysis-ai).
+
+## Names as links
+
+![The menu of a container in an answer](/screens/en/hub-assistant-menu.png)
+
+Names of hosts, groups, pipelines, scripts, clusters and Traffic Fly
+routes in messages are links; containers and services too, if the
+assistant read them. A click opens a menu by the object's kind:
+
+- **host** — open, findings, containers, services, “ask: check host …”;
+- **container** and **service** — open on the host (the row is
+  highlighted), host logs, ask the assistant, **restart**;
+- **pipeline** — open in “Deployments”, **dry run**, **deploy**,
+  **start** or **stop** (with the same two confirmations as in
+  “Deployments”);
+- **script**, **cluster**, **route**, **group** — open in its section.
+
+Changing actions are for an admin only, with a confirmation, through the
+same calls as the section buttons; the job opens in a log window.
+
+## Favorites
+
+The star on your question adds it to **“Favorites”** on the right.
+Favorites are split into sections: “New section”, rename, delete.
+Questions and sections are **dragged** — the order and moving between
+sections. **A click on a question sends it** to the assistant. Favorites
+are kept on the hub, each user's own — visible from any browser and
+carried by the hub export together with the user account.
+
+## Hints while typing
+
+![Hints of a host's containers while typing a question](/screens/en/hub-assistant-suggest.png)
+
+A kind word and a space after it open a list: “host” — hosts with their
+state (the first item is “all hosts”), “container”, “service” — what is on
+the host named last in the question, “pipeline”, “script”, “cluster”,
+“route”, “group” — their own lists; “@” — everything at once, with a
+search. Arrows and Enter (or Tab) pick, Esc closes. The picked name is
+inserted and becomes a link in the sent question.
 
 ## Example
 
 Question: “Which critical findings are on the hosts now and where do I
 start?”
 
-Above the answer — what the assistant looked at:
+The answer has “looked at: 3 ▾”, unfolded:
 
 ```
-Looked at: list_hosts  host_findings host_id=1  list_alerts after=0
+list_hosts  host_findings host_id=1  list_alerts after=0
 ```
 
 The answer:
@@ -144,8 +186,11 @@ snapshot answer fails too, the error names both reasons. In this mode the model 
 
 ## The conversation
 
-The conversation lives in the browser tab while it is open; “New
-conversation” starts over. Ctrl+Enter sends. Every question goes to the
+The conversation is a chat: your questions on the right, answers on the
+left, each with its time; what the assistant looked at is folded into a
+“looked at: N ▾” line. It lives in the browser tab while it is open;
+“Clear the conversation” (with a confirmation) starts over, favorites
+stay. Ctrl+Enter sends. Every question goes to the
 audit log (`ai.assistant`).
 
 An external agent (Claude Code, Cursor) gets the same data — and actions,

@@ -420,12 +420,15 @@ export function AIBody({
   origin,
   check,
   onAskAbout,
+  renderText,
 }: {
   text: string
   origin?: ScriptOrigin
   check?: ScriptCheckView
   /** Ассистент: вопрос о результате запуска сценария. */
   onAskAbout?: (text: string) => void
+  /** Ассистент: текст вне блоков кода — с именами объектов ссылками. */
+  renderText?: (text: string) => ReactNode
 }) {
   const { t } = useTranslation()
   const me = useApi<Me>('/auth/me')
@@ -461,7 +464,7 @@ export function AIBody({
           </div>
         ) : p.body.trim() ? (
           <p key={i} className="small" style={{ whiteSpace: 'pre-wrap', margin: '0.2rem 0' }}>
-            {blurText(p.body.trim())}
+            {renderText ? renderText(p.body.trim()) : blurText(p.body.trim())}
           </p>
         ) : null,
       )}
