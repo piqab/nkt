@@ -365,3 +365,49 @@ func (e errProfile) Error() string { return msgs.T(msgs.DefaultLang, string(e)) 
 
 // Unwrap отдаёт каталожную ошибку, чтобы writeErr показал её на языке запроса.
 func (e errProfile) Unwrap() error { return msgs.Errorf(string(e)) }
+
+// handleProfileHelp — справка формата профиля (встроенная, «Из nkt») и
+// готовые профили: те же тексты и примеры, что на странице сайта.
+func (s *Server) handleProfileHelp(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, profile.HelpFor(msgs.FromContext(r.Context())))
+}
+
+// profileCheckResult — итог «Проверить»: что профиль задаёт или ошибка
+// со строкой YAML, если разбор её назвал.
+type profileCheckResult struct {
+	OK     bool           `json:"ok"`
+	Name   string         `json:"name,omitempty"`
+	Error  string         `json:"error,omitempty"`
+	Line   int            `json:"line,omitempty"`
+	Counts map[string]int `json:"counts,omitempty"`
+}
+
+var yamlLineRe = regexp.MustCompile(`line (\d+)`)
+
+func (s *Server) handleProfileCheck(w http.ResponseWriter, r *http.Request) {
+	var req profileRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	p, err := parseProfileRequest(req)
+	if err != nil {
+		res := profileCheckResult{Error: msgs.Localize(msgs.FromContext(r.Context()), err)}
+		if m := yamlLineRe.FindStringSubmatch(err.Error()); m != nil {
+			res.Line, _ = strconv.Atoi(m[1])
+		}
+		writeJSON(w, http.StatusOK, res)
+		return
+	}
+	counts := map[string]int{
+		"packages": len(p.Packages), "services": len(p.Services), "files": len(p.Files),
+		"users": len(p.Users), "compose": len(p.Compose),
+	}
+	if p.Firewall != nil {
+		counts["firewall"] = len(p.Firewall.Allow)
+	}
+	if p.System != nil {
+		counts["system"] = 1
+	}
+	writeJSON(w, http.StatusOK, profileCheckResult{OK: true, Name: p.Name, Counts: counts})
+}

@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.94 — 2026-10-23
+
+- **The profile editor — as for scripts.** The editing window has
+  **“Check”** (parsing with the same code as saving: an error with a line
+  or what the profile sets), **“Save”** only after a successful check,
+  **“Ready-made profiles ▾”** (a base server, nginx, a Docker host with a
+  stack) and a **“?”** that opens the profile format.
+- **“Profile format” on the docs site.** A new page with every profile
+  section, examples and ready-made profiles — built from nkt code, a test
+  keeps it from falling behind. The profile card has “Text” and
+  “Reference” tabs: the site page, without access to the site — the help
+  built into nkt.
+- The example on the “Profiles” page had wrong `firewall` and `files`:
+  the old example would not save.
+
 ## v1.13.93 — 2026-10-23
 
 - **“?” leads to its own tab's help.** By the “Scripts” title — the

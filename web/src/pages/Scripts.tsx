@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, ColorPicker, Dropdown, Input, Segmented, Space, Tabs, Tag, Tooltip } from 'antd'
-import { CopyOutlined, DownOutlined, ExportOutlined } from '@ant-design/icons'
+import { Button, ColorPicker, Dropdown, Input, Tabs, Tag, Tooltip } from 'antd'
+import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Job, Me } from '../types'
@@ -12,8 +12,7 @@ import { JobLogModal } from './Jobs'
 import ScriptScheme from '../components/ScriptScheme'
 import { AIScriptMenu } from '../components/AIScriptMenu'
 import { TextVersions } from '../components/TextVersions'
-import { DocsFrame, HelpButton, TitleHelp } from '../components/Docs'
-import { DOCS, docsURL, useDocsBase } from '../docs'
+import { HelpButton, SiteHelpTab, TitleHelp } from '../components/Docs'
 import { msg, tx, type Msg } from '../msg'
 import { autoScriptName } from '../scriptName'
 import { takePendingScript } from '../scriptDraft'
@@ -623,58 +622,23 @@ function CommandsHelp({ me }: { me: Me }) {
   return <HelpButton docKey="hub:script-commands" isHub admin={me.is_admin} version={me.hub_version} compact />
 }
 
-const HELP_SOURCE = 'nkt-script-help-source'
-
-function readHelpSource(): 'site' | 'nkt' {
-  try {
-    return localStorage.getItem(HELP_SOURCE) === 'nkt' ? 'nkt' : 'site'
-  } catch {
-    return 'site'
-  }
-}
-
 /**
  * Вкладка «Справка»: по умолчанию — страница «Команды сценариев» с сайта
  * справки (её собирают из того же описания команд, что и разбор); без
  * доступа к сайту — справка из nkt, она же умеет вставлять готовые
- * сценарии в редактор. Выбор помнится в браузере.
+ * сценарии в редактор.
  */
 function ScriptHelpTab({ canInsert, onInsert }: { canInsert: boolean; onInsert: (text: string) => void }) {
-  const { t, i18n } = useTranslation()
-  const base = useDocsBase(true)
-  const url = docsURL(base, i18n.language, DOCS['hub:script-commands'])
-  const [source, setSource] = useState<'site' | 'nkt'>(readHelpSource)
-  function choose(v: 'site' | 'nkt') {
-    setSource(v)
-    try {
-      localStorage.setItem(HELP_SOURCE, v)
-    } catch {
-      /* без хранилища — выбор до перезагрузки */
-    }
-  }
+  const { t } = useTranslation()
   return (
-    <div className="col" style={{ gap: '0.5rem' }}>
-      <Space wrap>
-        <Segmented
-          size="small"
-          value={source}
-          onChange={(v) => choose(v as 'site' | 'nkt')}
-          options={[
-            { value: 'site', label: t('scripts.help.fromSite') },
-            { value: 'nkt', label: t('scripts.help.fromNkt') },
-          ]}
-        />
-        {source === 'site' && (
-          <a href={url} target="_blank" rel="noreferrer">
-            <Button size="small" icon={<ExportOutlined />}>
-              {t('docs.newTab')}
-            </Button>
-          </a>
-        )}
-        <span className="small muted">{t(source === 'site' ? 'scripts.help.siteHint' : 'scripts.help.nktHint')}</span>
-      </Space>
-      {source === 'site' ? <DocsFrame url={url} height="70vh" /> : <ScriptHelp canInsert={canInsert} onInsert={onInsert} />}
-    </div>
+    <SiteHelpTab
+      docKey="hub:script-commands"
+      isHub
+      storageKey="nkt-script-help-source"
+      siteHint={t('scripts.help.siteHint')}
+      nktHint={t('scripts.help.nktHint')}
+      fallback={<ScriptHelp canInsert={canInsert} onInsert={onInsert} />}
+    />
   )
 }
 
