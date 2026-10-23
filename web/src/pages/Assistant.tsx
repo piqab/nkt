@@ -27,6 +27,7 @@ interface Reply {
   script: boolean
   script_retried?: boolean
   mode: 'tools' | 'summary'
+  tools_error?: string
   model: string
   rounds: number
 }
@@ -157,8 +158,9 @@ export default function Assistant() {
                       ))}
                     </>
                   )}
+                  {m.reply?.mode === 'summary' && m.reply.tools_error && <span className="small muted">{m.reply.tools_error}</span>}
                   {m.reply?.mode === 'summary' && (
-                    <Tooltip title={t('assistant.summaryHint')}>
+                    <Tooltip title={m.reply.tools_error ? `${t('assistant.summaryHint')} ${t('assistant.summaryWhy', { why: m.reply.tools_error })}` : t('assistant.summaryHint')}>
                       <Tag color="orange" style={{ margin: 0 }}>
                         {t('assistant.summary')}
                       </Tag>

@@ -5057,6 +5057,7 @@
     "looked": "Looked at:",
     "summary": "from a snapshot",
     "summaryHint": "The model cannot call tools: the answer is from a hub snapshot (hosts, alerts, pipelines, moves).",
+    "summaryWhy": "The provider answered: {{why}}",
     "footer": "Answer by {{model}} · turns: {{rounds}}",
     "disabled": "AI is off: turn it on in “About” → “Model analysis”.",
     "modelToolsHint": "The model calls tools: the assistant looks at the hub’s data itself."

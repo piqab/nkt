@@ -44,10 +44,14 @@ type ChatReply struct {
 	Calls []ToolCall
 }
 
-// ErrToolsUnsupported — провайдер отверг запрос с инструментами (обычно
-// локальная модель без function calling): вызывающий переходит на
-// ответ по сводке.
-var ErrToolsUnsupported = errors.New("tools unsupported")
+// ToolsRejected — провайдер отверг запрос с инструментами (обычно
+// локальная модель без function calling или сервер, не принимающий
+// результаты инструментов): вызывающий переходит на ответ по сводке.
+// Ошибка несёт ответ провайдера — его показывают, а не прячут.
+func ToolsRejected(err error) bool {
+	var me *msgs.Err
+	return errors.As(err, &me) && me.Key == "ai.toolsRejected"
+}
 
 // Chat — один ход диалога с инструментами.
 func (c *Client) Chat(ctx context.Context, system string, history []ChatMessage, tools []Tool) (ChatReply, error) {
@@ -64,7 +68,7 @@ func (c *Client) Chat(ctx context.Context, system string, history []ChatMessage,
 	var me *msgs.Err
 	if err != nil && len(tools) > 0 && errors.As(err, &me) && me.Key == "ai.providerCodeAt" && len(me.Args) > 0 {
 		if code, _ := me.Args[0].(int); code == http.StatusBadRequest || code == http.StatusUnprocessableEntity || code == http.StatusNotImplemented {
-			return reply, ErrToolsUnsupported
+			return reply, msgs.Errorf("ai.toolsRejected", err)
 		}
 	}
 	return reply, err

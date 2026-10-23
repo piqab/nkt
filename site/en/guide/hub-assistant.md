@@ -127,9 +127,11 @@ last message is the question) → `answer`, `steps` (what it looked at),
 ## A model without tools
 
 Local models can't always call tools. If the provider refuses such a
-request, the assistant answers **from a snapshot**: the request carries
-the hosts, recent alerts, pipelines and moves, and the answer gets a “from
-a snapshot” tag. In this mode the model doesn't see host details
+request — at once or on the request with the tools' results — the
+assistant answers **from a snapshot**: the request carries the hosts,
+recent alerts, pipelines and moves, and the answer gets a “from a
+snapshot” tag and the provider's answer (why tools didn't work). If the
+snapshot answer fails too, the error names both reasons. In this mode the model doesn't see host details
 (findings, services).
 
 ## The conversation

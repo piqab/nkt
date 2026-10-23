@@ -3,7 +3,6 @@ package hub
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -48,9 +47,12 @@ type assistantReply struct {
 	ScriptRetried bool `json:"script_retried,omitempty"`
 	// Mode — tools (модель читала сама) или summary (модель без
 	// инструментов, ответ по сводке).
-	Mode   string `json:"mode"`
-	Model  string `json:"model"`
-	Rounds int    `json:"rounds"`
+	Mode string `json:"mode"`
+	// ToolsError — почему ответ по сводке: что ответил провайдер на запрос
+	// с инструментами (или с их результатами).
+	ToolsError string `json:"tools_error,omitempty"`
+	Model      string `json:"model"`
+	Rounds     int    `json:"rounds"`
 }
 
 const (
@@ -146,6 +148,7 @@ func (s *Server) handleAssistant(w http.ResponseWriter, r *http.Request) {
 	reply := assistantReply{Mode: "tools", Model: set.Model, Steps: []assistantStep{}, Issues: []scriptIssueJSON{}}
 	system := mapper.Hide(ai.AssistantSystemPrompt(lang, reference, names, ""))
 	tools := assistantTools()
+	question := history
 	answer := ""
 	for round := 0; round < assistantRounds; round++ {
 		if err := spend(); err != nil {
@@ -158,10 +161,28 @@ func (s *Server) handleAssistant(w http.ResponseWriter, r *http.Request) {
 			offer = nil
 		}
 		turn, err := client.Chat(ctx, system, history, offer)
-		if errors.Is(err, ai.ErrToolsUnsupported) && round == 0 {
+		if ai.ToolsRejected(err) {
+			// Провайдер не принял инструменты — сразу или уже на ходе с их
+			// результатами (сервер, который зовёт инструмент, но не
+			// понимает ответ на него). Отвечаем по сводке, причину —
+			// в ответ: без неё «по сводке» не объяснить.
+			reason := err
+			if round > 0 {
+				reason = msgs.Errorf("ai.toolsResultRejected", round+1, err)
+			}
 			reply.Mode = "summary"
+			reply.ToolsError = mapper.Reveal(msgs.Localize(lang, reason))
 			system = mapper.Hide(ai.AssistantSystemPrompt(lang, reference, names, s.assistantSnapshot(ctx, who)))
-			turn, err = client.Chat(ctx, system, history, nil)
+			if round > 0 {
+				if err = spend(); err != nil {
+					fail(w, r, err)
+					return
+				}
+			}
+			turn, err = client.Chat(ctx, system, question, nil)
+			if err != nil {
+				err = msgs.Errorf("ai.assistantSummaryFailed", err, reason)
+			}
 		}
 		if err != nil {
 			fail(w, r, err)
