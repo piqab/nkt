@@ -240,8 +240,12 @@ What works with any model: finding analysis and the fix script, the
 architecture review, config help, the address check, AI in the script
 editor. The [assistant](/en/guide/hub-assistant) needs **tool calling**:
 the **“Check tools”** button sends the model a short request with one
-probe tool and shows the result — “calls tools” or “doesn't call tools”
-(then the assistant answers from a hub snapshot). The result is kept for
+probe tool and, if the model called it, a second one with the tool's
+result, as the assistant does. The result is “calls tools” or “doesn't
+call tools” (then the assistant answers from a hub snapshot); if the
+provider refused, its answer is shown next to it — so you can see whether
+the server rejected the request with the result itself (OpenAI-compatible
+servers sometimes do). The result is kept for
 the “model + address” pair and shown on the assistant page; a question to
 the assistant updates it.
 

@@ -31,6 +31,7 @@ func TestAssistant(t *testing.T) {
 	var bodies [][]msg
 	var withTools []bool
 	toolsUnsupported := false
+	resultRejected, summaryFails := false, false
 	step := 0
 	prov := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -40,6 +41,23 @@ func TestAssistant(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		bodies = append(bodies, body.Messages)
 		withTools = append(withTools, len(body.Tools) > 0)
+		hasToolMsg := false
+		for _, m := range body.Messages {
+			hasToolMsg = hasToolMsg || m.Role == "tool"
+		}
+		if resultRejected {
+			switch {
+			case hasToolMsg:
+				http.Error(w, `{"error":"unexpected role tool"}`, http.StatusBadRequest)
+			case len(body.Tools) > 0:
+				_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"list_hosts","arguments":"{}"}}]}}]}`)
+			case summaryFails:
+				http.Error(w, `{"error":"overloaded"}`, http.StatusServiceUnavailable)
+			default:
+				_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"По сводке: один хост."}}]}`)
+			}
+			return
+		}
 		if toolsUnsupported && len(body.Tools) > 0 {
 			http.Error(w, `{"error":"tools not supported"}`, http.StatusBadRequest)
 			return
@@ -143,6 +161,26 @@ func TestAssistant(t *testing.T) {
 	rep = ask()
 	if rep.Mode != "summary" || len(withTools) != 2 || !withTools[0] || withTools[1] || !strings.Contains(bodies[1][0].Content, "/hub/hosts") {
 		t.Fatalf("summary: %+v tools=%v", rep, withTools)
+	}
+	if !strings.Contains(rep.ToolsError, "tools not supported") {
+		t.Fatalf("summary reason: %q", rep.ToolsError)
+	}
+
+	// Инструмент модель вызвала, а запрос с его результатом провайдер не
+	// принял: не «tools unsupported», а ответ по сводке с причиной; сводка
+	// идёт с исходным вопросом, без ходов с инструментами.
+	toolsUnsupported, resultRejected = false, true
+	bodies, withTools = nil, nil
+	rep = ask()
+	if rep.Mode != "summary" || len(rep.Steps) != 1 || len(bodies) != 3 || withTools[2] || len(bodies[2]) != 2 ||
+		!strings.Contains(rep.ToolsError, "unexpected role tool") || !strings.Contains(rep.ToolsError, "(ход 2)") {
+		t.Fatalf("result rejected: %+v bodies=%d", rep, len(bodies))
+	}
+	// Сводка тоже не удалась — видны обе причины.
+	summaryFails = true
+	rec = do("POST", "/api/hub/assistant", `{"messages":[{"role":"user","text":"что не так с web1?"}]}`, session)
+	if rec.Code == 200 || !strings.Contains(rec.Body.String(), "overloaded") || !strings.Contains(rec.Body.String(), "unexpected role tool") {
+		t.Fatalf("summary failed: %d %s", rec.Code, rec.Body)
 	}
 
 	// Токену — нет (ассистент только в интерфейсе).

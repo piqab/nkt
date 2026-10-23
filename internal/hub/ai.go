@@ -3,7 +3,6 @@ package hub
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -647,25 +646,50 @@ func (m *Manager) AIToolsTest(ctx context.Context, set ai.Settings, apiKey *stri
 	tool := ai.Tool{Name: "get_hub_time", Description: "Returns the current time on the hub.",
 		Schema: map[string]any{"type": "object", "properties": map[string]any{}}}
 	started := time.Now()
-	reply, err := ai.New(set).Chat(ctx, msgs.T(lang, "ai.toolsTestSystem"),
-		[]ai.ChatMessage{{Role: "user", Text: msgs.T(lang, "ai.toolsTestUser")}}, []ai.Tool{tool})
-	took := time.Since(started).Milliseconds()
+	client := ai.New(set)
+	system := msgs.T(lang, "ai.toolsTestSystem")
+	history := []ai.ChatMessage{{Role: "user", Text: msgs.T(lang, "ai.toolsTestUser")}}
+	reply, err := client.Chat(ctx, system, history, []ai.Tool{tool})
 	_ = m.db.AIUsageAdd(ctx)
-	res := AIToolsResult{Model: set.Model, TookMS: took}
+	res := AIToolsResult{Model: set.Model}
 	switch {
-	case errors.Is(err, ai.ErrToolsUnsupported):
-		res.Status = "no_tools"
+	case ai.ToolsRejected(err):
+		res.Status, res.Message = "no_tools", msgs.Localize(lang, err)
 	case err != nil:
 		res.Status, res.Message = "error", msgs.Localize(lang, err)
+		res.TookMS = time.Since(started).Milliseconds()
 		return res, nil
 	default:
 		res.Status = "no_tools"
-		for _, c := range reply.Calls {
+		var call *ai.ToolCall
+		for i, c := range reply.Calls {
 			if c.Name == tool.Name {
-				res.Status = "tools"
+				call = &reply.Calls[i]
 			}
 		}
+		if call == nil {
+			break
+		}
+		// Второй ход — как у ассистента: результат инструмента обратно
+		// модели. Есть серверы, которые инструмент зовут, а ответ на него
+		// не принимают; тогда ассистент отвечает по сводке.
+		history = append(history,
+			ai.ChatMessage{Role: "assistant", Text: reply.Text, Calls: []ai.ToolCall{*call}},
+			ai.ChatMessage{Role: "tool", CallID: call.ID, Text: time.Now().UTC().Format(time.RFC3339)})
+		_, err = client.Chat(ctx, system, history, []ai.Tool{tool})
+		_ = m.db.AIUsageAdd(ctx)
+		switch {
+		case err == nil:
+			res.Status = "tools"
+		case ai.ToolsRejected(err):
+			res.Message = msgs.Localize(lang, msgs.Errorf("ai.toolsResultRejected", 2, err))
+		default:
+			res.Status, res.Message = "error", msgs.Localize(lang, msgs.Errorf("ai.toolsResultRejected", 2, err))
+			res.TookMS = time.Since(started).Milliseconds()
+			return res, nil
+		}
 	}
+	res.TookMS = time.Since(started).Milliseconds()
 	m.aiRecordTools(ctx, set, res.Status, "test")
 	return res, nil
 }

@@ -282,7 +282,7 @@ export function AISettingsCard() {
           api_key: apiKey === '' ? null : apiKey,
         },
       })
-      setToolsTest({ status: res.status, text: res.status === 'error' ? res.message ?? '' : t(`ai.tools.${res.status}`) + ` (${res.took_ms} ms)` })
+      setToolsTest({ status: res.status, text: res.status === 'error' ? res.message ?? '' : t(`ai.tools.${res.status}`) + ` (${res.took_ms} ms)` + (res.message ? ` — ${res.message}` : '') })
       status.reload()
     } catch (err) {
       setToolsTest({ status: 'error', text: err instanceof Error ? err.message : String(err) })

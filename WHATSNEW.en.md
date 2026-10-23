@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.91 — 2026-10-23
+
+- **Assistant: an answer instead of “tools unsupported”.** If the
+  provider rejects the request with tools — at once or on the request
+  with their results, as OpenAI-compatible servers sometimes do — the
+  assistant answers from a hub snapshot, and next to the “from a
+  snapshot” tag is what the provider said. If the snapshot fails too,
+  the error names both reasons.
+- **“Check tools” checks the second step too:** it sends the model the
+  probe tool's result, as the assistant does, and on a refusal shows the
+  provider's answer.
+
 ## v1.13.90 — 2026-10-23
 
 - **Version history — as in the other editors.** For scripts, profiles

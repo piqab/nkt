@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +11,7 @@ import (
 )
 
 // Anthropic: вызов инструмента — tool_use, результат — tool_result в
-// реплике user; отказ провайдера от инструментов — ErrToolsUnsupported.
+// реплике user; отказ провайдера от инструментов — ToolsRejected с ответом провайдера.
 func TestChatAnthropic(t *testing.T) {
 	var got map[string]any
 	reject := false
@@ -48,10 +47,10 @@ func TestChatAnthropic(t *testing.T) {
 		t.Fatal("no tools sent")
 	}
 	reject = true
-	if _, err := c.Chat(context.Background(), "sys", history, tools); !errors.Is(err, ErrToolsUnsupported) {
+	if _, err := c.Chat(context.Background(), "sys", history, tools); !ToolsRejected(err) || !strings.Contains(err.Error(), `{"error":"tools"}`) {
 		t.Fatalf("reject: %v", err)
 	}
-	if _, err := c.Chat(context.Background(), "sys", history, nil); err == nil || errors.Is(err, ErrToolsUnsupported) {
+	if _, err := c.Chat(context.Background(), "sys", history, nil); err == nil || ToolsRejected(err) {
 		t.Fatalf("reject without tools: %v", err)
 	}
 }

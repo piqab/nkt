@@ -28,6 +28,13 @@ func TestAIToolsTest(t *testing.T) {
 			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"","tool_calls":[{"id":"1","type":"function","function":{"name":"get_hub_time","arguments":"{}"}}]}}]}`)
 		case "openai-text":
 			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"It is noon."}}]}`)
+		case "openai-result-reject":
+			// Инструмент зовёт, а запрос с его результатом не принимает.
+			if strings.Contains(string(body), `"role":"tool"`) {
+				http.Error(w, `{"error":"unexpected role tool"}`, http.StatusBadRequest)
+				return
+			}
+			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"","tool_calls":[{"id":"1","type":"function","function":{"name":"get_hub_time","arguments":"{}"}}]}}]}`)
 		case "openai-reject":
 			http.Error(w, `{"error":"tools are not supported"}`, http.StatusBadRequest)
 		case "anthropic-tools":
@@ -44,6 +51,7 @@ func TestAIToolsTest(t *testing.T) {
 		{"openai-tools", ai.ProviderOpenAI, "tools"},
 		{"openai-text", ai.ProviderOpenAI, "no_tools"},
 		{"openai-reject", ai.ProviderOpenAI, "no_tools"},
+		{"openai-result-reject", ai.ProviderOpenAI, "no_tools"},
 		{"anthropic-tools", ai.ProviderAnthropic, "tools"},
 		{"anthropic-text", ai.ProviderAnthropic, "no_tools"},
 	} {
@@ -52,6 +60,10 @@ func TestAIToolsTest(t *testing.T) {
 		res, err := m.AIToolsTest(ctx, set, &key)
 		if err != nil || res.Status != c.want {
 			t.Errorf("%s: %+v %v", c.mode, res, err)
+		}
+		// Отказ виден с ответом провайдера, а не «tools unsupported».
+		if c.mode == "openai-result-reject" && !strings.Contains(res.Message, "unexpected role tool") {
+			t.Errorf("%s: message %q", c.mode, res.Message)
 		}
 		if st := m.aiToolsFor(ctx, set); st == nil || st.Status != c.want || st.Origin != "test" {
 			t.Errorf("%s: recorded %+v", c.mode, st)
