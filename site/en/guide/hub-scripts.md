@@ -36,40 +36,26 @@ wait web1 http http://${ADDR}/ 200 1m
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `set NAME value`, `set NAME ask` | a variable; `ask` — asked at run time, never stored |
-| `param NAME "prompt"` | a parameter asked at run time — one script for different stands |
-| `group NAME [profile PROFILE]` | a group on the hub |
-| `host NAME ADDR[:PORT] user … (password ask \| password "…" \| key hub) [group …]` | register a host |
-| `install HOST…` | install nkt |
-| `wait HOST online \| port N \| http URL [CODE] \| service NAME active` | wait |
-| `wait url URL [CODE] [DURATION]` | wait for an outside address: a request from the hub to the real name — DNS, gateway and certificate are verified as for a user |
-| `on HOST… packages install\|remove …` | packages; several hosts may be listed in `on` |
-| `on HOST service NAME start\|stop\|restart\|reload\|enable\|disable` | services |
-| `on HOST firewall allow\|deny PORT [from CIDR]` | firewall |
-| `on HOST docker install`, `on HOST docker stack PATH up\|down` | Docker and a compose stack: `up` without a block starts the file already on the host; with a block (compose YAML up to `end` right under the line) it writes it first; `down` takes no block |
-| `on HOST vm create NAME image IMAGE [cpu N] [mem MB] [disk GB] [profile …] [install]` | a machine on the host |
-| `on HOST apply profile PROFILE` | apply a profile |
-| `on HOST file put PATH … end` | write a file |
-| `on HOST user add NAME [sudo] [key "…"]` | an account |
-| `on HOST system hostname\|timezone\|locale\|ntp …` | system settings |
-| `on HOST cert issue DOMAIN… \| cert renew DOMAIN` | a Let's Encrypt certificate |
-| `on HOST git clone URL /DIR [branch …] [token ask]` | clone a repository |
-| `on HOST k8s create NAME [nodes single\|1+N\|3+N\|"HOST: cp N, w N, host cp\|w; …"] [network nat\|bridge\|wireguard] [cni cilium] [expose] …`, `on HOST k8s destroy NAME` | a Kubernetes cluster on the host's machines or placed across several hosts (experimental) |
-| `pipeline NAME` … `end` | save a deployment pipeline — the description as a block, like “Save” in the pipeline window: `env:` values go to secrets, `generate:` is created by the hub, another value for an already set key is an error |
-| `deploy PIPELINE [DURATION]` | deploy a pipeline and wait for the result; in a dry run — the pipeline's dry run |
-| `k8s CLUSTER ingress cilium [port N]` | turn on Cilium Ingress in host network mode (a port on every node, 8080 by default); needs a cluster with Cilium replacing kube-proxy |
-| `k8s CLUSTER apply` … `end` | apply a manifest on the first control plane, like “Manifests” in “Clusters”; in a dry run — `kubectl diff` |
-| `k8s CLUSTER wait deployment NAME [namespace NS] [DURATION]` | wait until all replicas are ready |
-| `fly route ID KIND [names …] [port N] [tls gateway] [check …] [gateway GATEWAY] (targets cluster CLUSTER port N \| target HOST KIND NAME PORT …)` | create or update a Traffic Fly route and apply it, like a pipeline's `fly:` block; `targets cluster` — all cluster nodes |
-| `fly apply` | apply the Traffic Fly map |
-| `migrate HOST CONTAINER to HOST [switch-fly] [switch-pipeline] [clean-leftovers]` | move a stack to another host, like from the hosts map: a plan with obstacles, the move, rollback on error; in a dry run — the plan |
+Every command with its syntax, arguments and examples, plus ready-made
+scripts, is on the **[Script commands](/en/guide/script-commands)** page.
+It is built from the same command descriptions in nkt code that “Check”,
+the “Reference” tab and AI work from, so it always matches what the hub
+understands. In short:
 
-The full reference with examples you can copy or insert into the editor is
-the “Reference” tab on the scripts page (on the right, next to “Text” and
-“Scheme”); the same ready-made scripts are under “Ready-made scripts ▾” in
-the editor window.
+- variables and questions at start: `set`, `param`;
+- the hub: `group`, `host`, `install`, `wait`, `wait url`;
+- on a host (`on HOST… …`): packages, services, firewall, Docker and
+  compose stacks, machines, profiles, files, accounts, system settings,
+  certificates, `git clone`, Kubernetes clusters;
+- deployments and moves: `pipeline`, `deploy`, `migrate`;
+- clusters and Traffic Fly: `k8s … ingress|apply|wait`, `fly route`, `fly apply`.
+
+![The “Reference” tab: the “Script commands” page from the site](/screens/en/hub-script-help.png)
+
+Command help is in the editor too: the “?” icon in the window title and
+the “Reference” tab on the scripts page (the same site page; without
+access to the site — the help built into nkt); ready-made scripts —
+“Ready-made scripts ▾” in the editor window.
 
 ## AI in the editor
 

@@ -2587,7 +2587,11 @@
       "examples": "Ready-made scripts",
       "examplesHint": "Copy or insert into the editor and put in your own addresses, names and profiles.",
       "insert": "Into editor",
-      "confirmInsert": "Replace the editor text with this script? Unsaved edits will be lost."
+      "confirmInsert": "Replace the editor text with this script? Unsaved edits will be lost.",
+      "fromSite": "Site",
+      "fromNkt": "From nkt",
+      "siteHint": "the “Script commands” page from the docs site; didn't open — “From nkt”",
+      "nktHint": "the help built into nkt: works without the site, ready-made scripts go into the editor"
     },
     "templateComment": "Web farm: a group, two hosts, nginx and a stack",
     "examplesLabel": "Start from a ready one",
