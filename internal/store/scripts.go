@@ -12,9 +12,11 @@ import (
 // Script — сценарий хаба: текст на языке internal/script, хранится и
 // версионируется так же, как профиль.
 type Script struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Color     string `json:"color,omitempty"`
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color,omitempty"`
+	// Origin — «ai»: сценарий из ответа ассистента или разбора находки.
+	Origin    string `json:"origin,omitempty"`
 	Content   string `json:"content,omitempty"`
 	Note      string `json:"note,omitempty"`
 	Author    string `json:"author,omitempty"`
@@ -41,8 +43,8 @@ func (db *DB) CreateScript(ctx context.Context, s Script) (int64, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO scripts (name, color, content, note, author, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`, s.Name, s.Color, s.Content, s.Note, s.Author, now, now)
+		INSERT INTO scripts (name, color, origin, content, note, author, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, s.Name, s.Color, s.Origin, s.Content, s.Note, s.Author, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -92,9 +94,9 @@ func (db *DB) DeleteScript(ctx context.Context, id int64) error {
 // ScriptByID отдаёт сценарий с текстом.
 func (db *DB) ScriptByID(ctx context.Context, id int64) (Script, error) {
 	row := db.QueryRowContext(ctx,
-		`SELECT id, name, color, content, note, author, created_at, updated_at FROM scripts WHERE id = ?`, id)
+		`SELECT id, name, color, origin, content, note, author, created_at, updated_at FROM scripts WHERE id = ?`, id)
 	var s Script
-	err := row.Scan(&s.ID, &s.Name, &s.Color, &s.Content, &s.Note, &s.Author, &s.CreatedAt, &s.UpdatedAt)
+	err := row.Scan(&s.ID, &s.Name, &s.Color, &s.Origin, &s.Content, &s.Note, &s.Author, &s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Script{}, ErrNotFound
 	}
@@ -104,7 +106,7 @@ func (db *DB) ScriptByID(ctx context.Context, id int64) (Script, error) {
 // ListScripts отдаёт сценарии без текста.
 func (db *DB) ListScripts(ctx context.Context) ([]Script, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, name, color, note, author, created_at, updated_at FROM scripts ORDER BY name`)
+		`SELECT id, name, color, origin, note, author, created_at, updated_at FROM scripts ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +114,7 @@ func (db *DB) ListScripts(ctx context.Context) ([]Script, error) {
 	out := []Script{}
 	for rows.Next() {
 		var s Script
-		if err := rows.Scan(&s.ID, &s.Name, &s.Color, &s.Note, &s.Author, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Color, &s.Origin, &s.Note, &s.Author, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

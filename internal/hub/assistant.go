@@ -14,6 +14,7 @@ import (
 	"github.com/piqab/nkt/internal/ai"
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/script"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -43,6 +44,8 @@ type assistantReply struct {
 	Issues []scriptIssueJSON `json:"issues"`
 	// Script — есть ли в ответе сценарий (блок ```nkt).
 	Script bool `json:"script"`
+	// ScriptRetried — сценарий не прошёл проверку, модель исправляла.
+	ScriptRetried bool `json:"script_retried,omitempty"`
 	// Mode — tools (модель читала сама) или summary (модель без
 	// инструментов, ответ по сводке).
 	Mode   string `json:"mode"`
@@ -183,11 +186,11 @@ func (s *Server) handleAssistant(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(answer) == "" {
 		answer = msgs.T(lang, "ai.assistantNoAnswer")
 	}
-	reply.Answer = mapper.Reveal(answer)
-	if mm := nktBlock.FindStringSubmatch(reply.Answer); mm != nil {
-		reply.Script = true
-		reply.Issues = issuesJSON(lang, s.aiScriptCheck(ctx, mm[1]))
-	}
+	// Сценарий в ответе проходит «Проверить»; с ошибками — модели одна
+	// попытка исправить.
+	var issues []script.Issue
+	reply.Answer, issues, reply.Script, reply.ScriptRetried = m.fixAnswerScript(ctx, client, set, mapper, mapper.Reveal(answer))
+	reply.Issues = issuesJSON(lang, issues)
 	// Что модель показала об инструментах — в настройки ИИ («умеет» или
 	// «отвечает по сводке»); ответ без вызовов ничего не доказывает.
 	switch {

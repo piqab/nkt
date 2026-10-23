@@ -48,6 +48,13 @@ func TestAssistant(t *testing.T) {
 			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"По сводке: один хост."}}]}`)
 			return
 		}
+		// Попытка исправить сценарий: модели — ошибки «Проверить».
+		for _, m := range body.Messages {
+			if m.Role == "user" && (strings.Contains(m.Content, "нашла ошибки") || strings.Contains(m.Content, "found errors")) {
+				_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"`+"```\\non web1 packages install htop\\n```"+`"}}]}`)
+				return
+			}
+		}
 		step++
 		switch step {
 		case 1:
@@ -56,7 +63,8 @@ func TestAssistant(t *testing.T) {
 			args, _ := json.Marshal(`{"host_id":-1}`)
 			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"","tool_calls":[{"id":"c2","type":"function","function":{"name":"host_findings","arguments":`+string(args)+`}},{"id":"c3","type":"function","function":{"name":"run_script","arguments":"{}"}}]}}]}`)
 		default:
-			a, _ := json.Marshal("На web1 стоит поставить htop:\n\n```nkt\non web1 packages install htop\n```\n")
+			// Сценарий с ошибкой (нет хоста web9) — хаб попросит исправить.
+			a, _ := json.Marshal("На web1 стоит поставить htop:\n\n```nkt\non web9 packages install htop\n```\n")
 			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":`+string(a)+`}}]}`)
 		}
 	}))
@@ -103,7 +111,7 @@ func TestAssistant(t *testing.T) {
 	}
 
 	rep := ask()
-	if rep.Mode != "tools" || rep.Rounds != 3 || len(rep.Steps) != 3 || !rep.Script || len(rep.Issues) != 0 {
+	if rep.Mode != "tools" || rep.Rounds != 3 || len(rep.Steps) != 3 || !rep.Script || len(rep.Issues) != 0 || !rep.ScriptRetried {
 		t.Fatalf("reply: %+v", rep)
 	}
 	if rep.Steps[0].Tool != "list_hosts" || rep.Steps[1].Error || !rep.Steps[2].Error {

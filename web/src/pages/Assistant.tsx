@@ -25,6 +25,7 @@ interface Reply {
   steps: Step[]
   issues: { line: number; error: string }[]
   script: boolean
+  script_retried?: boolean
   mode: 'tools' | 'summary'
   model: string
   rounds: number
@@ -164,22 +165,11 @@ export default function Assistant() {
                     </Tooltip>
                   )}
                 </div>
-                <AIBody text={m.text} />
-                {m.reply?.script &&
-                  (m.reply.issues.length > 0 ? (
-                    <Banner kind="warn">
-                      {t('scripts.ai.issues', { count: m.reply.issues.length })}
-                      <ul className="small" style={{ margin: '0.3rem 0 0', paddingLeft: '1.2rem' }}>
-                        {m.reply.issues.map((x, n) => (
-                          <li key={n}>
-                            {t('scripts.line', { line: x.line })} {x.error}
-                          </li>
-                        ))}
-                      </ul>
-                    </Banner>
-                  ) : (
-                    <span className="small muted">{t('assistant.scriptChecked')}</span>
-                  ))}
+                <AIBody
+                  text={m.text}
+                  origin={{ kind: 'assistant', label: messages[i - 1]?.text }}
+                  check={m.reply?.script ? { issues: m.reply.issues, retried: m.reply.script_retried } : undefined}
+                />
                 {m.reply && <div className="small muted">{t('assistant.footer', { model: m.reply.model, rounds: m.reply.rounds })}</div>}
               </div>
             ),

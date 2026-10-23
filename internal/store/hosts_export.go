@@ -156,6 +156,7 @@ type ProfileVersionExport struct {
 type ScriptExport struct {
 	Name     string                 `json:"name"`
 	Color    string                 `json:"color,omitempty"`
+	Origin   string                 `json:"origin,omitempty"`
 	Content  string                 `json:"content"`
 	Note     string                 `json:"note,omitempty"`
 	Author   string                 `json:"author,omitempty"`
@@ -363,7 +364,7 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 		if err != nil {
 			return HubExport{}, err
 		}
-		se := ScriptExport{Name: full.Name, Color: full.Color, Content: full.Content, Note: full.Note, Author: full.Author}
+		se := ScriptExport{Name: full.Name, Color: full.Color, Origin: full.Origin, Content: full.Content, Note: full.Note, Author: full.Author}
 		versions, err := d.ScriptVersions(ctx, sc.ID, 200)
 		if err != nil {
 			return HubExport{}, err
@@ -855,7 +856,7 @@ func (d *DB) importScripts(ctx context.Context, scripts []ScriptExport, res Impo
 			cnt.Replaced++
 			continue
 		}
-		id, err := d.CreateScript(ctx, Script{Name: s.Name, Color: s.Color, Content: s.Content, Note: s.Note, Author: s.Author})
+		id, err := d.CreateScript(ctx, Script{Name: s.Name, Color: s.Color, Origin: s.Origin, Content: s.Content, Note: s.Note, Author: s.Author})
 		if err != nil {
 			rep.Err("%s: %v", s.Name, err)
 			continue

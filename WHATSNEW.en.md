@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.87 — 2026-10-23
+
+- **`docker stack … up` without a block.** The line
+  `on HOST docker stack PATH up` with no content starts the file already
+  on the host — a block (YAML up to `end`) is needed only to write the
+  file; `down` takes no block. The parser used to require `end`, and
+  script lines under the command ended up in the compose file. “Check”
+  now catches a block closed in the wrong place (“`end` is misplaced:
+  lines N–M are script commands”) and compose that isn't YAML.
+- **“Check” is in the script editor window**, the result under the text;
+  “Save” is available once there is a name and the text passed the check.
+- **Scripts from AI are checked right away.** A script in an assistant
+  answer or a finding analysis passes “Check” on the hub; on errors the
+  model fixes it once, the result is under the block. “Open as a script”
+  gives a Latin name (`ai-…`, `fix-…`), a note saying where it came from
+  and an already checked text; the list shows an “AI” tag. A downloaded
+  script's file name is in Latin letters.
+
 ## v1.13.86 — 2026-10-22
 
 - **Local models in two clicks.** The “Model analysis” card has ready

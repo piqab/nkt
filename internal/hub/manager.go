@@ -22,6 +22,7 @@ import (
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/script"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -248,7 +249,13 @@ type Manager struct {
 	db      *store.DB
 	key     []byte
 	version string
-	log     *slog.Logger
+
+	// scriptCheck и scriptNames — «Проверить» сценария и имена объектов
+	// хаба (их знает Server): сценарий в ответе модели проверяется, при
+	// ошибках модели — одна попытка исправить (fixAnswerScript).
+	scriptCheck func(ctx context.Context, text string) []script.Issue
+	scriptNames func(ctx context.Context) string
+	log         *slog.Logger
 	// sumsCache — SHA256SUMS релизов по версии (см. releaseSums).
 	sumsMu    sync.Mutex
 	sumsCache map[string]releaseSumsEntry

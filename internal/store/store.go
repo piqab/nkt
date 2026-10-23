@@ -642,6 +642,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"api_tokens", "via_edge", `ALTER TABLE api_tokens ADD COLUMN via_edge INTEGER NOT NULL DEFAULT 0`},
 	// max_body — предел тела запроса у прокси сайта ("" — 64m, "0" — без).
 	{"sites", "max_body", `ALTER TABLE sites ADD COLUMN max_body TEXT NOT NULL DEFAULT ''`},
+	// Откуда сценарий: «ai» — черновик ассистента или разбора находки.
+	{"scripts", "origin", `ALTER TABLE scripts ADD COLUMN origin TEXT NOT NULL DEFAULT ''`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

@@ -38,9 +38,11 @@ host_findings host_id=1 …”); a red tag is a call that failed.
 ## Changes — as a script
 
 The assistant cannot change anything. When an action is needed, it sends
-a **script** (an `nkt` block): the hub runs it through “Check” right away
-and says under the answer whether it passed; under the block is **“Open as
-a script”**: “Profiles” → “Scripts” opens with that text, then “Check”, a
+a **script** (an `nkt` block): the hub runs it through “Check” right away;
+on errors it sends them back to the model once, and the model fixes the
+script. Under the block is the result (“passed “Check””, after a fix —
+“the model fixed it after the check errors”) or the remaining errors by
+line, and **“Open as a script”**: “Profiles” → “Scripts” opens with that text, then “Check”, a
 dry run and the run — by you. A stack move (`migrate`) and a deployment
 (`deploy`) come the same way.
 

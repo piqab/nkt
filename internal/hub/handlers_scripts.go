@@ -28,6 +28,8 @@ type scriptRequest struct {
 	Content string `json:"content"`
 	Note    string `json:"note"`
 	Color   string `json:"color"`
+	// Origin — «ai» для черновика из ответа модели (только при создании).
+	Origin string `json:"origin"`
 }
 
 func (s *Server) scriptByIDParam(r *http.Request) (store.Script, error) {
@@ -45,6 +47,9 @@ func cleanScriptRequest(req scriptRequest) (scriptRequest, error) {
 	}
 	if len(req.Content) > maxScriptBytes {
 		return req, msgs.Errorf("script.tooBig", maxScriptBytes>>10)
+	}
+	if req.Origin != "" && req.Origin != "ai" {
+		req.Origin = ""
 	}
 	req.Color = strings.ToLower(strings.TrimSpace(req.Color))
 	if req.Color != "" && !scriptColorRe.MatchString(req.Color) {
@@ -78,12 +83,9 @@ func (s *Server) handleScriptExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+strings.Map(func(c rune) rune {
-		if c == '/' || c == '\\' || c == '"' {
-			return '_'
-		}
-		return c
-	}, sc.Name)+`.nkt"`)
+	// Имя файла — латиницей (кириллица транслитом): заголовок без
+	// не-ASCII и без кавычек, слэшей и переводов строк.
+	w.Header().Set("Content-Disposition", `attachment; filename="`+asciiFileName(sc.Name, "script")+`.nkt"`)
 	_, _ = w.Write([]byte(sc.Content))
 }
 
@@ -99,7 +101,7 @@ func (s *Server) handleScriptCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.Username(r.Context())
-	id, err := s.db.CreateScript(r.Context(), store.Script{Name: req.Name, Color: req.Color, Content: req.Content, Note: req.Note, Author: user})
+	id, err := s.db.CreateScript(r.Context(), store.Script{Name: req.Name, Color: req.Color, Origin: req.Origin, Content: req.Content, Note: req.Note, Author: user})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
