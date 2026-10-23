@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.93 — 2026-10-23
+
+- **“?” leads to its own tab's help.** By the “Scripts” title — the
+  “Scripts” page, by “Services” — “Service descriptions” (both used to
+  lead to “Profiles”). The “Deployments” tabs (“Pipelines”, “Sites”,
+  “nkt-edge”) have their own “?” next to the name.
+- **The profile format reference is on the profile and in the editing
+  window,** not a second “?” by the section title.
+- **“Script commands” starts with an overview:** every command by group,
+  each with a link to its section and what it does.
+
 ## v1.13.92 — 2026-10-23
 
 - **A draft from a model answer — without browser storage.** “Open as a

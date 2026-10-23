@@ -45,7 +45,7 @@ SCREENS = [
     ('kubernetes', 'host', '/containers', "tabStart('Kubernetes')"),
     ('k8s-helm', 'host', '/containers', "tabStart('Kubernetes'); await sleep(2500); tab('Helm'); await sleep(1500); document.querySelector('.ant-tabs-tab-active')?.scrollIntoView({block: 'start'})"),
     ('k8s-forward', 'host', '/containers', "tabStart('Kubernetes'); await sleep(2500); tab(pick({ru: 'Сеть', en: 'Network'})); await sleep(1500); document.querySelector('button[aria-label=\"' + pick({ru: 'Действия', en: 'Actions'}) + '\"]')?.click(); await sleep(700); clickText('.ant-dropdown:not(.ant-dropdown-hidden) [role=menuitem]', new RegExp('^' + pick({ru: 'Открыть в браузере', en: 'Open in the browser'})))"),
-    ('profiles', 'host', '/profiles', ''),
+    ('profiles', 'host', '/profiles', "await sleep(800); tab({ru: 'Профили', en: 'Profiles'}); await sleep(1200)"),
     ('configs-editor', 'host', '/configs', "clickText('button', /^\\/etc\\/nginx\\/nginx\\.conf/)"),
     ('interfaces', 'host', '/interfaces', ''),
     ('firewall', 'host', '/firewall', ''),

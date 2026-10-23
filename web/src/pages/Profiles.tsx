@@ -291,24 +291,20 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
     [chosen, canEdit, t],
   )
 
+  // «?» у профиля и в окне правки — справочник формата: писать профиль
+  // приходится здесь же, а подсказка у заголовка раздела — о разделе.
+  const guideButton = (
+    <Tooltip title={t('profiles.guide.open')}>
+      <Button type="text" size="small" aria-label={t('profiles.guide.open')} icon={<QuestionCircleOutlined />} onClick={() => setGuideOpen(true)} />
+    </Tooltip>
+  )
+
   return (
     <>
       <div className="page-head spread">
         <h1>
           {t('profiles.title')}
           <TitleHelp>{t(hubLevel ? 'profiles.hubHint' : 'profiles.hint')}</TitleHelp>
-          {/* Подсказка у заголовка отвечает «что это за раздел», а писать
-              профиль приходится здесь же — за справочником с примерами
-              уходить в репозиторий незачем. */}
-          <Tooltip title={t('profiles.guide.open')}>
-            <Button
-              type="text"
-              size="small"
-              aria-label={t('profiles.guide.open')}
-              icon={<QuestionCircleOutlined />}
-              onClick={() => setGuideOpen(true)}
-            />
-          </Tooltip>
         </h1>
         {canEdit && (
           <Button
@@ -368,7 +364,11 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
 
         <div className="col">
           <Card
-            title={current.data?.name ?? t('profiles.newProfile')}
+            title={
+              <span>
+                {current.data?.name ?? t('profiles.newProfile')} {guideButton}
+              </span>
+            }
             actions={
               <>
                 {selected && (
@@ -485,7 +485,11 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
       {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
       {editing && (
         <EditTextModal
-          title={current.data?.name ?? t('profiles.newProfile')}
+          title={
+            <span>
+              {current.data?.name ?? t('profiles.newProfile')} {guideButton}
+            </span>
+          }
           saved={selected ? current.data?.content ?? '' : ''}
           draft={draft}
           onDraft={setDraft}

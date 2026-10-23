@@ -42,8 +42,9 @@ files:
 - Version history (a table: No., time, author, note, size, a “current”
   label; each has “Content”, “Difference” with the current or the
   previous one, and “Back to the editor”), export and import, a format
-  reference in both languages right in the UI (the “?” next to the
-  title).
+  reference in both languages right in the UI (the “?” icon on the
+  profile and in the editing window; the “?” by the section title is this
+  page).
 
 ::: tip On the hub
 In the hub's “Profiles” section a profile gets a colour and is assigned to a

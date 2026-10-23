@@ -77,3 +77,13 @@ export interface DocsPlace {
   version?: string
 }
 export const DocsContext = createContext<DocsPlace | null>(null)
+
+/** Ключ справки раздела хаба: у «Профилей» — по открытой вкладке
+ * (профили, сценарии, описания сервисов — разные страницы). */
+export function hubDocsKey(view: string, profilesTab: string): string {
+  if (view === 'profiles') {
+    if (profilesTab === 'scripts') return 'hub:scripts'
+    if (profilesTab === 'services') return 'hub:svcdescs'
+  }
+  return `hub:${view}`
+}

@@ -73,6 +73,41 @@ export function DocsFrame({ url, height }: { url: string; height?: string }) {
   )
 }
 
+/**
+ * «?» в названии вкладки: своя страница справки у каждой вкладки
+ * раздела. Щелчок открывает справку и не переключает вкладку.
+ */
+export function TabHelp({ docKey }: { docKey: string }) {
+  const { t } = useTranslation()
+  const place = useContext(DocsContext)
+  const [open, setOpen] = useState(false)
+  const target = DOCS[docKey]
+  if (!target || !place) return null
+  const show = (e: { stopPropagation: () => void; preventDefault: () => void }) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setOpen(true)
+  }
+  return (
+    <>
+      <Tooltip title={t('docs.button')}>
+        <QuestionCircleOutlined
+          className="muted"
+          role="button"
+          aria-label={t('docs.button')}
+          style={{ marginLeft: '0.35rem', fontSize: '0.85em', cursor: 'pointer' }}
+          tabIndex={0}
+          onClick={show}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') show(e)
+          }}
+        />
+      </Tooltip>
+      {open && <DocsModal target={target} isHub={place.isHub} admin={place.admin} version={place.version} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
 /** Кнопка «Справка» для места интерфейса (ключ docsMap.json). */
 export function HelpButton({ docKey, isHub, admin, version, compact, label }: { docKey: string; isHub: boolean; admin: boolean; version?: string; compact?: boolean; label?: string }) {
   const { t } = useTranslation()

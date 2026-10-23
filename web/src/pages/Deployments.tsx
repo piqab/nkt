@@ -16,7 +16,7 @@ import { JobLogModal } from './Jobs'
 import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
-import { HelpButton, TitleHelp } from '../components/Docs'
+import { HelpButton, TabHelp, TitleHelp } from '../components/Docs'
 import { EXAMPLE_WARNING, PIPELINE_EXAMPLES, type PipelineExample } from '../pipelineExamples'
 import { msg, tx, type Msg } from '../msg'
 
@@ -321,7 +321,12 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
         items={[
           {
             key: 'pipelines',
-            label: t('deploy.tabPipelines'),
+            label: (
+              <span>
+                {t('deploy.tabPipelines')}
+                <TabHelp docKey="deploy:pipelines" />
+              </span>
+            ),
             children: (
               <>
                 <HubGitBanner admin={me.is_admin} />
@@ -342,10 +347,19 @@ export default function Deployments({ me, initialTab }: { me: Me; initialTab?: s
               </>
             ),
           },
-          { key: 'sites', label: t('deploy.tabSites'), children: <SitesPanel me={me} /> },
+          {
+            key: 'sites',
+            label: (
+              <span>
+                {t('deploy.tabSites')}
+                <TabHelp docKey="deploy:sites" />
+              </span>
+            ),
+            children: <SitesPanel me={me} />,
+          },
           // nkt-edge — своя вкладка: им пользуются и вебхуки конвейеров, и
           // шлюзы Traffic Fly, и API снаружи.
-          ...(me.is_admin ? [{ key: 'edge', label: 'nkt-edge', children: <EdgeCard onOpenJob={(id) => void openJob(id)} /> }] : []),
+          ...(me.is_admin ? [{ key: 'edge', label: <span>nkt-edge<TabHelp docKey="deploy:edge" /></span>, children: <EdgeCard onOpenJob={(id) => void openJob(id)} /> }] : []),
         ]}
       />
       {edit && (
