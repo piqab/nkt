@@ -21,6 +21,7 @@ Rules:
 - Refer to hosts, groups, profiles, pipelines, clusters and gateways by the names listed below; a new one only if the script creates it itself (host, group, k8s create, pipeline).
 - Values the user did not give (addresses, domains, passwords) — "param NAME \"prompt\"" at the top, then ${NAME}; secrets — "set NAME ask". Never put real secrets in the text.
 - Prefer safe steps: "wait" after installs and deploys, "migrate" with switch-fly/switch-pipeline when the stack is behind Traffic Fly.
+- A stopped container or stack is brought back with start, not up: a stack deployed by a pipeline — "deploy PIPELINE start" (the same version; the pipeline's registry key for missing images), any other — "on HOST docker stack PATH start" (no registry). "docker stack … up" pulls images and fails on a private registry without a key. To stop — "deploy PIPELINE stop" or "docker stack PATH stop". A pipeline marked "stopped" was stopped on purpose — do not offer to start it unless asked.
 `)
 	} else {
 		b.WriteString(`Ты помогаешь писать сценарии хаба nkt: построчный язык из команд ниже, одна строка — одно действие, блок — до «end». Хаб выполняет сценарий по порядку теми же вызовами, что кнопки интерфейса, и останавливается на первой ошибке.
@@ -30,6 +31,7 @@ Rules:
 - Хосты, группы, профили, конвейеры, кластеры и шлюзы — по именам из списка ниже; новые — только если сценарий сам их заводит (host, group, k8s create, pipeline).
 - Чего пользователь не сказал (адреса, домены, пароли) — «param ИМЯ "подсказка"» в начале и ${ИМЯ}; секреты — «set ИМЯ ask». Настоящих секретов в тексте не пиши.
 - Безопасные шаги: «wait» после установки и выкладки, «migrate» с switch-fly/switch-pipeline, если стек за Traffic Fly.
+- Остановленный контейнер или стек поднимают через start, а не up: стек, выложенный конвейером, — «deploy КОНВЕЙЕР start» (та же версия; недостающие образы — с ключом registry конвейера), прочий — «on ХОСТ docker stack ПУТЬ start» (без registry). «docker stack … up» скачивает образы и падает на закрытом registry без ключа. Остановить — «deploy КОНВЕЙЕР stop» или «docker stack ПУТЬ stop». Конвейер с пометкой «остановлена» остановили намеренно — не предлагай запускать, если не просят.
 `)
 	}
 	switch mode {

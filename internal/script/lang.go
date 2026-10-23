@@ -182,11 +182,11 @@ var Commands = []CommandDoc{
 		Example: "on web1 docker install",
 	},
 	{
-		Kind: KindDockerStack, OnHost: true, Block: true, Syntax: "on ХОСТ docker stack ПУТЬ up|down\n[compose-файл построчно\nend]",
+		Kind: KindDockerStack, OnHost: true, Block: true, Syntax: "on ХОСТ docker stack ПУТЬ up|down|start|stop\n[compose-файл построчно\nend]",
 		Summary: "script.doc.dockerStack",
 		Args: []ArgDoc{
 			{Name: "ПУТЬ", Required: true, Desc: "script.doc.dockerStack.path"},
-			{Name: "up|down", Required: true, Desc: "script.doc.dockerStack.action"},
+			{Name: "up|down|start|stop", Required: true, Desc: "script.doc.dockerStack.action"},
 		},
 		Example: "on web1 docker stack /srv/app/docker-compose.yml up\nservices:\n  web:\n    image: nginx:alpine\n    ports:\n      - \"8080:80\"\nend",
 	},

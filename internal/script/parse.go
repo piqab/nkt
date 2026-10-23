@@ -517,7 +517,7 @@ func parseOn(toks []string) (Step, error) {
 			}
 			return Step{Kind: KindDockerInst}, nil
 		}
-		if len(toks) != 4 || toks[1] != "stack" || !pathRe.MatchString(toks[2]) || !oneOf(toks[3], "up", "down") {
+		if len(toks) != 4 || toks[1] != "stack" || !pathRe.MatchString(toks[2]) || !oneOf(toks[3], "up", "down", "start", "stop") {
 			return Step{}, msgs.Errorf("script.badDockerStack")
 		}
 		return Step{Kind: KindDockerStack, Action: toks[3], Args: map[string]string{"path": toks[2]}}, nil
@@ -985,7 +985,7 @@ func blockFollows(step Step, lines []string, i int) bool {
 	if step.Kind != KindDockerStack {
 		return true
 	}
-	if step.Action == "down" {
+	if step.Action != "up" {
 		return false
 	}
 	for j := i + 1; j < len(lines); j++ {

@@ -197,7 +197,9 @@ var aiCommentRe = regexp.MustCompile(`(?mi)^\s*#\s*(ИИ|AI)\s*:`)
 func (s *Server) aiScriptCheck(ctx context.Context, text string) []script.Issue {
 	sc, issues := script.Parse(text, nil)
 	if len(issues) == 0 {
-		issues = script.Check(sc, s.refsNowCtx(ctx))
+		// Сценарию от модели и предупреждения — ошибки: пусть исправит.
+		refs := s.refsNowCtx(ctx)
+		issues = append(script.Check(sc, refs), script.Warnings(sc, refs)...)
 	}
 	return issues
 }

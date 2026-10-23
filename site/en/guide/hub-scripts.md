@@ -118,6 +118,16 @@ entirely on its hosts. Details — [Hub API](/en/guide/hub-api#what-a-token-can-
   result is under the text, errors by line. It also catches a block closed
   in the wrong place: if script commands (`on …`, `wait …`) ended up in a
   block's YAML — “`end` is misplaced”.
+- **Warnings** (in yellow) don't stop you from saving and running the
+  script — they suggest a better way. For now there is one: `docker stack`
+  on a stack deployed by a pipeline. It is better started or stopped
+  through the deployment — `deploy PIPELINE start|stop`: it has the
+  pipeline's registry key and the “stopped” tag. `docker stack … up` pulls
+  images and on a private registry without a key fails with
+  `unauthorized` — nkt adds to such an error how to bring the stack up. A
+  stopped stack without a pipeline comes up with
+  `on HOST docker stack PATH start` — no registry, and `stop` stops it
+  without removing anything.
 - **Save** in the editor window is available when the script has a name
   and the current text passed “Check”; any edit needs a new check. Next to
   the disabled button it says what is missing.

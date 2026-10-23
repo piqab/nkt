@@ -34,7 +34,7 @@ title: Команды сценариев
 | [`on ХОСТ service ИМЯ start\|stop\|restart\|reload\|enable\|disable`](#cmd-service) | Управляет службой systemd: запуск, остановка, перезапуск, перечитывание, автозапуск. |
 | [`on ХОСТ firewall allow\|deny ПОРТ[/tcp\|udp]`](#cmd-firewall) | Правило ufw/firewalld: разрешить или запретить порт, при желании — только с адреса. |
 | [`on ХОСТ docker install`](#cmd-docker-install) | Ставит Docker с официального репозитория docker.com. |
-| [`on ХОСТ docker stack ПУТЬ up\|down`](#cmd-docker-stack) | Поднимает или гасит compose-стек. |
+| [`on ХОСТ docker stack ПУТЬ up\|down\|start\|stop`](#cmd-docker-stack) | Поднимает, гасит, запускает или останавливает compose-стек. |
 | [`on ХОСТ vm create ИМЯ image …`](#cmd-vm-create) | Создаёт виртуальную машину на хосте из облачного образа — как окно «Новая машина». |
 | [`on ХОСТ vm start\|shutdown\|destroy ИМЯ`](#cmd-vm-action) | Запускает, выключает или принудительно гасит машину на хосте. |
 | [`on ХОСТ apply profile ПРОФИЛЬ`](#cmd-apply) | Применяет профиль хаба к хосту целиком: строит план и выполняет все пункты. |
@@ -240,12 +240,12 @@ on web1 firewall allow 5432 from 10.0.0.0/24
 on web1 docker install
 ```
 
-### `on ХОСТ docker stack ПУТЬ up|down` {#cmd-docker-stack}
+### `on ХОСТ docker stack ПУТЬ up|down|start|stop` {#cmd-docker-stack}
 
-Поднимает или гасит compose-стек. Без блока up поднимает файл, который уже лежит на хосте; с блоком (YAML compose до «end») — сначала записывает его по указанному пути. down блока не берёт.
+Поднимает, гасит, запускает или останавливает compose-стек. Без блока up поднимает файл, который уже лежит на хосте; с блоком (YAML compose до «end») — сначала записывает его по указанному пути. start поднимает то, что есть на хосте, не обращаясь в registry (остановленный контейнер с закрытым образом поднимется без ключа); stop останавливает, ничего не удаляя. down, start и stop блока не берут. Стек, выложенный конвейером, запускают и останавливают командой deploy КОНВЕЙЕР start|stop — «Проверить» об этом напомнит.
 
 ```
-on ХОСТ docker stack ПУТЬ up|down
+on ХОСТ docker stack ПУТЬ up|down|start|stop
 [compose-файл построчно
 end]
 ```
@@ -253,7 +253,7 @@ end]
 | Аргумент | Обязательный | Что это |
 |---|---|---|
 | `ПУТЬ` | ✓ | полный путь к docker-compose.yml |
-| `up\|down` | ✓ | up — поднять, down — остановить и убрать |
+| `up\|down\|start\|stop` | ✓ | up — поднять (скачав образы, если нужно), down — остановить и убрать, start — запустить имеющееся без registry, stop — остановить, оставив контейнеры |
 
 Пример:
 

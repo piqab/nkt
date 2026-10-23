@@ -197,9 +197,15 @@ func (s *Server) refsNow(r *http.Request) script.Refs { return s.refsNowCtx(r.Co
 // refsNowCtx — имена хостов, групп и профилей для проверки сценария.
 func (s *Server) refsNowCtx(ctx context.Context) script.Refs {
 	refs := script.Refs{Hosts: map[string]bool{}, Groups: map[string]bool{}, Profiles: map[string]bool{}, Pipelines: map[string]bool{}}
+	refs.PipelineStacks = map[string]string{}
 	if list, err := s.db.ListPipelines(ctx); err == nil {
 		for _, p := range list {
 			refs.Pipelines[p.Name] = true
+			if d := s.loadDeployed(ctx, p.ID); d != nil {
+				for _, h := range d.Hosts {
+					refs.PipelineStacks[h.Name+"|"+d.Project] = p.Name
+				}
+			}
 		}
 	}
 	if hosts, err := s.db.ListHosts(ctx); err == nil {
@@ -233,8 +239,11 @@ func (s *Server) handleScriptCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := msgs.FromContext(r.Context())
 	sc, issues := script.Parse(req.Content, nil)
+	var warnings []script.Issue
 	if len(issues) == 0 {
-		issues = script.Check(sc, s.refsNow(r))
+		refs := s.refsNow(r)
+		issues = script.Check(sc, refs)
+		warnings = script.Warnings(sc, refs)
 	}
 	steps := sc.Steps
 	if steps == nil {
@@ -247,9 +256,11 @@ func (s *Server) handleScriptCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"steps":  steps,
 		"issues": issuesJSON(lang, issues),
-		"asks":   asks,
-		"hosts":  orEmpty(sc.Hosts),
-		"groups": orEmpty(sc.Groups),
+		// Не мешают сохранить и выполнить: подсказка, как лучше.
+		"warnings": issuesJSON(lang, warnings),
+		"asks":     asks,
+		"hosts":    orEmpty(sc.Hosts),
+		"groups":   orEmpty(sc.Groups),
 	})
 }
 

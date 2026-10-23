@@ -30,6 +30,11 @@ const (
 	ActionWriteCompose  = "compose.write"
 	ActionComposeUp     = "compose.up"
 	ActionComposeDown   = "compose.down"
+	// Запустить то, что есть на хосте, без registry (up --pull never), и
+	// остановить без удаления (stop) — команды сценария docker stack
+	// start|stop; в плане профиля не появляются.
+	ActionComposeStart = "compose.start"
+	ActionComposeStop  = "compose.stop"
 )
 
 // Состояния ресурса в плане. Коды, а не готовые слова: план читают и

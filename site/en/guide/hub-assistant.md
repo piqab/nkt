@@ -46,6 +46,14 @@ line, and **“Open as a script”**: “Profiles” → “Scripts” opens wit
 dry run and the run — by you. A stack move (`migrate`) and a deployment
 (`deploy`) come the same way.
 
+The assistant brings a stopped container back with `start`, not `up`: a
+pipeline's stack — `deploy PIPELINE start` (the same version, missing
+images with the pipeline's registry key), any other —
+`docker stack PATH start` (no registry). A script with `docker stack … up`
+on a pipeline's stack goes back to the model from “Check” to be fixed. It
+doesn't offer on its own to start a deployment tagged “stopped” — it was
+stopped on purpose.
+
 ## Running from the answer
 
 ![Dry run and run right in the assistant's answer](/screens/en/hub-assistant-run.png)

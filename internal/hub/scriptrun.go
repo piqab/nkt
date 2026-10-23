@@ -363,15 +363,23 @@ func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *Script
 	case script.KindDockerStack:
 		path := st.Args["path"]
 		name := stackName(path)
-		if st.Action == "down" {
+		switch st.Action {
+		case "down":
 			return r.applyChanges(ctx, jc, h, p.Name, []profile.Change{{Action: profile.ActionComposeDown, Target: path}})
+		case "start":
+			return r.applyChanges(ctx, jc, h, p.Name, []profile.Change{{Action: profile.ActionComposeStart, Target: path}})
+		case "stop":
+			return r.applyChanges(ctx, jc, h, p.Name, []profile.Change{{Action: profile.ActionComposeStop, Target: path}})
 		}
+		var err error
 		if st.Block == "" {
 			// Без блока поднимается файл, который уже лежит на хосте.
-			return r.applyChanges(ctx, jc, h, p.Name, []profile.Change{{Action: profile.ActionComposeUp, Target: path}})
+			err = r.applyChanges(ctx, jc, h, p.Name, []profile.Change{{Action: profile.ActionComposeUp, Target: path}})
+		} else {
+			stack := map[string]any{"name": name, "path": path, "up": true, "content": st.Block}
+			err = r.applyMini(ctx, jc, h, p.Name, map[string]any{"compose": []any{stack}})
 		}
-		stack := map[string]any{"name": name, "path": path, "up": true, "content": st.Block}
-		return r.applyMini(ctx, jc, h, p.Name, map[string]any{"compose": []any{stack}})
+		return r.registryHint(ctx, h, name, path, err)
 
 	case script.KindVMCreate:
 		return r.createVM(ctx, jc, p, done, h, st)
@@ -676,7 +684,7 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 			return nil
 		}
 	case script.KindDockerStack:
-		if st.Block == "" || st.Action == "down" {
+		if st.Block == "" || st.Action != "up" {
 			jc.Log("hub.scriptDryWould", st.Text)
 			return nil
 		}
@@ -1028,13 +1036,7 @@ func (r *ScriptRunner) logTail(jc *jobs.Context, out string) {
 }
 
 // stackName — имя стека из пути: каталог compose-файла.
-func stackName(path string) string {
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) >= 2 {
-		return parts[len(parts)-2]
-	}
-	return "stack"
-}
+func stackName(path string) string { return script.StackName(path) }
 
 // clusterSpecFromStep — спецификация кластера из строки сценария; общая
 // для запуска и сухого прогона.
@@ -1169,4 +1171,29 @@ func (r *ScriptRunner) destroyCluster(ctx context.Context, jc *jobs.Context, h s
 		return r.waitHubJob(ctx, jc, jobID)
 	}
 	return msgs.Errorf("script.unknownCluster", st.Name, h.Name)
+}
+
+// registryHint — up упал на registry (закрытый образ без ключа): к ошибке
+// — как поднять. Стек конвейера — его выкладкой (у неё ключ registry),
+// прочий — start: поднять то, что уже есть на хосте, без registry.
+func (r *ScriptRunner) registryHint(ctx context.Context, h store.Host, project, path string, err error) error {
+	if err == nil {
+		return nil
+	}
+	low := strings.ToLower(err.Error())
+	if !strings.Contains(low, "unauthorized") && !strings.Contains(low, "pull access denied") && !strings.Contains(low, "denied: ") {
+		return err
+	}
+	if list, lerr := r.s.db.ListPipelines(ctx); lerr == nil {
+		for _, pl := range list {
+			if d := r.s.loadDeployed(ctx, pl.ID); d != nil && d.Project == project {
+				for _, dh := range d.Hosts {
+					if dh.ID == h.ID {
+						return msgs.Errorf("hub.scriptStackUnauthorizedPipeline", err, pl.Name)
+					}
+				}
+			}
+		}
+	}
+	return msgs.Errorf("hub.scriptStackUnauthorized", err, h.Name, path)
 }

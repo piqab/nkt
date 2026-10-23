@@ -2,6 +2,7 @@ package script
 
 import (
 	"github.com/piqab/nkt/internal/msgs"
+	"strings"
 )
 
 // Refs — что известно хабу на момент проверки: по этому сценарий
@@ -13,6 +14,54 @@ type Refs struct {
 	Profiles  map[string]bool
 	Pipelines map[string]bool
 	Clusters  map[string]bool
+	// PipelineStacks — стеки, выложенные конвейерами: «хост|стек» → имя
+	// конвейера (для предупреждений Warnings).
+	PipelineStacks map[string]string
+}
+
+// Warnings — замечания, которые не мешают сохранить и выполнить сценарий:
+// «docker stack» по стеку, который выложен конвейером. Поднимать его
+// лучше командой выкладки — с ключом registry конвейера и пометкой
+// «остановлена», убирать — удалением конвейера (иначе выкладка вернёт
+// стек). Сценариям от ИИ они уходят как ошибки — модели на исправление.
+func Warnings(sc Script, refs Refs) []Issue {
+	var out []Issue
+	for _, s := range sc.Steps {
+		if s.Kind != KindDockerStack || refs.PipelineStacks == nil {
+			continue
+		}
+		project := StackName(s.Args["path"])
+		hosts := s.Hosts
+		if len(hosts) == 0 {
+			hosts = []string{s.Host}
+		}
+		for _, h := range hosts {
+			pl := refs.PipelineStacks[h+"|"+project]
+			if pl == "" {
+				continue
+			}
+			key := "script.warnPipelineStack.up"
+			switch s.Action {
+			case "stop":
+				key = "script.warnPipelineStack.stop"
+			case "down":
+				key = "script.warnPipelineStack.down"
+			}
+			out = append(out, Issue{Line: s.Line, Err: msgs.Errorf(key, project, h, pl)})
+			break
+		}
+	}
+	return out
+}
+
+// StackName — имя стека по пути compose-файла: каталог файла
+// (/srv/compose/shop/compose.yaml → shop).
+func StackName(path string) string {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) >= 2 {
+		return parts[len(parts)-2]
+	}
+	return "stack"
 }
 
 // Check сверяет ссылки сценария с тем, что есть в хабе и что заводит сам

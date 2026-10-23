@@ -82,6 +82,22 @@ func (a *HostApplier) Apply(ctx context.Context, c Change) (string, error) {
 		return a.composeUp(ctx, c.Target)
 	case ActionComposeDown:
 		return a.composeDown(ctx, c.Target)
+	case ActionComposeStart:
+		if a.services == nil {
+			return "", msgs.Errorf("profile.serviceManagementUnavailable")
+		}
+		if _, err := a.services.ComposeStart(ctx, a.user, c.Target); err != nil {
+			return "", err
+		}
+		return msgs.Tc(ctx, "profile.stackStarted", c.Target), nil
+	case ActionComposeStop:
+		if a.services == nil {
+			return "", msgs.Errorf("profile.serviceManagementUnavailable")
+		}
+		if _, err := a.services.ComposeStop(ctx, a.user, c.Target); err != nil {
+			return "", err
+		}
+		return msgs.Tc(ctx, "profile.stackStoppedKept", c.Target), nil
 	case ActionSetTimezone:
 		return a.setTimezone(ctx, c.Target)
 	}

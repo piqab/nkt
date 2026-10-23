@@ -56,3 +56,20 @@ func TestDockerStackBlock(t *testing.T) {
 		t.Fatalf("syntax: %+v", doc)
 	}
 }
+
+// docker stack … start|stop — без блока, даже если следом YAML-похожая
+// строка не идёт; предупреждения — у стека, выложенного конвейером.
+func TestDockerStackStartStop(t *testing.T) {
+	sc, issues := Parse("on web1 docker stack /srv/compose/shop/compose.yaml stop\non web1 docker stack /srv/compose/shop/compose.yaml start\non web1 docker stack /srv/compose/blog/compose.yaml start\n", nil)
+	if len(issues) != 0 || len(sc.Steps) != 3 || sc.Steps[0].Action != "stop" || sc.Steps[1].Action != "start" || sc.Steps[0].Block != "" {
+		t.Fatalf("parse: %+v %v", sc.Steps, issues)
+	}
+	refs := Refs{Hosts: map[string]bool{"web1": true}, PipelineStacks: map[string]string{"web1|shop": "shop-pl"}}
+	if issues := Check(sc, refs); len(issues) != 0 {
+		t.Fatalf("check: %v", issues)
+	}
+	w := Warnings(sc, refs)
+	if len(w) != 2 || w[0].Line != 1 || w[1].Line != 2 || !strings.Contains(w[1].Err.Error(), "deploy shop-pl start") || !strings.Contains(w[0].Err.Error(), "deploy shop-pl stop") {
+		t.Fatalf("warnings: %+v", w)
+	}
+}
