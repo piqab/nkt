@@ -84,3 +84,61 @@ func TestScriptRunnerHostsAndResume(t *testing.T) {
 		t.Errorf("resume: %+v", done)
 	}
 }
+
+// «Выполнить» из ответа ассистента: сухой прогон, затем выполнение одним
+// заданием; не прошёл сухой прогон — на хостах ничего не менялось.
+func TestScriptRunnerDryFirst(t *testing.T) {
+	ctx := context.Background()
+	m, db := newTestManager(t)
+	s := &Server{hub: m, db: db, jobs: jobs.New(db, slog.New(slog.DiscardHandler))}
+	r := NewScriptRunner(s)
+	s.jobs.Register(KindScriptRun, r)
+	run := func(content string) store.Job {
+		t.Helper()
+		id, err := s.jobs.Start(ctx, jobs.Spec{Kind: KindScriptRun, Title: "t", Queue: "script:9", Steps: 4,
+			Params: ScriptRunParams{ScriptID: 9, Name: "t", Content: content, Ticket: r.keep(nil), DryFirst: true}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			job, _ := db.JobByID(ctx, id)
+			if job.Done() || time.Now().After(deadline) {
+				return job
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	// Сухой прогон проходит — дальше выполнение: группа и хост заведены.
+	job := run("group g2\n" + `host web3 192.0.2.12 user root password "x" group g2`)
+	if job.Status != store.JobSucceeded {
+		t.Fatalf("dry-first ok: %s %s\n%s", job.Status, job.Error, jobLogText(t, ctx, db, job.ID))
+	}
+	if log := jobLogText(t, ctx, db, job.ID); !strings.Contains(log, "Сухой прогон прошёл") && !strings.Contains(log, "Dry run passed") {
+		t.Errorf("log:\n%s", log)
+	}
+	if hosts, _ := db.ListHosts(ctx); len(hosts) != 1 || hosts[0].Name != "web3" {
+		t.Fatalf("hosts: %+v", hosts)
+	}
+	// Сухой прогон падает на втором шаге (хост не отвечает — план не
+	// получить) — первый шаг (новая группа) не выполнен.
+	if _, err := db.CreateHost(ctx, "web5", "192.0.2.14", 22, "root", store.HostAuthPassword, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	job = run("group g3\non web5 packages install htop")
+	if job.Status != store.JobFailed || !(strings.Contains(job.Error, "сухой прогон") || strings.Contains(job.Error, "dry run")) {
+		t.Fatalf("dry-first fail: %s %s", job.Status, job.Error)
+	}
+	if groups, _ := db.ListHostGroups(ctx); containsGroup(groups, "g3") {
+		t.Fatalf("group created after a failed dry run: %v", groups)
+	}
+}
+
+func containsGroup(groups []string, name string) bool {
+	for _, g := range groups {
+		if g == name {
+			return true
+		}
+	}
+	return false
+}

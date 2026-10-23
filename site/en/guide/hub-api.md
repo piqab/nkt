@@ -164,6 +164,7 @@ to the hub through the tunnel. Conditions:
 | `GET /api/hub/k8s/manifests`, `/{id}` | admin | saved manifests |
 | `POST /api/hub/k8s/manifests/diff` | admin | `kubectl diff` per cluster (`{"name":"…","content":"…","clusters":[1,2]}`) |
 | `POST /api/hub/k8s/manifests/apply?job=1` | admin | `kubectl apply` per cluster as a job (body as for diff, plus `note`) → `job_id` |
+| `POST /api/hub/scripts/{id}/run` with `"dry_first": true` | admin | a dry run, then the run if it passes, as one job → `job_id` |
 | `POST /api/mcp` | read | [MCP for AI agents](/en/guide/hub-mcp): JSON-RPC; tools by the token's role and scope |
 
 Still closed to any token: creating, editing and deleting scripts;

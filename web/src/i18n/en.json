@@ -5116,5 +5116,18 @@
     "asRoot": "commands as root: {{count}}",
     "needCheck": "Press “Check”: the checked text is what gets saved",
     "needFix": "Fix the check error"
+  },
+  "scriptInline": {
+    "run": "Run",
+    "runHint": "A dry run first, then the run right away as one job; the script is saved by itself.",
+    "confirmTitle": "Run the script?",
+    "confirmBody": "A dry run first, then the run if it passes. Will change: {{hosts}}. Steps:",
+    "dryThenRun": "dry run → run",
+    "openJob": "Open the job",
+    "dryOK": "The dry run passed: nothing changed on the hosts.",
+    "runOK": "Done: the dry run passed and the script ran.",
+    "failed": "Didn’t pass: {{error}}",
+    "askButton": "Ask the assistant about the result",
+    "askAbout": "I ran the suggested script ({{mode}}). Outcome: {{status}}. {{error}}\nJob log:\n{{log}}\n\nAnalyse the outcome: what happened and what to do next?"
   }
 }

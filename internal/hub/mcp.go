@@ -391,9 +391,10 @@ var mcpTools = []mcpTool{
 
 	{Name: "check_script", Description: "Parse and check a script text against the hub (steps, errors, questions asked at start). Changes nothing.", Method: "POST", Path: "/hub/scripts/check",
 		Props: map[string]map[string]any{"content": prop("string", "Script text")}, Required: []string{"content"}, Body: []string{"content"}, Admin: true, ReadOnly: true},
-	{Name: "run_script", Description: "Run a saved hub script. dry_run=true only asks the hosts for plans. values — answers to the start questions, e.g. {\"param:FROM\":\"web1\"}.", Method: "POST", Path: "/hub/scripts/{script_id}/run",
-		Props:    map[string]map[string]any{"script_id": prop("integer", "Script id"), "dry_run": prop("boolean", "Only plan, change nothing"), "values": prop("object", "Answers to the script's questions")},
-		Required: []string{"script_id"}, Body: []string{"dry_run", "values"}, Admin: true, Job: true, Destructive: true},
+	{Name: "run_script", Description: "Run a saved hub script. dry_run=true only asks the hosts for plans; dry_first=true does a dry run first and runs only if it passed (one job). values — answers to the start questions, e.g. {\"param:FROM\":\"web1\"}.", Method: "POST", Path: "/hub/scripts/{script_id}/run",
+		Props: map[string]map[string]any{"script_id": prop("integer", "Script id"), "dry_run": prop("boolean", "Only plan, change nothing"),
+			"dry_first": prop("boolean", "Dry run first, then the run if it passed"), "values": prop("object", "Answers to the script's questions")},
+		Required: []string{"script_id"}, Body: []string{"dry_run", "dry_first", "values"}, Admin: true, Job: true, Destructive: true},
 	{Name: "deploy_pipeline", Description: "Deploy a pipeline (optionally a ref or tag).", Method: "POST", Path: "/hub/pipelines/{pipeline_id}/deploy",
 		Props:    map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id"), "ref": prop("string", "Branch (empty — the pipeline's)"), "tag": prop("string", "Tag (empty — branch head)")},
 		Required: []string{"pipeline_id"}, Body: []string{"ref", "tag"}, Admin: true, Job: true, Destructive: true},

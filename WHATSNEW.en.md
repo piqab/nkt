@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.88 — 2026-10-23
+
+- **A script from an answer runs right in the window.** Under a script
+  that passed “Check”, in an assistant answer and a finding analysis, an
+  admin gets **“Dry run”** and **“Run”**. The script is saved by itself (a
+  Latin name, a note on the source, an “AI” tag); “Run”, after a
+  confirmation, starts one job: a dry run, and if it passes — the run; a
+  failed dry run doesn't touch the hosts. Progress and the outcome are
+  right there, without going to “Scripts”; **“Ask the assistant about the
+  result”** hands it the outcome and the log. The API and MCP run with
+  `"dry_first": true`.
+
 ## v1.13.87 — 2026-10-23
 
 - **`docker stack … up` without a block.** The line

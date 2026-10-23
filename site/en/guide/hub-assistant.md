@@ -46,6 +46,34 @@ line, and **“Open as a script”**: “Profiles” → “Scripts” opens wit
 dry run and the run — by you. A stack move (`migrate`) and a deployment
 (`deploy`) come the same way.
 
+## Running from the answer
+
+![Dry run and run right in the assistant's answer](/screens/en/hub-assistant-run.png)
+
+Under a script that passed “Check”, an admin gets two buttons right in
+the assistant window:
+
+- **“Dry run”** — the script is saved by itself (a Latin name
+  `ai-DATE-HOST`, the note “Suggested by the assistant: …”, an “AI” tag in
+  “Scripts”) and a dry run starts: hosts are asked for plans, nothing
+  changes. The job's progress and log are right there.
+- **“Run”** — a confirmation with the hosts and steps, then **one job**:
+  a dry run, and if it passes — the run right away. If the dry run fails,
+  the hosts aren't touched. The hub holds the chain: a closed tab doesn't
+  stop it.
+
+If the script asks for something (a password, a parameter), the fields
+appear above the buttons. The outcome is “Done” or “Didn't pass: …”,
+“Open the job” shows the whole log. **“Ask the assistant about the
+result”** adds the outcome and the log to the conversation: the assistant
+analyses what happened and, if needed, suggests a fixed script — with the
+same buttons.
+
+The assistant itself still runs nothing: you run it with a button, after a
+confirmation; each run is an ordinary hub job with an author and an audit
+log entry. The same buttons are under the fix script in
+[finding analysis](/en/guide/hub-operations#model-analysis-ai).
+
 ## Example
 
 Question: “Which critical findings are on the hosts now and where do I
