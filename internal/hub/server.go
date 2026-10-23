@@ -246,6 +246,9 @@ func (s *Server) Handler() http.Handler {
 			r.Use(s.auth.RequireAuth)
 			r.Use(s.auth.RequireAdmin)
 			r.Post("/hub/assistant", s.handleAssistant)
+			r.Get("/hub/assistant/objects", s.handleAssistantObjects)
+			r.Get("/hub/assistant/favorites", s.handleAssistantFavorites)
+			r.Put("/hub/assistant/favorites", s.handleAssistantFavoritesPut)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(aiTimeoutMaxS*time.Second + time.Minute))

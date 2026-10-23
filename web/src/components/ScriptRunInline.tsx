@@ -4,17 +4,19 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import type { Job, JobLogLine } from '../types'
 import { autoScriptName } from '../scriptName'
-import { Banner } from './ui'
-import { confirmAction } from './confirm'
+import { Banner, Modal } from './ui'
 import { JobLogModal } from '../pages/Jobs'
 import type { ScriptOrigin } from './AIExplain'
 
 /**
- * «Сухой прогон» и «Выполнить» прямо под сценарием из ответа модели
- * (ассистент, разбор находки): сценарий сохраняется сам (имя латиницей,
- * заметка об источнике), «Выполнить» — одно задание «сухой прогон →
- * выполнение» после подтверждения; ход и итог — тут же, без перехода в
- * «Сценарии». Запускает человек: модель ничего не выполняет.
+ * «Сухой прогон» и «Выполнить» под сценарием из ответа модели (ассистент,
+ * разбор находки). Щелчок открывает окно задания: что сделает сценарий
+ * (хосты, шаги), вопросы при запуске, затем ход и журнал. «Выполнить» —
+ * одно задание «сухой прогон → выполнение»; прошло — окно закрывается
+ * само, в сообщении остаётся строка итога со ссылкой на журнал. Не
+ * прошло — окно остаётся с ошибкой. Сценарий сохраняется сам (имя
+ * латиницей, заметка об источнике). Запускает человек: модель ничего не
+ * выполняет.
  */
 
 interface Ask {
@@ -27,6 +29,9 @@ interface Check {
   asks: Ask[]
   issues: { line: number; error: string }[]
 }
+
+// Через сколько окно удачного «Выполнить» закрывается само.
+const AUTO_CLOSE_MS = 2500
 
 export function ScriptRunInline({
   content,
@@ -45,11 +50,14 @@ export function ScriptRunInline({
   const [job, setJob] = useState<Job | null>(null)
   const [lines, setLines] = useState<JobLogLine[]>([])
   const [mode, setMode] = useState<'dry' | 'run' | null>(null)
+  // Окно: какой запуск готовится или идёт (null — закрыто).
+  const [dialog, setDialog] = useState<'dry' | 'run' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
+  const [fullLog, setFullLog] = useState(false)
   const lastSeq = useRef(0)
+  const logRef = useRef<HTMLPreElement | null>(null)
 
-  // Что сценарий спросит при запуске и какие шаги — для подтверждения.
+  // Что сценарий спросит при запуске и какие шаги — для окна.
   useEffect(() => {
     void api<Check>('/hub/scripts/check', { method: 'POST', body: { content } }).then(setCheck).catch(() => undefined)
   }, [content])
@@ -72,6 +80,21 @@ export function ScriptRunInline({
     return () => clearInterval(timer)
   }, [job])
 
+  useEffect(() => {
+    logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight })
+  }, [lines])
+
+  const running = job !== null && (job.status === 'queued' || job.status === 'running')
+  const finished = job !== null && !running
+  const ok = job?.status === 'succeeded'
+
+  // Удачное «Выполнить» закрывает окно само; сухой прогон читают — нет.
+  useEffect(() => {
+    if (!finished || !ok || mode !== 'run' || dialog === null) return
+    const id = window.setTimeout(() => setDialog(null), AUTO_CLOSE_MS)
+    return () => window.clearTimeout(id)
+  }, [finished, ok, mode, dialog])
+
   async function ensureSaved(): Promise<number> {
     if (scriptID !== null) return scriptID
     const list = await api<{ scripts: { name: string }[] }>('/hub/scripts')
@@ -84,22 +107,9 @@ export function ScriptRunInline({
   }
 
   async function start(dry: boolean) {
-    if (!check) return
-    if (!dry) {
-      const hosts = [...new Set(check.steps.flatMap((s) => (s.hosts && s.hosts.length > 0 ? s.hosts : s.host ? [s.host] : [])))]
-      const ok = await confirmAction(
-        <div className="col" style={{ gap: '0.3rem' }}>
-          <span>{t('scriptInline.confirmBody', { hosts: hosts.join(', ') || '—' })}</span>
-          <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-            {check.steps.map((s) => s.text).join('\n')}
-          </pre>
-        </div>,
-        { title: t('scriptInline.confirmTitle'), okText: t('scriptInline.run'), danger: true },
-      )
-      if (!ok) return
-    }
     setError(null)
     setLines([])
+    setJob(null)
     lastSeq.current = 0
     setMode(dry ? 'dry' : 'run')
     try {
@@ -115,73 +125,102 @@ export function ScriptRunInline({
     }
   }
 
-  const running = job !== null && (job.status === 'queued' || job.status === 'running')
   const asksReady = (check?.asks ?? []).every((a) => (values[a.key] ?? '').trim() !== '')
-  const finished = job !== null && !running
-  const ok = job?.status === 'succeeded'
+  const hosts = check ? [...new Set(check.steps.flatMap((s) => (s.hosts && s.hosts.length > 0 ? s.hosts : s.host ? [s.host] : [])))] : []
+  const modeLabel = mode === 'dry' ? t('scripts.dryRun') : t('scriptInline.dryThenRun')
+  const askAbout = () =>
+    onAskAbout?.(
+      t('scriptInline.askAbout', {
+        mode: modeLabel,
+        status: job?.status ?? '',
+        error: job?.error ?? '',
+        log: lines.slice(-60).map((l) => l.text).join('\n'),
+      }),
+    )
+  const resultText = job && finished ? (ok ? t(mode === 'dry' ? 'scriptInline.dryOK' : 'scriptInline.runOK') : t('scriptInline.failed', { error: job.error ?? '' })) : ''
+
   return (
     <div className="col" style={{ gap: '0.35rem', margin: '0.3rem 0' }}>
-      {(check?.asks ?? []).length > 0 && !running && (
-        <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
-          {check!.asks.map((a) =>
-            a.secret ? (
-              <Input.Password key={a.key} size="small" style={{ width: 220 }} placeholder={a.prompt} value={values[a.key] ?? ''} autoComplete="new-password" onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} />
-            ) : (
-              <Input key={a.key} size="small" style={{ width: 220 }} placeholder={a.prompt} value={values[a.key] ?? ''} onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} />
-            ),
-          )}
-        </div>
-      )}
       <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button size="small" disabled={!check || running || !asksReady} loading={running && mode === 'dry'} onClick={() => void start(true)}>
+        <Button size="small" disabled={!check || running} loading={running && mode === 'dry'} onClick={() => setDialog('dry')}>
           {t('scripts.dryRun')}
         </Button>
-        <Button size="small" type="primary" danger disabled={!check || running || !asksReady} loading={running && mode === 'run'} onClick={() => void start(false)} title={t('scriptInline.runHint')}>
+        <Button size="small" type="primary" danger disabled={!check || running} loading={running && mode === 'run'} onClick={() => setDialog('run')} title={t('scriptInline.runHint')}>
           {t('scriptInline.run')}
         </Button>
+        {/* Итог в сообщении — после закрытия окна; ссылка открывает его снова. */}
         {job && (
-          <>
+          <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setDialog(mode)}>
             <Tag color={ok ? 'success' : finished ? 'error' : 'processing'} style={{ margin: 0 }}>
-              {mode === 'dry' ? t('scripts.dryRun') : t('scriptInline.dryThenRun')} · {job.steps > 0 ? `${job.step}/${job.steps} · ` : ''}
-              {t(`jobs.status.${job.status}`, { defaultValue: job.status })}
-            </Tag>
-            <Button size="small" type="link" onClick={() => setOpen(true)}>
-              {t('scriptInline.openJob')}
-            </Button>
-          </>
+              {finished ? (ok ? '✓ ' : '✗ ') : ''}
+              {modeLabel} · {finished ? t(`jobs.status.${job.status}`, { defaultValue: job.status }) : `${job.step}/${job.steps}`}
+            </Tag>{' '}
+            {t('scriptInline.log')}
+          </Button>
         )}
       </div>
-      {error && <Banner kind="error">{error}</Banner>}
-      {job && lines.length > 0 && (
-        <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', maxHeight: '14rem', overflow: 'auto', margin: 0 }}>
-          {lines.slice(-40).map((l) => l.text).join('\n')}
-        </pre>
+      {dialog && (
+        <Modal title={t(dialog === 'dry' ? 'scriptInline.dryTitle' : 'scriptInline.confirmTitle')} onClose={() => setDialog(null)} width={820} maskClosable={!running}>
+          <div className="col" style={{ gap: '0.6rem' }}>
+            {!job || mode !== dialog ? (
+              <>
+                <span>{t(dialog === 'dry' ? 'scriptInline.dryBody' : 'scriptInline.confirmBody', { hosts: hosts.join(', ') || '—' })}</span>
+                <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: '30vh', overflow: 'auto' }}>
+                  {(check?.steps ?? []).map((s) => s.text).join('\n')}
+                </pre>
+                {(check?.asks ?? []).length > 0 && (
+                  <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {check!.asks.map((a) =>
+                      a.secret ? (
+                        <Input.Password key={a.key} style={{ width: 240 }} placeholder={a.prompt} value={values[a.key] ?? ''} autoComplete="new-password" onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} />
+                      ) : (
+                        <Input key={a.key} style={{ width: 240 }} placeholder={a.prompt} value={values[a.key] ?? ''} onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} />
+                      ),
+                    )}
+                  </div>
+                )}
+                {error && <Banner kind="error">{error}</Banner>}
+                <div className="row" style={{ gap: '0.4rem' }}>
+                  <Button type="primary" danger={dialog === 'run'} disabled={!asksReady || running} onClick={() => void start(dialog === 'dry')}>
+                    {t(dialog === 'dry' ? 'scriptInline.dryStart' : 'scriptInline.run')}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Tag color={ok ? 'success' : finished ? 'error' : 'processing'} style={{ margin: 0 }}>
+                    {modeLabel} · {job.steps > 0 ? `${job.step}/${job.steps} · ` : ''}
+                    {t(`jobs.status.${job.status}`, { defaultValue: job.status })}
+                  </Tag>
+                  <Button size="small" type="link" onClick={() => setFullLog(true)}>
+                    {t('scriptInline.openJob')}
+                  </Button>
+                </div>
+                <pre ref={logRef} className="diff mono small" style={{ whiteSpace: 'pre-wrap', maxHeight: '45vh', minHeight: '8rem', overflow: 'auto', margin: 0 }}>
+                  {lines.map((l) => l.text).join('\n')}
+                </pre>
+                {finished && <Banner kind={ok ? 'success' : 'error'}>{resultText}</Banner>}
+                {finished && ok && mode === 'run' && <span className="small muted">{t('scriptInline.autoClose')}</span>}
+                {finished && onAskAbout && (
+                  <div>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        askAbout()
+                        setDialog(null)
+                      }}
+                    >
+                      {t('scriptInline.askButton')}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
       )}
-      {finished && (
-        <Banner kind={ok ? 'success' : 'error'}>
-          {ok ? t(mode === 'dry' ? 'scriptInline.dryOK' : 'scriptInline.runOK') : t('scriptInline.failed', { error: job.error ?? '' })}
-        </Banner>
-      )}
-      {finished && onAskAbout && (
-        <div>
-          <Button
-            size="small"
-            onClick={() =>
-              onAskAbout(
-                t('scriptInline.askAbout', {
-                  mode: mode === 'dry' ? t('scripts.dryRun') : t('scriptInline.dryThenRun'),
-                  status: job.status,
-                  error: job.error ?? '',
-                  log: lines.slice(-60).map((l) => l.text).join('\n'),
-                }),
-              )
-            }
-          >
-            {t('scriptInline.askButton')}
-          </Button>
-        </div>
-      )}
-      {open && job && <JobLogModal job={job} scope="/hosts/local" onClose={() => setOpen(false)} />}
+      {fullLog && job && <JobLogModal job={job} scope="/hosts/local" onClose={() => setFullLog(false)} />}
     </div>
   )
 }

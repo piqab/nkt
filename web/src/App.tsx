@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { setPendingScript, type ScriptDraft } from './scriptDraft'
+import type { OpenTarget } from './appNav'
 import { OsIcon } from './components/OsIcon'
 import { ActiveJobsIndicator } from './components/ActiveJobsIndicator'
 import { StaleUIBanner } from './components/StaleUIBanner'
@@ -392,6 +393,29 @@ function Shell({
   const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'fly' | 'assistant' | 'about'>('hosts')
   // Вкладка «Выкладок», которую открыть (события Traffic Fly ведут в неё).
   const [deployTab, setDeployTab] = useState<string | undefined>(undefined)
+  // Переход из ссылок чата ассистента (appNav.openInApp).
+  useEffect(() => {
+    const open = (e: Event) => {
+      const d = (e as CustomEvent<OpenTarget>).detail
+      if (!d) return
+      if (d.host) {
+        const host = { id: d.host.id, name: d.host.name } as SelectedHost
+        setSelectedHost(host)
+        writeSelectedHost(host)
+        navigate(d.path ?? '/')
+        return
+      }
+      if (!d.view) return
+      setSelectedHost(null)
+      writeSelectedHost(null)
+      setHubView(d.view as typeof hubView)
+      if (d.view === 'profiles' && d.tab) setProfilesTab(d.tab)
+      if (d.view === 'deploy') setDeployTab(d.tab)
+    }
+    window.addEventListener('nkt-open', open)
+    return () => window.removeEventListener('nkt-open', open)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // Polled independently of whichever section is actually showing, so the
   // sidebar's own "доступно обновление" badge stays current even while
   // looking at the host list — matches how criticalCount/certAlerts below

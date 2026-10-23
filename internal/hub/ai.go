@@ -674,7 +674,7 @@ func (m *Manager) AIToolsTest(ctx context.Context, set ai.Settings, apiKey *stri
 		// модели. Есть серверы, которые инструмент зовут, а ответ на него
 		// не принимают; тогда ассистент отвечает по сводке.
 		history = append(history,
-			ai.ChatMessage{Role: "assistant", Text: reply.Text, Calls: []ai.ToolCall{*call}},
+			ai.ChatMessage{Role: "assistant", Text: reply.Text, Calls: []ai.ToolCall{*call}, Reasoning: reply.Reasoning},
 			ai.ChatMessage{Role: "tool", CallID: call.ID, Text: time.Now().UTC().Format(time.RFC3339)})
 		_, err = client.Chat(ctx, system, history, []ai.Tool{tool})
 		_ = m.db.AIUsageAdd(ctx)

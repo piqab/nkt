@@ -36,12 +36,20 @@ type ChatMessage struct {
 	Text   string     `json:"text,omitempty"`
 	Calls  []ToolCall `json:"calls,omitempty"`
 	CallID string     `json:"call_id,omitempty"`
+	// Reasoning — рассуждения модели в режиме размышления (DeepSeek
+	// reasoning_content): провайдер требует вернуть их в той же реплике
+	// с вызовами на следующих ходах вопроса. Не показываются и не
+	// хранятся — живут внутри одного вопроса.
+	Reasoning string `json:"-"`
 }
 
 // ChatReply — ход модели: текст и (или) вызовы инструментов.
 type ChatReply struct {
 	Text  string
 	Calls []ToolCall
+	// Reasoning — reasoning_content ответа (OpenAI-совместимые провайдеры
+	// с режимом размышления); вернуть в историю вместе с Calls.
+	Reasoning string
 }
 
 // ToolsRejected — провайдер отверг запрос с инструментами (обычно
@@ -155,6 +163,9 @@ func (c *Client) chatOpenAI(ctx context.Context, system string, history []ChatMe
 		switch m.Role {
 		case "assistant":
 			msg := map[string]any{"role": "assistant", "content": m.Text}
+			if m.Reasoning != "" {
+				msg["reasoning_content"] = m.Reasoning
+			}
 			if len(m.Calls) > 0 {
 				var calls []map[string]any
 				for _, call := range m.Calls {
@@ -197,8 +208,9 @@ func (c *Client) chatOpenAI(ctx context.Context, system string, history []ChatMe
 	var out struct {
 		Choices []struct {
 			Message struct {
-				Content   string `json:"content"`
-				ToolCalls []struct {
+				Content          string `json:"content"`
+				ReasoningContent string `json:"reasoning_content"`
+				ToolCalls        []struct {
 					ID       string `json:"id"`
 					Function struct {
 						Name      string `json:"name"`
@@ -215,7 +227,7 @@ func (c *Client) chatOpenAI(ctx context.Context, system string, history []ChatMe
 		return ChatReply{}, msgs.Errorf("ai.emptyResponse")
 	}
 	m := out.Choices[0].Message
-	reply := ChatReply{Text: m.Content}
+	reply := ChatReply{Text: m.Content, Reasoning: m.ReasoningContent}
 	for _, tc := range m.ToolCalls {
 		args := json.RawMessage(tc.Function.Arguments)
 		if !json.Valid(args) {

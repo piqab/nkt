@@ -5024,6 +5024,12 @@
     "legend": "Legend ({{n}})"
   },
   "assistant": {
+    "lookedCount": "looked at: {{count}}",
+    "clear": "Clear the conversation",
+    "clearConfirm": "Clear the conversation? The messages go away; favorites stay.",
+    "obj": {"kind": {"host": "host", "group": "group", "pipeline": "pipeline", "script": "script", "cluster": "cluster", "route": "Traffic Fly route", "container": "container", "service": "service"}, "openHost": "Open the host", "findings": "Findings", "containers": "Containers", "services": "Services", "askHost": "Ask: check host {{name}}", "askHostText": "Check host {{name}}: how is it now and what should be done?", "openOn": "Open on host {{host}}", "logs": "Host logs", "askObj": "Ask the assistant", "ask": {"container": "What's with container {{name}} on host {{host}}?", "service": "What's with service {{name}} on host {{host}}?", "group": "How are the hosts of group {{name}}?"}, "restart": "Restart", "restartConfirm": {"container": "Restart container {{name}} on host {{host}}?", "service": "Restart service {{name}} on host {{host}}?"}, "restarted": "{{name}} on {{host}}: restart sent", "openPipeline": "Open in “Deployments”", "dryRun": "Dry run", "deploy": "Deploy", "deployConfirm": "Deploy pipeline {{name}}?", "openScripts": "Open “Scripts”", "openClusters": "Open “Clusters”", "openFly": "Open Traffic Fly", "openHosts": "Open “Hosts”"},
+    "fav": {"title": "Favorites", "addSection": "New section", "newSection": "New section", "defaultSection": "General", "empty": "The star on a question adds it here; a click on a question sends it.", "rename": "Rename", "deleteSection": "Delete the section", "deleteSectionConfirm": "Delete section “{{title}}” with its questions ({{count}})?", "delete": "Remove from favorites", "sendHint": "Send this question", "add": "Add to favorites", "inFavorites": "In favorites"},
+    "composer": {"allHosts": "all hosts", "hostFirst": "Name a host first — its containers and services show up here", "loading": "Reading the list from host {{host}}…"},
     "title": "Assistant",
     "hint": "Questions about the hub's hosts: the model itself looks at findings, services, containers, alerts, jobs, pipelines, moves and Traffic Fly — read only, with your rights. A change comes as a script: “Open as a script”, “Check”, a dry run and the run — by you.",
     "intro": "Ask about the fleet — the assistant looks at the hub's data and answers. For example:",
@@ -5103,6 +5109,11 @@
     "needFix": "Fix the check error"
   },
   "scriptInline": {
+    "log": "log",
+    "dryTitle": "Dry run",
+    "dryBody": "The dry run asks the hosts for plans ({{hosts}}) and changes nothing.",
+    "dryStart": "Start the dry run",
+    "autoClose": "The window closes by itself.",
     "run": "Run",
     "runHint": "A dry run first, then the run right away as one job; the script is saved by itself.",
     "confirmTitle": "Run the script?",
