@@ -168,6 +168,7 @@ func New(d Deps) *Server {
 		s.jobs.Register(KindDelete, &deleteRunner{s})
 		s.jobs.Register(KindComposeDeploy, &composeDeployRunner{s})
 		s.jobs.Register(KindComposeRemove, &composeRemoveRunner{s})
+		s.jobs.Register(KindComposeStop, &composeStopRunner{s})
 		s.jobs.Register(KindSiteApply, &siteRunner{s})
 		s.jobs.Register(KindClamAV, &clamRunner{s})
 		s.jobs.Register(KindArchiveFetch, &archiveFetchRunner{s})
@@ -529,6 +530,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/compose/stacks/deploy", s.handleComposeDeploy)
 				r.Post("/compose/stacks/check", s.handleComposeCheck)
 				r.Post("/compose/stacks/remove", s.handleComposeRemove)
+				r.Post("/compose/stacks/power", s.handleComposePower)
 				// Перенос контейнера на другой хост (шаги — от хаба).
 				r.Get("/migrate/plan", s.handleMigratePlan)
 				r.Post("/migrate/check", s.handleMigrateCheck)

@@ -252,6 +252,8 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		cur.Hosts = append(cur.Hosts, deployedHost{ID: t.ID, Name: t.Name})
 	}
 	s.saveDeployed(ctx, pl.ID, cur)
+	// Новая выкладка подняла стек — пометка «остановлена» снимается.
+	s.saveStopped(ctx, pl.ID, nil)
 	s.cleanupMovedStacks(ctx, jc, user, pl, c.Project, prev, targets)
 	switch {
 	case c.Site.Managed():

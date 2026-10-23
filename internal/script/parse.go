@@ -394,16 +394,25 @@ func parseStep(toks []string, sc *Script) (Step, error) {
 		sc.Pipelines = append(sc.Pipelines, toks[1])
 		return Step{Kind: KindPipeline, Name: toks[1]}, nil
 	case "deploy":
-		// deploy ИМЯ [ДЛИТЕЛЬНОСТЬ] — выкладка конвейера, ожидание итога.
-		if len(toks) < 2 || len(toks) > 3 || !nameRe.MatchString(toks[1]) {
+		// deploy ИМЯ [start|stop] [ДЛИТЕЛЬНОСТЬ] — выкладка конвейера (или
+		// запуск/остановка выложенного), ожидание итога.
+		if len(toks) < 2 || len(toks) > 4 || !nameRe.MatchString(toks[1]) {
 			return Step{}, msgs.Errorf("script.badDeploy")
 		}
 		args := map[string]string{"timeout": "30m"}
-		if len(toks) == 3 {
-			if _, err := time.ParseDuration(toks[2]); err != nil {
-				return Step{}, msgs.Errorf("script.badDuration", toks[2])
+		rest := toks[2:]
+		if len(rest) > 0 && (rest[0] == "start" || rest[0] == "stop") {
+			args["action"] = rest[0]
+			rest = rest[1:]
+		}
+		if len(rest) > 1 {
+			return Step{}, msgs.Errorf("script.badDeploy")
+		}
+		if len(rest) == 1 {
+			if _, err := time.ParseDuration(rest[0]); err != nil {
+				return Step{}, msgs.Errorf("script.badDuration", rest[0])
 			}
-			args["timeout"] = toks[2]
+			args["timeout"] = rest[0]
 		}
 		return Step{Kind: KindDeploy, Name: toks[1], Args: args}, nil
 	case "migrate":

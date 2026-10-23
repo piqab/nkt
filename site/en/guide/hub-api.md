@@ -143,6 +143,8 @@ to the hub through the tunnel. Conditions:
 | `GET /api/hosts/{id}/<section>` | read | overview, findings, vulnerabilities, services, containers, certificates, monitor, jobs, fail2ban, firewall, updates and other host sections |
 | `POST /api/hub/pipelines/{id}/deploy` | admin | deploy (`{"ref":"","tag":""}`) → `job_id` |
 | `POST /api/hub/pipelines/{id}/rollback` | admin | roll back to a deployment |
+| `GET /api/hub/pipelines/{id}/power` | read | what “Start” / “Stop” affect: hosts, Traffic Fly routes, the “stopped” tag |
+| `POST /api/hub/pipelines/{id}/stop`, `/start` | admin | stop a deployment (containers and data stay) or bring up the same version → `job_id` |
 | `POST /api/hub/pipelines/dryrun` | admin | dry run (`{"pipeline_id":1,"skip":[]}`) → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | admin | ban or unban (`{"action":"ban","ips":[…],"host_ids":[…]}`) |
 | `POST /api/hosts/{id}/vulnerabilities/scan` | admin | vulnerability scan |

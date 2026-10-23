@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.95 — 2026-10-23
+
+- **“Stop” and “Start” a deployment.** For a compose pipeline that has
+  been deployed: stopping is `compose stop` on all its hosts (containers,
+  volumes and `.env` stay), with two confirmations — what it affects
+  (hosts, Traffic Fly routes) and that the service becomes unavailable.
+  Starting brings up the same version: an image missing on the host is
+  pulled with the pipeline's registry key — where `docker stack … up` from
+  a script failed with `unauthorized`.
+- **A “stopped” tag** on the pipeline row (who, when); alerts for a stopped
+  deployment's Traffic Fly targets come marked; a new deployment clears
+  the tag by itself.
+- **Wherever deployments are:** in a script — `deploy PIPELINE stop|start`
+  (a dry run shows what it affects), over the API —
+  `POST /api/hub/pipelines/{id}/stop|start`, in MCP — `pipeline_power`, in
+  n8n — **Pipeline → Start / Stop**.
+
 ## v1.13.94 — 2026-10-23
 
 - **The profile editor — as for scripts.** The editing window has

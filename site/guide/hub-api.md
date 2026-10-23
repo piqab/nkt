@@ -139,6 +139,8 @@ function sign(secret, method, uri, body = '') {
 | `GET /api/hosts/{id}/<раздел>` | чтение | overview, findings, vulnerabilities, services, containers, certificates, monitor, jobs, fail2ban, firewall, updates и другие разделы хоста |
 | `POST /api/hub/pipelines/{id}/deploy` | администратор | выкладка (`{"ref":"","tag":""}`) → `job_id` |
 | `POST /api/hub/pipelines/{id}/rollback` | администратор | откат на выкладку |
+| `GET /api/hub/pipelines/{id}/power` | чтение | что затронут «Запустить» / «Остановить»: хосты, маршруты Traffic Fly, метка «остановлена» |
+| `POST /api/hub/pipelines/{id}/stop`, `/start` | администратор | остановить выкладку (контейнеры и данные остаются) или поднять ту же версию → `job_id` |
 | `POST /api/hub/pipelines/dryrun` | администратор | сухой прогон (`{"pipeline_id":1,"skip":[]}`) → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | администратор | бан или разбан (`{"action":"ban","ips":[…],"host_ids":[…]}`) |
 | `POST /api/hosts/{id}/vulnerabilities/scan` | администратор | сканирование уязвимостей |

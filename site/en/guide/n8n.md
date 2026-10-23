@@ -77,6 +77,9 @@ also acts; a host and group scope narrows both lists and actions.
 - **Pipeline → Deploy / Dry Run** starts a hub job and, with "Wait for
   Result", waits for it and returns `succeeded`, the job state and the log
   (`log` as lines). A dry run has **Skip Checks**: which checks to skip.
+- **Pipeline → Start / Stop** stops a deployment (containers and data
+  stay) or brings up the same version; with “Wait for Result” — the job's
+  outcome.
 - **Host**: the host list (one item per host) and host sections:
   `overview`, `findings` (one item per finding), `vulnerabilities`,
   `services`. The hub machine is number `-1`.

@@ -885,6 +885,33 @@ compares the file with a hash of what it wrote last.
 
 ![.env history](/screens/en/deploy-env-history.png)
 
+## Stop and start
+
+![Stopping a deployment: what it affects](/screens/en/deploy-power.png)
+
+A compose pipeline that has been deployed has **“Stop”** (and **“Start”**
+when the deployment is stopped). The action runs on all hosts where the
+last successful deployment put the stack, as a hub job with a log.
+
+- **Stop** — `docker compose stop`: containers, volumes and `.env` stay.
+  It asks twice: the first window lists the hosts and the Traffic Fly
+  routes with targets in this stack, the second says the service will be
+  unavailable. The pipeline row gets a “stopped” tag (who and when).
+- **Start** — the same version that is deployed: no files are written, no
+  new commit is taken, `up` runs with `--pull never`. An image missing on
+  the host (removed by a cleanup) is pulled **with the pipeline's registry
+  key** — only the missing one. So “Start” brings up a private image where
+  `docker stack … up` from a script would fail with `unauthorized`.
+- **Alerts** for a stopped deployment's targets still come, marked:
+  “deployment shop is stopped (who, when)”. The assistant sees the tag too
+  — in the pipeline list.
+- A new deployment clears the tag by itself.
+
+In a script — `deploy PIPELINE stop` and `deploy PIPELINE start` (a dry run
+shows which hosts and routes it affects), over the API —
+`POST /api/hub/pipelines/{id}/stop` and `/start`, in MCP — `pipeline_power`,
+in n8n — **Pipeline → Start / Stop**.
+
 ## History and rollback
 
 Every deployment is a hub job with a log: what (commit, branch, tag), who

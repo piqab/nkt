@@ -303,13 +303,14 @@ var Commands = []CommandDoc{
 		Example: "pipeline hello\nrepo: https://github.com/org/app.git\nref: main\naction: compose\ncompose:\n  file: deploy/docker-compose.yml\n  project: hello\n  hosts: [web1]\n  env:\n    DB_PASSWORD: generate:password\nend",
 	},
 	{
-		Kind: KindDeploy, Syntax: "deploy КОНВЕЙЕР [ДЛИТЕЛЬНОСТЬ]",
+		Kind: KindDeploy, Syntax: "deploy КОНВЕЙЕР [start|stop] [ДЛИТЕЛЬНОСТЬ]",
 		Summary: "script.doc.deploy",
 		Args: []ArgDoc{
 			{Name: "КОНВЕЙЕР", Required: true, Desc: "script.doc.deploy.name"},
+			{Name: "start|stop", Desc: "script.doc.deploy.power"},
 			{Name: "ДЛИТЕЛЬНОСТЬ", Desc: "script.doc.deploy.duration"},
 		},
-		Example: "deploy hello 20m",
+		Example: "deploy hello 20m\ndeploy shop stop\ndeploy shop start",
 	},
 	{
 		Kind: KindMigrate, Syntax: "migrate ХОСТ КОНТЕЙНЕР to ХОСТ [switch-fly] [switch-pipeline] [clean-leftovers]",
