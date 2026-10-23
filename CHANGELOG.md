@@ -915,3 +915,4 @@
 - `78cdfb8b` Ассистент: вместо «tools unsupported» — ответ по сводке с причиной, «Проверить инструменты» проверяет второй ход; 1.13.91
 - `2c3d9a80` CodeQL #341, gosec #342: черновик сценария из ответа модели — в памяти вкладки, шлюз Traffic Fly — #nosec G102 с обоснованием; 1.13.92
 - `58f7f0ef` CI: actions/setup-go v5 → v6 (Node.js 24)
+- `94b467d5` gitleaks: ключи перевода titleKey — в allowlist (ложная находка generic-api-key)
