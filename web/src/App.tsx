@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { setPendingScript, type ScriptDraft } from './scriptDraft'
 import { OsIcon } from './components/OsIcon'
 import { ActiveJobsIndicator } from './components/ActiveJobsIndicator'
 import { StaleUIBanner } from './components/StaleUIBanner'
@@ -378,7 +379,8 @@ function Shell({
   // модели (событие nkt-open-script): хаб → «Профили» → «Сценарии».
   const [profilesTab, setProfilesTab] = useState('profiles')
   useEffect(() => {
-    const open = () => {
+    const open = (e: Event) => {
+      setPendingScript((e as CustomEvent<ScriptDraft>).detail ?? null)
       setSelectedHost(null)
       writeSelectedHost(null)
       setHubView('profiles')

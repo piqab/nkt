@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Button, Input, Spin, Tooltip } from 'antd'
 import { BulbFilled, BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import type { ScriptDraft } from '../scriptDraft'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Modal, formatDateTime } from './ui'
@@ -471,13 +472,8 @@ export function AIBody({
 /** Открыть текст новым сценарием в «Профили» → «Сценарии» (App ловит
  * событие, страница сценариев берёт текст при открытии). */
 export function openAsScript(content: string, origin?: ScriptOrigin) {
-  try {
-    sessionStorage.setItem('nkt-script-draft', content.endsWith('\n') ? content : content + '\n')
-    sessionStorage.setItem('nkt-script-draft-origin', JSON.stringify(origin ?? { kind: 'assistant' }))
-  } catch {
-    /* без хранилища — откроется пустой */
-  }
-  window.dispatchEvent(new CustomEvent('nkt-open-script'))
+  const detail: ScriptDraft = { content: content.endsWith('\n') ? content : content + '\n', origin: origin ?? { kind: 'assistant' } }
+  window.dispatchEvent(new CustomEvent<ScriptDraft>('nkt-open-script', { detail }))
 }
 
 /** Под блоком сценария: прошёл «Проверить» или ошибки по строкам
