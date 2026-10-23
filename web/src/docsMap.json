@@ -28,6 +28,7 @@
   "hub:fail2ban": { "page": "fail2ban" },
   "hub:jobs": { "page": "hub-operations", "ru": "Задания хаба", "en": "Hub jobs" },
   "hub:profiles": { "page": "profiles" },
+  "profiles:format": { "page": "profile-format" },
   "hub:clusters": { "page": "hub-clusters" },
   "hub:deploy": { "page": "hub-deploy" },
   "hub:fly": { "page": "traffic-fly" },

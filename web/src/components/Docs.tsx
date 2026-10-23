@@ -1,5 +1,5 @@
 import { useContext, useState, type ReactNode } from 'react'
-import { Button, Space, Tooltip } from 'antd'
+import { Button, Segmented, Space, Tooltip } from 'antd'
 import { ExportOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -55,6 +55,73 @@ export function DocsModal({ target, isHub, admin, version, onClose }: { target: 
       </div>
       {settings && <DocsSettingsModal isHub={isHub} onClose={() => setSettings(false)} />}
     </Modal>
+  )
+}
+
+/**
+ * Вкладка «Справка» у редактора (сценарии, профили): по умолчанию —
+ * страница сайта справки, переключатель «Сайт / Из nkt» — встроенная
+ * справка (работает без сайта, из неё вставляются готовые тексты). Выбор
+ * помнится в браузере (storageKey).
+ */
+export function SiteHelpTab({
+  docKey,
+  isHub,
+  storageKey,
+  siteHint,
+  nktHint,
+  fallback,
+}: {
+  docKey: string
+  isHub: boolean
+  storageKey: string
+  siteHint: string
+  nktHint: string
+  fallback: ReactNode
+}) {
+  const { t, i18n } = useTranslation()
+  const base = useDocsBase(isHub)
+  const target = DOCS[docKey]
+  const url = target ? docsURL(base, i18n.language, target) : ''
+  const [source, setSource] = useState<'site' | 'nkt'>(() => {
+    try {
+      return localStorage.getItem(storageKey) === 'nkt' ? 'nkt' : 'site'
+    } catch {
+      return 'site'
+    }
+  })
+  function choose(v: 'site' | 'nkt') {
+    setSource(v)
+    try {
+      localStorage.setItem(storageKey, v)
+    } catch {
+      /* без хранилища — выбор до перезагрузки */
+    }
+  }
+  const site = source === 'site' && url !== ''
+  return (
+    <div className="col" style={{ gap: '0.5rem' }}>
+      <Space wrap>
+        <Segmented
+          size="small"
+          value={site ? 'site' : 'nkt'}
+          onChange={(v) => choose(v as 'site' | 'nkt')}
+          options={[
+            { value: 'site', label: t('docs.fromSite'), disabled: url === '' },
+            { value: 'nkt', label: t('docs.fromNkt') },
+          ]}
+        />
+        {site && (
+          <a href={url} target="_blank" rel="noreferrer">
+            <Button size="small" icon={<ExportOutlined />}>
+              {t('docs.newTab')}
+            </Button>
+          </a>
+        )}
+        <span className="small muted">{site ? siteHint : nktHint}</span>
+      </Space>
+      {site ? <DocsFrame url={url} height="70vh" /> : fallback}
+    </div>
   )
 }
 

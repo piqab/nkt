@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { blurText } from '../privacy'
-import { Button, Checkbox, ColorPicker, Input, Tag, Tooltip, type TableColumnsType } from 'antd'
-import { QuestionCircleOutlined } from '@ant-design/icons'
+import { Button, Checkbox, ColorPicker, Dropdown, Input, Tabs, Tag, type TableColumnsType } from 'antd'
+import { DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { TextVersions } from '../components/TextVersions'
 import { api, useApi } from '../api'
@@ -12,7 +12,7 @@ import { RowAction } from '../components/RowAction'
 import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
-import { TitleHelp } from '../components/Docs'
+import { HelpButton, SiteHelpTab, TitleHelp } from '../components/Docs'
 import { msg, tx, type Msg } from '../msg'
 
 /** Заготовка для нового профиля: показывает форму, а не пустой экран. */
@@ -47,80 +47,103 @@ services:
 #           ports: ["8080:80"]
 `
 
-/**
- * Справка по формату профиля — всё, что нужно знать, чтобы написать его
- * самому.
- *
- * Отдельным окном, а не подсказкой у заголовка: подсказка отвечает
- * «что это за раздел», а здесь нужен справочник с примерами — их не
- * уместить в всплывающую строку, но и уводить за ними в репозиторий
- * незачем, писать профиль человек будет прямо на этом экране.
- *
- * Примеры YAML живут здесь, а не в переводах: это код, он одинаков на
- * любом языке, и держать две его копии значило бы однажды поправить
- * одну. Поэтому и комментариев внутри них нет — комментарий это проза,
- * и в английском интерфейсе он остался бы русским; всё, что нужно
- * сказать, сказано текстом раздела.
- */
-const GUIDE: { key: string; example: string }[] = [
-  { key: 'head', example: 'version: 1\nname: web-server' },
-  { key: 'packages', example: 'packages:\n  - nginx\n  - btop' },
-  {
-    key: 'services',
-    example: 'services:\n  nginx:\n    enabled: true\n    active: true\n  apache2:\n    active: false',
-  },
-  {
-    key: 'files',
-    example: 'files:\n  - path: /etc/motd\n    mode: "0644"\n    content: |\n      Managed by nkt',
-  },
-  {
-    key: 'firewall',
-    example: 'firewall:\n  allow:\n    - port: 443\n    - port: 5432\n      proto: tcp\n      from: 10.0.0.0/24',
-  },
-  {
-    key: 'users',
-    example: 'users:\n  - name: deploy\n    sudo: true\n    keys:\n      - "ssh-ed25519 AAAA... deploy@laptop"',
-  },
-  { key: 'system', example: 'system:\n  hostname: web-1\n  timezone: Europe/Moscow' },
-  {
-    key: 'compose',
-    example:
-      'compose:\n  - name: shop\n    up: true\n    content: |\n      services:\n        web:\n          image: nginx:1.27\n          ports: ["8080:80"]',
-  },
-]
+interface ProfileHelpData {
+  intro: string[]
+  sections: { key: string; title: string; body: string; example: string }[]
+  limits: { title: string; items: string[] }
+  examples: { key: string; title: string; summary: string; content: string }[]
+}
 
-function ProfileGuide({ onClose }: { onClose: () => void }) {
+/** Итог «Проверить»: что профиль задаёт или ошибка со строкой. */
+interface ProfileCheck {
+  ok: boolean
+  name?: string
+  error?: string
+  line?: number
+  counts?: Record<string, number>
+}
+
+const COUNT_ORDER = ['packages', 'services', 'files', 'firewall', 'users', 'system', 'compose']
+
+function checkSummary(c: ProfileCheck): string {
+  return COUNT_ORDER.filter((k) => (c.counts?.[k] ?? 0) > 0)
+    .map((k) => `${k}: ${c.counts![k]}`)
+    .join(', ')
+}
+
+function CheckLine({ check }: { check: ProfileCheck }) {
   const { t } = useTranslation()
-  return (
-    <Modal title={t('profiles.guide.title')} onClose={onClose} width={860}>
-      <div className="col" style={{ gap: '1rem', maxHeight: '70vh', overflowY: 'auto' }}>
-        <div className="col" style={{ gap: '0.4rem' }}>
-          <p style={{ margin: 0 }}>{t('profiles.guide.intro')}</p>
-          <p style={{ margin: 0 }}>{t('profiles.guide.additive')}</p>
-          <p style={{ margin: 0 }}>{t('profiles.guide.flow')}</p>
-        </div>
+  if (check.ok) return <Banner kind="success">{t('profiles.checkOK', { name: check.name, summary: checkSummary(check) || t('profiles.checkEmpty') })}</Banner>
+  return <Banner kind="error">{check.line ? t('profiles.checkErrorLine', { line: check.line, error: check.error }) : check.error}</Banner>
+}
 
-        {GUIDE.map((s) => (
-          <div key={s.key} className="col" style={{ gap: '0.3rem' }}>
-            <strong>{t(`profiles.guide.section.${s.key}.title`)}</strong>
-            <span className="small">{t(`profiles.guide.section.${s.key}.body`)}</span>
+/**
+ * Справка формата профиля, встроенная в nkt («Из nkt» на вкладке
+ * «Справка»): те же тексты и примеры, что страница сайта «Формат
+ * профиля», — с сервера, из одного описания. Готовые профили
+ * вставляются в редактор.
+ */
+function ProfileHelp({ canInsert, onInsert }: { canInsert: boolean; onInsert: (text: string) => void }) {
+  const { t } = useTranslation()
+  const help = useApi<ProfileHelpData>('/profiles/help')
+  if (help.loading && !help.data) return <Loading what={t('profiles.tabHelp')} />
+  if (help.error) return <Banner kind="error">{help.error}</Banner>
+  const d = help.data
+  if (!d) return null
+  return (
+    <div className="col" style={{ gap: '1rem' }}>
+      <div className="col" style={{ gap: '0.4rem' }}>
+        {d.intro.map((p, i) => (
+          <p key={i} className="small" style={{ margin: 0 }}>
+            {p}
+          </p>
+        ))}
+      </div>
+      {d.sections.map((s) => (
+        <div key={s.key} className="col" style={{ gap: '0.3rem' }}>
+          <strong>{s.title}</strong>
+          <span className="small">{s.body}</span>
+          <pre className="diff" style={{ margin: 0 }}>
+            {s.example}
+          </pre>
+        </div>
+      ))}
+      <div className="col" style={{ gap: '0.3rem' }}>
+        <strong>{d.limits.title}</strong>
+        <ul className="small" style={{ margin: 0, paddingLeft: '1.1rem' }}>
+          {d.limits.items.map((it, i) => (
+            <li key={i}>{it}</li>
+          ))}
+        </ul>
+      </div>
+      <div className="col" style={{ gap: '0.5rem' }}>
+        <strong>{t('profiles.ready')}</strong>
+        {d.examples.map((e) => (
+          <div key={e.key} className="col" style={{ gap: '0.3rem' }}>
+            <div className="row spread" style={{ alignItems: 'center' }}>
+              <span>
+                <strong className="small">{e.title}</strong> <span className="small muted">— {e.summary}</span>
+              </span>
+              {canInsert && (
+                <Button
+                  size="small"
+                  onClick={() =>
+                    void (async () => {
+                      if (await confirmAction(t('profiles.confirmInsert'), { okText: t('profiles.insert'), danger: false })) onInsert(e.content)
+                    })()
+                  }
+                >
+                  {t('profiles.insert')}
+                </Button>
+              )}
+            </div>
             <pre className="diff" style={{ margin: 0 }}>
-              {s.example}
+              {e.content}
             </pre>
           </div>
         ))}
-
-        <div className="col" style={{ gap: '0.3rem' }}>
-          <strong>{t('profiles.guide.limits.title')}</strong>
-          <ul className="small" style={{ margin: 0, paddingLeft: '1.1rem' }}>
-            <li>{t('profiles.guide.limits.packages')}</li>
-            <li>{t('profiles.guide.limits.files')}</li>
-            <li>{t('profiles.guide.limits.order')}</li>
-            <li>{t('profiles.guide.limits.volumes')}</li>
-          </ul>
-        </div>
       </div>
-    </Modal>
+    </div>
   )
 }
 
@@ -140,7 +163,8 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
   const [chosen, setChosen] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
-  const [guideOpen, setGuideOpen] = useState(false)
+  const [check, setCheck] = useState<ProfileCheck | null>(null)
+  const [tab, setTab] = useState<'text' | 'help'>('text')
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [detail, setDetail] = useState<PlanChange | null>(null)
   const [showVersions, setShowVersions] = useState(false)
@@ -153,6 +177,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
       setColor(current.data.color ?? '')
       setNote('')
       setPlan(null)
+      setCheck(null)
     }
   }, [current.data])
 
@@ -291,13 +316,29 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
     [chosen, canEdit, t],
   )
 
-  // «?» у профиля и в окне правки — справочник формата: писать профиль
-  // приходится здесь же, а подсказка у заголовка раздела — о разделе.
-  const guideButton = (
-    <Tooltip title={t('profiles.guide.open')}>
-      <Button type="text" size="small" aria-label={t('profiles.guide.open')} icon={<QuestionCircleOutlined />} onClick={() => setGuideOpen(true)} />
-    </Tooltip>
-  )
+  // «?» у профиля и в окне правки — страница «Формат профиля» на сайте
+  // справки; подсказка у заголовка раздела — о разделе.
+  const guideButton = <HelpButton docKey="profiles:format" isHub={hubLevel} admin={me.is_admin} version={me.hub_version} compact />
+  const helpData = useApi<ProfileHelpData>('/profiles/help')
+
+  async function runCheck(text = draft) {
+    setBusy(true)
+    try {
+      setCheck(await api<ProfileCheck>('/profiles/check', { method: 'POST', body: { content: text } }))
+    } catch (err) {
+      setCheck({ ok: false, error: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function pickExample(content: string) {
+    const pristine = draft.trim() === '' || draft === TEMPLATE || (selected !== null && draft === (current.data?.content ?? ''))
+    if (!pristine && !(await confirmAction(t('profiles.confirmInsert'), { okText: t('profiles.insert'), danger: false }))) return
+    setDraft(content)
+    setCheck(null)
+  }
+
 
   return (
     <>
@@ -311,6 +352,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
             onClick={() => {
               setSelected(null)
               setDraft(TEMPLATE)
+              setCheck(null)
               setPlan(null)
               setNote('')
               // Новому профилю — следующий свободный цвет палитры.
@@ -323,7 +365,6 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
         )}
       </div>
 
-      {guideOpen && <ProfileGuide onClose={() => setGuideOpen(false)} />}
 
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
@@ -412,7 +453,37 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
             }
           >
             {/* Просмотр; правка — в окне с диффом перед записью. */}
-            <CodeEditor value={draft} onChange={() => undefined} rows={18} readOnly />
+            <Tabs
+              activeKey={tab}
+              onChange={(k) => setTab(k as typeof tab)}
+              items={[
+                { key: 'text', label: t('profiles.tabText'), children: <CodeEditor value={draft} onChange={() => undefined} rows={18} readOnly /> },
+                {
+                  key: 'help',
+                  label: t('profiles.tabHelp'),
+                  children: (
+                    <SiteHelpTab
+                      docKey="profiles:format"
+                      isHub={hubLevel}
+                      storageKey="nkt-profile-help-source"
+                      siteHint={t('profiles.siteHint')}
+                      nktHint={t('profiles.nktHint')}
+                      fallback={
+                        <ProfileHelp
+                          canInsert={canEdit}
+                          onInsert={(text) => {
+                            setDraft(text)
+                            setCheck(null)
+                            setTab('text')
+                            setEditing(true)
+                          }}
+                        />
+                      }
+                    />
+                  ),
+                },
+              ]}
+            />
           </Card>
 
           {plan && (
@@ -492,9 +563,17 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
           }
           saved={selected ? current.data?.content ?? '' : ''}
           draft={draft}
-          onDraft={setDraft}
+          onDraft={(v) => {
+            setDraft(v)
+            setCheck(null)
+          }}
           busy={busy}
+          saveBlocked={!check ? t('profiles.needCheck') : !check.ok ? t('profiles.needFix') : undefined}
+          below={check && <div style={{ marginTop: '0.5rem' }}><CheckLine check={check} /></div>}
           fields={(<div className="filters" style={{ marginBottom: '0.5rem', alignItems: 'flex-end' }}>
+                <Button loading={busy} onClick={() => void runCheck()}>
+                  {t('profiles.check')}
+                </Button>
                 <label style={{ flex: 1, minWidth: '14rem' }}>
                   {t('profiles.note')}
                   <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('profiles.notePlaceholder')} />
@@ -515,6 +594,23 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
                     />
                     <span className="small muted mono">{color || t('profiles.colorNone')}</span>
                   </span>
+                </label>
+                <label>
+                  {t('profiles.readyStart')}
+                  <Dropdown
+                    trigger={['click']}
+                    menu={{
+                      items: (helpData.data?.examples ?? []).map((e) => ({ key: e.key, label: e.title })),
+                      onClick: ({ key }) => {
+                        const e = helpData.data?.examples.find((x) => x.key === key)
+                        if (e) void pickExample(e.content)
+                      },
+                    }}
+                  >
+                    <Button>
+                      {t('profiles.ready')} <DownOutlined />
+                    </Button>
+                  </Dropdown>
                 </label>
               </div>)}
           onSave={save}

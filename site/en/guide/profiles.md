@@ -25,12 +25,16 @@ services:
     enabled: true
     active: true
 firewall:
-  - allow: 80/tcp
-  - allow: 443/tcp
+  allow:
+    - port: 80
+    - port: 443
 files:
-  /etc/nginx/conf.d/gzip.conf: |
-    gzip on;
+  - path: /etc/nginx/conf.d/gzip.conf
+    content: |
+      gzip on;
 ```
+
+Every section of the format with examples is on the [Profile format](/en/guide/profile-format) page.
 
 - **Plan**: before applying, nkt compares the profile with the host and
   shows what will change; dangerous items (stop a service, remove a
@@ -45,6 +49,26 @@ files:
   reference in both languages right in the UI (the “?” icon on the
   profile and in the editing window; the “?” by the section title is this
   page).
+
+## The editing window
+
+![The profile editing window: a ready-made profile, “Check” and the result](/screens/en/profile-editor.png)
+
+Editing happens in a window, as with scripts:
+
+- **“Check”** parses the profile with the same code as saving: a typo in a
+  field name, a wrong package name or file path is an error with a line;
+  on success — what the profile sets (`packages: 1, services: 1, …`).
+- **“Save”** is available when the current text passed “Check”; any edit
+  needs a new check, and next to the disabled button it says what is
+  missing. A diff comes before writing.
+- **“Ready-made profiles ▾”** — a base server, an nginx web server, a
+  Docker host with a stack — go in whole (with a confirmation if the
+  window has edits).
+- **“?”** in the window title and on the profile opens [Profile format](/en/guide/profile-format);
+  the profile card has “Text” and “Reference” tabs: the same site page,
+  without access to the site — the help built into nkt (“Site / From
+  nkt”), whose ready-made profiles go into the editor too.
 
 ::: tip On the hub
 In the hub's “Profiles” section a profile gets a colour and is assigned to a

@@ -137,7 +137,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Domain XML editing in a window (text and blocks) with a diff, version history, `virt-xml-validate` and `virsh define` on apply.
 - **Profiles**: the host's desired state in YAML — packages, services, files, firewall rules, accounts, system settings, compose stacks.
 - Apply plan with risky items marked, application as a job with a log, scheduled drift check.
-- Profile export and import, profile versions, a format guide in both languages right in the UI.
+- Profile export and import, profile versions, a format guide in both languages right in the UI; an editing window as for scripts — “Check” (an error with a line or what the profile sets), “Save” after the check, “Ready-made profiles ▾”, a “?” to the “Profile format” page of the docs site (built from code, with a sync test), a “Reference” tab on the profile — the site or the help built into nkt.
 
 ### Packages
 - apt package search ranked by match, installation of several packages in one transaction.

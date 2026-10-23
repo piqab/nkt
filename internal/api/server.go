@@ -363,6 +363,10 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/certificates/standalone-plan", s.handleStandalonePlan)
 
 			r.Get("/profiles", s.handleProfileList)
+			r.Get("/profiles/help", s.handleProfileHelp)
+			// «Проверить» в окне правки: разбор тем же кодом, что при
+			// сохранении, ничего не пишет.
+			r.Post("/profiles/check", s.handleProfileCheck)
 			r.Get("/profiles/{id}", s.handleProfileGet)
 			r.Get("/profiles/{id}/export", s.handleProfileExport)
 			r.Get("/profiles/{id}/plan", s.handleProfilePlan)
