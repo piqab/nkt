@@ -14,4 +14,7 @@ regexTarget = "line"
 regexes = [
   # Комментарий в internal/api/server.go: «there is no per-task key: …».
   '''there is no per-task key''',
+  # Ключи перевода в интерфейсе (titleKey: 'topology.colK8sIngress') —
+  # имя подписи, не секрет; значение — только буквы, цифры, «.» и «_».
+  '''titleKey: '[a-zA-Z0-9_.]+''',
 ]
