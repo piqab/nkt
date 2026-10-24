@@ -66,6 +66,11 @@ func (s *Server) scriptScopeError(ctx context.Context, sc script.Script) error {
 		switch st.Kind {
 		case script.KindHost, script.KindGroup, script.KindFlyRoute, script.KindFlyApply:
 			return msgs.Errorf("auth.tokenScriptGlobal", st.Line, st.Text)
+		case script.KindPlugin:
+			// Плагин — не на хостах токена: только с его действием.
+			if t, ok := tokenFromContext(ctx); !ok || !t.Can(pluginActPrefix+st.Name) {
+				return msgs.Errorf("auth.tokenScriptGlobal", st.Line, st.Text)
+			}
 		case script.KindInstall:
 			for _, h := range st.Hosts {
 				if err = host(st.Line, h); err != nil {

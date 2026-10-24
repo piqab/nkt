@@ -277,6 +277,8 @@ func (r *ScriptRunner) step(ctx context.Context, jc *jobs.Context, p *ScriptRunP
 		return r.flyRoute(ctx, jc, done, st, false)
 	case script.KindFlyApply:
 		return r.flyApply(ctx, jc, false)
+	case script.KindPlugin:
+		return r.s.pluginStep(ctx, jc, st, false)
 
 	case script.KindWait:
 		if st.Action == "url" {
@@ -622,6 +624,8 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 		return r.flyRoute(ctx, jc, done, st, true)
 	case script.KindFlyApply:
 		return r.flyApply(ctx, jc, true)
+	case script.KindPlugin:
+		return r.s.pluginStep(ctx, jc, st, true)
 	case script.KindGroup, script.KindInstall, script.KindWait, script.KindVMCreate, script.KindVMAction,
 		script.KindDockerInst, script.KindCert, script.KindGitClone, script.KindSystem, script.KindK8sDestroy:
 		jc.Log("hub.scriptDryWould", st.Text)

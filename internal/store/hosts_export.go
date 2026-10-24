@@ -262,6 +262,9 @@ var ExportedSettingKeys = []string{
 	"ai.tools",
 	// Бета-канал обновлений.
 	"update.beta",
+	// Подключённые плагины (секреты перешифровываются при импорте —
+	// hub.reencryptPlugins).
+	"plugins",
 	// Адрес сайта справки и его история («О системе»).
 	"ui.docs_url", "ui.docs_url.history",
 	// Раскладка меню хаба и хоста с историей.

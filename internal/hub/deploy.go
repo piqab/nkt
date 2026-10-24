@@ -337,7 +337,7 @@ func (r *DeployRunner) runScript(ctx context.Context, jc *jobs.Context, pl store
 	values := map[string]string{"param:TAG": vars.Tag, "param:COMMIT": vars.Commit, "param:REF": vars.Ref}
 	parsed, issues := script.Parse(content, values)
 	if len(issues) == 0 {
-		issues = script.Check(parsed, s.refsNowCtx(ctx))
+		issues = s.checkScript(ctx, parsed, s.refsNowCtx(ctx))
 	}
 	if len(issues) > 0 {
 		return msgs.Errorf("hub.scriptParseFailed", issues[0].Line, msgs.Localize(jc.Lang(), issues[0].Err))

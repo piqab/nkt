@@ -17,6 +17,8 @@ type Refs struct {
 	// PipelineStacks — стеки, выложенные конвейерами: «хост|стек» → имя
 	// конвейера (для предупреждений Warnings).
 	PipelineStacks map[string]string
+	// Plugins — подключённые плагины.
+	Plugins map[string]bool
 }
 
 // Warnings — замечания, которые не мешают сохранить и выполнить сценарий:
@@ -91,6 +93,10 @@ func Check(sc Script, refs Refs) []Issue {
 				if !known(refs.Hosts, t.Host) && !hosts[t.Host] {
 					fail(s.Line, "script.unknownHost", t.Host)
 				}
+			}
+		case KindPlugin:
+			if !known(refs.Plugins, s.Name) {
+				fail(s.Line, "script.unknownPlugin", s.Name)
 			}
 		case KindPipeline:
 			pipelines[s.Name] = true

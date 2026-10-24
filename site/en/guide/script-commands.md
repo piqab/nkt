@@ -64,6 +64,12 @@ Every command of the hub script language — the same ones “Check”, the “R
 | [`fly route ID KIND`](#cmd-fly-route) | Creates or updates a Traffic Fly route and applies it — like a pipeline's fly: block: a new one is saved and applied, an existing one changes targets smoothly (new ones added and checked, old ones drained). |
 | [`fly apply`](#cmd-fly-apply) | Applies the Traffic Fly map — like “Apply”; in a dry run — the apply dry run. |
 
+**Plugins**
+
+| Command | What it does |
+|---|---|
+| [`plugin NAME WORD args…`](#cmd-plugin) | A command of a connected plugin (“About” → “Plugins”): the plugin's command word and its arguments. |
+
 ## Commands
 
 ### `set NAME value | set NAME ask` {#cmd-set}
@@ -602,6 +608,23 @@ Example:
 
 ```
 fly apply
+```
+
+### `plugin NAME WORD args… | WORD args…` {#cmd-plugin}
+
+A command of a connected plugin (“About” → “Plugins”): the plugin's command word and its arguments. It can be written without “plugin NAME” — as one word, unless another plugin took it. The plugin decides what the command does and which arguments it takes: “Check” asks it, in a dry run it only says what it would do. Not connected — a “Check” error.
+
+| Argument | Required | What it is |
+|---|---|---|
+| `NAME` | ✓ | the plugin's name on the hub |
+| `WORD` | ✓ | a command word from the plugin's help (dns, …) followed by its arguments |
+
+Example:
+
+```
+dns zone add example.com
+dns set app.example.com A 203.0.113.10 ttl 300
+plugin dns dns rm old.example.com
 ```
 
 ## Ready-made scripts

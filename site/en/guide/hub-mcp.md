@@ -79,6 +79,10 @@ admin token or a token by permission (within its limits).
 | `service_action`, `container_action` | admin | start / stop / restart services and containers |
 | `fail2ban_ban` | admin | ban / unban addresses on hosts |
 
+Plus the tools of connected [plugins](/en/guide/hub-plugins):
+`<name>_<operation>` — read operations for any token, others with the
+“plugin NAME” action.
+
 Tools carry `readOnlyHint` and `destructiveHint`: clients that honour
 them will ask you before a dangerous call themselves.
 

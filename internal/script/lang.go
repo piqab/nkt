@@ -57,6 +57,7 @@ const (
 	KindK8sWait      Kind = "k8s.wait"
 	KindFlyRoute     Kind = "fly.route"
 	KindFlyApply     Kind = "fly.apply"
+	KindPlugin       Kind = "plugin"
 )
 
 // ArgDoc — один аргумент команды в справке.
@@ -372,6 +373,15 @@ var Commands = []CommandDoc{
 		Summary: "script.doc.flyApply",
 		Example: "fly apply",
 	},
+	{
+		Kind: KindPlugin, Syntax: "plugin ИМЯ СЛОВО аргументы… | СЛОВО аргументы…",
+		Summary: "script.doc.plugin",
+		Args: []ArgDoc{
+			{Name: "ИМЯ", Required: true, Desc: "script.doc.plugin.name"},
+			{Name: "СЛОВО", Required: true, Desc: "script.doc.plugin.word"},
+		},
+		Example: "dns zone add example.com\ndns set app.example.com A 203.0.113.10 ttl 300\nplugin dns dns rm old.example.com",
+	},
 }
 
 // docByKind — команда справки по виду шага.
@@ -494,6 +504,8 @@ var englishTerms = [][2]string{
 	{"Ingress Cilium: порт 8080 на каждом узле", "Cilium Ingress: port 8080 on every node"},
 	{"Тестовый под, сервис и Ingress", "Test pod, service and Ingress"},
 	{"Вход снаружи: шлюз Traffic Fly на все узлы кластера", "Outside access: the Traffic Fly gateway to all cluster nodes"},
+	{"аргументы…", "args…"},
+	{"СЛОВО", "WORD"},
 	{"КОНВЕЙЕР", "PIPELINE"},
 	{"КЛАСТЕР", "CLUSTER"},
 	{"ШЛЮЗ", "GATEWAY"},

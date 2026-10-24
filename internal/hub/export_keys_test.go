@@ -30,6 +30,7 @@ func TestEveryHubKVKeyIsExportedOrExplained(t *testing.T) {
 		"hub.instance_id":     "id экземпляра хаба — у каждого свой",
 		"hub.telegram.offset": "смещение очереди бота — у каждого хаба своё",
 		"mon.k8s.":            "кэш мониторинга кластеров — соберётся опросом",
+		"plugin.doc.":         "история правок документов плагина — сами документы живут в плагине",
 	}
 	settings := map[string]bool{}
 	for _, k := range store.ExportedSettingKeys {

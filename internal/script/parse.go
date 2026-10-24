@@ -328,6 +328,9 @@ func kv(toks []string, keys []string, flags []string) (map[string]string, error)
 }
 
 func parseStep(toks []string, sc *Script) (Step, error) {
+	if step, ok, err := parsePlugin(toks); ok {
+		return step, err
+	}
 	switch toks[0] {
 	case "set":
 		if len(toks) < 3 || !varNameRe.MatchString(toks[1]) {

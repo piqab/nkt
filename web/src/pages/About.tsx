@@ -8,6 +8,7 @@ import { AISettingsCard } from '../components/AISettingsCard'
 import { ApiTokensCard } from '../components/ApiTokensCard'
 import { NavLayoutCard } from '../components/NavLayoutModal'
 import { ExperimentalCard } from '../components/ExperimentalCard'
+import { PluginsCard } from '../components/PluginsCard'
 import { DangerZoneCard } from '../components/PurgeAllModal'
 import { InstallAllCard } from '../components/InstallAllModal'
 import type { HubVersionInfo, HubVulnDBInfo, Job } from '../types'
@@ -447,6 +448,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
       <NavLayoutCard admin={admin} />
       <ExperimentalCard admin={admin} />
       <ApiTokensCard admin={admin} />
+      <PluginsCard admin={admin} />
 
       <Card title={t('about.vulnDBTitle')} subtitle={t('about.vulnDBHint')}>
         {vulndb.loading && !vulndb.data ? (

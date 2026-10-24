@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.104 — 2026-10-24
+
+- External plugins: “About” → “Plugins”. A plugin is a separate program (a
+  container deployed by a pipeline), the hub reaches it over SSH with a
+  signature; connecting from a pipeline (host, port and secret taken from
+  it) with a preview of what the plugin adds. A plugin adds a section to
+  the Plugins menu (tables, forms, editing documents with a diff and a
+  version history), script commands (`plugin NAME WORD …`), MCP tools and
+  the “plugin NAME” token-by-permission action. The protocol and a
+  plugin example — the Plugins guide.
+
 ## v1.13.103 — 2026-10-24
 
 - MCP: creating pipelines — `list_pipeline_examples` (ready descriptions

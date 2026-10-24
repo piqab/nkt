@@ -199,7 +199,7 @@ func (s *Server) aiScriptCheck(ctx context.Context, text string) []script.Issue 
 	if len(issues) == 0 {
 		// Сценарию от модели и предупреждения — ошибки: пусть исправит.
 		refs := s.refsNowCtx(ctx)
-		issues = append(script.Check(sc, refs), script.Warnings(sc, refs)...)
+		issues = append(s.checkScript(ctx, sc, refs), script.Warnings(sc, refs)...)
 	}
 	return issues
 }

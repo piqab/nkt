@@ -397,6 +397,10 @@ var tokenHubRoutes = map[string]string{
 	// MCP: инструменты — внутренние вызовы этого же API под тем же
 	// токеном (mcp.go), права — их.
 	"POST /mcp": "",
+	// Плагины: список и операции; что меняет — с действием plugin.<имя>
+	// (проверяет handlePluginCall по манифесту).
+	"GET /hub/plugins":              "",
+	"POST /hub/plugins/{name}/call": "",
 	// Кластеры: смотреть и применять манифесты; создание, удаление,
 	// обновление, kubeconfig и Helm — нет.
 	"GET /hub/clusters":             "",

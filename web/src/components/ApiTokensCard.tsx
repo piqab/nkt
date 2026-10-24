@@ -79,7 +79,7 @@ export function ApiTokensCard({ admin }: { admin: boolean }) {
         <Space size={2} wrap>
           <Tag color={tk.role === 'admin' ? 'red' : tk.role === 'custom' ? 'gold' : 'blue'}>{t(`tokens.roles.${tk.role}`)}</Tag>
           {tk.role === 'custom' && (
-            <Tooltip title={(tk.perms?.actions ?? []).map((a) => t(`tokens.act.${a}`)).join(', ')}>
+            <Tooltip title={(tk.perms?.actions ?? []).map((a) => t(`tokens.act.${a}`, { defaultValue: a })).join(', ')}>
               <span className="small muted">{t('tokens.actionsCount', { count: tk.perms?.actions.length ?? 0 })}</span>
             </Tooltip>
           )}

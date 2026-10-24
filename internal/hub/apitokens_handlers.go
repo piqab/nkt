@@ -325,7 +325,7 @@ func (s *Server) validateTokenPerms(ctx context.Context, p *store.TokenPerms) er
 	bad := func(what string) error { return msgs.Errorf("hub.tokenBadPerms", what) }
 	acts := []string{}
 	for _, a := range p.Actions {
-		if !slices.Contains(store.TokenActions, a) {
+		if !slices.Contains(store.TokenActions, a) && !s.pluginActionKnown(ctx, a) {
 			return bad(a)
 		}
 		if !slices.Contains(acts, a) {

@@ -63,7 +63,7 @@ func DocsMarkdown(lang msgs.Lang) string {
 
 // Группы обзора — в порядке справки; у каждой команды своя группа
 // (TestEveryCommandHasDocGroup).
-var docGroups = []string{"vars", "hub", "host", "deploy", "cluster"}
+var docGroups = []string{"vars", "hub", "host", "deploy", "cluster", "plugins"}
 
 var docGroup = map[Kind]string{
 	KindSet: "vars", KindParam: "vars",
@@ -73,6 +73,7 @@ var docGroup = map[Kind]string{
 	KindSystem: "host", KindCert: "host", KindGitClone: "host", KindK8sCreate: "host", KindK8sDestroy: "host",
 	KindPipeline: "deploy", KindDeploy: "deploy", KindMigrate: "deploy",
 	KindK8sIngress: "cluster", KindK8sApply: "cluster", KindK8sWait: "cluster", KindFlyRoute: "cluster", KindFlyApply: "cluster",
+	KindPlugin: "plugins",
 }
 
 func anchor(k Kind) string { return "cmd-" + strings.ReplaceAll(string(k), ".", "-") }
