@@ -4,6 +4,8 @@ package msgs
 // here mirrors the exact text that already shipped before this package
 // existed, so converting a call site to msgs.T never changes Russian
 // behavior, only adds an English counterpart.
+//
+// #nosec G101 -- тексты сообщений, а не учётные данные.
 var ruCatalog = map[string]string{
 	"err.notFound":       "not found",
 	"err.fileNotFound":   "файл не найден",

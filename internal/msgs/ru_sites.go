@@ -7,6 +7,7 @@ func init() {
 	}
 }
 
+// #nosec G101 -- тексты сообщений (ключи вроде compose.badPath), а не учётные данные.
 var ruSitesCatalog = map[string]string{
 	"compose.badPath":                 "Недопустимый путь файла стека: %q",
 	"compose.badProject":              "Имя стека — строчные латинские буквы, цифры, «-» и «_»: %q",

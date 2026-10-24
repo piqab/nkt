@@ -5,6 +5,8 @@ package msgs
 // falls back to Russian text for English requests too, same as the
 // frontend's own i18next fallbackLng — that's the expected state for
 // anything not yet migrated, not a bug.
+//
+// #nosec G101 -- message texts, not credentials.
 var enCatalog = map[string]string{
 	"err.notFound":       "not found",
 	"err.fileNotFound":   "file not found",

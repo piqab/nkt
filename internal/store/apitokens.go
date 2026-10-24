@@ -22,6 +22,8 @@ const (
 )
 
 // Действия токена «по правам».
+//
+// #nosec G101 -- названия действий (pipeline.deploy, vuln.scan), а не учётные данные.
 const (
 	TokenActPipelineDeploy = "pipeline.deploy" // выкладка, откат, сухой прогон
 	TokenActPipelinePower  = "pipeline.power"  // «Запустить» / «Остановить»

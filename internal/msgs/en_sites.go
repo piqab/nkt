@@ -7,6 +7,7 @@ func init() {
 	}
 }
 
+// #nosec G101 -- message texts (keys like compose.badPath), not credentials.
 var enSitesCatalog = map[string]string{
 	"compose.badPath":                 "Invalid stack file path: %q",
 	"compose.badProject":              "A stack name is lowercase latin letters, digits, “-” and “_”: %q",
