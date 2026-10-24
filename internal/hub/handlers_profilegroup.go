@@ -148,6 +148,15 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.Username(r.Context())
+	// Токен «по правам»: потолки одной машины и суммы токена; машина
+	// учитывается сразу (не создалась — запись снимет задание).
+	tok, byToken := tokenFromContext(r.Context())
+	if byToken && tok.Limited() {
+		if err := s.tokenVMCheck(r.Context(), tok, host, req.Spec); err != nil {
+			writeErr(w, r, http.StatusForbidden, err)
+			return
+		}
+	}
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:     KindVMProvision,
 		TitleKey: "hub.machineOnHostJobTitle", TitleArgs: []any{req.Spec.Name, host.Name},

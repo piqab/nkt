@@ -22,7 +22,9 @@ With the same token the hub is an [MCP server for AI agents](/en/guide/hub-mcp).
   and rolling back a pipeline, dry runs, IP bans and unbans on the hosts,
   service and container actions, vulnerability scans, running saved
   scripts, stack moves, Traffic Fly (saving and applying the map), and
-  manifests into clusters.
+  manifests into clusters. *By permission*: read plus only the chosen
+  actions, with resource limits (below, “[Token by
+  permission](#token-by-permission)”).
 - **Hosts and groups** limit the token. Both empty means all hosts. A host
   is in scope if it is named itself or belongs to one of the groups (a
   machine belongs to its host's group). Renaming a group does not break the
@@ -49,6 +51,72 @@ hosts), creating and editing scripts, creating, deleting and upgrading
 clusters, the kubeconfig and Helm, Kubernetes on a host directly, the
 terminal and console, files and backups, config contents, or websockets.
 Such a call gets 403.
+
+## Token by permission
+
+For an agent, CI or contractor that needs one job, not the whole hub:
+“deploy pipeline shop”, “keep a compose stack in group staging within 2
+CPU”, “an own namespace in a cluster with a quota”, “up to three machines
+of 2 vCPU”.
+
+- **Presets** fill in the fields: read only; CI — deploy a pipeline;
+  agent — compose with limits; k8s — own namespace with a quota; VPS — up
+  to three machines.
+- **Actions** — what else is allowed besides reading: deploy (and roll
+  back, dry run), “Start” / “Stop”, run saved scripts, k8s manifests,
+  machines, containers, services, Traffic Fly, moves, fail2ban,
+  vulnerability scans. Anything else is a 403 naming the action.
+- **Objects** — pipelines, scripts and clusters by name (empty — all
+  within the token's hosts); **k8s namespaces** — required for manifests
+  (`kube-*` and `default` are not allowed).
+- **Limits** (empty — no limit):
+  - **total** — CPU, memory, disk: the sum of everything the token
+    deployed and created that still exists;
+  - **per host** — CPU and memory of the token's stacks and machines on
+    one host;
+  - **compose service** — CPU and memory: a service without its own
+    `limits` gets this limit (in the copy of the compose file that goes to
+    the host), a service with higher `limits` is refused; **free on the
+    host** — space before a deployment;
+  - **machines** — how many in total and the limits of one (vCPU,
+    memory, disk);
+  - **k8s namespace quota** — CPU, memory, storage, pods;
+  - **actions per hour** — deployments, starts, applies, machines.
+
+**How the sum works.** The hub keeps a ledger per token: a compose stack
+on each host (the sum of the services' `limits` times `replicas`), a
+machine (vCPU, memory, disk), a k8s namespace (its quota). A new action
+passes if “in use without this same entry + new” is within the limit: a
+repeated deployment of the same stack replaces its entry instead of
+adding up. Stopped things keep their place — “Start” won't be refused. A
+stack or machine removed outside nkt — the hub drops the entry on a check
+(every 10 minutes and when the token window opens); the token window shows
+“In use … of …” and a manual “Release”. A deleted token takes its ledger
+with it.
+
+**What a token with limits can't have in compose**: `privileged`, host
+network, pid and ipc, `cap_add`, `devices`, `security_opt: …unconfined`,
+host path and docker socket mounts (`./…` inside the stack directory and
+named volumes are fine). Docker has no volume quota, so for compose the
+disk limit is a free-space check before a deployment.
+
+**k8s.** A manifest goes only into the token's namespaces, without kinds
+that change the whole cluster (ClusterRole, CRD, PersistentVolume,
+ResourceQuota…), and without node access (`privileged`, `hostNetwork`,
+`hostPID`, `hostIPC`, `hostPath`). Before the first apply the hub puts a
+`ResourceQuota` (the namespace limits) and a `LimitRange` (the service
+limit — default and maximum per container) into the namespace: the
+cluster itself holds the quota, even for pods created from inside.
+
+**Machines** — create (`create_vm` in MCP, “New machine” over the API),
+start, stop and delete only its own: created by this token.
+
+**MCP** shows the agent only the allowed tools. Connection examples are
+in the token window (“MCP examples”), with the issued secret — right
+after creation.
+
+Permissions, limits and the ledger travel in the hub export with the
+token.
 
 ## Presenting the token
 

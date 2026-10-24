@@ -474,7 +474,7 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(ctx)
 	name := msgs.Tc(ctx, "deploy.dryNewPipeline")
 	tok, byToken := tokenFromContext(ctx)
-	if byToken && tok.Scoped() && (req.PipelineID == 0 || strings.TrimSpace(req.Content) != "") {
+	if byToken && (tok.Scoped() || tok.Limited()) && (req.PipelineID == 0 || strings.TrimSpace(req.Content) != "") {
 		// Произвольное описание может смотреть на любые хосты.
 		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenDryContent"))
 		return
@@ -487,6 +487,12 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeErr(w, r, http.StatusNotFound, err)
 			return
+		}
+		if byToken {
+			if err := tokenPipelineAllowed(tok, pl.Name); err != nil {
+				writeErr(w, r, http.StatusForbidden, err)
+				return
+			}
 		}
 		name = pl.Name
 		if strings.TrimSpace(req.Content) == "" {

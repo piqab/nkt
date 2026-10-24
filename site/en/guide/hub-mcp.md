@@ -32,6 +32,9 @@ rules:
 - an **admin** token also gets actions: running a script, deploying,
   moving a stack, Traffic Fly, manifests to clusters, services and
   containers, banning addresses;
+- a token **by permission** — only the chosen actions with resource limits
+  ([Token by permission](/en/guide/hub-api#token-by-permission)): the agent
+  sees only the allowed tools, deployments and machines stay within limits;
 - the **host and group limit** works as in the API: other hosts are out
   of reach, the shared Traffic Fly map is only for a token without a limit;
 - the address list, expiry and nkt-edge — as for any token call.
@@ -39,8 +42,9 @@ rules:
 ::: warning Actions run without confirmation
 With an admin token the agent **runs actions right away**; no person
 confirms them. That is intended, so the agent can finish the task. For
-an agent you don't trust with actions, issue a read token or a token
-limited to some hosts. Everything the agent did is in the hub audit log
+an agent you don't trust with everything, issue a read token or a token
+[by permission](/en/guide/hub-api#token-by-permission): only the needed
+actions, its own objects and CPU, memory, disk and machine limits. Everything the agent did is in the hub audit log
 as `token:<token name>`.
 :::
 
@@ -64,6 +68,7 @@ runs nothing by itself — only MCP with an admin token executes.
 | `run_script` | admin | run a script (`dry_run`; `dry_first` — a dry run, then the run if it passes; `values` — answers to its questions) |
 | `deploy_pipeline`, `dry_run_pipeline` | admin | deploy, dry run |
 | `pipeline_power` | admin | stop a deployment or bring up the same version (`action`: `stop` / `start`) |
+| `create_vm`, `vm_power` | admin | a machine on a host from a cloud image; start, shut down, force off (a token by permission — its own, within limits) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |
 | `fly_apply`, `fly_ops` | admin, no limit | apply the map, point edits of targets |
 | `manifest_diff`, `manifest_apply` | admin | a manifest to clusters |

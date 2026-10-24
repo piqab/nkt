@@ -969,6 +969,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	server.StartFlyMonitor(ctx)
 	server.StartMigrationReminders(ctx)
 	server.StartCertWatch(ctx)
+	server.StartTokenUsageReconcile(ctx)
 	server.StartTelegram(ctx)
 	server.StartSlack()
 

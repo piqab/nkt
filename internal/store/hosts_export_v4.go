@@ -389,6 +389,22 @@ type APITokenExport struct {
 	ViaEdge   bool     `json:"via_edge,omitempty"`
 	Author    string   `json:"author,omitempty"`
 	SecretEnc []byte   `json:"secret_enc"`
+	// Perms — права и потолки роли «по правам»; Usage — что токен занял
+	// (хосты и кластеры — по именам).
+	Perms *TokenPerms        `json:"perms,omitempty"`
+	Usage []TokenUsageExport `json:"usage,omitempty"`
+}
+
+// TokenUsageExport — запись учёта токена: Place — имя хоста (стек,
+// машина) или кластера (namespace).
+type TokenUsageExport struct {
+	Kind   string  `json:"kind"`
+	Place  string  `json:"place"`
+	Ref    string  `json:"ref"`
+	Label  string  `json:"label,omitempty"`
+	CPU    float64 `json:"cpu,omitempty"`
+	MemMB  int64   `json:"mem_mb,omitempty"`
+	DiskGB int64   `json:"disk_gb,omitempty"`
 }
 
 // OutHookExport — адресат исходящих вебхуков; хосты — по именам.

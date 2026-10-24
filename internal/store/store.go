@@ -561,6 +561,22 @@ CREATE TABLE IF NOT EXISTS api_tokens (
     last_used_at TEXT NOT NULL DEFAULT '',
     last_ip      TEXT NOT NULL DEFAULT ''
 );
+
+-- Что занято токеном «по правам» (tokenusage.go): стек compose на хосте,
+-- машина, namespace k8s — с ресурсами, которые он держит. Суммы — для
+-- потолков токена; запись снимается удалением и сверкой с хостами.
+CREATE TABLE IF NOT EXISTS token_usage (
+    token_id   INTEGER NOT NULL,
+    kind       TEXT NOT NULL,
+    host_id    INTEGER NOT NULL DEFAULT 0,
+    ref        TEXT NOT NULL,
+    label      TEXT NOT NULL DEFAULT '',
+    cpu        REAL NOT NULL DEFAULT 0,
+    mem_mb     INTEGER NOT NULL DEFAULT 0,
+    disk_gb    INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (token_id, kind, host_id, ref)
+);
 `
 
 // columnMigrations lists every column the hosts table has picked up since
@@ -640,6 +656,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	// dry_skip — снятые галочки проверок сухого прогона (JSON-список).
 	{"pipelines", "dry_skip", `ALTER TABLE pipelines ADD COLUMN dry_skip TEXT NOT NULL DEFAULT ''`},
 	{"api_tokens", "via_edge", `ALTER TABLE api_tokens ADD COLUMN via_edge INTEGER NOT NULL DEFAULT 0`},
+	// perms — права и потолки роли «по правам» (JSON).
+	{"api_tokens", "perms", `ALTER TABLE api_tokens ADD COLUMN perms TEXT NOT NULL DEFAULT ''`},
 	// max_body — предел тела запроса у прокси сайта ("" — 64m, "0" — без).
 	{"sites", "max_body", `ALTER TABLE sites ADD COLUMN max_body TEXT NOT NULL DEFAULT ''`},
 	// Откуда сценарий: «ai» — черновик ассистента или разбора находки.

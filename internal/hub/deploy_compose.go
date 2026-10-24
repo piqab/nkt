@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -179,6 +180,36 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		}
 		return msgs.Errorf("deploy.portSelfConflict", len(conf))
 	}
+	// Выкладка от токена «по правам»: потолок сервисам без limits,
+	// отказ — сервису выше потолка и тому, что выходит за стек; место на
+	// хостах и суммы токена — до первого хоста.
+	tok, limited := s.tokenByAuthor(ctx, jc.Job.Author)
+	var need deploy.StackNeed
+	if limited {
+		l := tok.Perms.Limits
+		out, nd, err := deploy.ApplyTokenLimits(files[main], deploy.ServiceCaps{CPU: l.ServiceCPU, MemMB: l.ServiceMemMB})
+		if err != nil {
+			return err
+		}
+		if len(nd.Unlimited) > 0 && (l.CPU > 0 || l.MemMB > 0 || l.HostCPU > 0 || l.HostMemMB > 0) {
+			return msgs.Errorf("hub.tokenUnlimited", strings.Join(nd.Unlimited, ", "))
+		}
+		files[main], need = out, nd
+		var adds []store.TokenUsage
+		for _, t := range targets {
+			if l.MinFreeGB > 0 {
+				if free, ok := s.hostFreeGB(ctx, user, t.ID); ok && free < l.MinFreeGB {
+					return msgs.Errorf("hub.tokenFreeDisk", t.Name, free, l.MinFreeGB)
+				}
+			}
+			adds = append(adds, store.TokenUsage{TokenID: tok.ID, Kind: store.UsageCompose, HostID: t.ID, Ref: c.Project,
+				Label: c.Project + "@" + t.Name, CPU: need.CPU, MemMB: need.MemMB})
+			jc.Log("deploy.tokenStack", c.Project, t.Name, need.CPU, need.MemMB, tok.Name)
+		}
+		if err := s.tokenFits(ctx, tok, adds...); err != nil {
+			return err
+		}
+	}
 	// Где стек был до этой выкладки: переименованный — заменяется на том
 	// же хосте, с прежних хостов — убирается после успеха.
 	prev := s.loadDeployed(ctx, pl.ID)
@@ -252,6 +283,21 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		cur.Hosts = append(cur.Hosts, deployedHost{ID: t.ID, Name: t.Name})
 	}
 	s.saveDeployed(ctx, pl.ID, cur)
+	// Учёт токенов: стек ушёл с прежних хостов — запись снимается (кем бы
+	// ни был выложен); выкладка токена «по правам» — запись на каждый хост.
+	if prev != nil {
+		for _, h := range prev.Hosts {
+			if !slices.ContainsFunc(targets, func(t targetHost) bool { return t.ID == h.ID }) || prev.Project != c.Project {
+				_ = s.db.DeleteTokenUsage(ctx, 0, store.UsageCompose, h.ID, prev.Project)
+			}
+		}
+	}
+	if limited {
+		for _, t := range targets {
+			_ = s.db.SetTokenUsage(ctx, store.TokenUsage{TokenID: tok.ID, Kind: store.UsageCompose, HostID: t.ID, Ref: c.Project,
+				Label: c.Project + "@" + t.Name, CPU: need.CPU, MemMB: need.MemMB})
+		}
+	}
 	// Новая выкладка подняла стек — пометка «остановлена» снимается.
 	s.saveStopped(ctx, pl.ID, nil)
 	s.cleanupMovedStacks(ctx, jc, user, pl, c.Project, prev, targets)
@@ -514,4 +560,29 @@ func (s *Server) actingUser(ctx context.Context, candidates ...string) string {
 		}
 	}
 	return ""
+}
+
+// hostFreeGB — свободно на хосте там, где docker держит образы и тома
+// (/var/lib/docker, иначе корень). ok=false — не узнать (не мешает).
+func (s *Server) hostFreeGB(ctx context.Context, user string, hostID int64) (int64, bool) {
+	var ov struct {
+		Filesystems []struct {
+			MountPoint string `json:"mount_point"`
+			Available  int64  `json:"available"`
+		} `json:"filesystems"`
+	}
+	if _, err := s.hostCall(ctx, user, hostID, "GET", "/api/disks", nil, &ov); err != nil {
+		return 0, false
+	}
+	best, bestLen := int64(-1), -1
+	for _, f := range ov.Filesystems {
+		mp := f.MountPoint
+		if (mp == "/" || strings.HasPrefix("/var/lib/docker/", strings.TrimSuffix(mp, "/")+"/")) && len(mp) > bestLen {
+			best, bestLen = f.Available, len(mp)
+		}
+	}
+	if best < 0 {
+		return 0, false
+	}
+	return best >> 30, true
 }

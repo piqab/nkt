@@ -4172,11 +4172,13 @@
     "role": "Role",
     "roles": {
       "read": "read",
-      "admin": "admin"
+      "admin": "admin",
+      "custom": "by permission"
     },
     "roleHint": {
       "read": "state, findings, alerts, job logs, scripts, moves, Traffic Fly, clusters — viewing",
-      "admin": "actions too: deploy, dry run, IP bans, services, running saved scripts, stack moves, Traffic Fly (without a host limit), manifests into clusters"
+      "admin": "actions too: deploy, dry run, IP bans, services, running saved scripts, stack moves, Traffic Fly (without a host limit), manifests into clusters",
+      "custom": "read plus only the chosen actions, with resource limits"
     },
     "scope": "Scope",
     "scopeHint": "Hosts and groups limit the token; both empty means all hosts.",
@@ -4216,7 +4218,91 @@
     "viaEdgeHint": "the token is also accepted through an edge with the API role, signed requests only",
     "edgeTag": "edge",
     "yes": "yes",
-    "no": "no"
+    "no": "no",
+    "actionsCount": "actions: {{count}}",
+    "preset": "Preset",
+    "presetPlaceholder": "pick one — the fields fill in",
+    "presets": {
+      "read": "Read only",
+      "ci": "CI: deploy a pipeline",
+      "compose": "Agent: compose with limits",
+      "k8s": "k8s: own namespace with a quota",
+      "vps": "VPS: up to 3 machines"
+    },
+    "actions": "Actions",
+    "pipelines": "Pipelines",
+    "scripts": "Scripts",
+    "clusters": "Clusters",
+    "namespaces": "k8s namespaces",
+    "namespacesHint": " — the token applies manifests only there; the hub puts a quota and limits there",
+    "allInScope": "all within the token's hosts",
+    "act": {
+      "pipeline.deploy": "deploy, roll back, dry run",
+      "pipeline.power": "“Start” / “Stop” a deployment",
+      "script.run": "run saved scripts",
+      "k8s.apply": "manifests into its own namespace",
+      "vm.manage": "machines: create, start, stop its own",
+      "container.action": "containers: start, stop, restart",
+      "service.action": "services: start, stop, restart",
+      "fly.manage": "Traffic Fly routes",
+      "migrate": "stack moves",
+      "fail2ban.manage": "fail2ban bans",
+      "vuln.scan": "vulnerability scans"
+    },
+    "limits": "Limits",
+    "limitsHint": "Empty — no limit. Sums cover everything the token deployed and created that still exists; stopped things keep their place too.",
+    "limitGroup": {
+      "total": "Total",
+      "host": "Per host",
+      "service": "Compose service (gets this limit without its own limits)",
+      "vm": "Machines",
+      "k8s": "k8s namespace quota",
+      "rate": "Rate"
+    },
+    "limit": {
+      "cpu": "CPU",
+      "mem_mb": "Memory",
+      "disk_gb": "Disk",
+      "host_cpu": "CPU",
+      "host_mem_mb": "Memory",
+      "service_cpu": "CPU",
+      "service_mem_mb": "Memory",
+      "min_free_gb": "Free on the host",
+      "vms": "Machines",
+      "vm_cpu": "vCPU each",
+      "vm_mem_mb": "Memory each",
+      "vm_disk_gb": "Disk each",
+      "k8s_cpu": "CPU",
+      "k8s_mem_mb": "Memory",
+      "k8s_storage_gb": "Storage",
+      "k8s_pods": "Pods",
+      "deploys_per_hour": "Actions per hour"
+    },
+    "unit": {
+      "cpu": "cores",
+      "mb": "MB",
+      "gb": "GB",
+      "count": "pcs"
+    },
+    "usage": "In use",
+    "usedOf": "{{used}} of {{limit}}",
+    "usedNoLimit": "{{used}}",
+    "usageEmpty": "The token hasn't deployed or created anything yet.",
+    "usageKind": {
+      "compose": "stack",
+      "vm": "machine",
+      "k8s": "namespace"
+    },
+    "release": "Release",
+    "releaseConfirm": "Release “{{name}}” in the token's usage? The stack or machine itself is not touched — its place simply stops counting.",
+    "mcp": {
+      "title": "MCP examples",
+      "hint": "An agent (Claude Code, Claude Desktop, Cursor) sees the hub as tools — only those the token is allowed. MCP is turned on in “Experimental features”.",
+      "check": "Check: which tools the token sees",
+      "call": "Call a tool",
+      "claudeCode": "Claude Code",
+      "desktop": "Claude Desktop and other clients (the nkt mcp bridge)"
+    }
   },
   "webhooks": {
     "title": "Outgoing webhooks",

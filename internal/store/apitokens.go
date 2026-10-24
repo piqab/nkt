@@ -16,7 +16,87 @@ import (
 const (
 	TokenRoleRead  = "read"
 	TokenRoleAdmin = "admin"
+	// TokenRoleCustom — «по правам»: чтение плюс только перечисленные
+	// действия (Perms.Actions), с пределами и потолками ресурсов.
+	TokenRoleCustom = "custom"
 )
+
+// Действия токена «по правам».
+const (
+	TokenActPipelineDeploy = "pipeline.deploy" // выкладка, откат, сухой прогон
+	TokenActPipelinePower  = "pipeline.power"  // «Запустить» / «Остановить»
+	TokenActScriptRun      = "script.run"      // запуск сохранённых сценариев
+	TokenActK8sApply       = "k8s.apply"       // манифесты в namespace токена
+	TokenActVMManage       = "vm.manage"       // машины: создать, включить, выключить
+	TokenActContainer      = "container.action"
+	TokenActService        = "service.action"
+	TokenActFly            = "fly.manage"
+	TokenActMigrate        = "migrate"
+	TokenActFail2ban       = "fail2ban.manage"
+	TokenActVulnScan       = "vuln.scan"
+)
+
+// TokenActions — все действия по порядку (окно токена, проверка).
+var TokenActions = []string{TokenActPipelineDeploy, TokenActPipelinePower, TokenActScriptRun, TokenActK8sApply, TokenActVMManage,
+	TokenActContainer, TokenActService, TokenActFly, TokenActMigrate, TokenActFail2ban, TokenActVulnScan}
+
+// TokenPerms — права и потолки токена «по правам».
+type TokenPerms struct {
+	Actions []string `json:"actions"`
+	// Pipelines / Scripts / Clusters — по именам; пусто — все в пределах
+	// хостов токена.
+	Pipelines []string `json:"pipelines,omitempty"`
+	Scripts   []string `json:"scripts,omitempty"`
+	Clusters  []string `json:"clusters,omitempty"`
+	// Namespaces — namespace k8s, куда токену можно (обязательно для
+	// k8s.apply).
+	Namespaces []string    `json:"namespaces,omitempty"`
+	Limits     TokenLimits `json:"limits"`
+}
+
+// TokenLimits — потолки ресурсов; ноль — без потолка. Суммы — по всему,
+// что выложено и создано этим токеном и ещё существует (token_usage).
+type TokenLimits struct {
+	// Всего: ядра, память, диск (диски машин и хранилище k8s).
+	CPU    float64 `json:"cpu,omitempty"`
+	MemMB  int64   `json:"mem_mb,omitempty"`
+	DiskGB int64   `json:"disk_gb,omitempty"`
+	// На один хост (стеки compose и машины на нём).
+	HostCPU   float64 `json:"host_cpu,omitempty"`
+	HostMemMB int64   `json:"host_mem_mb,omitempty"`
+	// compose: потолок сервиса — без своих limits сервис получает его.
+	ServiceCPU   float64 `json:"service_cpu,omitempty"`
+	ServiceMemMB int64   `json:"service_mem_mb,omitempty"`
+	// compose: свободного места на хосте перед выкладкой.
+	MinFreeGB int64 `json:"min_free_gb,omitempty"`
+	// Машины: сколько всего и потолки одной.
+	VMs      int   `json:"vms,omitempty"`
+	VMCPU    int   `json:"vm_cpu,omitempty"`
+	VMMemMB  int64 `json:"vm_mem_mb,omitempty"`
+	VMDiskGB int64 `json:"vm_disk_gb,omitempty"`
+	// k8s: квота одного namespace (ResourceQuota), подов в нём.
+	K8sCPU       float64 `json:"k8s_cpu,omitempty"`
+	K8sMemMB     int64   `json:"k8s_mem_mb,omitempty"`
+	K8sStorageGB int64   `json:"k8s_storage_gb,omitempty"`
+	K8sPods      int     `json:"k8s_pods,omitempty"`
+	// Выкладок (и применений манифестов) в час.
+	DeploysPerHour int `json:"deploys_per_hour,omitempty"`
+}
+
+// Can — токену можно это действие: администратору — всё, «по правам» —
+// перечисленное, чтению — ничего.
+func (t APIToken) Can(action string) bool {
+	switch t.Role {
+	case TokenRoleAdmin:
+		return true
+	case TokenRoleCustom:
+		return slices.Contains(t.Perms.Actions, action)
+	}
+	return false
+}
+
+// Limited — у токена есть права и потолки (роль «по правам»).
+func (t APIToken) Limited() bool { return t.Role == TokenRoleCustom }
 
 // APIToken — токен API хаба. Пустые Hosts и Groups — доступ ко всем
 // хостам; иначе — только к перечисленным хостам и хостам групп.
@@ -31,12 +111,14 @@ type APIToken struct {
 	ExpiresAt string   `json:"expires_at,omitempty"`
 	// ViaEdge — токен принимается и через nkt-edge с ролью api (только
 	// подписанные запросы).
-	ViaEdge   bool   `json:"via_edge"`
-	Author    string `json:"author,omitempty"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-	LastUsed  string `json:"last_used_at,omitempty"`
-	LastIP    string `json:"last_ip,omitempty"`
+	ViaEdge bool `json:"via_edge"`
+	// Perms — права и потолки роли «по правам».
+	Perms     TokenPerms `json:"perms"`
+	Author    string     `json:"author,omitempty"`
+	CreatedAt string     `json:"created_at"`
+	UpdatedAt string     `json:"updated_at"`
+	LastUsed  string     `json:"last_used_at,omitempty"`
+	LastIP    string     `json:"last_ip,omitempty"`
 
 	SecretEnc []byte `json:"-"`
 }
@@ -62,13 +144,13 @@ func (t APIToken) AllowsHost(id int64, group string) bool {
 }
 
 // #nosec G101 -- список колонок SQL (secret_enc — имя колонки), не учётные данные.
-const apiTokenCols = `id, name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, via_edge, author, created_at, updated_at, last_used_at, last_ip`
+const apiTokenCols = `id, name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, via_edge, author, created_at, updated_at, last_used_at, last_ip, perms`
 
 func scanAPIToken(row interface{ Scan(...any) error }) (APIToken, error) {
 	var t APIToken
-	var hosts, groups, ips string
+	var hosts, groups, ips, perms string
 	err := row.Scan(&t.ID, &t.Name, &t.KeyID, &t.SecretEnc, &t.Role, &hosts, &groups, &ips, &t.ExpiresAt, &t.ViaEdge, &t.Author,
-		&t.CreatedAt, &t.UpdatedAt, &t.LastUsed, &t.LastIP)
+		&t.CreatedAt, &t.UpdatedAt, &t.LastUsed, &t.LastIP, &perms)
 	if errors.Is(err, sql.ErrNoRows) {
 		return t, ErrNotFound
 	}
@@ -78,6 +160,12 @@ func scanAPIToken(row interface{ Scan(...any) error }) (APIToken, error) {
 	_ = json.Unmarshal([]byte(hosts), &t.Hosts)
 	_ = json.Unmarshal([]byte(groups), &t.Groups)
 	_ = json.Unmarshal([]byte(ips), &t.IPs)
+	if perms != "" {
+		_ = json.Unmarshal([]byte(perms), &t.Perms)
+	}
+	if t.Perms.Actions == nil {
+		t.Perms.Actions = []string{}
+	}
 	if t.Hosts == nil {
 		t.Hosts = []int64{}
 	}
@@ -101,9 +189,9 @@ func jsonList[T any](v []T) string {
 // CreateAPIToken заводит токен.
 func (d *DB) CreateAPIToken(ctx context.Context, t APIToken) (int64, error) {
 	now := FormatTime(time.Now())
-	res, err := d.ExecContext(ctx, `INSERT INTO api_tokens(name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, via_edge, author, created_at, updated_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		t.Name, t.KeyID, t.SecretEnc, t.Role, jsonList(t.Hosts), jsonList(t.Groups), jsonList(t.IPs), t.ExpiresAt, t.ViaEdge, t.Author, now, now)
+	res, err := d.ExecContext(ctx, `INSERT INTO api_tokens(name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, via_edge, author, created_at, updated_at, perms)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.Name, t.KeyID, t.SecretEnc, t.Role, jsonList(t.Hosts), jsonList(t.Groups), jsonList(t.IPs), t.ExpiresAt, t.ViaEdge, t.Author, now, now, permsJSON(t))
 	if err != nil {
 		return 0, err
 	}
@@ -140,9 +228,18 @@ func (d *DB) APITokenByKeyID(ctx context.Context, keyID string) (APIToken, error
 
 // UpdateAPIToken — имя, роль, пределы, адреса и срок.
 func (d *DB) UpdateAPIToken(ctx context.Context, t APIToken) error {
-	_, err := d.ExecContext(ctx, `UPDATE api_tokens SET name = ?, role = ?, hosts = ?, groups_json = ?, ips = ?, expires_at = ?, via_edge = ?, updated_at = ? WHERE id = ?`,
-		t.Name, t.Role, jsonList(t.Hosts), jsonList(t.Groups), jsonList(t.IPs), t.ExpiresAt, t.ViaEdge, FormatTime(time.Now()), t.ID)
+	_, err := d.ExecContext(ctx, `UPDATE api_tokens SET name = ?, role = ?, hosts = ?, groups_json = ?, ips = ?, expires_at = ?, via_edge = ?, updated_at = ?, perms = ? WHERE id = ?`,
+		t.Name, t.Role, jsonList(t.Hosts), jsonList(t.Groups), jsonList(t.IPs), t.ExpiresAt, t.ViaEdge, FormatTime(time.Now()), permsJSON(t), t.ID)
 	return err
+}
+
+// permsJSON — права токена для колонки perms (у прочих ролей — пусто).
+func permsJSON(t APIToken) string {
+	if t.Role != TokenRoleCustom {
+		return ""
+	}
+	raw, _ := json.Marshal(t.Perms)
+	return string(raw)
 }
 
 // SetAPITokenSecret — новый секрет (старый перестаёт действовать сразу).
@@ -161,6 +258,9 @@ func (d *DB) TouchAPIToken(ctx context.Context, id int64, ip string) error {
 // DeleteAPIToken — отзыв токена.
 func (d *DB) DeleteAPIToken(ctx context.Context, id int64) error {
 	_, err := d.ExecContext(ctx, `DELETE FROM api_tokens WHERE id = ?`, id)
+	if err == nil {
+		_, err = d.ExecContext(ctx, `DELETE FROM token_usage WHERE token_id = ?`, id)
+	}
 	return err
 }
 

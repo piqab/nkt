@@ -49,6 +49,11 @@ func (s *Server) manifestScopeError(ctx context.Context, req manifestRequest) er
 			return msgs.Errorf("auth.tokenHostDenied")
 		}
 	}
+	if t, ok := tokenFromContext(ctx); ok && t.Limited() {
+		if _, err := s.tokenK8sCheck(ctx, t, req); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -139,6 +144,14 @@ func (s *Server) handleManifestApply(w http.ResponseWriter, r *http.Request) {
 	if err := s.manifestScopeError(r.Context(), req); err != nil {
 		writeErr(w, r, http.StatusForbidden, err)
 		return
+	}
+	// Токен «по правам»: квоты его namespace — до применения.
+	if t, ok := tokenFromContext(r.Context()); ok && t.Limited() {
+		nss, _ := s.tokenK8sCheck(r.Context(), t, req)
+		if err := s.tokenK8sPrepare(r.Context(), msgs.LangFromRequest(r), t, req, nss); err != nil {
+			writeErr(w, r, http.StatusForbidden, err)
+			return
+		}
 	}
 	user := auth.Username(r.Context())
 	if r.URL.Query().Get("job") == "1" && s.jobs != nil {

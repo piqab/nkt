@@ -284,8 +284,11 @@ type mcpTool struct {
 	Required []string
 	// Body — какие аргументы уходят телом JSON (пусто — без тела).
 	Body []string
-	// Admin — нужен токен администратора; Fly — только токен без предела.
+	// Admin — инструмент-действие: нужен администратор или токен «по
+	// правам» с этим действием (Act, иначе — из таблицы маршрутов); Fly —
+	// только токен без предела.
 	Admin, Fly bool
+	Act        string
 	// Job — вызов возвращает job_id: доступен «wait».
 	Job bool
 	// ReadOnly / Destructive — подсказки агенту (annotations).
@@ -293,10 +296,33 @@ type mcpTool struct {
 }
 
 func (t mcpTool) allowed(tok store.APIToken) bool {
-	if t.Admin && tok.Role != store.TokenRoleAdmin {
+	if t.Fly && tok.Scoped() {
 		return false
 	}
-	return !(t.Fly && tok.Scoped())
+	if !t.Admin || tok.Role == store.TokenRoleAdmin {
+		return true
+	}
+	act := t.Act
+	if act == "" {
+		act, _ = tokenRouteAction(t.Method, mcpRoutePattern(t.Path))
+	}
+	return act != "" && tok.Can(act)
+}
+
+var mcpFirstParam = regexp.MustCompile(`\{[a-z_]+\}`)
+
+// mcpRoutePattern — путь инструмента как шаблон маршрута: первый
+// параметр — {id} («/hub/pipelines/{pipeline_id}/deploy» →
+// «/hub/pipelines/{id}/deploy»).
+func mcpRoutePattern(path string) string {
+	done := false
+	return mcpFirstParam.ReplaceAllStringFunc(path, func(m string) string {
+		if done {
+			return m
+		}
+		done = true
+		return "{id}"
+	})
 }
 
 func (t mcpTool) describe() map[string]any {
@@ -400,7 +426,7 @@ var mcpTools = []mcpTool{
 		Required: []string{"pipeline_id"}, Body: []string{"ref", "tag"}, Admin: true, Job: true, Destructive: true},
 	{Name: "pipeline_power", Description: "Start or stop what a compose pipeline has deployed, on all its hosts: stop keeps containers and data; start brings up the same version (images from the host, the pipeline's registry key only for missing ones). Alerts for a stopped deployment's Traffic Fly targets still come, marked as stopped.", Method: "POST", Path: "/hub/pipelines/{pipeline_id}/{action}",
 		Props:    map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id"), "action": prop("string", "start | stop")},
-		Required: []string{"pipeline_id", "action"}, Admin: true, Job: true, Destructive: true},
+		Required: []string{"pipeline_id", "action"}, Admin: true, Act: store.TokenActPipelinePower, Job: true, Destructive: true},
 	{Name: "dry_run_pipeline", Description: "Dry run of a saved pipeline: checks hosts, images, ports, site; changes nothing.", Method: "POST", Path: "/hub/pipelines/dryrun",
 		Props: map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id")}, Required: []string{"pipeline_id"}, Body: []string{"pipeline_id"}, Admin: true, Job: true, ReadOnly: true},
 	{Name: "migrate_preview", Description: "Plan of moving a container's stack to another host: what travels, obstacles, Traffic Fly routes, pipeline.", Method: "POST", Path: "/hub/migrate/preview",
@@ -430,6 +456,13 @@ var mcpTools = []mcpTool{
 	{Name: "container_action", Description: "start, stop or restart a Docker container on a host.", Method: "POST", Path: "/hosts/{host_id}/containers/{name}/{action}",
 		Props:    map[string]map[string]any{"host_id": prop("integer", "Host id"), "name": prop("string", "Container name"), "action": prop("string", "start | stop | restart")},
 		Required: []string{"host_id", "name", "action"}, Admin: true, Destructive: true},
+	{Name: "create_vm", Description: "Create a virtual machine on a host from a cloud image (like the “New machine” window). A limited token: within its vCPU, memory, disk and machine-count limits; the machine is the token's own.", Method: "POST", Path: "/hub/vm/provision",
+		Props: map[string]map[string]any{"host_id": prop("integer", "Host to create on"), "spec": prop("object", "name, image_id, vcpus, memory_mb, disk_gb, user, ssh_key (optional: network, packages, autostart)"),
+			"install_nkt": prop("boolean", "Install nkt inside")},
+		Required: []string{"host_id", "spec"}, Body: []string{"host_id", "spec", "install_nkt"}, Admin: true, Job: true, Destructive: true},
+	{Name: "vm_power", Description: "start, shutdown or destroy (force off) a machine; host_id is the machine's own id from list_hosts. A limited token: only its own machines.", Method: "POST", Path: "/hub/hosts/{host_id}/vm/{action}",
+		Props:    map[string]map[string]any{"host_id": prop("integer", "Machine id"), "action": prop("string", "start | shutdown | destroy")},
+		Required: []string{"host_id", "action"}, Admin: true, Destructive: true},
 	{Name: "fail2ban_ban", Description: "Ban (action=ban) or unban (action=unban) IP addresses on hosts with fail2ban.", Method: "POST", Path: "/hub/fail2ban/fleet",
 		Props:    map[string]map[string]any{"action": prop("string", "ban | unban"), "ips": prop("array", "IP addresses"), "host_ids": prop("array", "Host ids (empty — all with fail2ban)")},
 		Required: []string{"action", "ips"}, Body: []string{"action", "ips", "host_ids"}, Admin: true, Job: true, Destructive: true},

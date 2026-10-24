@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { osLabel } from './OsIcon'
 import { Button, Checkbox, Input, Select, Space, Tag, Tooltip, Typography } from 'antd'
+import { TokenPermsEditor, TokenUsagePanel, McpExamples, permsText, emptyPerms, type TokenPerms } from './TokenPerms'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubHost } from '../types'
@@ -15,10 +16,11 @@ interface ApiToken {
   id: number
   name: string
   key_id: string
-  role: 'read' | 'admin'
+  role: 'read' | 'admin' | 'custom'
   hosts: number[]
   groups: string[]
   ips: string[]
+  perms?: TokenPerms
   expires_at?: string
   via_edge: boolean
   author?: string
@@ -75,7 +77,12 @@ export function ApiTokensCard({ admin }: { admin: boolean }) {
       key: 'role',
       render: (_: unknown, tk: ApiToken) => (
         <Space size={2} wrap>
-          <Tag color={tk.role === 'admin' ? 'red' : 'blue'}>{t(`tokens.roles.${tk.role}`)}</Tag>
+          <Tag color={tk.role === 'admin' ? 'red' : tk.role === 'custom' ? 'gold' : 'blue'}>{t(`tokens.roles.${tk.role}`)}</Tag>
+          {tk.role === 'custom' && (
+            <Tooltip title={(tk.perms?.actions ?? []).map((a) => t(`tokens.act.${a}`)).join(', ')}>
+              <span className="small muted">{t('tokens.actionsCount', { count: tk.perms?.actions.length ?? 0 })}</span>
+            </Tooltip>
+          )}
           {tk.via_edge && <Tag color="purple">{t('tokens.edgeTag')}</Tag>}
         </Space>
       ),
@@ -211,7 +218,8 @@ export function ApiTokensCard({ admin }: { admin: boolean }) {
 
 interface Draft {
   name: string
-  role: 'read' | 'admin'
+  role: 'read' | 'admin' | 'custom'
+  perms: TokenPerms
   hosts: number[]
   groups: string[]
   ips: string
@@ -230,6 +238,7 @@ function draftText(d: Draft, hostName: Map<number, string>, expiresLabel: string
     `${t('tokens.ips')}: ${splitIPs(d.ips).join(', ') || '—'}`,
     `${t('tokens.expires')}: ${expiresLabel}`,
     `${t('tokens.viaEdge')}: ${d.viaEdge ? t('tokens.yes') : t('tokens.no')}`,
+    ...(d.role === 'custom' ? permsText(d.perms, t) : []),
     '',
   ].join('\n')
 }
@@ -258,8 +267,8 @@ function TokenModal({
   const { t } = useTranslation()
   const groups = useApi<{ groups: string[] }>('/hub/groups')
   const initial: Draft = token
-    ? { name: token.name, role: token.role, hosts: token.hosts, groups: token.groups, ips: token.ips.join(', '), days: -1, viaEdge: token.via_edge }
-    : { name: '', role: 'read', hosts: [], groups: [], ips: '', days: 90, viaEdge: false }
+    ? { name: token.name, role: token.role, perms: token.perms ?? emptyPerms(), hosts: token.hosts, groups: token.groups, ips: token.ips.join(', '), days: -1, viaEdge: token.via_edge }
+    : { name: '', role: 'read', perms: emptyPerms(), hosts: [], groups: [], ips: '', days: 90, viaEdge: false }
   const [d, setD] = useState<Draft>(initial)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -277,7 +286,7 @@ function TokenModal({
   const changed = !token || diff.trim() !== ''
   const hostOptions = [{ value: LOCAL_ID, label: osLabel(undefined, 'localhost'), search: 'localhost' }, ...hosts.filter((h) => h.id !== LOCAL_ID).map((h) => ({ value: h.id, label: osLabel(h.os_info, h.name), search: h.name }))]
   return (
-    <Modal title={token ? t('tokens.editTitle', { name: token.name }) : t('tokens.newTitle')} onClose={onClose} width={640}>
+    <Modal title={token ? t('tokens.editTitle', { name: token.name }) : t('tokens.newTitle')} onClose={onClose} width={860} sizeKey="token">
       <div className="col" style={{ gap: '0.5rem' }}>
         <label className="small">
           {t('tokens.name')}
@@ -292,9 +301,12 @@ function TokenModal({
             options={[
               { value: 'read', label: `${t('tokens.roles.read')} — ${t('tokens.roleHint.read')}` },
               { value: 'admin', label: `${t('tokens.roles.admin')} — ${t('tokens.roleHint.admin')}` },
+              { value: 'custom', label: `${t('tokens.roles.custom')} — ${t('tokens.roleHint.custom')}` },
             ]}
           />
         </label>
+        {d.role === 'custom' && <TokenPermsEditor perms={d.perms} onChange={(perms) => setD({ ...d, perms })} onRole={(role) => setD({ ...d, role })} />}
+        {token && token.role === 'custom' && <TokenUsagePanel tokenID={token.id} />}
         <span className="small muted">{t('tokens.scopeHint')}</span>
         <label className="small">
           {t('tokens.hosts')}
@@ -357,6 +369,7 @@ function TokenModal({
                 expires_days: Math.max(d.days, 0),
                 keep_expiry: d.days === -1,
                 via_edge: d.viaEdge,
+                perms: d.role === 'custom' ? d.perms : undefined,
               }
               try {
                 if (token) {
@@ -375,6 +388,8 @@ function TokenModal({
             {token ? t('tokens.save') : t('tokens.create')}
           </Button>
         </div>
+        {/* Как подключить агента по MCP — с этим токеном (секрет придёт после создания). */}
+        <McpExamples token="nkt_…" />
       </div>
     </Modal>
   )
@@ -402,6 +417,7 @@ function IssuedModal({ name, data, onClose }: { name: string; data: Issued; onCl
       <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
         {`curl -H "Authorization: Bearer ${data.token}" ${origin}/api/hub/hosts`}
       </pre>
+      <McpExamples token={data.token} open />
     </Modal>
   )
 }
