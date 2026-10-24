@@ -7,7 +7,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
 	github.com/gdamore/tcell/v2 v2.13.10
-	github.com/go-chi/chi/v5 v5.3.2
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/haproxytech/config-parser/v5 v5.1.6
 	github.com/hashicorp/yamux v0.1.2
 	github.com/nginxinc/nginx-go-crossplane v0.4.89

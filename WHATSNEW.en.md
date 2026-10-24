@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.99 — 2026-10-24
+
+- **chi 5.5.0.** The HTTP router library is updated: an advisory about
+  client address spoofing in `ClientIPFromXFF`. nkt doesn't use that
+  function (the address for tokens comes from the connection itself); the
+  update is so as not to keep a vulnerable version.
+
 ## v1.13.98 — 2026-10-24
 
 - **A token “by permission”.** A third API token role: read plus only the
