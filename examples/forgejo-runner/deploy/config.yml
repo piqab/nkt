@@ -1,0 +1,30 @@
+# Настройки раннера Forgejo (forgejo-runner generate-config, сокращено):
+# задания — в контейнерах dockerd из сервиса docker (DinD), docker CLI в
+# задании ходит туда же по TLS.
+log:
+  level: info
+runner:
+  file: .runner
+  # Сколько заданий одновременно.
+  capacity: 2
+  timeout: 3h
+  fetch_timeout: 5s
+  fetch_interval: 2s
+  # Заданию — адрес dockerd и сертификаты: docker build и docker push
+  # работают в DinD.
+  envs:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: /certs/client
+  # Ярлыки — из регистрации (RUNNER_LABELS в .env).
+  labels: []
+cache:
+  enabled: true
+container:
+  # Контейнеры заданий — в сети dockerd: имя docker там — он сам.
+  network: host
+  privileged: false
+  options: -v /certs/client:/certs/client
+  valid_volumes:
+    - /certs/client
+  force_pull: false

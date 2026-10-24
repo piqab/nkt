@@ -3624,6 +3624,10 @@
         "title": "Forgejo + PostgreSQL",
         "hint": "Git-сервер без мастера установки: администратор из .env (разовый сервис), веб — через сайт, SSH на 2222 — наружу."
       },
+      "forgejo-runner": {
+        "title": "Раннер Forgejo Actions (Docker-in-Docker)",
+        "hint": "Сборка образов на своём хосте: задания в отдельном dockerd (privileged), регистрация токеном из .env, чистка кэша раз в сутки. Хост — отдельный от рабочих стеков."
+      },
       "wordpress": {
         "title": "WordPress + MariaDB",
         "hint": "Сайт на WordPress за прокси с HTTPS; пароли из .env."

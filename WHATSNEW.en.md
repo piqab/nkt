@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.101 — 2026-10-24
+
+- A “Forgejo Actions runner” pipeline example: your own runner for
+  building images, Docker-in-Docker (a separate dockerd), registration
+  with a token from `.env`, a daily cache cleanup; workflows that build an
+  app image and deploy it by webhook or registry polling, and that build
+  the nkt hub image (examples/forgejo-runner, the CI/CD examples guide).
+
 ## v1.13.100 — 2026-10-24
 
 - **Traffic Fly on hosts with old nftables** (Debian 11, Ubuntu 22.04

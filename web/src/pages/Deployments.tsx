@@ -946,6 +946,8 @@ function ComposeFromLink({
   // путь, когда файл не скачать.
   function linkOnlyYaml(p: { repo: string; ref: string; file: string; name: string }, proj: string, ex: PipelineExample | undefined, src: string): string {
     // Сервисов чужого compose хаб не знает — заглушка явная.
+    // У примера без веба (раннер CI) сайта нет — и закомментированного тоже.
+    const noSite = !!ex && !ex.site
     const site = ex?.site ?? { service: t('deploy.fromLinkSiteService'), port: t('deploy.fromLinkSitePort') }
     // {hostip} в публикациях примера — адрес выбранного хоста (IPv4).
     const hostAddr = (hosts.data ?? []).find((h) => h.name === picked[0])?.addr ?? ''
@@ -1006,16 +1008,18 @@ function ComposeFromLink({
       `  wait_timeout: ${ex?.waitTimeout ?? '5m'}\n` +
       block('images', ex?.images, t('deploy.imagesComment')) +
       block('ports', ex?.ports, t('deploy.portsComment')) +
-      (ex?.ports ? '' : ports) +
+      (ex?.ports || noSite ? '' : ports) +
       configs +
       envKeys +
       env +
-      `  # site:                          # ${t('deploy.fromLinkSiteComment')}\n` +
-      `  #   domains: [${domain}]\n` +
-      `  #   service: ${site.service}\n` +
-      `  #   port: ${site.port}\n` +
-      (ex?.site.maxBody ? `  #   max_body: "${ex.site.maxBody}"   # ${t('deploy.maxBodyComment')}\n` : '') +
-      `  #   cert: manual   # ${t('deploy.fromLinkCertComment')}\n` +
+      (noSite
+        ? ''
+        : `  # site:                          # ${t('deploy.fromLinkSiteComment')}\n` +
+          `  #   domains: [${domain}]\n` +
+          `  #   service: ${site.service}\n` +
+          `  #   port: ${site.port}\n` +
+          (ex?.site?.maxBody ? `  #   max_body: "${ex.site.maxBody}"   # ${t('deploy.maxBodyComment')}\n` : '') +
+          `  #   cert: manual   # ${t('deploy.fromLinkCertComment')}\n`) +
       (ex?.flyCheckPath
         ? `  # ${t('deploy.fromLinkFlyComment')}\n` +
           `  # fly:\n` +

@@ -214,6 +214,16 @@ Webhooks, Secret token — секрет конвейера, события Push 
 Обычный вебхук Gitea/Forgejo тоже подходит: Settings → Webhooks → Gitea,
 Secret — секрет конвейера; хаб проверит `X-Gitea-Signature`.
 
+### Свой раннер на хосте — выкладкой nkt
+
+Раннера нет — поднимите его конвейером: «Выкладки» → «Новый конвейер» →
+«Примеры» → **«Раннер Forgejo Actions»** ([examples/forgejo-runner](https://github.com/piqab/nkt/tree/main/examples/forgejo-runner)).
+Стек: Forgejo Runner, отдельный dockerd (Docker-in-Docker, privileged —
+ставьте на отдельный хост для сборок), разовая регистрация токеном из
+`.env` и ежедневная чистка кэша. В примере — workflow сборки образа
+приложения (вебхук после сборки или опрос registry, варианты выше) и
+сборки образа самого хаба nkt из зеркала репозитория.
+
 ### Без CI: собрать у себя
 
 ```bash
