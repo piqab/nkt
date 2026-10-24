@@ -10,7 +10,8 @@ an ordinary pipeline: updated and removed by the pipeline too, while the
 hub only connects to it. Without connected plugins the hub works as
 before.
 
-<!-- plugin-dns -->
+The first plugin is [Technitium DNS](/en/guide/hub-plugin-dns): zones and
+records of your domains on your own name servers, delegation, DNSSEC.
 
 ## How it works
 

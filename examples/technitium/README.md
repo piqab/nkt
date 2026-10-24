@@ -20,7 +20,8 @@
 
 - [`deploy/docker-compose.yml`](deploy/docker-compose.yml) — первичный (ns1): `dns` и разовый `dns-init`;
 - [`deploy/docker-compose.secondary.yml`](deploy/docker-compose.secondary.yml) — вторичный (ns2);
-- [`deploy/init.py`](deploy/init.py) — первичная настройка через API (ключи, зоны, перенос, Failover);
+- [`deploy/init.py`](deploy/init.py) — первичная настройка через API (ключи, зоны, зона каталога, перенос, Failover);
+- [`deploy/nkt-plugin.py`](deploy/nkt-plugin.py) — плагин хаба nkt: зоны и записи из хаба, сценарии, MCP (§8);
 - [`pipeline.yaml`](pipeline.yaml), [`pipeline.secondary.yaml`](pipeline.secondary.yaml) — конвейеры;
 - [`deploy/cert-manager-issuer.yaml`](deploy/cert-manager-issuer.yaml) — `ClusterIssuer` и пример сертификата;
 - [`deploy/certbot-dot-hook.sh`](deploy/certbot-dot-hook.sh) — сертификат для DoT после каждого продления.
@@ -92,8 +93,10 @@ Failover. Повтор при каждой выкладке ничего не л
 - `TSIG_TRANSFER` — **тот же**, что у первичного (скопируйте из его
   секретов); `ZONES` и `ACME_ZONE` — те же.
 
-`dns-init` заведёт вторичные зоны и Failover. Изменения с первичного
-приходят по NOTIFY примерно через 10 секунд. Проверка:
+`dns-init` заведёт вторичную **зону каталога** (`catalog.nkt.invalid`) и
+Failover: зоны первичного приходят с каталогом сами — и те, что из
+`ZONES`, и новые, добавленные позже в консоли или из хаба. Изменения с
+первичного приходят по NOTIFY примерно через 10 секунд. Проверка:
 
 ```bash
 dig +short @203.0.113.10 acme.example.com SOA
@@ -221,6 +224,23 @@ env:
   Или в консоли: **Settings → Backup Settings**.
 - Новая версия — правкой тега в обоих compose-файлах и выкладкой: сначала
   вторичный, потом первичный.
+
+## 8. Плагин хаба nkt
+
+Сервис `plugin` — плагин хаба: зоны и записи прямо в хабе, команды
+`dns …` в сценариях, инструменты MCP для агентов. Он слушает только
+`127.0.0.1:9180` хоста, хаб ходит к нему по SSH, каждый вызов подписан
+`NKT_PLUGIN_SECRET` (его создаёт хаб, `generate:hex32`).
+
+Подключить: «О системе» → «Плагины» → «Подключить» → «С конвейера» →
+этот конвейер → «Проверить» → «Подключить». Дальше — «Плагины» →
+**Technitium DNS**: добавить зону (`example1.com` — ns2 получит её через
+каталог), шаблон сайта или почты, записи таблицей или всей зоной текстом
+с диффом, проверка делегирования у регистратора, DNSSEC и DS.
+Подробно — справка «[Плагин: Technitium DNS](https://piqab.github.io/nkt/guide/hub-plugin-dns)».
+
+Плагин не нужен — удалите сервис `plugin` из compose-файла или просто не
+подключайте его в хабе.
 
 ## Если не работает
 

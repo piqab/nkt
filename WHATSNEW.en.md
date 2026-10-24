@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.105 — 2026-10-24
+
+- The Technitium DNS plugin (the “Technitium DNS Server” example, the
+  `plugin` service): zones of several domains right in the hub — add one
+  with a site or mail template, records as a table and the whole zone as
+  text with a diff and history, a registrar delegation check (NS, glue,
+  what public resolvers see), DNSSEC and DS records; `dns …` commands in
+  scripts, `dns_*` MCP tools. The secondary server gets new zones by
+  itself — through a catalog zone (RFC 9432). The “Plugin: Technitium
+  DNS” guide.
+
 ## v1.13.104 — 2026-10-24
 
 - External plugins: “About” → “Plugins”. A plugin is a separate program (a

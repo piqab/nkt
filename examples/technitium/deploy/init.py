@@ -12,9 +12,13 @@ dns-init стека, запускается при каждой выкладке
     SECONDARY_IP и только с ключом zone-transfer; NS вторичного сервера;
   - зона ACME_ZONE: динамические обновления только с ключом cert-manager и
     только TXT;
+  - зона каталога CATALOG_ZONE (RFC 9432, если есть вторичный): все зоны —
+    её члены, и новая зона (из консоли или плагина хаба nkt) сама
+    появляется на вторичном;
   - приложение Failover (если не INSTALL_FAILOVER=false).
-Вторичный (ROLE=secondary): ключ zone-transfer, вторичные зоны из ZONES с
-первичного PRIMARY_IP, приложение Failover.
+Вторичный (ROLE=secondary): ключ zone-transfer, вторичная зона каталога с
+первичного PRIMARY_IP (зоны приходят с ней), приложение Failover. Каталог
+выключен (CATALOG_ZONE пустая) — вторичные зоны из ZONES, как раньше.
 """
 import json
 import os
@@ -30,6 +34,8 @@ ZONES = [z.strip().rstrip(".").lower() for z in os.environ.get("ZONES", "").spli
 ACME_ZONE = os.environ.get("ACME_ZONE", "").strip().rstrip(".").lower()
 # Зоны стека: ZONES и зона проверок ACME_ZONE (если её нет в списке).
 ALL_ZONES = ZONES + ([ACME_ZONE] if ACME_ZONE and ACME_ZONE not in ZONES else [])
+# Зона каталога: служебная, в DNS не делегируется (.invalid).
+CATALOG = os.environ.get("CATALOG_ZONE", "catalog.nkt.invalid").strip().rstrip(".").lower()
 TOKEN = ""
 
 
@@ -118,10 +124,21 @@ def primary():
     secondary_ip = os.environ.get("SECONDARY_IP", "").strip()
     secondary_ns = os.environ.get("SECONDARY_NS", "").strip().rstrip(".")
     have = zones()
+    catalog = bool(CATALOG and secondary_ip)
+    if catalog:
+        if CATALOG not in have:
+            call("zones/create", zone=CATALOG, type="Catalog")
+            log(f"зона каталога {CATALOG} создана")
+        call("zones/options/set", zone=CATALOG, zoneTransfer="UseSpecifiedNetworkACL",
+             zoneTransferNetworkACL=secondary_ip, zoneTransferTsigKeyNames="zone-transfer",
+             notify="SpecifiedNameServers", notifyNameServers=secondary_ip)
     for z in ALL_ZONES:
         if z not in have:
-            call("zones/create", zone=z, type="Primary")
+            call("zones/create", zone=z, type="Primary", **({"catalog": CATALOG} if catalog else {}))
             log(f"зона {z} создана")
+        elif catalog and not have[z].get("catalog"):
+            call("zones/options/set", zone=z, catalog=CATALOG)
+            log(f"{z}: в каталоге {CATALOG}")
         if secondary_ip:
             call("zones/options/set", zone=z, zoneTransfer="UseSpecifiedNetworkACL",
                  zoneTransferNetworkACL=secondary_ip, zoneTransferTsigKeyNames="zone-transfer",
@@ -144,6 +161,14 @@ def secondary():
     set_tsig({"zone-transfer": os.environ["TSIG_TRANSFER"]})
     primary_ip = os.environ["PRIMARY_IP"].strip()
     have = zones()
+    if CATALOG:
+        # Зоны приходят с каталогом; заведённые раньше вручную — остаются.
+        if CATALOG not in have:
+            call("zones/create", zone=CATALOG, type="SecondaryCatalog", primaryNameServerAddresses=primary_ip,
+                 zoneTransferProtocol="Tcp", tsigKeyName="zone-transfer")
+            log(f"вторичная зона каталога {CATALOG} с {primary_ip}: зоны первичного придут с ней")
+        install_failover()
+        return
     for z in ALL_ZONES:
         if z in have:
             continue
