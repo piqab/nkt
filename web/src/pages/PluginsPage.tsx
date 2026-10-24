@@ -52,19 +52,21 @@ function PluginPanel({ plugin, admin }: { plugin: PluginInfo; admin: boolean }) 
   if (pages.length === 0) {
     return <PluginAbout plugin={plugin} />
   }
-  const cur = page ?? { id: pages[0].id }
+  const cur = page ?? { id: (pages.find((p) => !p.hidden) ?? pages[0]).id }
   const def = pages.find((p) => p.id === cur.id) ?? pages[0]
   return (
     <div className="col" style={{ gap: '0.75rem' }}>
       <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        {pages.map((p) => (
-          <Button key={p.id} size="small" type={p.id === def.id && !cur.args ? 'primary' : 'default'} onClick={() => setPage({ id: p.id })}>
-            {p.title}
-          </Button>
-        ))}
+        {pages
+          .filter((p) => !p.hidden)
+          .map((p) => (
+            <Button key={p.id} size="small" type={p.id === def.id && !cur.args ? 'primary' : 'default'} onClick={() => setPage({ id: p.id })}>
+              {p.title}
+            </Button>
+          ))}
         {cur.args && (
           <span className="small muted">
-            {def.title}
+            → {def.title}
             {cur.title ? ` — ${cur.title}` : ''}
           </span>
         )}

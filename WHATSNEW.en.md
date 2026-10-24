@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.106 — 2026-10-24
+
+- The DNS plugin sets records for the hub: names of Traffic Fly routes
+  with the “DNS through the plugin” box — at the gateway address on Apply
+  (one name on several gateways — Failover), domains of pipeline sites
+  with `site.dns: auto` (or addresses) — before the certificate, host
+  autonames `<host>.<zone>` (About → Plugins). The hub remembers what it
+  set and doesn't touch other records; “Check” shows the difference, a
+  check runs every 10 minutes. In a script — `fly route … dns plugin`, in
+  a pipeline — `dns: plugin` in the `fly:` block.
+
 ## v1.13.105 — 2026-10-24
 
 - The Technitium DNS plugin (the “Technitium DNS Server” example, the

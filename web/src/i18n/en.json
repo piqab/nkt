@@ -4920,6 +4920,9 @@
     "tlsPassHint": "Without the box the gateway does not decrypt TLS: the target must hold the certificate, or browsers show a protocol error.",
     "tlsNoWildcard": "A gateway certificate needs exact names: *.domain cannot be issued over a port 80 check.",
     "tlsTag": "TLS on gateway",
+    "dnsPlugin": "DNS through the plugin: A record of the names at the gateway address",
+    "dnsPluginHint": "The hub's DNS plugin sets the records on Apply (several gateways with this name — Failover: only live addresses). The name must be in the plugin's zone.",
+    "dnsTag": "DNS",
     "certPending": "certificate not requested yet",
     "certError": "certificate not issued: {{error}}",
     "certUntil": "certificate until {{date}}",
@@ -5277,6 +5280,16 @@
     "check": "Check",
     "asks": "The plugin asks for rights on the hub: {{list}}. The hub issues it a token by permission with only these.",
     "hubURL": "Hub address for the plugin",
-    "grant": "Grant the plugin these rights"
+    "grant": "Grant the plugin these rights",
+    "dnsTitle": "DNS through a plugin ({{list}})",
+    "dnsHint": "The hub sets records itself: names of Traffic Fly routes with the “DNS through the plugin” box — at the gateways' addresses, domains of pipeline sites with site.dns, host autonames. Other records at the same names aren't touched; a check runs every 10 minutes.",
+    "autonames": "Host autonames",
+    "autonamesZone": "Zone",
+    "autonamesOn": "Keep records <host>.<zone> → the host's address on the hub",
+    "autonamesHint": "Every hub host (and machine) gets a name in this zone: web-1.hosts.example.com → the address the hub reaches it by. The zone lives in the DNS plugin (add it there).",
+    "dnsCheck": "Check",
+    "dnsApply": "Apply",
+    "dnsApplied": "DNS records",
+    "dnsNothing": "The records match — nothing to change."
   }
 }

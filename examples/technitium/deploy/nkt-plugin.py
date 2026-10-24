@@ -633,7 +633,10 @@ def dns_sync(c, args, dry):
     want = {key(r): r for r in new}
     for r in prev:
         k = key(r)
-        zone = zone_of(c, k[0], zones)
+        try:
+            zone = zone_of(c, k[0], zones)
+        except Fail:
+            continue  # зону удалили — убирать нечего
         if r.get("failover") and (k not in want or not want[k].get("failover")):
             for f in failover_records(zone, k[0]):
                 lines.append(c.t("removed", name=k[0], type="APP", value="Failover"))
@@ -709,10 +712,11 @@ def records_view(c, zone):
             continue
         name = r["name"].lower()
         v = value_text(typ, r["rData"], zone)
-        rows.append({"cells": {"name": rel(name, zone), "ttl": r["ttl"], "type": typ, "value": v},
-                     "actions": [{"title": c.t("delete"), "op": "record_delete", "danger": True,
-                                  "args": {"name": name, "type": typ, "value": v},
-                                  "confirm": c.t("delete_record_confirm", name=name, type=typ, value=v)}]})
+        # NS вершины зоны — делегирование: удалять отсюда нельзя.
+        actions = [] if typ == "NS" and name == zone else [
+            {"title": c.t("delete"), "op": "record_delete", "danger": True, "args": {"name": name, "type": typ, "value": v},
+             "confirm": c.t("delete_record_confirm", name=name, type=typ, value=v)}]
+        rows.append({"cells": {"name": rel(name, zone), "ttl": r["ttl"], "type": typ, "value": v}, "actions": actions})
     rows.sort(key=lambda x: (x["cells"]["name"] != "@", x["cells"]["name"], TYPES.index(x["cells"]["type"])))
     add = {"title": c.t("add_record"), "op": "record_add", "args": {"zone": zone}, "fields": [
         {"name": "name", "title": c.t("name"), "required": True, "default": "@", "hint": c.t("name_hint")},
@@ -827,9 +831,10 @@ def manifest(c):
         ],
         "pages": [
             {"id": "zones", "title": c.t("zones"), "op": "zones"},
-            {"id": "records", "title": c.t("records"), "op": "records"},
-            {"id": "delegation", "title": c.t("delegation"), "op": "delegation"},
-            {"id": "dnssec", "title": c.t("dnssec"), "op": "dnssec"},
+            # Открываются из строки зоны (с её именем).
+            {"id": "records", "title": c.t("records"), "op": "records", "hidden": True},
+            {"id": "delegation", "title": c.t("delegation"), "op": "delegation", "hidden": True},
+            {"id": "dnssec", "title": c.t("dnssec"), "op": "dnssec", "hidden": True},
         ],
         "commands": [{"word": "dns", "usage": c.t("usage"), "example": "dns zone add example.com template site ip 203.0.113.10\ndns set app.example.com A 203.0.113.10 ttl 300"}],
         "provides": ["dns"],

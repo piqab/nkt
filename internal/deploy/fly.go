@@ -44,6 +44,9 @@ type FlySpec struct {
 	Check     string `yaml:"check,omitempty"`
 	CheckPath string `yaml:"check_path,omitempty"`
 	CheckPort int    `yaml:"check_port,omitempty"`
+	// DNS — «plugin»: записи имён маршрута ведёт DNS-плагин хаба (A на
+	// адрес шлюза).
+	DNS string `yaml:"dns,omitempty"`
 }
 
 var (
@@ -122,6 +125,9 @@ func (f *FlySpec) validate(i int) error {
 	}
 	if f.TLS != "" && (f.TLS != "gateway" || f.Kind != "https" || f.ProxyProtocol) {
 		return msgs.Errorf("deploy.specBad", field("tls"), f.TLS)
+	}
+	if f.DNS != "" && (f.DNS != "plugin" || !f.Named()) {
+		return msgs.Errorf("deploy.specBad", field("dns"), f.DNS)
 	}
 	if f.MaxConns < 0 || f.MaxConns > 100000 {
 		return msgs.Errorf("deploy.specBad", field("max_conns"), fmt.Sprint(f.MaxConns))

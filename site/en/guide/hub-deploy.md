@@ -599,7 +599,15 @@ compose:
     firewall: true               # open 80/443 (yes by default)
     cert: manual                 # certificate: manual (default), auto or /path to your own file
     max_body: 512m               # nginx request body limit: 64m by default, "0" — no limit
+    dns: auto                    # domain records through the hub's DNS plugin (or addresses, comma-separated)
 ```
+
+- **`dns`** — the hub's [DNS plugin](/en/guide/hub-plugin-dns) sets the
+  site domains' A/AAAA records before the certificate: `auto` — the host's
+  public addresses (its hub address and interfaces), or a list of
+  addresses (`203.0.113.10, 2001:db8::10`) — for a host behind NAT. A
+  domain outside the plugin's zones, or no plugin — a line in the
+  deployment log, the deployment goes on.
 
 - **`max_body`** is nginx's request size limit (`client_max_body_size`):
   `64m` without it; a number with `k`, `m`, `g` (`512m`, `2g`); `"0"` means
@@ -703,6 +711,7 @@ rest is not overwritten.
 | `names` | Names for `https`/`http` |
 | `port`, `port_to` | Gateway port (443/80 for `https`/`http`) and range end |
 | `tls` | `gateway` — certificate on the gateway (`https` only, exact names) |
+| `dns` | `plugin` — the hub [DNS plugin](/en/guide/hub-plugin-dns) sets A records of the names at the gateway address (`https`/`http` only) |
 | `proxy_protocol` | PROXY protocol v2 to the target (not with `tls`) |
 | `allow` | Allowed client addresses (IPv4, networks); empty — all |
 | `max_conns`, `rate` | At most this many concurrent and new-per-second connections per address |

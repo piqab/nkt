@@ -56,6 +56,8 @@ interface FlyRoute {
   proxy_protocol?: boolean
   /** Сертификат на шлюзе: TLS завершает шлюз, цели — HTTP. */
   tls?: boolean
+  /** Записи имён ведёт DNS-плагин хаба (A на адрес шлюза). */
+  dns?: boolean
   /** Белый список адресов клиентов (IPv4, сети); пусто — все. */
   allow?: string[]
   /** Не больше одновременных / новых в секунду соединений с одного адреса. */
@@ -1625,6 +1627,7 @@ function RouteDetails({
           <Tag>{t(`fly.algo.${route.algorithm}`)}</Tag>
           {route.proxy_protocol && <Tag color="blue">PROXY protocol</Tag>}
           {route.tls && <Tag color="green">{t('fly.tlsTag')}</Tag>}
+          {route.dns && <Tag color="cyan">{t('fly.dnsTag')}</Tag>}
           {(route.allow ?? []).length > 0 && (
             <Tooltip title={(route.allow ?? []).join(', ')}>
               <Tag color="purple">{t('fly.allowTag', { n: route.allow?.length })}</Tag>
@@ -1739,6 +1742,9 @@ function RouteEditor({
   const { t } = useTranslation()
   const [r, setR] = useState<FlyRoute>(() => (route ? (JSON.parse(JSON.stringify(route)) as FlyRoute) : emptyRoute(gateways[0]?.edge_id ?? 0)))
   const hosts = useApi<HubHost[]>('/hub/hosts')
+  // DNS-плагин подключён — галочка «DNS через плагин».
+  const dnsState = useApi<{ plugins: string[] }>('/hub/dns')
+  const hasDNS = (dnsState.data?.plugins?.length ?? 0) > 0
   // Идентификатор нового маршрута — сам (из имени, подписи, вида и
   // порта), пока человек не правил поле.
   const [idTouched, setIdTouched] = useState(false)
@@ -1808,6 +1814,7 @@ function RouteEditor({
                   port: k === 'https' ? 443 : k === 'http' ? 80 : r.port === 443 || r.port === 80 ? 0 : r.port,
                   proxy_protocol: named(k) ? r.proxy_protocol : false,
                   tls: k === 'https' ? r.tls : false,
+                  dns: named(k) ? r.dns : false,
                   names: named(k) ? r.names : [],
                   algorithm: !named(k) && r.algorithm === 'leastconn' ? 'source' : r.algorithm,
                   check: k === 'udp' && r.check.kind === 'tcp' && !r.check.port ? { kind: 'none' } : r.check,
@@ -1867,6 +1874,14 @@ function RouteEditor({
               <Checkbox checked={r.proxy_protocol} onChange={(e) => set({ proxy_protocol: e.target.checked })}>
                 {t('fly.proxyProtocol')}
               </Checkbox>
+            )}
+            {(hasDNS || r.dns) && (
+              <>
+                <Checkbox checked={!!r.dns} onChange={(e) => set({ dns: e.target.checked })}>
+                  {t('fly.dnsPlugin')}
+                </Checkbox>
+                <span className="small muted">{t('fly.dnsPluginHint')}</span>
+              </>
             )}
           </>
         )}

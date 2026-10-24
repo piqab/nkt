@@ -353,7 +353,7 @@ var Commands = []CommandDoc{
 		Example: "k8s lab wait deployment hello 5m",
 	},
 	{
-		Kind: KindFlyRoute, Syntax: "fly route ИД ВИД [names ИМЯ,…] [port ПОРТ] [tls gateway] [check tcp|http|none] [path ПУТЬ] [gateway ШЛЮЗ] (targets cluster КЛАСТЕР port ПОРТ | target ХОСТ container|vm|lxd ИМЯ ПОРТ … | target ХОСТ host ПОРТ …)",
+		Kind: KindFlyRoute, Syntax: "fly route ИД ВИД [names ИМЯ,…] [port ПОРТ] [tls gateway] [dns plugin] [check tcp|http|none] [path ПУТЬ] [gateway ШЛЮЗ] (targets cluster КЛАСТЕР port ПОРТ | target ХОСТ container|vm|lxd ИМЯ ПОРТ … | target ХОСТ host ПОРТ …)",
 		Summary: "script.doc.flyRoute",
 		Args: []ArgDoc{
 			{Name: "ИД", Required: true, Desc: "script.doc.flyRoute.id"},
@@ -361,6 +361,7 @@ var Commands = []CommandDoc{
 			{Name: "names", Desc: "script.doc.flyRoute.names"},
 			{Name: "port", Desc: "script.doc.flyRoute.port"},
 			{Name: "tls gateway", Desc: "script.doc.flyRoute.tls"},
+			{Name: "dns plugin", Desc: "script.doc.flyRoute.dns"},
 			{Name: "check", Desc: "script.doc.flyRoute.check"},
 			{Name: "gateway", Desc: "script.doc.flyRoute.gateway"},
 			{Name: "targets cluster", Desc: "script.doc.flyRoute.cluster"},

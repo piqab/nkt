@@ -27,6 +27,8 @@ deployments don't touch DNS.
 3. In the hub menu — Plugins → **Technitium DNS**: zones, records,
    delegation, DNSSEC.
 
+![The Technitium DNS plugin: zones](/screens/en/hub-plugin-dns.png)
+
 ## Several domains
 
 Each domain is its own zone. **Add zone** (or `dns zone add …` in a
@@ -62,6 +64,8 @@ the registrar: that way the site and mail don't drop out during the move.
   changes only the difference; SOA, DNSSEC and app records (Failover)
   aren't shown in the text and aren't touched.
 - Types: A, AAAA, CNAME, NS, MX, TXT, SRV, CAA, PTR, ANAME.
+
+![A zone as text: editing with a diff and history](/screens/en/hub-plugin-dns-text.png)
 
 ```
 @        3600   A     203.0.113.10
@@ -106,7 +110,29 @@ Agent tools: `dns_zones`, `dns_records`, `dns_zone_text`,
 by permission with the “plugin dns” action. An example request: “create
 zone example1.com with a site at 203.0.113.10 and check the delegation”.
 
-<!-- hub-dns -->
+## For the hub: Traffic Fly, sites, host names
+
+The plugin tells the hub it keeps DNS — and the hub sets records itself:
+
+- **Traffic Fly** — the “DNS through the plugin” box on a route (in a
+  script `fly route … dns plugin`, in a pipeline `dns: plugin` in the
+  `fly:` block): on Apply the route's names get an A record at the gateway
+  address; one name on several gateways — a **Failover** app record
+  (Technitium answers only with live gateways, a tcp443 check);
+- **a pipeline site** — `dns: auto` in the `site:` block (the host's
+  public address) or a list of addresses: the records are set before the
+  certificate, so certbot finds the name right away;
+- **host autonames** — About → Plugins → Host autonames: every hub host
+  and machine gets `<host>.<zone>` at the address the hub reaches it by
+  (edited with a diff and history).
+
+The hub remembers what it set for each owner (route, site, host) and on a
+change also passes the previous state to the plugin: extras are removed,
+other values at the same name stay. A name outside the plugin's zones is a
+log line, not an error. “Check” in About shows what would change, “Apply”
+brings the records in line; the check also runs by itself every 10
+minutes (a host address changed, the plugin was unavailable).
+
 
 ## Upgrading an existing installation
 

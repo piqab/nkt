@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"net"
 	"regexp"
 	"slices"
 	"sort"
@@ -56,6 +57,24 @@ type SiteSpec struct {
 	// MaxBody — предел тела запроса у прокси: пусто — 64m, "0" — без
 	// предела (S3, большие загрузки), иначе число с k/m/g.
 	MaxBody string `yaml:"max_body"`
+	// DNS — записи доменов через DNS-плагин хаба («О системе» →
+	// «Плагины»): auto — публичный адрес хоста; иначе адреса через
+	// запятую. Пусто — DNS хаб не трогает.
+	DNS string `yaml:"dns"`
+}
+
+// SiteDNSAuto — site.dns: auto.
+const SiteDNSAuto = "auto"
+
+// DNSAddrs — адреса из site.dns (не auto).
+func (s *SiteSpec) DNSAddrs() []string {
+	var out []string
+	for _, a := range strings.Split(s.DNS, ",") {
+		if a = strings.TrimSpace(a); a != "" {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // certPathRe — свой файл сертификата: абсолютный путь без пробелов и «..».
@@ -77,7 +96,7 @@ func (s *SiteSpec) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.MappingNode {
 		return msgs.Errorf("deploy.specBad", "compose.site", n.Value)
 	}
-	known := map[string]bool{"domains": true, "service": true, "port": true, "proxy": true, "firewall": true, "cert": true, "cert_key": true, "max_body": true}
+	known := map[string]bool{"domains": true, "service": true, "port": true, "proxy": true, "firewall": true, "cert": true, "cert_key": true, "max_body": true, "dns": true}
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		if k := n.Content[i].Value; !known[k] {
 			return msgs.Errorf("deploy.specBad", "compose.site."+k, n.Content[i+1].Value)
@@ -153,6 +172,13 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 	}
 	if !site.ValidMaxBody(s.MaxBody) {
 		return msgs.Errorf("deploy.specBad", "compose.site.max_body", s.MaxBody)
+	}
+	if s.DNS != "" && s.DNS != SiteDNSAuto {
+		for _, a := range s.DNSAddrs() {
+			if ip := net.ParseIP(a); ip == nil || ip.IsPrivate() || ip.IsLoopback() || ip.IsUnspecified() {
+				return msgs.Errorf("deploy.specBad", "compose.site.dns", s.DNS)
+			}
+		}
 	}
 	switch c := s.Cert; {
 	case c == "" || c == "manual" || c == "auto":

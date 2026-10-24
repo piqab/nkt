@@ -17,7 +17,7 @@ export interface PluginManifest {
   version: string
   description?: string
   ops: PluginOp[]
-  pages?: { id: string; title: string; op: string }[]
+  pages?: { id: string; title: string; op: string; hidden?: boolean }[]
   commands?: { word: string; usage: string; summary?: string; example?: string }[]
   provides?: string[]
   hub_actions?: string[]

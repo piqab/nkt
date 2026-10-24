@@ -868,6 +868,13 @@ func parseFly(toks []string) (Step, error) {
 			}
 			st.Args["tls"] = "gateway"
 			rest = rest[2:]
+		case "dns":
+			// dns plugin — записи имён маршрута ведёт DNS-плагин хаба.
+			if len(rest) < 2 || rest[1] != "plugin" {
+				return Step{}, msgs.Errorf("script.badFlyRoute")
+			}
+			st.Args["dns"] = "plugin"
+			rest = rest[2:]
 		case "targets":
 			// targets cluster КЛАСТЕР port N — все узлы кластера.
 			if len(rest) < 5 || rest[1] != "cluster" || !nameRe.MatchString(rest[2]) || rest[3] != "port" {

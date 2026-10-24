@@ -82,6 +82,9 @@ type FlyRoute struct {
 	Algorithm string      `json:"algorithm" yaml:"algorithm"`
 	Check     fly.Check   `json:"check" yaml:"check"`
 	Targets   []FlyTarget `json:"targets" yaml:"targets"`
+	// DNS — записи имён маршрута ведёт DNS-плагин хаба: A на адрес шлюза
+	// (несколько шлюзов с этим именем — Failover). Без плагина — ничего.
+	DNS bool `json:"dns,omitempty" yaml:"dns,omitempty"`
 }
 
 // FlyAlloc — постоянные номера: хост в подсети шлюза, служебный порт

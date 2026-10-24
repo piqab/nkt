@@ -577,7 +577,7 @@ end
 k8s lab wait deployment hello 5m
 ```
 
-### `fly route ИД ВИД [names ИМЯ,…] [port ПОРТ] [tls gateway] [check tcp|http|none] [path ПУТЬ] [gateway ШЛЮЗ] (targets cluster КЛАСТЕР port ПОРТ | target ХОСТ container|vm|lxd ИМЯ ПОРТ … | target ХОСТ host ПОРТ …)` {#cmd-fly-route}
+### `fly route ИД ВИД [names ИМЯ,…] [port ПОРТ] [tls gateway] [dns plugin] [check tcp|http|none] [path ПУТЬ] [gateway ШЛЮЗ] (targets cluster КЛАСТЕР port ПОРТ | target ХОСТ container|vm|lxd ИМЯ ПОРТ … | target ХОСТ host ПОРТ …)` {#cmd-fly-route}
 
 Создаёт или обновляет маршрут Traffic Fly и применяет его — как блок fly: конвейера: новый записывается и применяется, у существующего цели меняются плавно (новые добавляются и проверяются, прежние выводятся). В сухом прогоне — проверка карты с маршрутом.
 
@@ -588,6 +588,7 @@ k8s lab wait deployment hello 5m
 | `names` |  | имена через запятую (https, http) |
 | `port` |  | порт на шлюзе (у tcp/udp обязателен; у https — 443, у http — 80) |
 | `tls gateway` |  | сертификат на шлюзе (Let's Encrypt), целям — HTTP |
+| `dns plugin` |  | записи имён маршрута ведёт DNS-плагин хаба (A на адрес шлюза, при «fly apply»); без плагина — ничего |
 | `check` |  | проверка целей: tcp (по умолчанию), http (с path), none |
 | `gateway` |  | имя шлюза; один шлюз — можно не писать |
 | `targets cluster` |  | targets cluster КЛАСТЕР port N — цели: все узлы кластера (машины — как «виртуальная машина» на своих хостах) |

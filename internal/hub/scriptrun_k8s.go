@@ -175,7 +175,7 @@ func (r *ScriptRunner) flyRouteFromStep(ctx context.Context, done *scriptRunResu
 	if err != nil {
 		return nil, err
 	}
-	route := FlyRoute{ID: st.Name, Gateway: gw.EdgeID, Kind: st.Action, Names: st.List, TLS: st.Args["tls"] == "gateway"}
+	route := FlyRoute{ID: st.Name, Gateway: gw.EdgeID, Kind: st.Action, Names: st.List, TLS: st.Args["tls"] == "gateway", DNS: st.Args["dns"] == "plugin"}
 	route.Port, _ = strconv.Atoi(st.Args["port"])
 	if route.Port == 0 {
 		route.Port = 443
