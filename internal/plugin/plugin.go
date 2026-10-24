@@ -118,6 +118,9 @@ type Page struct {
 	Title string `json:"title"`
 	// Op — операция (только чтение), которая возвращает вид раздела.
 	Op string `json:"op"`
+	// Hidden — не кнопкой вверху: раздел открывается только из другого
+	// (Action.Open с аргументами — «записи зоны»).
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // Command — команда сценария.

@@ -238,6 +238,10 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 			return msgs.Errorf("fly.dryHostsNoWG", bad)
 		}
 		jc.Log("fly.dryOK", len(hostCfg), len(gws))
+		// DNS-плагин: что поменялось бы в записях имён маршрутов.
+		if err := s.dnsSync(ctx, func(o string) bool { return strings.HasPrefix(o, "fly:") }, true, jc.Log); err != nil {
+			jc.Log("plugin.dnsWarn", err.Error())
+		}
 		return nil
 	}
 
@@ -343,6 +347,11 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 		return err
 	}
 	jc.Log("fly.applied", d.Revision, len(applied), len(gwIDs))
+	// DNS-плагин: имена маршрутов с галочкой «DNS» — на адреса шлюзов.
+	// Ошибка DNS не отменяет применённого: она в журнале, сверка повторит.
+	if err := s.dnsSync(ctx, func(o string) bool { return strings.HasPrefix(o, "fly:") }, false, jc.Log); err != nil {
+		jc.Log("plugin.dnsWarn", err.Error())
+	}
 	return nil
 }
 

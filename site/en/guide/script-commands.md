@@ -577,7 +577,7 @@ Example:
 k8s lab wait deployment hello 5m
 ```
 
-### `fly route ID KIND [names NAME,…] [port PORT] [tls gateway] [check tcp|http|none] [path PATH] [gateway GATEWAY] (targets cluster CLUSTER port PORT | target HOST container|vm|lxd NAME PORT … | target HOST host PORT …)` {#cmd-fly-route}
+### `fly route ID KIND [names NAME,…] [port PORT] [tls gateway] [dns plugin] [check tcp|http|none] [path PATH] [gateway GATEWAY] (targets cluster CLUSTER port PORT | target HOST container|vm|lxd NAME PORT … | target HOST host PORT …)` {#cmd-fly-route}
 
 Creates or updates a Traffic Fly route and applies it — like a pipeline's fly: block: a new one is saved and applied, an existing one changes targets smoothly (new ones added and checked, old ones drained). In a dry run — the map is validated with the route.
 
@@ -588,6 +588,7 @@ Creates or updates a Traffic Fly route and applies it — like a pipeline's fly:
 | `names` |  | names separated by commas (https, http) |
 | `port` |  | port on the gateway (required for tcp/udp; https — 443, http — 80) |
 | `tls gateway` |  | certificate on the gateway (Let's Encrypt), targets get HTTP |
+| `dns plugin` |  | the hub's DNS plugin keeps the route names' records (A at the gateway address, on “fly apply”); no plugin — nothing |
 | `check` |  | target check: tcp (default), http (with path), none |
 | `gateway` |  | gateway name; with one gateway it can be omitted |
 | `targets cluster` |  | targets cluster CLUSTER port N — targets: all cluster nodes (machines as “virtual machine” on their hosts) |

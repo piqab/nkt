@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,7 +14,10 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/plugin"
+	"github.com/piqab/nkt/internal/secretbox"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // fakeDNSPlugin — плагин по протоколу: зоны, правка зоны текстом,
@@ -214,4 +218,94 @@ func TestPluginLifecycle(t *testing.T) {
 		t.Fatalf("word after disconnect: %s", rec.Body)
 	}
 	_ = db
+}
+
+// DNS через плагин: автоимена хостов и site.dns с адресами — плагину
+// уходят записи владельца и прежние; лишнее — убирается; отключили
+// автоимена — записи хостов сняты.
+func TestPluginDNSSync(t *testing.T) {
+	srv, db, _ := localFixtureHub(t)
+	ctx := context.Background()
+	const secret = "plugin-secret-0123456789"
+	var mu sync.Mutex
+	var syncs []map[string]any
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if !plugin.Verify(secret, r, body, time.Now()) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == plugin.PathManifest {
+			_ = json.NewEncoder(w).Encode(plugin.Manifest{Protocol: 1, Name: "dns", Title: "DNS", Version: "1", Ops: []plugin.Op{{Name: "zones", ReadOnly: true}}, Provides: []string{"dns"}})
+			return
+		}
+		var req plugin.Request
+		_ = json.Unmarshal(body, &req)
+		resp := plugin.Response{OK: true}
+		switch req.Op {
+		case plugin.OpDNSZones:
+			resp.Result, _ = json.Marshal(map[string]any{"zones": []string{"example.com"}})
+		case plugin.OpDNSSync:
+			mu.Lock()
+			syncs = append(syncs, req.Args)
+			mu.Unlock()
+			resp.Text = "synced " + req.Args["owner"].(string)
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer fake.Close()
+	u, _ := url.Parse(fake.URL)
+	port, _ := strconv.Atoi(u.Port())
+	enc, _ := secretbox.Encrypt(srv.hub.key, []byte(secret))
+	if err := srv.savePlugins(ctx, []pluginConf{{Name: "dns", Host: localHostName, Port: port, SecretEnc: enc}}); err != nil {
+		t.Fatal(err)
+	}
+	forgetManifests("dns")
+
+	// Хост и сайт конвейера с адресами в site.dns.
+	if _, err := db.CreateHost(ctx, "Web_1", "192.0.2.10", 22, "root", "key", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	content := "repo: https://codeberg.org/me/shop.git\nref: main\naction: compose\ncompose:\n  file: compose.yaml\n  project: shop\n  hosts: [localhost]\n" +
+		"  site:\n    domains: [shop.example.com, other.org]\n    service: web\n    port: 80\n    dns: 203.0.113.10, 2001:db8::10\n"
+	sec, _ := secretbox.Encrypt(srv.hub.key, []byte("s"))
+	if _, err := db.CreatePipeline(ctx, store.Pipeline{Name: "shop", Content: content, HookID: "hook-dns-0001", HookSecret: sec, Author: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.KVSet(ctx, dnsAutoKV, `{"zone":"hosts.example.com","enabled":true}`)
+
+	var lines []string
+	logf := func(key string, args ...any) { lines = append(lines, msgs.T(msgs.EN, key, args...)) }
+	if err := srv.dnsSync(ctx, nil, false, logf); err != nil {
+		t.Fatal(err)
+	}
+	owned := srv.dnsOwnedAll(ctx)
+	host := owned["host:Web_1"]
+	if host.Plugin != "dns" || len(host.Records) != 1 || host.Records[0].Name != "web-1.hosts.example.com" || host.Records[0].Values[0] != "192.0.2.10" {
+		t.Fatalf("host record: %+v", owned)
+	}
+	site := owned["site:shop"].Records
+	// other.org не в зонах плагина — мимо (в журнал); A и AAAA.
+	if len(site) != 2 || site[0].Type != "A" || site[1].Type != "AAAA" || site[1].Values[0] != "2001:db8::10" {
+		t.Fatalf("site records: %+v", site)
+	}
+	n := len(syncs)
+	// Без изменений — плагин не дёргается.
+	_ = srv.dnsSync(ctx, nil, false, logf)
+	if len(syncs) != n {
+		t.Fatalf("unchanged synced again: %d → %d", n, len(syncs))
+	}
+	// Автоимена выключены — записи хоста сняты с прежними в previous.
+	_ = db.KVSet(ctx, dnsAutoKV, `{"zone":"hosts.example.com","enabled":false}`)
+	_ = srv.dnsSync(ctx, nil, false, logf)
+	last := syncs[len(syncs)-1]
+	if last["owner"] != "host:Web_1" || len(last["records"].([]any)) != 0 || len(last["previous"].([]any)) != 1 {
+		t.Fatalf("host removal: %+v", last)
+	}
+	if _, ok := srv.dnsOwnedAll(ctx)["host:Web_1"]; ok {
+		t.Fatal("host owner kept")
+	}
+	if !strings.Contains(strings.Join(lines, "\n"), "synced site:shop") || !strings.Contains(strings.Join(lines, "\n"), "other.org") {
+		t.Fatalf("log: %v", lines)
+	}
 }

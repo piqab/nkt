@@ -62,6 +62,16 @@ clients ──80/443 by name, TCP/UDP ports──▶ VPS: nkt-edge (fly role)
 - A route by port goes **through the kernel** (DNAT without source
   rewrite): the target sees the real client address by itself.
 
+## DNS through the plugin
+
+With a [DNS plugin](/en/guide/hub-plugin-dns) connected, a named route
+gets a **DNS through the plugin** box: on Apply the hub sets A records of
+the route's names to the gateway address itself. One name in routes with
+different gateways — a Failover record: DNS answers only with live
+gateways. In a script — `fly route … dns plugin`, in a pipeline —
+`dns: plugin` in the `fly:` block. The Apply dry run shows which records
+change.
+
 ## Certificate on the gateway
 
 If the target serves plain HTTP (an application container without its own
@@ -384,6 +394,7 @@ compose:
       kind: https
       names: [shop.example.com]
       tls: gateway              # certificate on the gateway
+      dns: plugin               # A record of the names at the gateway — through the hub DNS plugin
       service: web              # the compose service
       target_port: 8080         # its port in the container
       check: http

@@ -970,6 +970,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	server.StartMigrationReminders(ctx)
 	server.StartCertWatch(ctx)
 	server.StartTokenUsageReconcile(ctx)
+	server.StartDNSReconcile(ctx)
 	server.StartTelegram(ctx)
 	server.StartSlack()
 

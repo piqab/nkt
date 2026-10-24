@@ -317,6 +317,7 @@ func (s *Server) Handler() http.Handler {
 				// Плагины: список и операции — всем вошедшим; что меняет —
 				// администратору или токену с plugin.<имя> (pluginOpAllowed).
 				r.Get("/hub/plugins", s.handlePlugins)
+				r.Get("/hub/dns", s.handleDNSState)
 				r.Post("/hub/plugins/{name}/call", s.handlePluginCall)
 				r.Get("/hub/plugins/{name}/doc", s.handlePluginDocGet)
 				r.Put("/hub/plugins/{name}/doc", s.handlePluginDocPut)
@@ -453,6 +454,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/plugins/probe", s.handlePluginProbe)
 					r.Post("/hub/plugins", s.handlePluginConnect)
 					r.Delete("/hub/plugins/{name}", s.handlePluginDisconnect)
+					r.Put("/hub/dns/autonames", s.handleDNSAutonamesSet)
+					r.Post("/hub/dns/sync", s.handleDNSSync)
 					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)
 					r.Post("/hub/pipelines", s.handlePipelineCreate)
 					r.Post("/hub/pipelines/dryrun", s.handlePipelineDryRun)

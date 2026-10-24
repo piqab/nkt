@@ -157,7 +157,28 @@ func (s *Server) pipelineFlyRoute(ctx context.Context, jc flyJobLog, user string
 	if diff := flySpecDiff(cur, f, gw.EdgeID); len(diff) > 0 {
 		jc.Log("fly.pipelineDiffers", f.Route, strings.Join(diff, ", "))
 	}
-	return s.flyReconcileTargets(ctx, jc, user, f.Route, want, true, note)
+	// dns: plugin у существующего маршрута — галочку поставить (записи —
+	// ниже, даже если цели те же и применять нечего).
+	if f.DNS == "plugin" && !cur.DNS {
+		routes := slices.Clone(d.Routes)
+		routes[idx].DNS = true
+		if _, err := s.flySave(ctx, FlyDoc{Gateways: d.Gateways, Routes: routes}, user, note); err != nil {
+			return err
+		}
+	}
+	if err := s.flyReconcileTargets(ctx, jc, user, f.Route, want, true, note); err != nil {
+		return err
+	}
+	if f.DNS == "plugin" {
+		names := map[string]bool{}
+		for _, n := range cur.Names {
+			names["fly:"+strings.ToLower(n)] = true
+		}
+		if err := s.dnsSync(ctx, func(o string) bool { return names[o] }, false, jc.Log); err != nil {
+			jc.Log("plugin.dnsWarn", err.Error())
+		}
+	}
+	return nil
 }
 
 // flyReconcileTargets — цели маршрута routeID привести к want. Те же —
@@ -376,7 +397,7 @@ func (s *Server) flyPipelineCheck(ctx context.Context, jc flyJobLog, r FlyRoute)
 // flyRouteFromSpec — новый маршрут по описанию конвейера.
 func flyRouteFromSpec(f deploy.FlySpec, gateway int64) FlyRoute {
 	r := FlyRoute{ID: f.Route, Gateway: gateway, Kind: f.Kind, Names: f.Names, Port: f.Port, PortTo: f.PortTo,
-		ProxyProtocol: f.ProxyProtocol, TLS: f.TLS == "gateway", Allow: f.Allow, MaxConns: f.MaxConns, Rate: f.Rate, Check: fly.Check{Kind: f.Check, Path: f.CheckPath, Port: f.CheckPort}}
+		ProxyProtocol: f.ProxyProtocol, TLS: f.TLS == "gateway", DNS: f.DNS == "plugin", Allow: f.Allow, MaxConns: f.MaxConns, Rate: f.Rate, Check: fly.Check{Kind: f.Check, Path: f.CheckPath, Port: f.CheckPort}}
 	r.Algorithm = fly.AlgoSourceHash
 	if f.Named() {
 		r.Algorithm = fly.AlgoLeastConn

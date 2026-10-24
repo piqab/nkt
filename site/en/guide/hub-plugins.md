@@ -124,7 +124,9 @@ A timestamp older than 5 minutes or a wrong signature — answer `401`.
 ```
 
 - `name` — Latin letters, digits, hyphen (2–32); operations and sections —
-  Latin letters, digits, `_`. A section refers to a read-only operation.
+  Latin letters, digits, `_`. A section refers to a read-only operation;
+  `"hidden": true` — not a button at the top, only reached from another
+  section (`open` with arguments).
 - `commands` — script words; the language's own words (`on`, `fly`,
   `deploy`…) can't be taken.
 - `provides: ["dns"]` — the plugin keeps DNS records for the hub (below).

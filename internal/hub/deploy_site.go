@@ -128,6 +128,7 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 		// Настроен (или прокси настроен вручную) и ничего не поменялось —
 		// только проверка HTTPS: ни прокси, ни сертификат не трогаются.
 		if sameSite(*cur, want) && (cur.Status == store.SiteOK || cur.Status == store.SiteProxyManual) {
+			s.pipelineSiteDNS(ctx, jc, pl, sp)
 			chk := httpsCheck(ctx, want.Domains[0])
 			var full SiteCheck
 			_ = json.Unmarshal(cur.Check, &full)
@@ -178,8 +179,25 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 		return err
 	}
 	want.ID = id
+	// Записи доменов — до сертификата: certbot проверяет имя по DNS.
+	s.pipelineSiteDNS(ctx, jc, pl, sp)
 	jc.Log("deploy.siteSetup", strings.Join(want.Domains, ", "), proxy, t.Name)
 	return s.setupSite(ctx, jc, user, want, true, false)
+}
+
+// pipelineSiteDNS — записи доменов сайта через DNS-плагин (site.dns).
+// Нет плагина или его зоны — строка в журнал, выкладка идёт дальше.
+func (s *Server) pipelineSiteDNS(ctx context.Context, jc *jobs.Context, pl store.Pipeline, sp *deploy.SiteSpec) {
+	if sp.DNS == "" {
+		return
+	}
+	if len(s.dnsPlugins(ctx)) == 0 {
+		jc.Log("plugin.dnsNoPlugin", pl.Name)
+		return
+	}
+	if err := s.dnsSync(ctx, func(o string) bool { return o == "site:"+pl.Name }, false, jc.Log); err != nil {
+		jc.Log("plugin.dnsWarn", msgs.Localize(jc.Lang(), err))
+	}
 }
 
 // siteProxyManual — почему прокси на хосте считается настроенным вручную
