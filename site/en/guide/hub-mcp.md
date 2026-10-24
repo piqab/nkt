@@ -50,7 +50,9 @@ as `token:<token name>`.
 
 The hub's built-in AI (finding analysis, AI in the script editor, the
 [assistant](/en/guide/hub-assistant)) still
-runs nothing by itself — only MCP with an admin token executes.
+runs nothing by itself: a script from the assistant's answer runs only
+when you press Run. Without a person, only MCP executes actions — with an
+admin token or a token by permission (within its limits).
 
 ## Tools
 
@@ -123,6 +125,29 @@ with an admin token the agent can stop the extra container itself
 `"wait": true`) — without confirmation, all in the audit log as
 `token:<name>`.
 
+## Example: a token by permission
+
+A token from the “Agent: compose with limits” preset: the “deploy, roll back, dry run” action, pipelines `app`
+and `blog`, host `web1`, limits — 2 CPU and 2048 MB in total, 1 CPU and
+512 MB per service, 10 actions per hour. An agent with it sees the read
+tools plus `deploy_pipeline` and `dry_run_pipeline` in `tools/list`;
+other actions aren't listed, and calling them returns
+`unknown or not allowed tool`.
+
+- `deploy_pipeline` for `app` deploys; services without their own limits
+  get the per-service cap (1 CPU, 512 MB) in the copy of the compose file
+  that goes to the host;
+- a stack that doesn't fit the remainder fails the job with an error like
+  `app@web1: needs 1.50 CPU, the token has 0.50 free of 2.00`;
+- a service with `privileged`, host networking or a host path outside the
+  stack directory — `service runner: privileged — not allowed to a token with limits (it reaches outside the stack)`;
+- a pipeline not on the list is refused by name; the 11th action in an
+  hour — `the token used up its actions per hour (10) — try again later`.
+
+Errors come in the tool result with `"isError": true` — the agent sees
+the reason and can pick smaller limits itself. How much the token already
+uses is in the token window (In use).
+
 ## Claude Code
 
 ```sh
@@ -172,6 +197,21 @@ agent's model needs tool calling — the same model advice as for the
 [assistant](/en/guide/hub-operations#local-and-other-models).
 
 ## Checking by hand
+
+Ready commands with your hub's address are in the token window: About
+→ API tokens → the token → **MCP examples** (with the secret — right
+after creating the token; later the secret isn't shown).
+
+Which tools the token sees (for a token by permission — only the allowed
+ones):
+
+```sh
+curl -s -H 'Authorization: Bearer nkt_…' -H 'Content-Type: application/json' \
+  https://hub.example.com/api/mcp \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Calling a tool:
 
 ```sh
 curl -s -H 'Authorization: Bearer nkt_…' -H 'Content-Type: application/json' \

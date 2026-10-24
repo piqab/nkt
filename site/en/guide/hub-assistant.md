@@ -166,7 +166,7 @@ map and target state).
 |---|---|---|
 | Who asks | an admin in the hub interface | an external agent (Claude Code, Cursor…) |
 | Access | the asker's rights | the API token's rights |
-| Actions | none — only a script you run | with an admin token — right away, without confirmation |
+| Actions | none — only a script from the answer that you run (Run) | with an admin token — right away, without confirmation; with a token by permission — only the allowed ones, within limits |
 | Model | the one set in “About” | the agent's model |
 
 Over the API: `POST /api/hub/assistant` with
@@ -194,4 +194,4 @@ stay. Ctrl+Enter sends. Every question goes to the
 audit log (`ai.assistant`).
 
 An external agent (Claude Code, Cursor) gets the same data — and actions,
-with an admin token — through [MCP](/en/guide/hub-mcp).
+with an admin token or one [by permission](/en/guide/hub-api#token-by-permission) — through [MCP](/en/guide/hub-mcp).
