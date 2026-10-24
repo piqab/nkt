@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -170,6 +171,20 @@ func nftLoads(t *testing.T, rules string) {
 		}
 		t.Fatalf("nft не принял правила: %v\n%s\n%s", err, out, rules)
 	}
+	// Старые nftables (0.9.x, 1.0.x на Debian 11, Ubuntu 22.04): корни
+	// распакованных пакетов через «:» в NKT_NFT_OLD — правила разбираются
+	// и ими (nft -c): в 1.0.2 «mss» — ключевое слово, цепочка с таким
+	// именем ломала файл на хосте.
+	for _, root := range filepath.SplitList(os.Getenv("NKT_NFT_OLD")) {
+		if root == "" {
+			continue
+		}
+		cmd := exec.Command("unshare", "-rn", filepath.Join(root, "usr/sbin/nft"), "-c", "-f", f)
+		cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+filepath.Join(root, "usr/lib/x86_64-linux-gnu"))
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("nft из %s не принял правила: %v\n%s\n%s", root, err, out, rules)
+		}
+	}
 }
 
 // Диапазон портов (coturn relay): порт сохраняется насквозь, цель —
@@ -245,4 +260,23 @@ func TestGatewayLimitsLoad(t *testing.T) {
 		}
 	}
 	nftLoads(t, rules)
+}
+
+// Имена цепочек и множеств — не слова nftables: в старых версиях (до
+// 1.0.6) «chain mss» — синтаксическая ошибка, и правила хоста не
+// грузились. Проверка без nft — в CI старых версий нет.
+func TestNFTNamesNotKeywords(t *testing.T) {
+	reserved := map[string]bool{"mss": true, "mark": true, "limit": true, "counter": true, "quota": true, "flags": true, "meta": true,
+		"ct": true, "log": true, "reject": true, "queue": true, "dnat": true, "snat": true, "masquerade": true, "redirect": true,
+		"tproxy": true, "synproxy": true, "secmark": true, "accept": true, "drop": true, "timeout": true, "size": true, "rt": true}
+	g := sampleGateway()
+	g.Routes[2].MaxConns, g.Routes[2].Rate = 20, 10
+	names := regexp.MustCompile(`(?m)^\s*(?:chain|set)\s+([A-Za-z0-9_]+)\s*\{`)
+	for _, rules := range []string{GatewayNFT(g, nil), HostNFT(sampleHost())} {
+		for _, m := range names.FindAllStringSubmatch(rules, -1) {
+			if reserved[m[1]] {
+				t.Errorf("name %q is an nftables keyword", m[1])
+			}
+		}
+	}
 }

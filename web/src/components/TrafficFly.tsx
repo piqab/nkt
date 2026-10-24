@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Select, Space, Spin, Switch, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { ROUTE_ID_RE, sanitizeRouteId, suggestRouteId } from '../flyRouteId'
 import { OverflowBar } from './OverflowBar'
 import { DeleteOutlined } from '@ant-design/icons'
 import { api, fetchHubJob, useApi } from '../api'
@@ -1738,17 +1739,56 @@ function RouteEditor({
   const { t } = useTranslation()
   const [r, setR] = useState<FlyRoute>(() => (route ? (JSON.parse(JSON.stringify(route)) as FlyRoute) : emptyRoute(gateways[0]?.edge_id ?? 0)))
   const hosts = useApi<HubHost[]>('/hub/hosts')
-  const set = (p: Partial<FlyRoute>) => setR({ ...r, ...p })
+  // Идентификатор нового маршрута — сам (из имени, подписи, вида и
+  // порта), пока человек не правил поле.
+  const [idTouched, setIdTouched] = useState(false)
+  const taken = new Set(doc.routes.map((x) => x.id))
+  const set = (p: Partial<FlyRoute>) => {
+    const next = { ...r, ...p }
+    if (!route && !idTouched) next.id = suggestRouteId(next.names, next.label, next.kind, next.port, taken)
+    setR(next)
+  }
   const isNamed = named(r.kind)
-  const idTaken = !route && doc.routes.some((x) => x.id === r.id)
-  const valid = /^[a-z0-9][a-z0-9-]{0,40}$/.test(r.id) && !idTaken && (r.allow ?? []).every((a) => allowRe.test(a)) && !(r.tls && (r.names ?? []).some((n) => n.startsWith('*.'))) && r.port > 0 && r.targets.length > 0 && (!isNamed || (r.names ?? []).length > 0) && r.targets.every((x) => x.port > 0 && x.host_id !== undefined && (x.kind === 'host' || !!x.ref))
+  const idTaken = !route && taken.has(r.id)
+  // Почему «Сохранить» неактивна — первое, чего не хватает.
+  const why = !r.id
+    ? t('fly.why.idEmpty')
+    : !ROUTE_ID_RE.test(r.id)
+      ? t('fly.why.idBad')
+      : idTaken
+        ? t('fly.why.idTaken', { id: r.id })
+        : isNamed && (r.names ?? []).length === 0
+          ? t('fly.why.names')
+          : r.tls && (r.names ?? []).some((n) => n.startsWith('*.'))
+            ? t('fly.why.wildcardTls')
+            : !(r.port > 0)
+              ? t('fly.why.port')
+              : r.targets.length === 0
+                ? t('fly.why.targets')
+                : !r.targets.every((x) => x.port > 0 && x.host_id !== undefined && (x.kind === 'host' || !!x.ref))
+                  ? t('fly.why.target')
+                  : !(r.allow ?? []).every((a) => allowRe.test(a))
+                    ? t('fly.why.allow')
+                    : ''
+  const valid = why === ''
   return (
     <Modal title={route ? t('fly.editTitle', { route: routeTitle(route) }) : t('fly.newRoute')} onClose={onClose} width={900}>
       <div className="col" style={{ gap: '0.6rem' }}>
         <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
           <label>
             {t('fly.fieldID')}
-            <Input value={r.id} disabled={!!route} status={idTaken ? 'error' : undefined} onChange={(e) => set({ id: e.target.value.toLowerCase() })} placeholder="app" style={{ width: 160 }} />
+            <Input
+              value={r.id}
+              disabled={!!route}
+              status={idTaken || (r.id !== '' && !ROUTE_ID_RE.test(r.id)) ? 'error' : undefined}
+              onChange={(e) => {
+                setIdTouched(e.target.value !== '')
+                setR({ ...r, id: e.target.value === '' ? '' : sanitizeRouteId(e.target.value) })
+              }}
+              placeholder="app"
+              style={{ width: 180 }}
+            />
+            {!route && <span className="small muted" style={{ display: 'block', maxWidth: 220 }}>{t(idTouched ? 'fly.idHint' : 'fly.idAuto')}</span>}
           </label>
           <label>
             {t('fly.fieldLabel')}
@@ -1920,7 +1960,8 @@ function RouteEditor({
           </Button>
         </div>
         <Space>
-          <Button type="primary" disabled={!valid} onClick={() => onAsk({ ...r, check: r.check.kind === 'http' ? { ...r.check, path: r.check.path || '/' } : r.check })}>
+          {!valid && <span className="small muted">{why}</span>}
+          <Button type="primary" disabled={!valid} title={why || undefined} onClick={() => onAsk({ ...r, check: r.check.kind === 'http' ? { ...r.check, path: r.check.path || '/' } : r.check })}>
             {t('common.save')}
           </Button>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
