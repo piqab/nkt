@@ -162,7 +162,8 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     readme: `${NKT}/tree/main/examples/technitium`,
     // DoH: прокси сайта перед DNS-over-HTTP (порт 80 контейнера).
     site: { service: 'dns', port: 80 },
-    files: ['examples/technitium/deploy/init.py'],
+    // init.py — первичная настройка; nkt-plugin.py — плагин хаба (сервис plugin).
+    files: ['examples/technitium/deploy/init.py', 'examples/technitium/deploy/nkt-plugin.py'],
     // DNS — на адрес хоста, не 0.0.0.0 (127.0.0.53:53 у systemd-resolved).
     ports: { dns: ['{hostip}:53:53/udp', '{hostip}:53:53/tcp', '127.0.0.1:5380:5380'] },
     env: [
@@ -174,6 +175,8 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
       ['SECONDARY_NS', 'ns2.example.com'],
       ['TSIG_CERT_MANAGER', 'generate:base64-32'],
       ['TSIG_TRANSFER', 'generate:base64-32'],
+      // Секрет подписи вызовов плагина: хаб возьмёт его из .env сам.
+      ['NKT_PLUGIN_SECRET', 'generate:hex32'],
     ],
   },
   {

@@ -21,7 +21,8 @@ Files:
 
 - [`deploy/docker-compose.yml`](deploy/docker-compose.yml) — the primary (ns1): `dns` and the one-shot `dns-init`;
 - [`deploy/docker-compose.secondary.yml`](deploy/docker-compose.secondary.yml) — the secondary (ns2);
-- [`deploy/init.py`](deploy/init.py) — initial setup through the API (keys, zones, transfer, Failover);
+- [`deploy/init.py`](deploy/init.py) — initial setup through the API (keys, zones, the catalog zone, transfer, Failover);
+- [`deploy/nkt-plugin.py`](deploy/nkt-plugin.py) — the nkt hub plugin: zones and records from the hub, scripts, MCP (§8);
 - [`pipeline.yaml`](pipeline.yaml), [`pipeline.secondary.yaml`](pipeline.secondary.yaml) — the pipelines;
 - [`deploy/cert-manager-issuer.yaml`](deploy/cert-manager-issuer.yaml) — a `ClusterIssuer` and an example certificate;
 - [`deploy/certbot-dot-hook.sh`](deploy/certbot-dot-hook.sh) — the DoT certificate after every renewal.
@@ -95,8 +96,11 @@ A second pipeline on a **different** host — [`pipeline.secondary.yaml`](pipeli
 - `TSIG_TRANSFER` — **the same** as the primary's (copy it from its
   secrets); `ZONES` and `ACME_ZONE` — the same.
 
-`dns-init` creates the secondary zones and Failover. Changes from the
-primary arrive by NOTIFY in about 10 seconds. Check:
+`dns-init` sets up the secondary **catalog zone** (`catalog.nkt.invalid`)
+and Failover: the primary's zones arrive with the catalog by themselves —
+both those from `ZONES` and new ones added later in the console or from
+the hub. Changes from the primary arrive by NOTIFY in about 10 seconds.
+Check:
 
 ```bash
 dig +short @203.0.113.10 acme.example.com SOA
@@ -225,6 +229,23 @@ within hours and used for DDoS amplification. Don't.
   Or in the console: **Settings → Backup Settings**.
 - A new version — a tag edit in both compose files and a deployment: the
   secondary first, then the primary.
+
+## 8. The nkt hub plugin
+
+The `plugin` service is a hub plugin: zones and records right in the hub,
+`dns …` commands in scripts, MCP tools for agents. It listens only on
+`127.0.0.1:9180` of the host, the hub reaches it over SSH, every call is
+signed with `NKT_PLUGIN_SECRET` (the hub creates it, `generate:hex32`).
+
+To connect: About → Plugins → Connect → From a pipeline → this pipeline →
+Check → Connect. Then — Plugins → **Technitium DNS**: add a zone
+(`example1.com` — ns2 gets it through the catalog), a site or mail
+template, records as a table or the whole zone as text with a diff, the
+registrar delegation check, DNSSEC and DS. Details — the
+“[Plugin: Technitium DNS](https://piqab.github.io/nkt/en/guide/hub-plugin-dns)” guide.
+
+Don't need the plugin — remove the `plugin` service from the compose file
+or just don't connect it in the hub.
 
 ## Troubleshooting
 

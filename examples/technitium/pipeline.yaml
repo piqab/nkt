@@ -10,7 +10,9 @@ compose:
   file: examples/technitium/deploy/docker-compose.yml
   project: technitium
   hosts: [ns1]
-  files: [examples/technitium/deploy/init.py]   # первичная настройка через API (разовый dns-init)
+  # init.py — первичная настройка через API (разовый dns-init);
+  # nkt-plugin.py — плагин хаба (сервис plugin).
+  files: [examples/technitium/deploy/init.py, examples/technitium/deploy/nkt-plugin.py]
   wait_timeout: 5m
   # DNS — наружу на адрес интерфейса хоста (ip -4 addr; за NAT — внутренний
   # адрес). Не 0.0.0.0: на Ubuntu 127.0.0.53:53 держит systemd-resolved, и
@@ -36,6 +38,9 @@ compose:
     SECONDARY_NS: ns2.example.com
     TSIG_CERT_MANAGER: generate:base64-32  # ключ cert-manager — динамические обновления ACME_ZONE
     TSIG_TRANSFER: generate:base64-32      # ключ переноса зон — тот же во втором конвейере
+    # Плагин хаба: секрет подписи вызовов — хаб возьмёт его из .env сам
+    # при подключении («О системе» → «Плагины» → «С конвейера»).
+    NKT_PLUGIN_SECRET: generate:hex32
     # Исходящий DNS по UDP закрыт — пересылка по DoH:
     # FORWARDERS: https://cloudflare-dns.com/dns-query (1.1.1.1)
     # FORWARDER_PROTOCOL: Https

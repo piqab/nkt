@@ -83,6 +83,30 @@ services:
       dns:
         condition: service_healthy
 
+  # Плагин хаба nkt («О системе» → «Плагины» → «С конвейера»): зоны и
+  # записи из хаба, команды «dns …» в сценариях, инструменты MCP, записи
+  # для Traffic Fly и сайтов. Слушает только 127.0.0.1 хоста — хаб ходит
+  # к нему по SSH; каждый вызов подписан NKT_PLUGIN_SECRET. Не нужен —
+  # удалите сервис (или не подключайте его в хабе).
+  plugin:
+    image: python:3.13-alpine
+    restart: unless-stopped
+    command: ["python3", "-I", "/nkt-plugin.py"]
+    environment:
+      NKT_PLUGIN_SECRET: ${NKT_PLUGIN_SECRET}
+      DNS_ADMIN_PASSWORD: ${DNS_ADMIN_PASSWORD}
+      DNS_DOMAIN: ${DNS_DOMAIN}
+      SECONDARY_IP: ${SECONDARY_IP:-}
+      SECONDARY_NS: ${SECONDARY_NS:-}
+      ACME_ZONE: ${ACME_ZONE:-}
+    volumes:
+      - ./nkt-plugin.py:/nkt-plugin.py:ro
+    ports:
+      - "127.0.0.1:9180:9180"
+    depends_on:
+      dns:
+        condition: service_healthy
+
 volumes:
   config:
   logs:
