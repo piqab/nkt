@@ -85,7 +85,8 @@ func (f *FlySpec) validate(i int) error {
 	f.normalize()
 	field := func(name string) string { return fmt.Sprintf("compose.fly[%d].%s", i, name) }
 	if !flyRouteRe.MatchString(f.Route) {
-		return msgs.Errorf("deploy.specBad", field("route"), f.Route)
+		// Правило и готовый вариант: «route: Git.Example» → «git-example».
+		return msgs.Errorf("deploy.flyRouteID", field("route"), f.Route, SuggestFlyRouteID(f.Route, f.Names))
 	}
 	if f.Gateway != "" && !flyGwRe.MatchString(f.Gateway) {
 		return msgs.Errorf("deploy.specBad", field("gateway"), f.Gateway)
@@ -96,7 +97,10 @@ func (f *FlySpec) validate(i int) error {
 			return msgs.Errorf("deploy.specNeeds", field("names"))
 		}
 		for _, n := range f.Names {
-			if !flyNameRe.MatchString(n) || (f.TLS == "gateway" && strings.HasPrefix(n, "*.")) {
+			if f.TLS == "gateway" && strings.HasPrefix(n, "*.") {
+				return msgs.Errorf("deploy.flyWildcardTLS", field("names"), n)
+			}
+			if !flyNameRe.MatchString(n) {
 				return msgs.Errorf("deploy.specBad", field("names"), n)
 			}
 		}
@@ -174,4 +178,23 @@ func validateFly(fs []FlySpec) error {
 		seen[fs[i].Route] = true
 	}
 	return nil
+}
+
+var flyRouteJunk = regexp.MustCompile(`[^a-z0-9]+`)
+
+// SuggestFlyRouteID — допустимый идентификатор маршрута из того, что
+// написано (или из первого имени): строчные, прочее — «-».
+func SuggestFlyRouteID(route string, names []string) string {
+	src := route
+	if strings.Trim(flyRouteJunk.ReplaceAllString(strings.ToLower(src), ""), "-") == "" && len(names) > 0 {
+		src = names[0]
+	}
+	id := strings.Trim(flyRouteJunk.ReplaceAllString(strings.ToLower(src), "-"), "-")
+	if len(id) > 41 {
+		id = strings.TrimRight(id[:41], "-")
+	}
+	if id == "" {
+		id = "route"
+	}
+	return id
 }

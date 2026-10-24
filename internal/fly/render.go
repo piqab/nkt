@@ -66,7 +66,7 @@ func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) stri
 	// MSS по MTU туннеля: SYN и SYN-ACK через туннель — с размером
 	// сегмента, который в нём помещается (иначе крупные пакеты застревают,
 	// если по дороге режут ICMP).
-	fmt.Fprintf(&b, "\tchain mss {\n\t\ttype filter hook forward priority mangle; policy accept;\n\t\toifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t\tiifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t}\n", c.Iface, c.Iface)
+	fmt.Fprintf(&b, "\tchain clamp_mss {\n\t\ttype filter hook forward priority mangle; policy accept;\n\t\toifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t\tiifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t}\n", c.Iface, c.Iface)
 	// Ограничения на клиента для маршрутов по порту: новые соединения
 	// сверх числа или частоты с одного адреса отбрасываются до DNAT.
 	b.WriteString(limitRules(c))
@@ -194,8 +194,8 @@ func HostNFT(i HostIface) string {
 	}
 	// MSS по MTU туннеля: ответы контейнеров и машин (forward) и самого
 	// хоста (соединения туннеля по метке).
-	fmt.Fprintf(&b, "\tchain mss {\n\t\ttype filter hook forward priority mangle; policy accept;\n\t\toifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t}\n", i.Name)
-	fmt.Fprintf(&b, "\tchain mss_out {\n\t\ttype filter hook output priority mangle; policy accept;\n\t\tct mark 0x%x tcp flags & syn == syn tcp option maxseg size set %d\n\t}\n", i.Mark, tunnelMSS)
+	fmt.Fprintf(&b, "\tchain clamp_mss {\n\t\ttype filter hook forward priority mangle; policy accept;\n\t\toifname %q tcp flags & syn == syn tcp option maxseg size set rt mtu\n\t}\n", i.Name)
+	fmt.Fprintf(&b, "\tchain clamp_mss_out {\n\t\ttype filter hook output priority mangle; policy accept;\n\t\tct mark 0x%x tcp flags & syn == syn tcp option maxseg size set %d\n\t}\n", i.Mark, tunnelMSS)
 	b.WriteString("}\n")
 	return b.String()
 }
@@ -224,7 +224,7 @@ func limitRules(c GatewayConfig) string {
 	if rules.Len() == 0 {
 		return ""
 	}
-	return sets.String() + "\tchain limits {\n\t\ttype filter hook prerouting priority mangle; policy accept;\n" + rules.String() + "\t}\n"
+	return sets.String() + "\tchain client_limits {\n\t\ttype filter hook prerouting priority mangle; policy accept;\n" + rules.String() + "\t}\n"
 }
 
 // tunnelMSS — размер TCP-сегмента в туннеле: MTU wg-quick по умолчанию

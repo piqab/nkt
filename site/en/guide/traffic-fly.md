@@ -74,6 +74,11 @@ route. Without it the gateway does not decrypt TLS, and browsers show
   must point to the gateway, and the gateway's port 80 must be free or
   used by HTTP by name routes. Exact names are needed: `*.domain` cannot
   be issued this way.
+- The ports belong to the gateway, not the host: nothing needs opening on
+  the host. nkt sets up the VPS's own ufw when installing the edge, but
+  **in the provider's firewall** (security group, the “firewall” in the
+  hosting panel) allow 80 and 443 and the ports of port routes (say, 2222
+  for git over SSH) — nkt can't reach that.
 - `http://name` is redirected to `https://`.
 - The target gets HTTP with the client address in `X-Forwarded-For` and
   `X-Real-IP`, the scheme in `X-Forwarded-Proto: https`; `Host` is the
@@ -252,6 +257,14 @@ way.
 ![Editing on the map](/screens/en/traffic-fly-redirect.png)
 
 ## Editing, history and applying
+
+- A new route's **identifier** fills in by itself: from the first name
+  (`git.example.com` → `git-example-com`), otherwise from the label
+  (Cyrillic transliterated), otherwise from the kind and port
+  (`tcp-2222`); if taken — with a `-2` suffix. You can type your own:
+  invalid characters are fixed as you type (upper case to lower, space,
+  `_`, `.` to `-`), and the hint under the field says what's allowed. If
+  “Save” is disabled, the reason is written next to it.
 
 - Routes are changed by admins; saving goes through a **diff** window
   with a note, and each save is a new **version**. Two simultaneous edits

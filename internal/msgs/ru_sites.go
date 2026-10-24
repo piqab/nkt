@@ -218,6 +218,8 @@ var ruSitesCatalog = map[string]string{
 	"deploy.tokenServiceMem":          "сервис %s просит %d МБ памяти — больше потолка сервиса токена (%d)",
 	"deploy.tokenServiceUnsafe":       "сервис %s: %s — токену с потолками нельзя (выходит за стек)",
 	"deploy.tokenStack":               "стек %s на %s: %.2f CPU, %d МБ (потолки токена %s)",
+	"deploy.flyRouteID":               "%s %q: идентификатор маршрута — латиница a–z, цифры и «-», первая — буква или цифра, до 41 знака; например %q",
+	"deploy.flyWildcardTLS":           "%s %q: сертификат на шлюзе (tls: gateway) — только для точных имён, без «*.»",
 	"deploy.removeTitle":              "Удаление конвейера %s",
 	"deploy.removeStepSite":           "Сайт конвейера",
 	"deploy.removeStepHosts":          "Стек на хостах: %d",

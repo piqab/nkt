@@ -1,6 +1,9 @@
 package deploy
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateFly(t *testing.T) {
 	ok := []FlySpec{
@@ -30,5 +33,23 @@ func TestValidateFly(t *testing.T) {
 	}
 	if validateFly([]FlySpec{ok[1], ok[1]}) == nil {
 		t.Error("route twice accepted")
+	}
+}
+
+// Неверный идентификатор маршрута в fly: — ошибка с правилом и готовым
+// вариантом; «*.» с сертификатом на шлюзе — своей ошибкой.
+func TestFlyRouteIDHint(t *testing.T) {
+	for in, want := range map[string]string{"Git.Example": "git-example", "_web_": "web", "--": "git-example-com"} {
+		if got := SuggestFlyRouteID(in, []string{"git.example.com"}); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+	f := FlySpec{Route: "Git Web", Kind: "https", Names: []string{"git.example.com"}, Service: "web", TargetPort: 3000}
+	if err := f.validate(0); err == nil || !strings.Contains(err.Error(), "git-web") {
+		t.Fatalf("route hint: %v", err)
+	}
+	f = FlySpec{Route: "web", Kind: "https", Names: []string{"*.example.com"}, TLS: "gateway", Service: "web", TargetPort: 3000}
+	if err := f.validate(0); err == nil || !strings.Contains(err.Error(), "*.") {
+		t.Fatalf("wildcard tls: %v", err)
 	}
 }

@@ -4787,6 +4787,9 @@
     "willTryOthers": "no answer — try the same port with another Megatec driver and nutdrv_qx over USB; the driver's answer goes to the log"
   },
   "fly": {
+    "idAuto": "fills in from the name or label; you can type your own",
+    "idHint": "Latin a–z, digits and “-”, starting with a letter or digit, up to 41 characters",
+    "why": {"idEmpty": "Enter an identifier", "idBad": "Identifier: Latin a–z, digits and “-”, starting with a letter or digit", "idTaken": "Identifier {{id}} is already used by another route", "names": "Enter a name (domain)", "wildcardTls": "A certificate on the gateway works only for exact names, without “*.”", "port": "Enter the gateway port", "targets": "Add a target", "target": "A target lacks a host, container or port", "allow": "“Allowed” has something that isn't an IPv4 address or network"},
     "openLog": "log",
     "gwInstallFailed": "gateway installation failed",
     "gwInstalling": "Installing a gateway: {{title}}",

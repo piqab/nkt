@@ -218,6 +218,8 @@ var enSitesCatalog = map[string]string{
 	"deploy.tokenServiceMem":          "service %s asks for %d MB of memory — above the token's service limit (%d)",
 	"deploy.tokenServiceUnsafe":       "service %s: %s — not allowed to a token with limits (it reaches outside the stack)",
 	"deploy.tokenStack":               "stack %s on %s: %.2f CPU, %d MB (limits of token %s)",
+	"deploy.flyRouteID":               "%s %q: a route identifier is Latin a–z, digits and “-”, starting with a letter or digit, up to 41 characters; for example %q",
+	"deploy.flyWildcardTLS":           "%s %q: a certificate on the gateway (tls: gateway) works only for exact names, without “*.”",
 	"deploy.removeTitle":              "Deleting pipeline %s",
 	"deploy.removeStepSite":           "The pipeline's site",
 	"deploy.removeStepHosts":          "Stack on hosts: %d",

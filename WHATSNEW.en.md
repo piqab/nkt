@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.100 — 2026-10-24
+
+- **Traffic Fly on hosts with old nftables** (Debian 11, Ubuntu 22.04
+  and others, before 1.0.6) no longer fails with `syntax error,
+  unexpected '}'` in `nkt-fly1.nft`: a chain was named `mss`, which is an
+  nftables word. The chains are renamed on the host and the gateway; the
+  files are checked with nftables 0.9.8, 1.0.2 and 1.0.6. Update nkt on
+  the host and press “Apply”.
+- **The route identifier fills in by itself:** from the first name, the
+  label or the kind with the port; invalid characters are fixed as you
+  type, the hint under the field says what's allowed, and next to a
+  disabled “Save” — what's missing.
+- **`fly:` in a pipeline:** a bad `route` gives an error with the rule
+  and a ready variant, `*.` with a certificate on the gateway — a clear
+  error.
+
 ## v1.13.99 — 2026-10-24
 
 - **chi 5.5.0.** The HTTP router library is updated: an advisory about
