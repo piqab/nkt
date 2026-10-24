@@ -44,6 +44,7 @@ export interface TokenPerms {
 export const TOKEN_ACTIONS = [
   'pipeline.deploy',
   'pipeline.power',
+  'pipeline.create',
   'script.run',
   'k8s.apply',
   'vm.manage',
@@ -76,7 +77,7 @@ const PRESETS: Record<string, TokenPerms | 'read'> = {
   read: 'read',
   ci: { actions: ['pipeline.deploy', 'pipeline.power'], limits: { deploys_per_hour: 20 } },
   compose: {
-    actions: ['pipeline.deploy', 'pipeline.power', 'container.action'],
+    actions: ['pipeline.deploy', 'pipeline.power', 'pipeline.create', 'container.action'],
     limits: { cpu: 2, mem_mb: 4096, host_cpu: 2, host_mem_mb: 4096, service_cpu: 1, service_mem_mb: 1024, min_free_gb: 5, deploys_per_hour: 30 },
   },
   k8s: { actions: ['k8s.apply'], namespaces: ['team-a'], limits: { k8s_cpu: 4, k8s_mem_mb: 8192, k8s_storage_gb: 50, k8s_pods: 30, service_cpu: 1, service_mem_mb: 1024, deploys_per_hour: 30 } },

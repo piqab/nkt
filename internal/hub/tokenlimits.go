@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/vmcreate"
@@ -30,7 +31,16 @@ func (s *Server) tokenObjectAllowed(r *http.Request, t store.APIToken, pattern s
 		if err != nil {
 			return tokenDeny(http.StatusNotFound, "err.notFound")
 		}
-		return tokenPipelineAllowed(t, p.Name)
+		return tokenPipelineAllowed(t, p)
+	case "/hub/pipelines/{id}", "/hub/pipelines/{id}/remove":
+		// Править и удалять — только свои.
+		p, err := s.db.PipelineByID(ctx, id)
+		if err != nil {
+			return tokenDeny(http.StatusNotFound, "err.notFound")
+		}
+		if !t.Owns(p.Author) {
+			return tokenDeny(http.StatusForbidden, "auth.tokenNotOwnPipeline", p.Name)
+		}
 	case "/hub/scripts/{id}/run":
 		sc, err := s.db.ScriptByID(ctx, id)
 		if err != nil {
@@ -50,10 +60,38 @@ func (s *Server) tokenObjectAllowed(r *http.Request, t store.APIToken, pattern s
 }
 
 // tokenPipelineAllowed — конвейер в списке токена (пусто — любой в
-// пределах его хостов).
-func tokenPipelineAllowed(t store.APIToken, name string) error {
-	if t.Limited() && len(t.Perms.Pipelines) > 0 && !slices.Contains(t.Perms.Pipelines, name) {
-		return tokenDeny(http.StatusForbidden, "auth.tokenObjectDenied", name)
+// пределах его хостов) или создан им самим.
+func tokenPipelineAllowed(t store.APIToken, p store.Pipeline) error {
+	if t.Limited() && len(t.Perms.Pipelines) > 0 && !slices.Contains(t.Perms.Pipelines, p.Name) && !t.Owns(p.Author) {
+		return tokenDeny(http.StatusForbidden, "auth.tokenObjectDenied", p.Name)
+	}
+	return nil
+}
+
+// tokenContentAllowed — описание, которое токен с пределами или «по
+// правам» создаёт, правит или прогоняет: «по правам» — только compose, и
+// все хосты описания — в пределах токена.
+func (s *Server) tokenContentAllowed(ctx context.Context, t store.APIToken, content string) error {
+	if !t.Scoped() && !t.Limited() {
+		return nil
+	}
+	spec, err := deploy.ParseSpec(content)
+	if err != nil {
+		return err
+	}
+	if spec.Action != deploy.ActionCompose || spec.Compose == nil {
+		return msgs.Errorf("auth.tokenPipelineCompose")
+	}
+	targets, err := s.resolveHosts(ctx, spec.Compose.Hosts, spec.Compose.Group)
+	if err != nil {
+		return err
+	}
+	if allow := s.scopeFilter(ctx); allow != nil {
+		for _, h := range targets {
+			if !allow(h.ID) {
+				return tokenDeny(http.StatusForbidden, "auth.tokenHostDenied")
+			}
+		}
 	}
 	return nil
 }

@@ -27,6 +27,7 @@ const (
 const (
 	TokenActPipelineDeploy = "pipeline.deploy" // выкладка, откат, сухой прогон
 	TokenActPipelinePower  = "pipeline.power"  // «Запустить» / «Остановить»
+	TokenActPipelineCreate = "pipeline.create" // создать, править и удалить свои конвейеры (compose)
 	TokenActScriptRun      = "script.run"      // запуск сохранённых сценариев
 	TokenActK8sApply       = "k8s.apply"       // манифесты в namespace токена
 	TokenActVMManage       = "vm.manage"       // машины: создать, включить, выключить
@@ -39,7 +40,7 @@ const (
 )
 
 // TokenActions — все действия по порядку (окно токена, проверка).
-var TokenActions = []string{TokenActPipelineDeploy, TokenActPipelinePower, TokenActScriptRun, TokenActK8sApply, TokenActVMManage,
+var TokenActions = []string{TokenActPipelineDeploy, TokenActPipelinePower, TokenActPipelineCreate, TokenActScriptRun, TokenActK8sApply, TokenActVMManage,
 	TokenActContainer, TokenActService, TokenActFly, TokenActMigrate, TokenActFail2ban, TokenActVulnScan}
 
 // TokenPerms — права и потолки токена «по правам».
@@ -96,6 +97,9 @@ func (t APIToken) Can(action string) bool {
 	}
 	return false
 }
+
+// Owns — объект создан этим токеном (автор «token:<имя>»).
+func (t APIToken) Owns(author string) bool { return author == "token:"+t.Name }
 
 // Limited — у токена есть права и потолки (роль «по правам»).
 func (t APIToken) Limited() bool { return t.Role == TokenRoleCustom }

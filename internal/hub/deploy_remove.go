@@ -81,6 +81,9 @@ func (s *Server) handlePipelineRemove(w http.ResponseWriter, r *http.Request) {
 		RemoveOptions
 		Items        []removalKey `json:"items"`
 		KeepPipeline bool         `json:"keep_pipeline"`
+		// All — убрать всё, что по плану «уберётся» (MCP remove_pipeline:
+		// агенту не нужно собирать items).
+		All bool `json:"all"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -96,6 +99,14 @@ func (s *Server) handlePipelineRemove(w http.ResponseWriter, r *http.Request) {
 	// Выбранное — только из плана и только «уберётся»: общий чужой стек
 	// снести нельзя и прямым запросом.
 	plan := s.removalPlan(ctx, p)
+	if req.All && req.Items == nil {
+		req.Items = []removalKey{}
+		for _, it := range plan {
+			if it.State == "remove" {
+				req.Items = append(req.Items, removalKey{HostID: it.HostID, Project: it.Project})
+			}
+		}
+	}
 	for _, k := range req.Items {
 		if !slices.ContainsFunc(plan, func(it removalItem) bool {
 			return it.HostID == k.HostID && it.Project == k.Project && it.State == "remove"

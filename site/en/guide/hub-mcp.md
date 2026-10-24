@@ -61,14 +61,16 @@ admin token or a token by permission (within its limits).
 | `list_hosts` | read | hosts: status, version, problems |
 | `host_overview`, `host_findings`, `host_services`, `host_containers` | read | host sections (`host_id`; the hub machine is `-1`) |
 | `list_alerts` | read | alerts newer than `after` |
-| `list_pipelines` | read | pipelines and their last deployment |
+| `list_pipelines`, `get_pipeline` | read | pipelines and their last deployment; a pipeline's description (secrets are `@secret`) |
+| `list_pipeline_examples` | read | ready descriptions from the examples (no `key` — the list, with `key` — the text) |
 | `job_status`, `job_log` | read | a hub job and its log |
 | `list_scripts`, `get_script` | read | saved scripts |
 | `list_migrations`, `list_clusters` | read | stack moves, clusters |
 | `fly_map`, `fly_status` | read, no limit | Traffic Fly map and state |
 | `check_script` | admin | “Check” for a script text, changes nothing |
 | `run_script` | admin | run a script (`dry_run`; `dry_first` — a dry run, then the run if it passes; `values` — answers to its questions) |
-| `deploy_pipeline`, `dry_run_pipeline` | admin | deploy, dry run |
+| `deploy_pipeline`, `dry_run_pipeline` | admin | deploy; a dry run of a saved pipeline or of a description text (`content`) |
+| `create_pipeline`, `update_pipeline`, `remove_pipeline` | admin | create a pipeline from a description, replace the description (a new version, the diff in the answer), remove it with its stack (a token by permission — the “create pipelines” action, compose only on its hosts and only its own) |
 | `pipeline_power` | admin | stop a deployment or bring up the same version (`action`: `stop` / `start`) |
 | `create_vm`, `vm_power` | admin | a machine on a host from a cloud image; start, shut down, force off (a token by permission — its own, within limits) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |
@@ -125,14 +127,40 @@ with an admin token the agent can stop the extra container itself
 `"wait": true`) — without confirmation, all in the audit log as
 `token:<name>`.
 
+## Example: an agent creates a pipeline
+
+The request: “bring up umami on web1 with the domain stats.example.com”.
+The agent:
+
+1. `list_pipeline_examples` → `list_pipeline_examples` with
+   `"key":"umami"` — a ready description;
+2. edits the host, the domain and `env:` in it (passwords stay
+   `generate:` — the hub creates them);
+3. `dry_run_pipeline` with `"content"` and `"wait": true` — hosts, ports,
+   images, site; on errors it fixes and repeats;
+4. `create_pipeline` — the pipeline is created, the `env:` values went to
+   the encrypted `.env`, the description keeps `@secret`;
+5. `deploy_pipeline` with `"wait": true` — the outcome and log.
+
+Later edits — `get_pipeline` and `update_pipeline` (the diff in the
+answer, a version by `token:<name>` in the pipeline's history), removal —
+`remove_pipeline`.
+
 ## Example: a token by permission
 
-A token from the “Agent: compose with limits” preset: the “deploy, roll back, dry run” action, pipelines `app`
-and `blog`, host `web1`, limits — 2 CPU and 2048 MB in total, 1 CPU and
-512 MB per service, 10 actions per hour. An agent with it sees the read
-tools plus `deploy_pipeline` and `dry_run_pipeline` in `tools/list`;
-other actions aren't listed, and calling them returns
+A token based on the “Agent: compose with limits” preset: of the actions
+only “deploy, roll back, dry run” and “create pipelines” are kept,
+pipelines `app` and `blog`, host `web1`, limits — 2 CPU and 2048 MB in
+total, 1 CPU and 512 MB per service, 10 actions per hour. An agent with it
+sees the read tools, `deploy_pipeline`, `dry_run_pipeline`,
+`create_pipeline`, `update_pipeline` and `remove_pipeline` in
+`tools/list`; other actions aren't listed, and calling them returns
 `unknown or not allowed tool`.
+
+- `create_pipeline` — compose only and only on `web1`; the created
+  pipeline is its own: it can deploy, edit and remove it although it isn't
+  in the `app`, `blog` list; `update_pipeline` for `app` (not created by
+  it) — `pipeline app wasn't created by this token`;
 
 - `deploy_pipeline` for `app` deploys; services without their own limits
   get the per-service cap (1 CPU, 512 MB) in the copy of the compose file

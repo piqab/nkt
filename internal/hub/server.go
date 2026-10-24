@@ -439,6 +439,7 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/pipelines", s.handlePipelines)
 					r.Get("/hub/deploy/git", s.handleDeployGit)
 					r.Get("/hub/pipelines/template", s.handlePipelineTemplate)
+					r.Get("/hub/pipelines/examples", s.handlePipelineExamples)
 					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)
 					r.Post("/hub/pipelines", s.handlePipelineCreate)
 					r.Post("/hub/pipelines/dryrun", s.handlePipelineDryRun)

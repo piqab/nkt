@@ -166,13 +166,13 @@ func TestTokenK8sRules(t *testing.T) {
 		t.Fatalf("ok: %v %v", nss, err)
 	}
 	for what, bad := range map[string]string{
-		"other ns":      strings.Replace(ok, "team-a", "team-b", 1),
-		"no ns":         strings.Replace(ok, "  namespace: team-a\n", "", 1),
-		"cluster role":  "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRoleBinding\nmetadata:\n  name: x\n",
-		"quota":         "apiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: x\n  namespace: team-a\n",
-		"host network":  strings.Replace(ok, "      containers:", "      hostNetwork: true\n      containers:", 1),
-		"host path":     strings.Replace(ok, "      containers:", "      volumes:\n        - name: h\n          hostPath:\n            path: /\n      containers:", 1),
-		"privileged":    strings.Replace(ok, "          image: nginx\n", "          image: nginx\n          securityContext:\n            privileged: true\n", 1),
+		"other ns":       strings.Replace(ok, "team-a", "team-b", 1),
+		"no ns":          strings.Replace(ok, "  namespace: team-a\n", "", 1),
+		"cluster role":   "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRoleBinding\nmetadata:\n  name: x\n",
+		"quota":          "apiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: x\n  namespace: team-a\n",
+		"host network":   strings.Replace(ok, "      containers:", "      hostNetwork: true\n      containers:", 1),
+		"host path":      strings.Replace(ok, "      containers:", "      volumes:\n        - name: h\n          hostPath:\n            path: /\n      containers:", 1),
+		"privileged":     strings.Replace(ok, "          image: nginx\n", "          image: nginx\n          securityContext:\n            privileged: true\n", 1),
 		"foreign ns obj": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: other\n",
 	} {
 		if _, err := tokenK8sNamespaces(bad, []string{"team-a"}); err == nil {

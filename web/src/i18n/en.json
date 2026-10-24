@@ -4243,6 +4243,7 @@
     "act": {
       "pipeline.deploy": "deploy, roll back, dry run",
       "pipeline.power": "“Start” / “Stop” a deployment",
+        "pipeline.create": "create, edit and remove its own pipelines (compose)",
       "script.run": "run saved scripts",
       "k8s.apply": "manifests into its own namespace",
       "vm.manage": "machines: create, start, stop its own",

@@ -475,9 +475,17 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 	name := msgs.Tc(ctx, "deploy.dryNewPipeline")
 	tok, byToken := tokenFromContext(ctx)
 	if byToken && (tok.Scoped() || tok.Limited()) && (req.PipelineID == 0 || strings.TrimSpace(req.Content) != "") {
-		// Произвольное описание может смотреть на любые хосты.
-		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenDryContent"))
-		return
+		// Произвольное описание может смотреть на любые хосты: токену с
+		// пределами — только тому, кто создаёт конвейеры, и только compose
+		// на своих хостах.
+		if tok.Limited() && !tok.Can(store.TokenActPipelineCreate) {
+			writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenDryContent"))
+			return
+		}
+		if err := s.tokenContentAllowed(ctx, tok, req.Content); err != nil {
+			writeErr(w, r, http.StatusForbidden, err)
+			return
+		}
 	}
 	if req.PipelineID > 0 {
 		pl, err := s.db.PipelineByID(ctx, req.PipelineID)
@@ -489,7 +497,7 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if byToken {
-			if err := tokenPipelineAllowed(tok, pl.Name); err != nil {
+			if err := tokenPipelineAllowed(tok, pl); err != nil {
 				writeErr(w, r, http.StatusForbidden, err)
 				return
 			}
