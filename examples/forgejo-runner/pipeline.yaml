@@ -1,0 +1,28 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Раннер Forgejo Actions с Docker-in-Docker из examples/ репозитория nkt.
+# Токен регистрации — Forgejo → «Администрирование» → «Actions» →
+# «Раннеры» → «Создать новый раннер» (или в настройках организации /
+# репозитория). Подробно — README.md.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/forgejo-runner/deploy/docker-compose.yml
+  project: forgejo-runner
+  # Отдельный хост или машина для сборок: DinD — privileged.
+  hosts: [build1]
+  files: [examples/forgejo-runner/deploy/config.yml]
+  wait_timeout: 5m
+  # Без адреса и токена раннер не зарегистрировать:
+  env_keys:
+    runner-register: [FORGEJO_URL, RUNNER_TOKEN, RUNNER_NAME, RUNNER_LABELS]
+  # .env стека: при сохранении значения уйдут в секреты конвейера.
+  env:
+    FORGEJO_URL: https://git.example.com
+    RUNNER_TOKEN: paste-registration-token-here
+    RUNNER_NAME: build1
+    # ubuntu-latest — образ с node, git и docker CLI (как runs-on в
+    # GitHub Actions); docker — только docker CLI.
+    RUNNER_LABELS: ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-22.04,docker:docker://docker:29.9-cli

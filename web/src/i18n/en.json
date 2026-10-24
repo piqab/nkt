@@ -3616,6 +3616,10 @@
         "title": "Forgejo + PostgreSQL",
         "hint": "A git server without the install wizard: the administrator from .env (a one-shot service), the web through the site, SSH on 2222 open to the outside."
       },
+      "forgejo-runner": {
+        "title": "Forgejo Actions runner (Docker-in-Docker)",
+        "hint": "Image builds on your own host: jobs in a separate dockerd (privileged), registration with a token from .env, daily cache cleanup. Use a host separate from production stacks."
+      },
       "wordpress": {
         "title": "WordPress + MariaDB",
         "hint": "A WordPress site behind the HTTPS proxy; passwords from .env."

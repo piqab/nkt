@@ -221,6 +221,17 @@ Gitea's built-in registry.
 A regular Gitea/Forgejo webhook works too: Settings → Webhooks → Gitea,
 Secret — the pipeline's secret; the hub checks `X-Gitea-Signature`.
 
+### Your own runner on a host — deployed by nkt
+
+No runner yet — bring one up with a pipeline: Deployments → New pipeline →
+Examples → **Forgejo Actions runner** ([examples/forgejo-runner](https://github.com/piqab/nkt/tree/main/examples/forgejo-runner)).
+The stack: Forgejo Runner, a separate dockerd (Docker-in-Docker,
+privileged — put it on a separate build host), one-time registration with
+a token from `.env` and a daily cache cleanup. The example includes a
+workflow that builds the app image (a webhook after the build or registry
+polling, the variants above) and one that builds the nkt hub image itself
+from a repository mirror.
+
 ### No CI: build on your machine
 
 ```bash

@@ -1,0 +1,50 @@
+# Сборка образа приложения на своём раннере (examples/forgejo-runner) и
+# выкладка через хаб nkt. Положите в репозиторий приложения как
+# .forgejo/workflows/build.yml.
+#
+# push в main  → образ <registry>/<владелец>/<репозиторий>:<короткий коммит>
+# тег v1.2.3   → образ …:v1.2.3
+# затем — либо вебхук конвейера хаба (NKT_HOOK_URL задан), либо ничего:
+# хаб сам увидит новый тег в registry (registry: в описании конвейера).
+#
+# Переменные репозитория (Settings → Actions → Variables):
+#   REGISTRY         адрес Forgejo без https:// (git.example.com)
+# Секреты (Settings → Actions → Secrets):
+#   REGISTRY_TOKEN   токен Forgejo с правом write:package
+#   NKT_HOOK_URL     адрес вебхука из окна «Вебхук» конвейера (пусто — без вебхука)
+#   NKT_HOOK_SECRET  секрет подписи оттуда же
+name: build
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NKT_HOOK_URL: ${{ secrets.NKT_HOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Тег образа
+        id: tag
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then tag="${GITHUB_REF_NAME}"; else tag="$(echo "$GITHUB_SHA" | cut -c1-12)"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=${{ vars.REGISTRY }}/$(echo "$GITHUB_REPOSITORY" | tr 'A-Z' 'a-z')" >> "$GITHUB_OUTPUT"
+
+      # docker CLI задания ходит в DinD раннера (DOCKER_HOST из config.yml).
+      - name: Сборка и отправка
+        run: |
+          echo "${{ secrets.REGISTRY_TOKEN }}" | docker login "${{ vars.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
+          docker build --build-arg VERSION="${{ steps.tag.outputs.tag }}" -t "${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.tag }}" .
+          docker push "${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.tag }}"
+
+      # Способ 1 — сразу после сборки: вебхук конвейера с тегом образа
+      # (подпись nkt; scripts/nkt-hook.sh — из examples/hello-app).
+      - name: Выложить через хаб nkt
+        if: ${{ env.NKT_HOOK_URL != '' }}
+        env:
+          NKT_HOOK_SECRET: ${{ secrets.NKT_HOOK_SECRET }}
+        run: sh scripts/nkt-hook.sh "${{ steps.tag.outputs.tag }}" "$GITHUB_SHA" main

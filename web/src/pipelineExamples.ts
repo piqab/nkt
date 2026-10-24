@@ -11,7 +11,7 @@ export interface PipelineExample {
   readme: string
   /** maxBody — предел тела запроса у прокси сайта (max_body; "0" — без
    * предела и без буферизации). */
-  site: { service: string; port: number; maxBody?: string }
+  site?: { service: string; port: number; maxBody?: string }
   /** Образы вместо compose-файла; {hubversion} — версия этого хаба. */
   images?: Record<string, string>
   files?: string[]
@@ -110,6 +110,20 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
       ['FORGEJO_ADMIN_USER', 'gitadmin'],
       ['FORGEJO_ADMIN_PASSWORD', 'generate:password'],
       ['FORGEJO_ADMIN_EMAIL', 'admin@example.com'],
+    ],
+  },
+  {
+    key: 'forgejo-runner',
+    link: `${NKT}/blob/main/examples/forgejo-runner/deploy/docker-compose.yml`,
+    project: 'forgejo-runner',
+    readme: `${NKT}/tree/main/examples/forgejo-runner`,
+    files: ['examples/forgejo-runner/deploy/config.yml'],
+    envKeys: { 'runner-register': ['FORGEJO_URL', 'RUNNER_TOKEN', 'RUNNER_NAME', 'RUNNER_LABELS'] },
+    env: [
+      ['FORGEJO_URL', 'https://git.example.com'],
+      ['RUNNER_TOKEN', 'paste-registration-token-here'],
+      ['RUNNER_NAME', 'build1'],
+      ['RUNNER_LABELS', 'ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-22.04,docker:docker://docker:29.9-cli'],
     ],
   },
   {

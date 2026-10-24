@@ -1,0 +1,97 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# Раннер Forgejo Actions с Docker-in-Docker для выкладки через хаб nkt:
+# задания крутятся в отдельном dockerd (сервис docker), а не в docker
+# хоста, — docker.sock хоста не монтируется. Регистрация — разовым
+# сервисом runner-register токеном из .env конвейера.
+#
+# DinD работает только с privileged: держите раннер на отдельном хосте
+# или машине, не рядом с рабочими стеками.
+services:
+  docker:
+    image: docker:29.9-dind
+    # Сертификаты TLS dockerd выписаны на имя docker.
+    hostname: docker
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - docker-certs:/certs
+      - docker-data:/var/lib/docker
+    healthcheck:
+      test: ["CMD-SHELL", "docker -H unix:///var/run/docker.sock info >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # Разовый: регистрирует раннер в Forgejo (файл /data/.runner) и
+  # завершается. Уже зарегистрирован — ничего не делает. nkt считает его
+  # завершение с кодом 0 успехом выкладки.
+  runner-register:
+    image: code.forgejo.org/forgejo/runner:13.2
+    user: "0:0"
+    restart: "no"
+    environment:
+      FORGEJO_URL: ${FORGEJO_URL}
+      RUNNER_TOKEN: ${RUNNER_TOKEN}
+      RUNNER_NAME: ${RUNNER_NAME}
+      RUNNER_LABELS: ${RUNNER_LABELS}
+    volumes:
+      - runner-data:/data
+    command: >-
+      bash -ec '
+      cd /data;
+      if [ -s .runner ]; then echo "runner already registered"; exit 0; fi;
+      forgejo-runner register --no-interactive --instance "$$FORGEJO_URL" --token "$$RUNNER_TOKEN"
+      --name "$$RUNNER_NAME" --labels "$$RUNNER_LABELS";
+      chown -R 1000:1000 /data
+      '
+
+  runner:
+    image: code.forgejo.org/forgejo/runner:13.2
+    restart: unless-stopped
+    working_dir: /data
+    environment:
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+    volumes:
+      - runner-data:/data
+      - docker-certs:/certs:ro
+      - ./config.yml:/config/config.yml:ro
+    command: forgejo-runner --config /config/config.yml daemon
+    depends_on:
+      runner-register:
+        condition: service_completed_successfully
+      docker:
+        condition: service_healthy
+
+  # Чистка кэша сборок раз в сутки: слои и образы старше недели — иначе
+  # том docker-data растёт, пока не кончится диск.
+  docker-gc:
+    image: docker:29.9-cli
+    restart: unless-stopped
+    environment:
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+    volumes:
+      - docker-certs:/certs:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        while true; do
+        docker builder prune -f --filter until=168h;
+        docker image prune -af --filter until=168h;
+        sleep 86400;
+        done
+    depends_on:
+      docker:
+        condition: service_healthy
+
+volumes:
+  docker-certs: {}
+  docker-data: {}
+  runner-data: {}
