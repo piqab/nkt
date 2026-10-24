@@ -136,6 +136,8 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 				tools = append(tools, t.describe())
 			}
 		}
+		// Операции подключённых плагинов (mcp: true).
+		tools = append(tools, s.pluginTools(r.Context(), tok)...)
 		resp.Result = map[string]any{"tools": tools}
 	case "tools/call":
 		var p struct {
@@ -166,6 +168,11 @@ func (s *Server) mcpCall(r *http.Request, tok store.APIToken, name string, args 
 	for i := range mcpTools {
 		if mcpTools[i].Name == name {
 			tool = &mcpTools[i]
+		}
+	}
+	if tool == nil {
+		if out, ok := s.pluginToolCall(r, tok, name, args); ok {
+			return out
 		}
 	}
 	if tool == nil || !tool.allowed(tok) {

@@ -223,6 +223,10 @@ func (s *Server) refsNowCtx(ctx context.Context) script.Refs {
 			refs.Profiles[p.Name] = true
 		}
 	}
+	refs.Plugins = map[string]bool{}
+	for _, p := range s.plugins(ctx) {
+		refs.Plugins[p.Name] = true
+	}
 	return refs
 }
 
@@ -242,7 +246,7 @@ func (s *Server) handleScriptCheck(w http.ResponseWriter, r *http.Request) {
 	var warnings []script.Issue
 	if len(issues) == 0 {
 		refs := s.refsNow(r)
-		issues = script.Check(sc, refs)
+		issues = s.checkScript(r.Context(), sc, refs)
 		warnings = script.Warnings(sc, refs)
 	}
 	steps := sc.Steps
@@ -340,7 +344,7 @@ func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
 	}
 	parsed, issues := script.Parse(sc.Content, req.Values)
 	if len(issues) == 0 {
-		issues = script.Check(parsed, s.refsNow(r))
+		issues = s.checkScript(r.Context(), parsed, s.refsNow(r))
 	}
 	lang := msgs.FromContext(r.Context())
 	if len(issues) > 0 {

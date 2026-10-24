@@ -84,9 +84,14 @@ const PRESETS: Record<string, TokenPerms | 'read'> = {
   vps: { actions: ['vm.manage'], limits: { vms: 3, vm_cpu: 2, vm_mem_mb: 4096, vm_disk_gb: 40, cpu: 6, mem_mb: 12288, disk_gb: 120 } },
 }
 
+/** Подпись действия: plugin.<имя> — «плагин <имя>: его действия». */
+function actLabel(a: string, t: T): string {
+  return a.startsWith('plugin.') ? t('tokens.act.pluginAct', { name: a.slice('plugin.'.length) }) : t(`tokens.act.${a}`)
+}
+
 /** Права и потолки текстом — для диффа перед записью. */
 export function permsText(p: TokenPerms, t: T): string[] {
-  const out = [`${t('tokens.actions')}: ${p.actions.map((a) => t(`tokens.act.${a}`)).join(', ') || '—'}`]
+  const out = [`${t('tokens.actions')}: ${p.actions.map((a) => actLabel(a, t)).join(', ') || '—'}`]
   if (p.pipelines?.length) out.push(`${t('tokens.pipelines')}: ${p.pipelines.join(', ')}`)
   if (p.scripts?.length) out.push(`${t('tokens.scripts')}: ${p.scripts.join(', ')}`)
   if (p.clusters?.length) out.push(`${t('tokens.clusters')}: ${p.clusters.join(', ')}`)
@@ -105,6 +110,9 @@ export function TokenPermsEditor({ perms, onChange, onRole }: { perms: TokenPerm
   const pipelines = useApi<{ pipelines: { name: string }[] }>('/hub/pipelines')
   const scripts = useApi<{ scripts: { name: string }[] }>('/hub/scripts')
   const clusters = useApi<{ clusters: { name: string }[] } | { name: string }[]>('/hub/clusters')
+  // Действия подключённых плагинов: plugin.<имя>.
+  const plugins = useApi<{ plugins: { name: string }[] }>('/hub/plugins')
+  const actions = [...TOKEN_ACTIONS, ...(plugins.data?.plugins ?? []).map((p) => `plugin.${p.name}`)]
   const clusterNames = (() => {
     const d = clusters.data
     const list = Array.isArray(d) ? d : (d?.clusters ?? [])
@@ -132,7 +140,7 @@ export function TokenPermsEditor({ perms, onChange, onRole }: { perms: TokenPerm
       <Checkbox.Group
         value={perms.actions}
         onChange={(v) => onChange({ ...perms, actions: v as string[] })}
-        options={TOKEN_ACTIONS.map((a) => ({ value: a, label: t(`tokens.act.${a}`) }))}
+        options={actions.map((a) => ({ value: a, label: actLabel(a, t) }))}
         style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '0.2rem' }}
       />
       {(has('pipeline.deploy') || has('pipeline.power')) && (

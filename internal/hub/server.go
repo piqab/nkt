@@ -100,6 +100,10 @@ func New(d Deps) *Server {
 		s.hub.scriptCheck = s.aiScriptCheck
 		s.hub.scriptNames = s.aiScriptNames
 	}
+	if s.db != nil {
+		// Слова команд плагинов — для разбора сценариев с первого запроса.
+		s.refreshScriptWords(context.Background())
+	}
 	return s
 }
 
@@ -310,6 +314,12 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/hub/events/seen", s.handleEventsSeen)
 				// MCP для ИИ-агентов — только по API-токену (mcp.go).
 				r.Post("/mcp", s.handleMCP)
+				// Плагины: список и операции — всем вошедшим; что меняет —
+				// администратору или токену с plugin.<имя> (pluginOpAllowed).
+				r.Get("/hub/plugins", s.handlePlugins)
+				r.Post("/hub/plugins/{name}/call", s.handlePluginCall)
+				r.Get("/hub/plugins/{name}/doc", s.handlePluginDocGet)
+				r.Put("/hub/plugins/{name}/doc", s.handlePluginDocPut)
 				// Опросить хост сейчас (щелчок по значку «недоступен»): на
 				// хосте ничего не меняет, поэтому — всем, кто видит список.
 				r.Post("/hub/hosts/{id}/poll", s.handleHostPoll)
@@ -440,6 +450,9 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/deploy/git", s.handleDeployGit)
 					r.Get("/hub/pipelines/template", s.handlePipelineTemplate)
 					r.Get("/hub/pipelines/examples", s.handlePipelineExamples)
+					r.Post("/hub/plugins/probe", s.handlePluginProbe)
+					r.Post("/hub/plugins", s.handlePluginConnect)
+					r.Delete("/hub/plugins/{name}", s.handlePluginDisconnect)
 					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)
 					r.Post("/hub/pipelines", s.handlePipelineCreate)
 					r.Post("/hub/pipelines/dryrun", s.handlePipelineDryRun)

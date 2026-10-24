@@ -306,6 +306,15 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 		}
 		export.Edges, export.Edge = edges, nil
 		reencryptAccess(&export, reenc, func(what string, err error) { pre = append(pre, fmt.Sprintf("%s: %v", what, err)) })
+		// Секреты плагинов — тем же ключом.
+		if raw := export.Settings[pluginsKV]; raw != "" {
+			if out, err := reencryptPlugins(raw, reenc); err != nil {
+				pre = append(pre, fmt.Sprintf("%s: %v", pluginsKV, err))
+				delete(export.Settings, pluginsKV)
+			} else {
+				export.Settings[pluginsKV] = out
+			}
+		}
 		// Ключ модели — тем же мастер-ключом, что и секреты хостов.
 		if enc := export.Settings[aiKeyKVKey]; enc != "" {
 			raw, err := secretbox.Decrypt(oldKey, []byte(enc))

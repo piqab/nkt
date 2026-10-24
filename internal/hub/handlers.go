@@ -1223,6 +1223,7 @@ func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rep := s.hub.ImportHosts(r.Context(), export, res)
+	s.refreshScriptWords(r.Context())
 	if c := rep.Sections[store.SectionEdge]; c != nil && c.Added+c.Replaced > 0 {
 		s.kickEdge()
 	}

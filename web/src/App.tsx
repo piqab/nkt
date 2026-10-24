@@ -18,7 +18,7 @@ import {
   PlayCircleOutlined,
   ProfileOutlined,
   SecurityScanOutlined,
-  LineChartOutlined, ApiOutlined, RobotOutlined } from '@ant-design/icons'
+  LineChartOutlined, ApiOutlined, RobotOutlined, AppstoreAddOutlined } from '@ant-design/icons'
 import { notifyNewEvents } from './notifications'
 import { NAV_ITEMS } from './navItems'
 import { applyNavLayout, type NavLayout } from './navLayout'
@@ -50,6 +50,7 @@ import ClustersPage from './pages/ClustersPage'
 import Deployments from './pages/Deployments'
 import TrafficFlyPage from './pages/TrafficFlyPage'
 import Assistant from './pages/Assistant'
+import { PluginsPage } from './pages/PluginsPage'
 import ServiceDescriptions from './pages/ServiceDescriptions'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
@@ -390,7 +391,7 @@ function Shell({
     window.addEventListener('nkt-open-script', open)
     return () => window.removeEventListener('nkt-open-script', open)
   }, [])
-  const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'fly' | 'assistant' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'fly' | 'assistant' | 'plugins' | 'about'>('hosts')
   // Вкладка «Выкладок», которую открыть (события Traffic Fly ведут в неё).
   const [deployTab, setDeployTab] = useState<string | undefined>(undefined)
   // Переход из ссылок чата ассистента (appNav.openInApp).
@@ -425,6 +426,7 @@ function Shell({
   // хоста без хаба меню по умолчанию. После правки в «О системе» окно
   // шлёт nkt-nav-changed — меню перестраивается сразу.
   const hubNav = useApi<{ layout: NavLayout }>(isHub ? '/hub/ui/nav/hub' : null, 5 * 60_000)
+  const hubPlugins = useApi<{ plugins: { name: string }[] }>(isHub ? '/hub/plugins' : null, 5 * 60_000)
   const hostNav = useApi<{ layout: NavLayout }>(isHub ? '/hub/ui/nav/host' : null, 5 * 60_000)
   useEffect(() => {
     const reload = () => {
@@ -614,6 +616,8 @@ function Shell({
       { key: 'fly', icon: <ApiOutlined />, label: 'Traffic Fly' },
       // Ассистент — администратору: он открывает разделы хостов через хаб.
       ...(me.is_admin && me.experimental?.assistant ? [{ key: 'assistant', icon: <RobotOutlined />, label: t('nav.assistant') }] : []),
+      // Плагины — только когда подключён хоть один («О системе» → «Плагины»).
+      ...((hubPlugins.data?.plugins?.length ?? 0) > 0 ? [{ key: 'plugins', icon: <AppstoreAddOutlined />, label: t('plugins.title') }] : []),
       {
         key: 'about',
         icon: navIcon(<InfoCircleOutlined />, hubUpdate.data?.update_available ? 1 : 0, false, collapsed),
@@ -698,6 +702,8 @@ function Shell({
                 <TrafficFlyPage me={me} />
               ) : hubView === 'assistant' ? (
                 <Assistant />
+              ) : hubView === 'plugins' ? (
+                <PluginsPage admin={me.is_admin} />
               ) : (
                 <About admin={me.is_admin} />
               )}

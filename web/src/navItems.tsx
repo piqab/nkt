@@ -27,7 +27,7 @@ import {
   TeamOutlined,
   ToolOutlined,
   UserOutlined,
-  WifiOutlined, ApiOutlined, RobotOutlined } from '@ant-design/icons'
+  WifiOutlined, ApiOutlined, RobotOutlined, AppstoreAddOutlined } from '@ant-design/icons'
 
 /**
  * Разделы бокового меню хоста и хаба — порядок по умолчанию. Раскладку
@@ -96,5 +96,6 @@ export const HUB_NAV: { key: string; labelKey: string; icon: ReactNode }[] = [
   { key: 'deploy', labelKey: 'nav.deploy', icon: <RocketOutlined /> },
   { key: 'fly', labelKey: 'nav.fly', icon: <ApiOutlined /> },
   { key: 'assistant', labelKey: 'nav.assistant', icon: <RobotOutlined /> },
+  { key: 'plugins', labelKey: 'plugins.title', icon: <AppstoreAddOutlined /> },
   { key: 'about', labelKey: 'nav.about', icon: <InfoCircleOutlined /> },
 ]
