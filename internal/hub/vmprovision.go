@@ -97,11 +97,20 @@ func NewVMProvisionRunner(m *Manager) *VMProvisionRunner { return &VMProvisionRu
 func (r *VMProvisionRunner) Resumable() bool { return true }
 
 // Run проходит все шаги.
-func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
+func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 	var p VMProvisionParams
 	if err := jc.Params(&p); err != nil {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
+	// Машина токена «по правам» учтена при запросе — не создалась, запись
+	// снимается.
+	defer func() {
+		if err != nil {
+			if _, ok := cutTokenAuthor(jc.Job.Author); ok {
+				_ = r.m.db.DeleteTokenUsage(context.WithoutCancel(ctx), 0, store.UsageVM, p.HostID, p.Spec.Name)
+			}
+		}
+	}()
 	if err := p.Spec.Validate(); err != nil {
 		return err
 	}

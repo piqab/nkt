@@ -236,9 +236,14 @@ func (a *tokenAuth) Authenticate(r *http.Request) (context.Context, error) {
 	}
 	ctx = auth.WithUser(ctx, store.User{Username: "token:" + t.Name, Role: role})
 	ctx = context.WithValue(ctx, tokenCtxKey{}, t)
-	grant, err := a.s.tokenPolicy(r.WithContext(ctx), t)
+	grant, act, err := a.s.tokenPolicy(r.WithContext(ctx), t)
 	if err != nil {
 		return nil, err
+	}
+	if act {
+		// Токен «по правам»: маршрут и действие уже проверены политикой —
+		// этот запрос проходит RequireAdmin.
+		ctx = auth.WithUser(ctx, store.User{Username: "token:" + t.Name, Role: store.RoleAdmin})
 	}
 	if grant {
 		ctx = auth.WithReadGrant(ctx)
@@ -337,73 +342,115 @@ var tokenHostDeny = map[string]bool{
 	"svcdesc": true,
 }
 
-// tokenHubRoutes — вызовы хаба, открытые токену: маршрут → нужна ли роль
-// администратора. Хосты (/hosts/…) — отдельно.
-var tokenHubRoutes = map[string]bool{
-	"GET /auth/me":                          false,
-	"GET /hub/version":                      false,
-	"GET /hub/hosts":                        false,
-	"GET /hub/events":                       false,
-	"GET /hub/fail2ban/banned":              false,
-	"GET /hub/sites":                        false,
-	"GET /hub/pipelines":                    false,
-	"GET /hub/pipelines/{id}":               false,
-	"GET /hub/pipelines/{id}/deployments":   false,
-	"GET /hub/jobs/{id}":                    false,
-	"GET /hub/jobs/{id}/log":                false,
-	"POST /hub/pipelines/{id}/deploy":       true,
-	"POST /hub/pipelines/{id}/rollback":     true,
-	"GET /hub/pipelines/{id}/power":         false,
-	"POST /hub/pipelines/{id}/start":        true,
-	"POST /hub/pipelines/{id}/stop":         true,
-	"POST /hub/pipelines/dryrun":            true,
-	"POST /hub/fail2ban/fleet":              true,
-	"GET /hosts/{id}/vulnerabilities":       false,
-	"POST /hosts/{id}/vulnerabilities/scan": true,
+// tokenHubRoutes — вызовы хаба, открытые токену: маршрут → какое действие
+// нужно («» — хватает чтения). Администратору можно всё, токену «по
+// правам» — перечисленное в Perms.Actions. Хосты (/hosts/…) — отдельно
+// (tokenHostAction).
+var tokenHubRoutes = map[string]string{
+	"GET /auth/me":                          "",
+	"GET /hub/version":                      "",
+	"GET /hub/hosts":                        "",
+	"GET /hub/events":                       "",
+	"GET /hub/fail2ban/banned":              "",
+	"GET /hub/sites":                        "",
+	"GET /hub/pipelines":                    "",
+	"GET /hub/pipelines/{id}":               "",
+	"GET /hub/pipelines/{id}/deployments":   "",
+	"GET /hub/jobs/{id}":                    "",
+	"GET /hub/jobs/{id}/log":                "",
+	"POST /hub/pipelines/{id}/deploy":       store.TokenActPipelineDeploy,
+	"POST /hub/pipelines/{id}/rollback":     store.TokenActPipelineDeploy,
+	"GET /hub/pipelines/{id}/power":         "",
+	"POST /hub/pipelines/{id}/start":        store.TokenActPipelinePower,
+	"POST /hub/pipelines/{id}/stop":         store.TokenActPipelinePower,
+	"POST /hub/pipelines/dryrun":            store.TokenActPipelineDeploy,
+	"POST /hub/fail2ban/fleet":              store.TokenActFail2ban,
+	"GET /hosts/{id}/vulnerabilities":       "",
+	"POST /hosts/{id}/vulnerabilities/scan": store.TokenActVulnScan,
 	// Сценарии: читать и запускать сохранённые; создавать и править — только
 	// в интерфейсе (с историей версий).
-	"GET /hub/scripts":           false,
-	"GET /hub/scripts/{id}":      false,
-	"POST /hub/scripts/check":    true,
-	"POST /hub/scripts/{id}/run": true,
+	"GET /hub/scripts":           "",
+	"GET /hub/scripts/{id}":      "",
+	"POST /hub/scripts/check":    store.TokenActScriptRun,
+	"POST /hub/scripts/{id}/run": store.TokenActScriptRun,
 	// Переносы стеков.
-	"GET /hub/migrations":                false,
-	"GET /hub/migrate/live":              false,
-	"POST /hub/migrate/preview":          true,
-	"POST /hub/migrate":                  true,
-	"POST /hub/migrations/{id}/{action}": true,
+	"GET /hub/migrations":                "",
+	"GET /hub/migrate/live":              "",
+	"POST /hub/migrate/preview":          store.TokenActMigrate,
+	"POST /hub/migrate":                  store.TokenActMigrate,
+	"POST /hub/migrations/{id}/{action}": store.TokenActMigrate,
 	// Traffic Fly — карта общая на все хосты: только токену без предела
 	// (tokenPolicy).
-	"GET /hub/fly":                     false,
-	"GET /hub/fly/status":              false,
-	"GET /hub/fly/versions":            false,
-	"PUT /hub/fly":                     true,
-	"POST /hub/fly/ops":                true,
-	"POST /hub/fly/routes/{id}/switch": true,
-	"POST /hub/fly/apply":              true,
+	"GET /hub/fly":                     "",
+	"GET /hub/fly/status":              "",
+	"GET /hub/fly/versions":            "",
+	"PUT /hub/fly":                     store.TokenActFly,
+	"POST /hub/fly/ops":                store.TokenActFly,
+	"POST /hub/fly/routes/{id}/switch": store.TokenActFly,
+	"POST /hub/fly/apply":              store.TokenActFly,
 	// MCP: инструменты — внутренние вызовы этого же API под тем же
 	// токеном (mcp.go), права — их.
-	"POST /mcp": false,
+	"POST /mcp": "",
 	// Кластеры: смотреть и применять манифесты; создание, удаление,
 	// обновление, kubeconfig и Helm — нет.
-	"GET /hub/clusters":             false,
-	"GET /hub/clusters/{id}/nodes":  false,
-	"GET /hub/k8s/manifests":        true,
-	"GET /hub/k8s/manifests/{id}":   true,
-	"POST /hub/k8s/manifests/diff":  true,
-	"POST /hub/k8s/manifests/apply": true,
+	"GET /hub/clusters":             "",
+	"GET /hub/clusters/{id}/nodes":  "",
+	"GET /hub/k8s/manifests":        store.TokenActK8sApply,
+	"GET /hub/k8s/manifests/{id}":   store.TokenActK8sApply,
+	"POST /hub/k8s/manifests/diff":  store.TokenActK8sApply,
+	"POST /hub/k8s/manifests/apply": store.TokenActK8sApply,
+	// Машины (VPS) на хостах: создать, включить, выключить — токену «по
+	// правам» с потолками; свои машины (учёт токена).
+	"POST /hub/vm/provision":           store.TokenActVMManage,
+	"POST /hub/hosts/{id}/vm/{action}": store.TokenActVMManage,
+}
+
+// tokenHostAction — запись в разделы хоста через прокси: какое действие
+// нужно («-» — закрыто токену «по правам», только администратору).
+func tokenHostAction(method, rest string) string {
+	section, tail, _ := strings.Cut(rest, "/")
+	parts := strings.Split(tail, "/")
+	switch {
+	case (section == "containers" || section == "podman") && method == http.MethodPost && len(parts) == 2:
+		return store.TokenActContainer
+	case section == "services" && method == http.MethodPost && len(parts) == 2:
+		return store.TokenActService
+	case section == "vms" && (method == http.MethodPost && len(parts) == 2 || method == http.MethodDelete && len(parts) == 1):
+		return store.TokenActVMManage
+	}
+	return "-"
+}
+
+// tokenRouteAction — какое действие нужно для маршрута (для MCP: какие
+// инструменты показать токену). known — маршрут токену вообще открыт.
+func tokenRouteAction(method, pattern string) (action string, known bool) {
+	if act, ok := tokenHubRoutes[method+" "+pattern]; ok {
+		return act, true
+	}
+	for _, prefix := range []string{"/hosts/{id}/", "/hosts/local/"} {
+		if rest, ok := strings.CutPrefix(pattern, prefix); ok {
+			if method == http.MethodGet {
+				section, _, _ := strings.Cut(rest, "/")
+				return "", tokenHostRead[section]
+			}
+			act := tokenHostAction(method, rest)
+			return act, act != "-"
+		}
+	}
+	return "", false
 }
 
 // tokenPolicy — открыт ли токену этот вызов. grant — GET, открытый
-// токену чтения за RequireAdmin.
-func (s *Server) tokenPolicy(r *http.Request, t store.APIToken) (bool, error) {
+// токену чтения за RequireAdmin; act — действие токена «по правам»
+// разрешено: этот запрос проходит как администраторский.
+func (s *Server) tokenPolicy(r *http.Request, t store.APIToken) (grant, act bool, err error) {
 	deny := tokenDeny(http.StatusForbidden, "auth.tokenRouteDenied", r.Method, r.URL.Path)
 	if r.Header.Get("Upgrade") != "" {
-		return false, deny
+		return false, false, deny
 	}
 	rctx := chi.RouteContext(r.Context())
 	if rctx == nil {
-		return false, deny
+		return false, false, deny
 	}
 	pattern := strings.TrimPrefix(rctx.RoutePattern(), "/api")
 	read := r.Method == http.MethodGet || r.Method == http.MethodHead
@@ -411,18 +458,36 @@ func (s *Server) tokenPolicy(r *http.Request, t store.APIToken) (bool, error) {
 	if method == http.MethodHead {
 		method = http.MethodGet
 	}
-	admin := t.Role == store.TokenRoleAdmin
-	if needAdmin, ok := tokenHubRoutes[method+" "+pattern]; ok {
-		if needAdmin && !admin {
-			return false, tokenDeny(http.StatusForbidden, "auth.tokenReadOnly")
+	need := func(action string) error {
+		if action == "" || t.Can(action) {
+			return nil
+		}
+		if t.Role == store.TokenRoleCustom {
+			return tokenDeny(http.StatusForbidden, "auth.tokenActionDenied", action)
+		}
+		return tokenDeny(http.StatusForbidden, "auth.tokenReadOnly")
+	}
+	if action, ok := tokenHubRoutes[method+" "+pattern]; ok {
+		if err := need(action); err != nil {
+			return false, false, err
 		}
 		if strings.HasPrefix(pattern, "/hub/fly") && t.Scoped() {
-			return false, tokenDeny(http.StatusForbidden, "auth.tokenFlyScoped")
+			return false, false, tokenDeny(http.StatusForbidden, "auth.tokenFlyScoped")
 		}
-		if strings.HasPrefix(pattern, "/hosts/{id}/") && !s.tokenHostAllowed(r.Context(), t, chi.URLParam(r, "id")) {
-			return false, tokenDeny(http.StatusForbidden, "auth.tokenHostDenied")
+		if (strings.HasPrefix(pattern, "/hosts/{id}/") || strings.HasPrefix(pattern, "/hub/hosts/{id}/")) && !s.tokenHostAllowed(r.Context(), t, chi.URLParam(r, "id")) {
+			return false, false, tokenDeny(http.StatusForbidden, "auth.tokenHostDenied")
 		}
-		return read, nil
+		if t.Limited() && action != "" {
+			if err := s.tokenObjectAllowed(r, t, pattern); err != nil {
+				return false, false, err
+			}
+			if !read {
+				if err := s.tokenRate(t, action); err != nil {
+					return false, false, err
+				}
+			}
+		}
+		return read, action != "" && t.Limited(), nil
 	}
 	var hostRef string
 	switch pattern {
@@ -431,22 +496,37 @@ func (s *Server) tokenPolicy(r *http.Request, t store.APIToken) (bool, error) {
 	case "/hosts/local/*":
 		hostRef = "local"
 	default:
-		return false, deny
+		return false, false, deny
 	}
-	section, _, _ := strings.Cut(chi.URLParam(r, "*"), "/")
+	rest := chi.URLParam(r, "*")
+	section, _, _ := strings.Cut(rest, "/")
 	if tokenHostDeny[section] {
-		return false, deny
+		return false, false, deny
 	}
-	if !read && !admin {
-		return false, tokenDeny(http.StatusForbidden, "auth.tokenReadOnly")
-	}
+	admin := t.Role == store.TokenRoleAdmin
 	if read && !admin && !tokenHostRead[section] {
-		return false, deny
+		return false, false, deny
 	}
 	if !s.tokenHostAllowed(r.Context(), t, hostRef) {
-		return false, tokenDeny(http.StatusForbidden, "auth.tokenHostDenied")
+		return false, false, tokenDeny(http.StatusForbidden, "auth.tokenHostDenied")
 	}
-	return read, nil
+	if read || admin {
+		return read, false, nil
+	}
+	action := tokenHostAction(method, rest)
+	if action == "-" {
+		return false, false, tokenDeny(http.StatusForbidden, "auth.tokenReadOnly")
+	}
+	if err := need(action); err != nil {
+		return false, false, err
+	}
+	if action == store.TokenActVMManage {
+		// Машина — только своя: та, что токен создал (учёт).
+		if err := s.tokenOwnsVM(r.Context(), t, hostRef, strings.Split(rest, "/")[1]); err != nil {
+			return false, false, err
+		}
+	}
+	return false, true, nil
 }
 
 // hostGroups — группа каждого хоста (у машины — группа её хоста) и

@@ -393,6 +393,9 @@ func withEnvRefs(content []*yaml.Node, keys []string) []*yaml.Node {
 }
 
 func mapValue(m *yaml.Node, key string) *yaml.Node {
+	if m == nil {
+		return nil
+	}
 	for i := 0; i+1 < len(m.Content); i += 2 {
 		if m.Content[i].Value == key {
 			return m.Content[i+1]

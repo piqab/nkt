@@ -259,6 +259,8 @@ func (r *PipelineRemoveRunner) Run(ctx context.Context, jc *jobs.Context) (err e
 		if err := s.waitHostJobVia(ctx, jc, user, it.HostID, started.JobID); err != nil {
 			return msgs.Errorf("deploy.removeHostFailed", it.Host, msgs.Localize(jc.Lang(), err))
 		}
+		// Стек убран — учёт токенов его больше не держит.
+		_ = s.db.DeleteTokenUsage(ctx, 0, store.UsageCompose, it.HostID, it.Project)
 	}
 
 	// Убранное больше не числится ни выложенным, ни оставшимся.

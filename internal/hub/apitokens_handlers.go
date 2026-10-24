@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"net/http"
 	"net/netip"
 	"slices"
@@ -31,6 +32,8 @@ type tokenReq struct {
 	ExpiresDays int  `json:"expires_days"`
 	KeepExpiry  bool `json:"keep_expiry"`
 	ViaEdge     bool `json:"via_edge"`
+	// Perms — права и потолки роли «по правам».
+	Perms store.TokenPerms `json:"perms"`
 }
 
 // validate — проверка и приведение полей; хосты и группы — только
@@ -40,8 +43,15 @@ func (s *Server) validateTokenReq(r *http.Request, req *tokenReq) error {
 	if req.Name == "" || utf8.RuneCountInString(req.Name) > 64 || strings.ContainsAny(req.Name, "\n\r\t") {
 		return msgs.Errorf("hub.tokenBadName")
 	}
-	if req.Role != store.TokenRoleRead && req.Role != store.TokenRoleAdmin {
+	if req.Role != store.TokenRoleRead && req.Role != store.TokenRoleAdmin && req.Role != store.TokenRoleCustom {
 		return msgs.Errorf("hub.tokenBadRole", req.Role)
+	}
+	if req.Role == store.TokenRoleCustom {
+		if err := s.validateTokenPerms(r.Context(), &req.Perms); err != nil {
+			return err
+		}
+	} else {
+		req.Perms = store.TokenPerms{}
 	}
 	if req.ExpiresDays < 0 || req.ExpiresDays > 3650 {
 		return msgs.Errorf("hub.tokenBadExpiry", req.ExpiresDays)
@@ -113,7 +123,11 @@ func tokenIDParam(r *http.Request) (int64, error) {
 
 // tokenAudit — пределы токена для журнала действий (без секрета).
 func tokenAudit(t store.APIToken) map[string]any {
-	return map[string]any{"role": t.Role, "hosts": t.Hosts, "groups": t.Groups, "ips": t.IPs, "expires_at": t.ExpiresAt, "via_edge": t.ViaEdge}
+	out := map[string]any{"role": t.Role, "hosts": t.Hosts, "groups": t.Groups, "ips": t.IPs, "expires_at": t.ExpiresAt, "via_edge": t.ViaEdge}
+	if t.Role == store.TokenRoleCustom {
+		out["perms"] = t.Perms
+	}
+	return out
 }
 
 // handleTokens — GET /hub/tokens.
@@ -150,7 +164,7 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := auth.Username(ctx)
 	t := store.APIToken{Name: req.Name, KeyID: keyID, SecretEnc: enc, Role: req.Role, Hosts: req.Hosts, Groups: req.Groups,
-		IPs: req.IPs, ExpiresAt: expiryFromDays(req.ExpiresDays), ViaEdge: req.ViaEdge, Author: user}
+		IPs: req.IPs, ExpiresAt: expiryFromDays(req.ExpiresDays), ViaEdge: req.ViaEdge, Author: user, Perms: req.Perms}
 	id, err := s.db.CreateAPIToken(ctx, t)
 	s.db.Audit(ctx, user, "token.create", req.Name, auditOutcome(err), tokenAudit(t))
 	if err != nil {
@@ -183,7 +197,7 @@ func (s *Server) handleTokenUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	t.Name, t.Role, t.Hosts, t.Groups, t.IPs, t.ViaEdge = req.Name, req.Role, req.Hosts, req.Groups, req.IPs, req.ViaEdge
+	t.Name, t.Role, t.Hosts, t.Groups, t.IPs, t.ViaEdge, t.Perms = req.Name, req.Role, req.Hosts, req.Groups, req.IPs, req.ViaEdge, req.Perms
 	if !req.KeepExpiry {
 		t.ExpiresAt = expiryFromDays(req.ExpiresDays)
 	}
@@ -302,4 +316,101 @@ func (s *Server) handleHubJobLog(w http.ResponseWriter, r *http.Request) {
 		lines[i].Text = msgs.Render(lang, lines[i].Key, lines[i].Args, lines[i].Text)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job": j, "lines": lines})
+}
+
+// validateTokenPerms — права роли «по правам»: известные действия, только
+// существующие конвейеры, сценарии и кластеры, имена namespace, разумные
+// потолки. Потолки суммой у compose без потолка сервиса не посчитать.
+func (s *Server) validateTokenPerms(ctx context.Context, p *store.TokenPerms) error {
+	bad := func(what string) error { return msgs.Errorf("hub.tokenBadPerms", what) }
+	acts := []string{}
+	for _, a := range p.Actions {
+		if !slices.Contains(store.TokenActions, a) {
+			return bad(a)
+		}
+		if !slices.Contains(acts, a) {
+			acts = append(acts, a)
+		}
+	}
+	if len(acts) == 0 {
+		return bad("actions")
+	}
+	p.Actions = acts
+	names := func(list []string, known []string, what string) ([]string, error) {
+		out := []string{}
+		for _, n := range list {
+			n = strings.TrimSpace(n)
+			if n == "" {
+				continue
+			}
+			if !slices.Contains(known, n) {
+				return nil, bad(what + " " + n)
+			}
+			if !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+		return out, nil
+	}
+	var known []string
+	if list, err := s.db.ListPipelines(ctx); err == nil {
+		for _, x := range list {
+			known = append(known, x.Name)
+		}
+	}
+	var err error
+	if p.Pipelines, err = names(p.Pipelines, known, "pipeline"); err != nil {
+		return err
+	}
+	known = nil
+	if list, err := s.db.ListScripts(ctx); err == nil {
+		for _, x := range list {
+			known = append(known, x.Name)
+		}
+	}
+	if p.Scripts, err = names(p.Scripts, known, "script"); err != nil {
+		return err
+	}
+	known = nil
+	if list, err := s.db.ListClusters(ctx); err == nil {
+		for _, x := range list {
+			known = append(known, x.Name)
+		}
+	}
+	if p.Clusters, err = names(p.Clusters, known, "cluster"); err != nil {
+		return err
+	}
+	nss := []string{}
+	for _, n := range p.Namespaces {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
+		if !NamespaceRe.MatchString(n) || strings.HasPrefix(n, "kube-") || n == "default" {
+			return bad("namespace " + n)
+		}
+		if !slices.Contains(nss, n) {
+			nss = append(nss, n)
+		}
+	}
+	if len(nss) > 32 {
+		return bad("namespaces")
+	}
+	p.Namespaces = nss
+	if slices.Contains(acts, store.TokenActK8sApply) && len(nss) == 0 {
+		return bad("namespaces")
+	}
+	l := p.Limits
+	if l.CPU < 0 || l.CPU > 4096 || l.HostCPU < 0 || l.HostCPU > 4096 || l.ServiceCPU < 0 || l.ServiceCPU > 1024 || l.K8sCPU < 0 || l.K8sCPU > 4096 ||
+		l.MemMB < 0 || l.HostMemMB < 0 || l.ServiceMemMB < 0 || l.K8sMemMB < 0 || l.DiskGB < 0 || l.K8sStorageGB < 0 || l.MinFreeGB < 0 ||
+		l.VMs < 0 || l.VMs > 1000 || l.VMCPU < 0 || l.VMCPU > 512 || l.VMMemMB < 0 || l.VMDiskGB < 0 || l.K8sPods < 0 || l.DeploysPerHour < 0 || l.DeploysPerHour > 10000 {
+		return bad("limits")
+	}
+	if slices.Contains(acts, store.TokenActPipelineDeploy) && (l.CPU > 0 || l.HostCPU > 0) && l.ServiceCPU == 0 {
+		return bad("service_cpu")
+	}
+	if slices.Contains(acts, store.TokenActPipelineDeploy) && (l.MemMB > 0 || l.HostMemMB > 0) && l.ServiceMemMB == 0 {
+		return bad("service_mem_mb")
+	}
+	return nil
 }

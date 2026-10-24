@@ -407,6 +407,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/tokens", s.handleTokenCreate)
 					r.Put("/hub/tokens/{id}", s.handleTokenUpdate)
 					r.Post("/hub/tokens/{id}/rotate", s.handleTokenRotate)
+					r.Get("/hub/tokens/{id}/usage", s.handleTokenUsage)
+					r.Post("/hub/tokens/{id}/usage/release", s.handleTokenUsageRelease)
 					r.Delete("/hub/tokens/{id}", s.handleTokenDelete)
 					r.Get("/hub/edges", s.handleEdges)
 					r.Put("/hub/fly", s.handleFlySave)

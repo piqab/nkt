@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.98 — 2026-10-24
+
+- **A token “by permission”.** A third API token role: read plus only the
+  chosen actions — deploy, “Start” / “Stop”, scripts, k8s manifests,
+  machines, containers, services, Traffic Fly, moves, fail2ban,
+  vulnerabilities; pipelines, scripts and clusters by name; presets for
+  common cases.
+- **Resource limits as sums.** CPU, memory and disk — total and per host,
+  over everything the token deployed and created. A compose service
+  without `limits` gets the token's limit, above the limit — refused;
+  what reaches outside the stack is forbidden (`privileged`, host
+  network, host paths, the docker socket); free space is checked before a
+  deployment. Machines — a count and the limits of one, only its own. k8s
+  — only its own namespaces, the hub puts a `ResourceQuota` and a
+  `LimitRange` there. Actions per hour — a limit too.
+- **The ledger in the token window:** “In use … of …”, the entries and
+  “Release”; things removed outside nkt drop off on a check.
+- **MCP** shows a token only its allowed tools; new `create_vm` and
+  `vm_power`. The token window has **MCP examples**, with the issued
+  secret — right after creation.
+
 ## v1.13.97 — 2026-10-23
 
 - **The assistant is a chat.** Questions on the right, answers on the

@@ -57,10 +57,32 @@ func (m *Manager) exportAccess(ctx context.Context, export *store.HubExport) err
 	if err != nil {
 		return err
 	}
+	clusterNames := map[int64]string{}
+	if list, err := m.db.ListClusters(ctx); err == nil {
+		for _, c := range list {
+			clusterNames[c.ID] = c.Name
+		}
+	}
 	for _, t := range tokens {
-		export.APITokens = append(export.APITokens, store.APITokenExport{Name: t.Name, KeyID: t.KeyID, Role: t.Role,
+		te := store.APITokenExport{Name: t.Name, KeyID: t.KeyID, Role: t.Role,
 			Hosts: idsToNames(t.Hosts, byID), Groups: t.Groups, IPs: t.IPs, ExpiresAt: t.ExpiresAt, ViaEdge: t.ViaEdge,
-			Author: t.Author, SecretEnc: t.SecretEnc})
+			Author: t.Author, SecretEnc: t.SecretEnc}
+		if t.Role == store.TokenRoleCustom {
+			perms := t.Perms
+			te.Perms = &perms
+			usage, _ := m.db.ListTokenUsage(ctx, t.ID)
+			for _, u := range usage {
+				place := byID[u.HostID]
+				if u.Kind == store.UsageK8sNS {
+					place = clusterNames[u.HostID]
+				}
+				if place == "" {
+					continue
+				}
+				te.Usage = append(te.Usage, store.TokenUsageExport{Kind: u.Kind, Place: place, Ref: u.Ref, Label: u.Label, CPU: u.CPU, MemMB: u.MemMB, DiskGB: u.DiskGB})
+			}
+		}
+		export.APITokens = append(export.APITokens, te)
 	}
 	for _, h := range m.outHooks(ctx) {
 		export.OutHooks = append(export.OutHooks, store.OutHookExport{Name: h.Name, URL: h.URL, Kinds: h.Kinds,
@@ -189,11 +211,15 @@ func (m *Manager) importAccess(ctx context.Context, export store.HubExport, res 
 				rep.Err("token %q: host %q missing — not imported", e.Name, missing)
 				continue
 			}
-			if e.Role != store.TokenRoleAdmin {
+			if e.Role != store.TokenRoleAdmin && !(e.Role == store.TokenRoleCustom && e.Perms != nil) {
 				e.Role = store.TokenRoleRead
 			}
 			t := store.APIToken{Name: e.Name, KeyID: e.KeyID, SecretEnc: e.SecretEnc, Role: e.Role, Hosts: hosts, Groups: e.Groups,
 				IPs: e.IPs, ExpiresAt: e.ExpiresAt, ViaEdge: e.ViaEdge, Author: e.Author}
+			if e.Role == store.TokenRoleCustom {
+				t.Perms = *e.Perms
+			}
+			defer m.importTokenUsage(ctx, e)
 			i := slices.IndexFunc(current, func(x store.APIToken) bool { return x.Name == e.Name })
 			if i >= 0 {
 				if !res.Replace(store.SectionAPITokens, e.Name) {
@@ -276,5 +302,38 @@ func (m *Manager) importAccess(ctx context.Context, export store.HubExport, res 
 		} else {
 			cnt.Added++
 		}
+	}
+}
+
+// importTokenUsage — учёт токена «по правам» по именам хостов и
+// кластеров этого хаба (чего здесь нет — пропускается).
+func (m *Manager) importTokenUsage(ctx context.Context, e store.APITokenExport) {
+	if len(e.Usage) == 0 {
+		return
+	}
+	list, err := m.db.ListAPITokens(ctx)
+	if err != nil {
+		return
+	}
+	i := slices.IndexFunc(list, func(x store.APIToken) bool { return x.Name == e.Name })
+	if i < 0 {
+		return
+	}
+	_, byName := m.hostNames(ctx)
+	clusters := map[string]int64{}
+	if cl, err := m.db.ListClusters(ctx); err == nil {
+		for _, c := range cl {
+			clusters[c.Name] = c.ID
+		}
+	}
+	for _, u := range e.Usage {
+		id, ok := byName[u.Place]
+		if u.Kind == store.UsageK8sNS {
+			id, ok = clusters[u.Place]
+		}
+		if !ok {
+			continue
+		}
+		_ = m.db.SetTokenUsage(ctx, store.TokenUsage{TokenID: list[i].ID, Kind: u.Kind, HostID: id, Ref: u.Ref, Label: u.Label, CPU: u.CPU, MemMB: u.MemMB, DiskGB: u.DiskGB})
 	}
 }
