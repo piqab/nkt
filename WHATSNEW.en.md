@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.102 — 2026-10-24
+
+- MCP guide: an example of a token by permission — which tools the agent
+  sees and which errors it gets (over a limit, privileged, actions per
+  hour); a `tools/list` check and the token window's MCP examples;
+  actions without a person — with an admin token or one by permission,
+  the assistant's script — via Run.
+
 ## v1.13.101 — 2026-10-24
 
 - A “Forgejo Actions runner” pipeline example: your own runner for
