@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.103 — 2026-10-24
+
+- MCP: creating pipelines — `list_pipeline_examples` (ready descriptions
+  from the examples), `get_pipeline`, `dry_run_pipeline` with a
+  description text, `create_pipeline`, `update_pipeline` (the diff in the
+  answer), `remove_pipeline` (with the stack, as a job); the same calls in
+  the API.
+- Token by permission: a “create pipelines” action — compose only on the
+  token's hosts; pipelines it created are its own: it can deploy, edit and
+  remove them, not others'. The “Agent: compose with limits” preset
+  includes it.
+
 ## v1.13.102 — 2026-10-24
 
 - MCP guide: an example of a token by permission — which tools the agent

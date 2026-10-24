@@ -63,7 +63,9 @@ of 2 vCPU”.
   agent — compose with limits; k8s — own namespace with a quota; VPS — up
   to three machines.
 - **Actions** — what else is allowed besides reading: deploy (and roll
-  back, dry run), “Start” / “Stop”, run saved scripts, k8s manifests,
+  back, dry run), “Start” / “Stop”, **create pipelines** (its own: compose
+  only on the token's hosts, edit and remove only those it created; no
+  need to add them to the pipeline list), run saved scripts, k8s manifests,
   machines, containers, services, Traffic Fly, moves, fail2ban,
   vulnerability scans. Anything else is a 403 naming the action.
 - **Objects** — pipelines, scripts and clusters by name (empty — all
@@ -213,7 +215,11 @@ to the hub through the tunnel. Conditions:
 | `POST /api/hub/pipelines/{id}/rollback` | admin | roll back to a deployment |
 | `GET /api/hub/pipelines/{id}/power` | read | what “Start” / “Stop” affect: hosts, Traffic Fly routes, the “stopped” tag |
 | `POST /api/hub/pipelines/{id}/stop`, `/start` | admin | stop a deployment (containers and data stay) or bring up the same version → `job_id` |
-| `POST /api/hub/pipelines/dryrun` | admin | dry run (`{"pipeline_id":1,"skip":[]}`) → `job_id` |
+| `POST /api/hub/pipelines/dryrun` | admin | dry run (`{"pipeline_id":1,"skip":[]}` or `{"content":"…"}` — a description not saved yet) → `job_id` |
+| `GET /api/hub/pipelines/examples`, `?key=…` | read | example descriptions from `examples/` (the list; with `key` — the text) |
+| `POST /api/hub/pipelines` | admin | create a pipeline (`{"name":"…","content":"…"}`): `env:` values go to the pipeline's `.env`, `generate:` — the hub creates them; by permission — the “create pipelines” action |
+| `PUT /api/hub/pipelines/{id}` | admin | replace the description (`{"content":"…","note":"…"}`): a new version, `diff` in the answer; a `.env` value already set — `409 env_conflict`, to replace — `"replace_env":true` |
+| `POST /api/hub/pipelines/{id}/remove` | admin | remove a compose pipeline with its stack as a job (`{"all":true,"volumes":false,"images":false,"cert":false}`) → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | admin | ban or unban (`{"action":"ban","ips":[…],"host_ids":[…]}`) |
 | `POST /api/hosts/{id}/vulnerabilities/scan` | admin | vulnerability scan |
 | `POST/PUT/DELETE /api/hosts/{id}/<section>/…` | admin | host actions: services, containers, package updates and so on, except what is closed above and **file uploads** (image archives, machine images, file browser files, backups — they have routes of their own, closed to tokens) |
@@ -247,7 +253,8 @@ export; on hosts — the service descriptions section
 The hub machine is `/api/hosts/local/…`; in a token's scope its number is
 `-1`. A scoped token sees only its hosts, their alerts and sites; only
 compose pipelines whose hosts are all in its scope; and it can dry-run only
-a saved pipeline. A scoped token sees only the hub jobs it started itself.
+a saved pipeline (a description text — with the “create pipelines” action
+and only compose on its own hosts). A scoped token sees only the hub jobs it started itself.
 
 Also for a scoped token:
 

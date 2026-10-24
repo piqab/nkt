@@ -282,8 +282,12 @@ type mcpTool struct {
 	// Props — свойства схемы входа: имя → {type, description}; Required.
 	Props    map[string]map[string]any
 	Required []string
-	// Body — какие аргументы уходят телом JSON (пусто — без тела).
-	Body []string
+	// Body — какие аргументы уходят телом JSON (пусто — без тела); Query —
+	// в строку запроса (GET).
+	Body  []string
+	Query []string
+	// Fixed — поля тела, которые агент не задаёт.
+	Fixed map[string]any
 	// Admin — инструмент-действие: нужен администратор или токен «по
 	// правам» с этим действием (Act, иначе — из таблицы маршрутов); Fly —
 	// только токен без предела.
@@ -375,10 +379,25 @@ func (t mcpTool) build(args map[string]any) (string, any, error) {
 		}
 		path += sep + "after=" + strconv.FormatInt(int64(q), 10)
 	}
+	for _, k := range t.Query {
+		if v, ok := args[k].(string); ok && v != "" {
+			if !mcpSafeSegment.MatchString(v) {
+				return "", nil, fmt.Errorf("argument %s: not a plain value", k)
+			}
+			sep := "?"
+			if strings.Contains(path, "?") {
+				sep = "&"
+			}
+			path += sep + k + "=" + v
+		}
+	}
 	if len(t.Body) == 0 {
 		return path, nil, nil
 	}
 	body := map[string]any{}
+	for k, v := range t.Fixed {
+		body[k] = v
+	}
 	for _, k := range t.Body {
 		if v, ok := args[k]; ok {
 			body[k] = v
@@ -403,6 +422,10 @@ var mcpTools = []mcpTool{
 	{Name: "list_alerts", Description: "Hub alerts newer than an id.", Method: "GET", Path: "/hub/events",
 		Props: map[string]map[string]any{"after": prop("integer", "Return alerts with id greater than this (0 — recent)")}, ReadOnly: true},
 	{Name: "list_pipelines", Description: "Deployment pipelines with their last deployment.", Method: "GET", Path: "/hub/pipelines", ReadOnly: true},
+	{Name: "get_pipeline", Description: "A pipeline with its description (YAML; secrets are @secret).", Method: "GET", Path: "/hub/pipelines/{pipeline_id}",
+		Props: map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id")}, Required: []string{"pipeline_id"}, ReadOnly: true},
+	{Name: "list_pipeline_examples", Description: "Ready pipeline descriptions (Forgejo, n8n, WordPress, Technitium DNS, a Forgejo Actions runner…): without key — the list; with key — the description to adapt for create_pipeline (hosts, domains, env).", Method: "GET", Path: "/hub/pipelines/examples",
+		Props: map[string]map[string]any{"key": prop("string", "Example key from the list")}, Query: []string{"key"}, ReadOnly: true},
 	{Name: "job_status", Description: "A hub job: status (queued, running, succeeded, failed) and error.", Method: "GET", Path: "/hub/jobs/{job_id}",
 		Props: map[string]map[string]any{"job_id": prop("integer", "Job id")}, Required: []string{"job_id"}, ReadOnly: true},
 	{Name: "job_log", Description: "Log lines of a hub job.", Method: "GET", Path: "/hub/jobs/{job_id}/log",
@@ -427,8 +450,20 @@ var mcpTools = []mcpTool{
 	{Name: "pipeline_power", Description: "Start or stop what a compose pipeline has deployed, on all its hosts: stop keeps containers and data; start brings up the same version (images from the host, the pipeline's registry key only for missing ones). Alerts for a stopped deployment's Traffic Fly targets still come, marked as stopped.", Method: "POST", Path: "/hub/pipelines/{pipeline_id}/{action}",
 		Props:    map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id"), "action": prop("string", "start | stop")},
 		Required: []string{"pipeline_id", "action"}, Admin: true, Act: store.TokenActPipelinePower, Job: true, Destructive: true},
-	{Name: "dry_run_pipeline", Description: "Dry run of a saved pipeline: checks hosts, images, ports, site; changes nothing.", Method: "POST", Path: "/hub/pipelines/dryrun",
-		Props: map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id")}, Required: []string{"pipeline_id"}, Body: []string{"pipeline_id"}, Admin: true, Job: true, ReadOnly: true},
+	{Name: "dry_run_pipeline", Description: "Dry run of a compose pipeline: checks hosts, images, ports, site; changes nothing. A saved one (pipeline_id) or a description text not saved yet (content; with pipeline_id — its secrets are used).", Method: "POST", Path: "/hub/pipelines/dryrun",
+		Props: map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id"), "content": prop("string", "Pipeline description (YAML) to check instead of the saved one")},
+		Body:  []string{"pipeline_id", "content"}, Admin: true, Job: true, ReadOnly: true},
+	{Name: "create_pipeline", Description: "Create a pipeline from a description (YAML, as in the editor; start from list_pipeline_examples). Values of the env: block move to the pipeline's encrypted .env, the description keeps @secret; generate: values are created by the hub. Doesn't deploy — then dry_run_pipeline and deploy_pipeline. A limited token: compose only, on its hosts; the pipeline becomes its own.", Method: "POST", Path: "/hub/pipelines",
+		Props:    map[string]map[string]any{"name": prop("string", "Pipeline name"), "content": prop("string", "Pipeline description (YAML)")},
+		Required: []string{"name", "content"}, Body: []string{"name", "content"}, Admin: true},
+	{Name: "update_pipeline", Description: "Replace a pipeline's description (a new version in its history; the answer has the diff). An env: value that would replace one already set fails with env_conflict unless replace_env=true. A limited token: only its own pipelines.", Method: "PUT", Path: "/hub/pipelines/{pipeline_id}",
+		Props: map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id"), "content": prop("string", "The whole new description"), "note": prop("string", "Version note"),
+			"replace_env": prop("boolean", "Replace .env values already set")},
+		Required: []string{"pipeline_id", "content"}, Body: []string{"content", "note", "replace_env"}, Admin: true, Destructive: true},
+	{Name: "remove_pipeline", Description: "Remove a compose pipeline: a job takes its stack down on all hosts (stacks shared with others stay) and deletes the pipeline. volumes=true also deletes volumes and the stack directory (otherwise kept aside), images — its images, cert — the site certificate. A limited token: only its own pipelines.", Method: "POST", Path: "/hub/pipelines/{pipeline_id}/remove",
+		Props: map[string]map[string]any{"pipeline_id": prop("integer", "Pipeline id"), "volumes": prop("boolean", "Also delete volumes and data"),
+			"images": prop("boolean", "Also delete images"), "cert": prop("boolean", "Also delete the site certificate")},
+		Required: []string{"pipeline_id"}, Body: []string{"volumes", "images", "cert"}, Fixed: map[string]any{"all": true}, Admin: true, Job: true, Destructive: true},
 	{Name: "migrate_preview", Description: "Plan of moving a container's stack to another host: what travels, obstacles, Traffic Fly routes, pipeline.", Method: "POST", Path: "/hub/migrate/preview",
 		Props:    map[string]map[string]any{"from": prop("integer", "Host id the stack runs on"), "to": prop("integer", "Target host id"), "container": prop("string", "A container of the stack")},
 		Required: []string{"from", "to", "container"}, Body: []string{"from", "to", "container"}, Admin: true, ReadOnly: true},

@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/piqab/nkt/examples"
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/secretbox"
@@ -63,6 +66,20 @@ func (s *Server) handlePipelines(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"pipelines": out})
 }
 
+// handlePipelineExamples — GET /hub/pipelines/examples: описания из
+// examples/ (заготовки для агентов MCP и сценариев).
+func (s *Server) handlePipelineExamples(w http.ResponseWriter, r *http.Request) {
+	list := examples.Pipelines(string(msgs.LangFromRequest(r)))
+	if key := r.URL.Query().Get("key"); key != "" {
+		list = slices.DeleteFunc(list, func(p examples.Pipeline) bool { return p.Key != key })
+	} else {
+		for i := range list {
+			list[i].Content = "" // список — без текста; текст — ?key=
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"examples": list})
+}
+
 // handlePipelineTemplate — GET /hub/pipelines/template.
 func (s *Server) handlePipelineTemplate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"content": deploy.TemplateFor(string(msgs.LangFromRequest(r)))})
@@ -91,6 +108,12 @@ func (s *Server) handlePipelineCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
+	}
+	if tok, ok := tokenFromContext(r.Context()); ok {
+		if err := s.tokenContentAllowed(r.Context(), tok, req.Content); err != nil {
+			writeErr(w, r, http.StatusForbidden, err)
+			return
+		}
 	}
 	// Значения блока env — в .env нового конвейера, в описание — «@secret».
 	move, err := planEnvMove(req.Content, nil, false)
@@ -174,6 +197,12 @@ func (s *Server) handlePipelineUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	if tok, ok := tokenFromContext(r.Context()); ok {
+		if err := s.tokenContentAllowed(r.Context(), tok, req.Content); err != nil {
+			writeErr(w, r, http.StatusForbidden, err)
+			return
+		}
+	}
 	cur, err := s.pipelineEnv(p)
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
@@ -205,6 +234,11 @@ func (s *Server) handlePipelineUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := map[string]any{"status": "ok"}
+	// Что поменялось — для агентов MCP и сценариев (интерфейс показал
+	// дифф до записи).
+	if d := control.UnifiedDiff(r.Context(), p.Name, p.Name, p.Content, req.Content); d != "" {
+		out["diff"] = d
+	}
 	envMoveReply(out, move, spec)
 	writeJSON(w, http.StatusOK, out)
 }

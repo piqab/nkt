@@ -347,15 +347,21 @@ var tokenHostDeny = map[string]bool{
 // правам» — перечисленное в Perms.Actions. Хосты (/hosts/…) — отдельно
 // (tokenHostAction).
 var tokenHubRoutes = map[string]string{
-	"GET /auth/me":                          "",
-	"GET /hub/version":                      "",
-	"GET /hub/hosts":                        "",
-	"GET /hub/events":                       "",
-	"GET /hub/fail2ban/banned":              "",
-	"GET /hub/sites":                        "",
-	"GET /hub/pipelines":                    "",
-	"GET /hub/pipelines/{id}":               "",
-	"GET /hub/pipelines/{id}/deployments":   "",
+	"GET /auth/me":                        "",
+	"GET /hub/version":                    "",
+	"GET /hub/hosts":                      "",
+	"GET /hub/events":                     "",
+	"GET /hub/fail2ban/banned":            "",
+	"GET /hub/sites":                      "",
+	"GET /hub/pipelines":                  "",
+	"GET /hub/pipelines/{id}":             "",
+	"GET /hub/pipelines/{id}/deployments": "",
+	"GET /hub/pipelines/examples":         "",
+	// Создать, править и удалить конвейер: токену «по правам» — только
+	// compose на своих хостах и только свои (созданные им).
+	"POST /hub/pipelines":                   store.TokenActPipelineCreate,
+	"PUT /hub/pipelines/{id}":               store.TokenActPipelineCreate,
+	"POST /hub/pipelines/{id}/remove":       store.TokenActPipelineCreate,
 	"GET /hub/jobs/{id}":                    "",
 	"GET /hub/jobs/{id}/log":                "",
 	"POST /hub/pipelines/{id}/deploy":       store.TokenActPipelineDeploy,
