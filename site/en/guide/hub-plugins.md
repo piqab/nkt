@@ -279,6 +279,19 @@ with Check and Apply; rights are those of a data-changing operation.
 `argv` — the words of the script command starting with the command word:
 `dns set app.example.com A 203.0.113.10` → `["dns", "set", "app.example.com", "A", "203.0.113.10"]`.
 
+## For agents and scripts
+
+Plugins → the plugin → **For agents**: the plugin's MCP tools exactly as
+an agent gets them (name, description, arguments, required ones with an
+asterisk), who can use them (reading — any token, changes — a token with
+the “plugin NAME” action, what deletes, what returns a secret only into a
+pipeline `.env`), and the script commands with examples. **Download
+JSON** — the same format as the MCP `tools/list` answer, plus the
+commands: give it to an agent or keep it next to its instructions. If MCP
+is off, the window says so.
+
+![For agents](/screens/en/hub-plugin-agents.png)
+
 ## Your own plugin: the shortest one
 
 Python without dependencies, one section and one command:

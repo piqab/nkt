@@ -822,29 +822,84 @@ func (s *Server) pluginTools(ctx context.Context, tok store.APIToken) []map[stri
 		if err != nil {
 			continue
 		}
-		for _, op := range m.Ops {
-			name := pluginToolName(p.Name, op.Name)
-			if !op.MCP || slices.ContainsFunc(mcpTools, func(t mcpTool) bool { return t.Name == name }) {
+		for _, d := range pluginToolDefs(p, m) {
+			if !d.op.ReadOnly && !tok.Can(pluginActPrefix+p.Name) {
 				continue
 			}
-			if !op.ReadOnly && !tok.Can(pluginActPrefix+p.Name) {
-				continue
-			}
-			schema := op.Input
-			if schema == nil {
-				schema = map[string]any{"type": "object", "properties": map[string]any{}}
-			}
-			desc := op.Description
-			if desc == "" {
-				desc = op.Title
-			}
-			out = append(out, map[string]any{
-				"name": name, "description": desc + " (plugin " + m.Title + ")", "inputSchema": schema,
-				"annotations": map[string]any{"readOnlyHint": op.ReadOnly, "destructiveHint": op.Destructive, "openWorldHint": false},
-			})
+			out = append(out, d.tool)
 		}
 	}
 	return out
+}
+
+// pluginToolDef — инструмент MCP плагина: как его видит агент (tool) и
+// операция, из которой он сделан.
+type pluginToolDef struct {
+	tool map[string]any
+	op   plugin.Op
+}
+
+// pluginToolDefs — все инструменты MCP плагина (без учёта прав токена) —
+// одни и те же для MCP и окна «Для агентов».
+func pluginToolDefs(p pluginConf, m plugin.Manifest) []pluginToolDef {
+	var out []pluginToolDef
+	for _, op := range m.Ops {
+		name := pluginToolName(p.Name, op.Name)
+		if !op.MCP || slices.ContainsFunc(mcpTools, func(t mcpTool) bool { return t.Name == name }) {
+			continue
+		}
+		schema := op.Input
+		if schema == nil {
+			schema = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+		desc := op.Description
+		if desc == "" {
+			desc = op.Title
+		}
+		out = append(out, pluginToolDef{op: op, tool: map[string]any{
+			"name": name, "description": desc + " (plugin " + m.Title + ")", "inputSchema": schema,
+			"annotations": map[string]any{"readOnlyHint": op.ReadOnly, "destructiveHint": op.Destructive, "openWorldHint": false},
+		}})
+	}
+	return out
+}
+
+// handlePluginAgents — GET /hub/plugins/{name}/agents: окно «Для
+// агентов» — инструменты MCP плагина ровно такими, какими их получает
+// агент (tools/list), кто их видит, и команды сценариев.
+func (s *Server) handlePluginAgents(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.pluginFromReq(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	m, err := s.pluginManifest(ctx, p)
+	if err != nil {
+		pluginError(w, r, p, err)
+		return
+	}
+	type toolJSON struct {
+		Tool map[string]any `json:"tool"`
+		// Action — действие токена, без которого агент инструмента не
+		// видит (пусто — любой токен, это чтение).
+		Action      string `json:"action,omitempty"`
+		Reveals     bool   `json:"reveals,omitempty"`
+		Destructive bool   `json:"destructive,omitempty"`
+	}
+	tools := []toolJSON{}
+	for _, d := range pluginToolDefs(p, m) {
+		t := toolJSON{Tool: d.tool, Reveals: d.op.Reveals, Destructive: d.op.Destructive}
+		if !d.op.ReadOnly {
+			t.Action = pluginActPrefix + p.Name
+		}
+		tools = append(tools, t)
+	}
+	cmds := m.Commands
+	if cmds == nil {
+		cmds = []plugin.Command{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plugin": p.Name, "title": m.Title, "version": m.Version,
+		"mcp_enabled": s.experimental(ctx).MCP, "tools": tools, "commands": cmds})
 }
 
 // pluginToolCall — вызов инструмента плагина через API хаба (те же

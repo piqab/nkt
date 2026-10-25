@@ -317,6 +317,7 @@ func (s *Server) Handler() http.Handler {
 				// Плагины: список и операции — всем вошедшим; что меняет —
 				// администратору или токену с plugin.<имя> (pluginOpAllowed).
 				r.Get("/hub/plugins", s.handlePlugins)
+				r.Get("/hub/plugins/{name}/agents", s.handlePluginAgents)
 				r.Get("/hub/dns", s.handleDNSState)
 				r.Post("/hub/plugins/{name}/call", s.handlePluginCall)
 				r.Post("/hub/plugins/{name}/dns", s.handlePluginDNS)
