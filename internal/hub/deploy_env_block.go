@@ -42,7 +42,7 @@ func planEnvMove(content string, cur *string, replace bool) (envMove, error) {
 	set := map[string]string{}
 	var order []string
 	for _, e := range entries {
-		if e.Stored() {
+		if e.Kept() {
 			continue
 		}
 		old, exists := have[e.Key]
@@ -129,7 +129,7 @@ func (s *Server) dryEnvOverride(ctx context.Context, pipelineID int64, content s
 	set := map[string]string{}
 	var order, names []string
 	for _, e := range entries {
-		if e.Stored() {
+		if e.Kept() {
 			continue
 		}
 		if g := e.Generate(); g != "" {

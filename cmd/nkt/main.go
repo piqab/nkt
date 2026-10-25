@@ -954,6 +954,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindSiteSetup, hub.NewSiteSetupRunner(server))
 	r.jobs.Register(hub.KindSiteRemove, hub.NewSiteRemoveRunner(server))
 	r.jobs.Register(hub.KindPipelineRemove, hub.NewPipelineRemoveRunner(server))
+	r.jobs.Register(hub.KindPluginInstall, hub.NewPluginInstallRunner(server))
 	r.jobs.Register(hub.KindPipelinePower, hub.NewPipelinePowerRunner(server))
 	// Опрос репозиториев и registry у конвейеров выкладки.
 	server.StartPipelineWatch(ctx)

@@ -58,9 +58,12 @@ type pluginConf struct {
 	Token string `json:"token,omitempty"`
 	// Words — слова команд сценариев (из манифеста при подключении:
 	// разбор сценариев не ходит к плагину).
-	Words   []string `json:"words,omitempty"`
-	Author  string   `json:"author,omitempty"`
-	AddedAt string   `json:"added_at,omitempty"`
+	Words []string `json:"words,omitempty"`
+	// Native — поставлен хабом службой на хост (без Docker): из какого
+	// пакета встроенного каталога — для «Обновить» и «Удалить с хоста».
+	Native  string `json:"native,omitempty"`
+	Author  string `json:"author,omitempty"`
+	AddedAt string `json:"added_at,omitempty"`
 }
 
 var pluginsMu sync.Mutex
@@ -216,6 +219,7 @@ type pluginJSON struct {
 	Title    string           `json:"title"`
 	Version  string           `json:"version,omitempty"`
 	Token    string           `json:"token,omitempty"`
+	Native   string           `json:"native,omitempty"`
 	Author   string           `json:"author,omitempty"`
 	AddedAt  string           `json:"added_at,omitempty"`
 	Error    string           `json:"error,omitempty"`
@@ -229,7 +233,7 @@ func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	for i, p := range list {
 		out[i] = pluginJSON{Name: p.Name, Host: p.Host, Port: p.Port, Pipeline: p.Pipeline, Title: p.Title, Version: p.Version,
-			Token: p.Token, Author: p.Author, AddedAt: p.AddedAt}
+			Token: p.Token, Native: p.Native, Author: p.Author, AddedAt: p.AddedAt}
 		wg.Add(1)
 		go func(i int, p pluginConf) {
 			defer wg.Done()
@@ -386,16 +390,31 @@ func (s *Server) handlePluginConnect(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	m, code, err := s.connectPlugin(ctx, conf, secret, req)
+	if err != nil {
+		var ce *plugin.CallError
+		if code == http.StatusBadGateway && !errors.As(err, &ce) {
+			writeError(w, code, msgs.Tc(ctx, "plugin.unreachable", req.Name, conf.Host, conf.Port, err))
+			return
+		}
+		writeErr(w, r, code, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"name": firstNonEmpty(req.Name, m.Name), "manifest": m})
+}
+
+// connectPlugin — манифест, проверки, токен для hub_actions, _connect и
+// запись подключения (с тем же именем — заменяется). Ответ — манифест и
+// код ошибки HTTP для вызывающего.
+func (s *Server) connectPlugin(ctx context.Context, conf pluginConf, secret string, req pluginConnectReq) (plugin.Manifest, int, error) {
 	c := plugin.Client{Dial: s.pluginDial(conf.Host, conf.Port), Secret: secret, Lang: string(msgs.FromContext(ctx)), Timeout: 15 * time.Second}
 	m, err := c.Manifest(ctx)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, msgs.Tc(ctx, "plugin.unreachable", req.Name, conf.Host, conf.Port, err))
-		return
+		return m, http.StatusBadGateway, err
 	}
 	conf.Name = firstNonEmpty(req.Name, m.Name)
 	if !plugin.ValidName(conf.Name) {
-		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.badName", conf.Name))
-		return
+		return m, http.StatusBadRequest, msgs.Errorf("plugin.badName", conf.Name)
 	}
 	pluginsMu.Lock()
 	defer pluginsMu.Unlock()
@@ -404,21 +423,19 @@ func (s *Server) handlePluginConnect(w http.ResponseWriter, r *http.Request) {
 	if conflicts := s.pluginConflicts(ctx, conf.Name, m); len(conflicts) > 0 {
 		// Повторное подключение того же — не конфликт с самим собой.
 		if prev < 0 || len(conflicts) > 1 {
-			writeError(w, http.StatusConflict, strings.Join(conflicts, "; "))
-			return
+			return m, http.StatusConflict, errors.New(strings.Join(conflicts, "; "))
 		}
 	}
 	if len(m.HubActions) > 0 && !req.GrantHub {
-		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "plugin.needGrant", strings.Join(m.HubActions, ", ")))
-		return
+		return m, http.StatusBadRequest, msgs.Errorf("plugin.needGrant", strings.Join(m.HubActions, ", "))
 	}
 	user := auth.Username(ctx)
 	conf.SecretEnc, err = secretbox.Encrypt(s.hub.key, []byte(secret))
 	if err != nil {
-		writeErr(w, r, http.StatusInternalServerError, err)
-		return
+		return m, http.StatusInternalServerError, err
 	}
 	conf.Title, conf.Version, conf.Author, conf.AddedAt = m.Title, m.Version, user, store.FormatTime(time.Now())
+	conf.Words = nil
 	for _, c := range m.Commands {
 		conf.Words = append(conf.Words, c.Word)
 	}
@@ -427,8 +444,7 @@ func (s *Server) handlePluginConnect(w http.ResponseWriter, r *http.Request) {
 	if len(m.HubActions) > 0 {
 		token, name, err := s.pluginToken(ctx, conf.Name, m.HubActions, user)
 		if err != nil {
-			writeErr(w, r, http.StatusBadRequest, err)
-			return
+			return m, http.StatusBadRequest, err
 		}
 		connect["token"], conf.Token = token, name
 	} else if prev >= 0 && list[prev].Token != "" {
@@ -441,8 +457,10 @@ func (s *Server) handlePluginConnect(w http.ResponseWriter, r *http.Request) {
 			if conf.Token != "" {
 				s.dropPluginToken(ctx, conf.Token)
 			}
-			pluginError(w, r, conf, err)
-			return
+			if errors.As(err, &ce) {
+				return m, http.StatusBadRequest, errors.New(ce.Msg)
+			}
+			return m, http.StatusBadGateway, err
 		}
 	}
 	if prev >= 0 {
@@ -453,12 +471,11 @@ func (s *Server) handlePluginConnect(w http.ResponseWriter, r *http.Request) {
 	err = s.savePlugins(ctx, list)
 	s.db.Audit(ctx, user, "plugin.connect", conf.Name, auditOutcome(err), map[string]any{"host": conf.Host, "port": conf.Port, "version": m.Version, "hub_actions": m.HubActions})
 	if err != nil {
-		writeErr(w, r, http.StatusInternalServerError, err)
-		return
+		return m, http.StatusInternalServerError, err
 	}
 	forgetManifests(conf.Name)
 	s.refreshScriptWords(ctx)
-	writeJSON(w, http.StatusOK, map[string]any{"name": conf.Name, "manifest": m})
+	return m, http.StatusOK, nil
 }
 
 // pluginToken — токен «по правам» для плагина (прежний — заменяется).

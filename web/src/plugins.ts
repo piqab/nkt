@@ -31,6 +31,8 @@ export interface PluginInfo {
   title: string
   version?: string
   token?: string
+  /** Поставлен хабом службой на хост: ключ пакета каталога. */
+  native?: string
   author?: string
   added_at?: string
   error?: string

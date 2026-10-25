@@ -247,6 +247,13 @@ registrar delegation check, DNSSEC and DS. Details — the
 Don't need the plugin — remove the `plugin` service from the compose file
 or just don't connect it in the hub.
 
+**Technitium installed outside nkt** (natively or with your own compose) —
+a plugin for it without moving: About → Plugins → Install on a host →
+Technitium DNS and an API token from the console (Administration →
+Sessions → Create Token). The hub installs the plugin as the
+`nkt-plugin-dns` service (no Docker) and connects it; Technitium isn't
+touched.
+
 ## 9. Moving from a Technitium that already runs
 
 Technitium is installed by hand (natively — `install.sh`, the `dns`

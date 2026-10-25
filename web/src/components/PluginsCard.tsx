@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Segmented, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { api, fetchHubJob, useApi } from '../api'
+import { JobLogModal } from '../pages/Jobs'
+import type { Job } from '../types'
 import { Banner, Card, DiffView, Modal, formatRelative } from './ui'
 import { unifiedDiff } from './textDiff'
 import { confirmAction } from './confirm'
@@ -19,7 +21,20 @@ export function PluginsCard({ admin }: { admin: boolean }) {
   const { t } = useTranslation()
   const list = useApi<{ plugins: PluginInfo[] }>('/hub/plugins')
   const [connect, setConnect] = useState(false)
+  const [install, setInstall] = useState(false)
+  const [job, setJob] = useState<Job | null>(null)
   const plugins = list.data?.plugins ?? []
+
+  // Плагин, поставленный хабом службой: обновить файл или удалить с хоста.
+  async function native(p: PluginInfo, action: 'update' | 'remove') {
+    if (action === 'remove' && !(await confirmAction(t('plugins.nativeRemoveConfirm', { name: p.name, host: p.host })))) return
+    try {
+      const res = await api<{ job_id: number }>(`/hub/plugins/${p.name}/native/${action}`, { method: 'POST' })
+      setJob(await fetchHubJob<Job>(res.job_id))
+    } catch (err) {
+      await confirmAction(err instanceof Error ? err.message : String(err), { danger: false })
+    }
+  }
 
   async function disconnect(p: PluginInfo) {
     if (!(await confirmAction(t('plugins.disconnectConfirm', { name: p.name, host: p.host })))) return
@@ -37,9 +52,14 @@ export function PluginsCard({ admin }: { admin: boolean }) {
       subtitle={t('plugins.hint')}
       actions={
         admin && (
-          <Button size="small" onClick={() => setConnect(true)}>
-            {t('plugins.connect')}
-          </Button>
+          <>
+            <Button size="small" onClick={() => setInstall(true)}>
+              {t('plugins.install')}
+            </Button>
+            <Button size="small" onClick={() => setConnect(true)}>
+              {t('plugins.connect')}
+            </Button>
+          </>
         )
       }
     >
@@ -56,10 +76,21 @@ export function PluginsCard({ admin }: { admin: boolean }) {
                 {p.name} {p.version} · {p.host}:{p.port}
                 {p.pipeline ? ` · ${t('plugins.pipeline')}: ${p.pipeline}` : ''}
                 {p.token ? ` · ${t('plugins.token')}: ${p.token}` : ''}
+                {p.native ? ` · ${t('plugins.nativeTag')}` : ''}
                 {p.added_at ? ` · ${formatRelative(p.added_at)}` : ''}
               </span>
               {p.error && <span style={{ color: 'var(--status-critical)' }}>{p.error}</span>}
-              {admin && (
+              {admin && p.native && (
+                <>
+                  <Button size="small" onClick={() => void native(p, 'update')}>
+                    {t('plugins.nativeUpdate')}
+                  </Button>
+                  <Button size="small" danger onClick={() => void native(p, 'remove')}>
+                    {t('plugins.nativeRemove')}
+                  </Button>
+                </>
+              )}
+              {admin && !p.native && (
                 <Button size="small" danger onClick={() => void disconnect(p)}>
                   {t('plugins.disconnect')}
                 </Button>
@@ -70,7 +101,105 @@ export function PluginsCard({ admin }: { admin: boolean }) {
       )}
       {plugins.length > 0 && <DNSBlock admin={admin} />}
       {connect && <ConnectModal onClose={() => setConnect(false)} />}
+      {install && (
+        <InstallModal
+          onClose={() => setInstall(false)}
+          onJob={(j) => {
+            setInstall(false)
+            setJob(j)
+          }}
+        />
+      )}
+      {job && (
+        <JobLogModal
+          job={job}
+          scope="/hosts/local"
+          onClose={() => {
+            setJob(null)
+            // Меню (раздел «Плагины») и слова сценариев — с новой страницы.
+            window.location.reload()
+          }}
+        />
+      )}
     </Card>
+  )
+}
+
+interface CatalogPackage {
+  key: string
+  name: string
+  title: string
+  description: string
+  run: string
+  port: number
+  settings: { env: string; title: string; hint?: string; default?: string; secret?: boolean; required?: boolean }[]
+}
+
+/** «Установить на хост (без Docker)»: плагин из встроенного каталога —
+ * службой systemd на выбранный хост, заданием; подключается сам. */
+function InstallModal({ onClose, onJob }: { onClose: () => void; onJob: (job: Job) => void }) {
+  const { t } = useTranslation()
+  const catalog = useApi<{ packages: CatalogPackage[] }>('/hub/plugins/catalog')
+  const hosts = useApi<{ name: string }[]>('/hub/hosts')
+  const [key, setKey] = useState<string | undefined>()
+  const [host, setHost] = useState<string | undefined>()
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const pkgs = catalog.data?.packages ?? []
+  const pkg = pkgs.find((p) => p.key === (key ?? pkgs[0]?.key))
+  const missing = (pkg?.settings ?? []).filter((f) => f.required && !(values[f.env] ?? f.default ?? '').trim())
+
+  async function start() {
+    if (!pkg || !host) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ job_id: number }>('/hub/plugins/install', { method: 'POST', body: { package: pkg.key, host, settings: values } })
+      onJob(await fetchHubJob<Job>(res.job_id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={t('plugins.installTitle')} onClose={onClose} width={720} maskClosable={false}>
+      <div className="col small" style={{ gap: '0.6rem' }}>
+        <span className="muted">{t('plugins.installHint')}</span>
+        <label className="col" style={{ gap: '0.2rem' }}>
+          {t('plugins.package')}
+          <Select value={pkg?.key} onChange={setKey} options={pkgs.map((p) => ({ value: p.key, label: p.title }))} />
+        </label>
+        {pkg && <span className="muted">{pkg.description}</span>}
+        <label className="col" style={{ gap: '0.2rem' }}>
+          {t('plugins.host')}
+          <Select showSearch value={host} onChange={setHost} options={(hosts.data ?? []).map((h) => ({ value: h.name, label: h.name }))} />
+        </label>
+        {(pkg?.settings ?? []).map((f) => (
+          <label key={f.env} className="col" style={{ gap: '0.2rem' }}>
+            <span>
+              {f.title}
+              {f.required && ' *'} <code className="muted">{f.env}</code>
+            </span>
+            {f.secret ? (
+              <Input.Password autoComplete="off" value={values[f.env] ?? ''} onChange={(e) => setValues({ ...values, [f.env]: e.target.value })} />
+            ) : (
+              <Input value={values[f.env] ?? ''} placeholder={f.default} onChange={(e) => setValues({ ...values, [f.env]: e.target.value })} />
+            )}
+            {f.hint && <span className="muted">{f.hint}</span>}
+          </label>
+        ))}
+        {error && <Banner kind="error">{error}</Banner>}
+        <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+          <Button type="primary" loading={busy} disabled={!pkg || !host || missing.length > 0} onClick={() => void start()}>
+            {t('plugins.install')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          {missing.length > 0 && <span className="muted">{t('plugins.fieldsMissing', { list: missing.map((f) => f.title).join(', ') })}</span>}
+        </div>
+      </div>
+    </Modal>
   )
 }
 

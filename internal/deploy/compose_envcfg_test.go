@@ -39,7 +39,7 @@ func TestEnvBlockStrip(t *testing.T) {
 		`    DB_URL: "@secret"`,
 		`    QUOTED: "@secret"`,
 		`    JWT: "@secret"`,
-		`    EMPTY: "@secret"`,
+		`    EMPTY: ""`, // пустое — не секрет, остаётся как есть
 	} {
 		if !strings.Contains(out, want+"\n") {
 			t.Fatalf("no %q in\n%s", want, out)
@@ -157,5 +157,27 @@ func TestConfigSecretHints(t *testing.T) {
 	}}
 	if h := c.ConfigSecretHints(); len(h) != 1 || h[0] != "a:/x" {
 		t.Fatalf("%v", h)
+	}
+}
+
+// Пустое значение («KEY:», «KEY: ""», «KEY: ”») — не секрет: строка
+// остаётся как есть, описание после замены — снова верный YAML.
+func TestEnvBlockEmptyValues(t *testing.T) {
+	c := "action: compose\ncompose:\n  env:\n    ZONES:\n    A: \"\"\n    B: ''\n    C: x\n    D: # комментарий\n"
+	entries, err := EnvBlock(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := StripEnvValues(c, entries)
+	want := "action: compose\ncompose:\n  env:\n    ZONES:\n    A: \"\"\n    B: ''\n    C: \"@secret\"\n    D: # комментарий\n"
+	if out != want {
+		t.Fatalf("got %q", out)
+	}
+	if again, err := EnvBlock(out); err != nil || HasEnvValues(again) {
+		t.Fatalf("after strip: %v %+v", err, again)
+	}
+	// Значение вплотную к двоеточию после замены — с пробелом.
+	if got := StripEnvValues("x:1", []EnvEntry{{Key: "x", Value: "1", Line: 1, Col: 2, End: 3}}); got != `x: "@secret"` {
+		t.Fatalf("no space: %q", got)
 	}
 }

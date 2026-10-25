@@ -5240,7 +5240,7 @@
   },
   "plugins": {
     "title": "Plugins",
-    "hint": "External plugins: separate programs (a container deployed by a pipeline) that add sections, script commands and MCP tools to the hub. Without connected plugins the hub works as before.",
+    "hint": "External plugins: separate programs (a container deployed by a pipeline, or a service on the host) that add sections, script commands and MCP tools to the hub. Without connected plugins the hub works as before.",
     "none": "No plugins connected — “About” → “Plugins”.",
     "noneHint": "None connected. Deploy a plugin with a pipeline (for example “Technitium DNS” with the plugin service) and press “Connect”.",
     "unreachable": "The plugin does not answer: {{error}}",
@@ -5290,6 +5290,14 @@
     "dnsCheck": "Check",
     "dnsApply": "Apply",
     "dnsApplied": "DNS records",
-    "dnsNothing": "The records match — nothing to change."
+    "dnsNothing": "The records match — nothing to change.",
+    "install": "Install on a host",
+    "installTitle": "Install a plugin on a host (no Docker)",
+    "installHint": "The hub puts its own version of the plugin, the settings (a root-only file) and a systemd service with a separate user, starts it and connects the plugin. The plugin listens on 127.0.0.1, the hub reaches it over SSH. No python3 — it installs the package. The service itself (Technitium, for example) isn't touched.",
+    "package": "Plugin",
+    "nativeTag": "service on the host",
+    "nativeUpdate": "Update on the host",
+    "nativeRemove": "Remove from the host",
+    "nativeRemoveConfirm": "Remove plugin {{name}} from {{host}}? The service stops, the plugin's files and settings are deleted, the plugin disconnects from the hub. The service itself (Technitium etc.) isn't touched."
   }
 }

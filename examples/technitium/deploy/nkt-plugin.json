@@ -1,0 +1,25 @@
+{
+  "name": "dns",
+  "title": {"ru": "Technitium DNS", "en": "Technitium DNS"},
+  "description": {
+    "ru": "Плагин к Technitium DNS, который уже работает на хосте (нативно или в контейнере): зоны и записи из хаба, делегирование, DNSSEC, команды «dns …», инструменты MCP, записи для Traffic Fly и сайтов. Ставится службой systemd, Technitium не трогает.",
+    "en": "A plugin for a Technitium DNS that already runs on the host (natively or in a container): zones and records from the hub, delegation, DNSSEC, “dns …” commands, MCP tools, records for Traffic Fly and sites. Installed as a systemd service; Technitium itself isn't touched."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9180,
+  "settings": [
+    {"env": "DNS_API", "default": "http://127.0.0.1:5380/api",
+     "title": {"ru": "Адрес API Technitium", "en": "Technitium API address"},
+     "hint": {"ru": "консоль на этом хосте; другой порт или HTTPS — поправьте", "en": "the console on this host; another port or HTTPS — change it"}},
+    {"env": "DNS_API_TOKEN", "secret": true, "required": true,
+     "title": {"ru": "API-токен Technitium", "en": "Technitium API token"},
+     "hint": {"ru": "консоль → Administration → Users: пользователь nkt (группа DNS Administrators), затем Sessions → Create Token от его имени", "en": "console → Administration → Users: a user nkt (DNS Administrators group), then Sessions → Create Token as that user"}},
+    {"env": "DNS_DOMAIN",
+     "title": {"ru": "Имя этого сервера (ns1.example.com)", "en": "This server's name (ns1.example.com)"},
+     "hint": {"ru": "для проверки делегирования", "en": "for the delegation check"}},
+    {"env": "SECONDARY_NS",
+     "title": {"ru": "Имя вторичного сервера (ns2.example.com)", "en": "The secondary server's name (ns2.example.com)"},
+     "hint": {"ru": "NS новых зон; пусто — без вторичного", "en": "NS of new zones; empty — no secondary"}}
+  ]
+}
