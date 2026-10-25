@@ -459,6 +459,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/plugins/install", s.handlePluginInstall)
 					r.Post("/hub/plugins/native/update-all", s.handlePluginUpdateAll)
 					r.Post("/hub/plugins/{name}/native/{action}", s.handlePluginNativeAction)
+					r.Get("/hub/plugins/{name}/settings", s.handlePluginSettings)
+					r.Post("/hub/plugins/{name}/settings", s.handlePluginSettingsSave)
 					r.Put("/hub/dns/autonames", s.handleDNSAutonamesSet)
 					r.Post("/hub/dns/sync", s.handleDNSSync)
 					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)

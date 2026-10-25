@@ -35,6 +35,8 @@ export interface PluginInfo {
   native?: string
   /** В каталоге хаба файл плагина новее поставленного. */
   outdated?: boolean
+  /** Нет обязательной настройки (новая версия плагина добавила поле). */
+  needs_settings?: boolean
   author?: string
   added_at?: string
   error?: string

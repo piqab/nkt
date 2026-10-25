@@ -52,6 +52,11 @@ func TestPluginInstallNative(t *testing.T) {
 			return
 		}
 		if r.URL.Path == plugin.PathManifest {
+			// «Неверная» настройка — плагин не поднимается (откат настроек).
+			if raw, _ := os.ReadFile(envPath); strings.Contains(string(raw), "DNS_DOMAIN=bad.example.com") {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(plugin.Manifest{Protocol: 1, Name: "dns", Title: "DNS", Version: "1.0.0", Ops: []plugin.Op{{Name: "zones", ReadOnly: true}}})
 			return
 		}
@@ -162,6 +167,70 @@ func TestPluginInstallNative(t *testing.T) {
 	expectCode(do("POST", "/api/hub/plugins/install", map[string]any{"package": "technitium", "host": "localhost", "name": "dns3",
 		"settings": map[string]string{"DNS_API_TOKEN": token}}, session), 400, "hub in a container")
 	hubInContainer = func() bool { return false }
+	// «Настройки»: обычные значения видны, секрет — только «задан».
+	rec = do("GET", "/api/hub/plugins/dns/settings", nil, session)
+	expectCode(rec, 200, "settings")
+	if b := rec.Body.String(); !strings.Contains(b, `"value":"ns1.example.com"`) || strings.Contains(b, token) || strings.Contains(b, secret()) ||
+		!strings.Contains(b, `"env":"DNS_API_TOKEN","title":`) || !strings.Contains(b, `"set":true`) {
+		t.Fatalf("settings: %s", b)
+	}
+	rec = do("POST", "/api/hub/plugins/dns/settings", map[string]any{"dry_run": true, "settings": map[string]string{"DNS_DOMAIN": "ns9.example.com"}}, session)
+	if b := rec.Body.String(); rec.Code != 200 || !strings.Contains(b, `"old":"ns1.example.com","new":"ns9.example.com"`) || strings.Count(b, `"env"`) != 1 {
+		t.Fatalf("settings dry run: %d %s", rec.Code, b)
+	}
+	expectCode(do("POST", "/api/hub/plugins/dns/settings", map[string]any{"settings": map[string]string{"DNS_DOMAIN": "ns1.example.com"}}, session), 400, "nothing changed")
+	expectCode(do("POST", "/api/hub/plugins/dns/settings", map[string]any{"settings": map[string]string{"NKT_PLUGIN_SECRET": "x"}}, session), 400, "hub key")
+	plugSecret := secret()
+	const token2 = "technitium-api-token-second-987"
+	rec = do("POST", "/api/hub/plugins/dns/settings", map[string]any{"settings": map[string]string{"DNS_DOMAIN": "ns9.example.com", "DNS_API_TOKEN": token2}}, session)
+	expectCode(rec, 200, "settings apply")
+	_ = json.Unmarshal(rec.Body.Bytes(), &started)
+	job = waitJobDone(t, db, started.JobID)
+	if job.Status != "succeeded" {
+		lines, _ := db.JobLog(t.Context(), job.ID, 0, 100)
+		t.Fatalf("settings job %s: %s %+v", job.Status, job.Error, lines)
+	}
+	if strings.Contains(string(job.Params), token2) {
+		t.Fatalf("secret in job params: %s", job.Params)
+	}
+	raw, _ = os.ReadFile(envPath)
+	if !strings.Contains(string(raw), "DNS_DOMAIN=ns9.example.com") || !strings.Contains(string(raw), "DNS_API_TOKEN="+token2) || secret() != plugSecret {
+		t.Fatalf("env after settings:\n%s", raw)
+	}
+	if hist := srv.pluginSettingsHistory(t.Context(), "dns"); len(hist) != 2 || hist[0].Values["DNS_DOMAIN"] != "ns9.example.com" ||
+		hist[1].Values["DNS_DOMAIN"] != "ns1.example.com" || hist[0].Values["DNS_API_TOKEN"] != "" {
+		t.Fatalf("history: %+v", hist)
+	}
+	// Плагин не поднялся — прежние настройки вернулись.
+	rec = do("POST", "/api/hub/plugins/dns/settings", map[string]any{"settings": map[string]string{"DNS_DOMAIN": "bad.example.com"}}, session)
+	expectCode(rec, 200, "bad settings")
+	_ = json.Unmarshal(rec.Body.Bytes(), &started)
+	if job := waitJobDone(t, db, started.JobID); job.Status != "failed" {
+		t.Fatalf("bad settings: %s", job.Status)
+	}
+	raw, _ = os.ReadFile(envPath)
+	if !strings.Contains(string(raw), "DNS_DOMAIN=ns9.example.com") {
+		t.Fatalf("not rolled back:\n%s", raw)
+	}
+	if _, err := os.Stat(envPath + ".prev"); !os.IsNotExist(err) {
+		t.Fatal(".env.prev left")
+	}
+	if len(srv.pluginSettingsHistory(t.Context(), "dns")) != 2 {
+		t.Fatal("failed settings in history")
+	}
+	// Новая версия плагина с обязательной настройкой — «нужна настройка».
+	pluginsMu.Lock()
+	list = srv.plugins(t.Context())
+	for i := range list {
+		if list[i].Name == "dns" {
+			list[i].SettingKeys = []string{"DNS_DOMAIN"}
+		}
+	}
+	_ = srv.savePlugins(t.Context(), list)
+	pluginsMu.Unlock()
+	if rec := do("GET", "/api/hub/plugins", nil, session); !strings.Contains(rec.Body.String(), `"needs_settings":true`) {
+		t.Fatalf("no needs_settings: %s", rec.Body)
+	}
 	// Обновление и удаление.
 	rec = do("POST", "/api/hub/plugins/dns/native/update", nil, session)
 	_ = json.Unmarshal(rec.Body.Bytes(), &started)

@@ -22,6 +22,7 @@ export function PluginsCard({ admin }: { admin: boolean }) {
   const list = useApi<{ plugins: PluginInfo[] }>('/hub/plugins')
   const [connect, setConnect] = useState(false)
   const [install, setInstall] = useState(false)
+  const [settings, setSettings] = useState<PluginInfo | null>(null)
   const [job, setJob] = useState<Job | null>(null)
   const plugins = list.data?.plugins ?? []
   const outdated = plugins.filter((p) => p.outdated)
@@ -44,6 +45,15 @@ export function PluginsCard({ admin }: { admin: boolean }) {
     } catch (err) {
       await confirmAction(err instanceof Error ? err.message : String(err), { danger: false })
     }
+  }
+
+  // «Настройки»: поставлен хабом — окно; выложен конвейером — его .env.
+  async function openSettings(p: PluginInfo) {
+    if (p.native) {
+      setSettings(p)
+      return
+    }
+    await confirmAction(t('plugins.settingsPipeline', { name: p.name, pipeline: p.pipeline || '—' }), { danger: false, title: t('plugins.settings') })
   }
 
   async function disconnect(p: PluginInfo) {
@@ -98,9 +108,20 @@ export function PluginsCard({ admin }: { admin: boolean }) {
                     <Tag color="processing">{t('plugins.outdated')}</Tag>
                   </>
                 )}
+                {p.needs_settings && (
+                  <>
+                    {' '}
+                    <Tag color="warning">{t('plugins.needsSettings')}</Tag>
+                  </>
+                )}
                 {p.added_at ? ` · ${formatRelative(p.added_at)}` : ''}
               </span>
               {p.error && <span style={{ color: 'var(--status-critical)' }}>{p.error}</span>}
+              {admin && (p.native || p.pipeline) && (
+                <Button size="small" onClick={() => void openSettings(p)}>
+                  {t('plugins.settings')}
+                </Button>
+              )}
               {admin && p.native && (
                 <>
                   <Button size="small" onClick={() => void native(p, 'update')}>
@@ -127,6 +148,16 @@ export function PluginsCard({ admin }: { admin: boolean }) {
           onClose={() => setInstall(false)}
           onJob={(j) => {
             setInstall(false)
+            setJob(j)
+          }}
+        />
+      )}
+      {settings && (
+        <SettingsModal
+          plugin={settings}
+          onClose={() => setSettings(null)}
+          onJob={(j) => {
+            setSettings(null)
             setJob(j)
           }}
         />
@@ -233,6 +264,148 @@ function InstallModal({ onClose, onJob }: { onClose: () => void; onJob: (job: Jo
         <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
           <Button type="primary" loading={busy} disabled={!pkg || !host || missing.length > 0} onClick={() => void start()}>
             {t('plugins.install')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          {missing.length > 0 && <span className="muted">{t('plugins.fieldsMissing', { list: missing.map((f) => f.title).join(', ') })}</span>}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+interface SettingsField {
+  env: string
+  title: string
+  hint?: string
+  default?: string
+  secret?: boolean
+  required?: boolean
+  value: string
+  set?: boolean
+}
+
+interface SettingsVersion {
+  at: string
+  user: string
+  values: Record<string, string>
+  changed?: string[]
+}
+
+interface SettingsChange {
+  env: string
+  title: string
+  old?: string
+  new?: string
+  secret?: boolean
+}
+
+/** «Настройки» плагина, поставленного на хост: обычные значения — с хоста,
+ * секреты — только «задан» и «заменить»; «Сверить» — дифф, «Сохранить» —
+ * заданием (плагин не ответил — прежние настройки возвращаются); история
+ * обычных значений с возвратом версии. */
+function SettingsModal({ plugin, onClose, onJob }: { plugin: PluginInfo; onClose: () => void; onJob: (job: Job) => void }) {
+  const { t } = useTranslation()
+  const st = useApi<{ fields: SettingsField[]; history: SettingsVersion[]; host: string }>(`/hub/plugins/${plugin.name}/settings`)
+  const [values, setValues] = useState<Record<string, string> | null>(null)
+  const [check, setCheck] = useState<SettingsChange[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fields = st.data?.fields ?? []
+  const current: Record<string, string> = Object.fromEntries(fields.filter((f) => !f.secret).map((f) => [f.env, f.value]))
+  const v = values ?? current
+  const set = (k: string, val: string) => {
+    setValues({ ...v, [k]: val })
+    setCheck(null)
+  }
+  const missing = fields.filter((f) => f.required && !(f.secret ? f.set || (v[f.env] ?? '').trim() : (v[f.env] || f.default || '').trim()))
+  const text = (m: Record<string, string>) =>
+    fields
+      .filter((f) => !f.secret)
+      .map((f) => `${f.env}=${m[f.env] ?? ''}`)
+      .join('\n')
+
+  async function run(dry: boolean) {
+    setBusy(true)
+    setError(null)
+    try {
+      if (dry) {
+        const r = await api<{ changes: SettingsChange[] }>(`/hub/plugins/${plugin.name}/settings`, { method: 'POST', body: { settings: v, dry_run: true } })
+        setCheck(r.changes)
+      } else {
+        const r = await api<{ job_id: number }>(`/hub/plugins/${plugin.name}/settings`, { method: 'POST', body: { settings: v } })
+        onJob(await fetchHubJob<Job>(r.job_id))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const after: Record<string, string> = { ...current }
+  for (const c of check ?? []) if (!c.secret) after[c.env] = c.new ?? ''
+  const diff = check ? unifiedDiff(text(current), text(after), t('plugins.settingsOnHost'), t('editModal.draft')) : ''
+  const secrets = (check ?? []).filter((c) => c.secret)
+
+  return (
+    <Modal title={t('plugins.settingsTitle', { name: plugin.name, host: plugin.host })} onClose={onClose} width={760} maskClosable={false}>
+      <div className="col small" style={{ gap: '0.6rem' }}>
+        <span className="muted">{t('plugins.settingsHint')}</span>
+        {st.error && <Banner kind="error">{st.error}</Banner>}
+        {(st.data?.history.length ?? 0) > 0 && (
+          <label className="col" style={{ gap: '0.2rem' }}>
+            {t('plugins.settingsHistory')}
+            <Select
+              placeholder={t('plugins.settingsVersionPick')}
+              value={null}
+              onChange={(i: number) => {
+                const h = st.data!.history[i]
+                setValues({ ...v, ...Object.fromEntries(fields.filter((f) => !f.secret).map((f) => [f.env, h.values[f.env] ?? ''])) })
+                setCheck(null)
+              }}
+              options={st.data!.history.map((h, i) => ({
+                value: i,
+                label: `${formatRelative(h.at)} · ${h.user || '—'}${h.changed?.length ? ` · ${h.changed.join(', ')}` : ''}`,
+              }))}
+            />
+          </label>
+        )}
+        {fields.map((f) => (
+          <label key={f.env} className="col" style={{ gap: '0.2rem' }}>
+            <span>
+              {f.title}
+              {f.required && ' *'} <code className="muted">{f.env}</code>
+              {f.secret && (
+                <>
+                  {' '}
+                  {f.set ? <Tag color="success">{t('plugins.settingsSecretSet')}</Tag> : <Tag color="warning">{t('plugins.settingsSecretUnset')}</Tag>}
+                </>
+              )}
+            </span>
+            {f.secret ? (
+              <Input.Password
+                autoComplete="new-password"
+                value={v[f.env] ?? ''}
+                placeholder={f.set ? t('plugins.settingsReplace') : ''}
+                onChange={(e) => set(f.env, e.target.value)}
+              />
+            ) : (
+              <Input value={v[f.env] ?? ''} placeholder={f.default} onChange={(e) => set(f.env, e.target.value)} />
+            )}
+            {f.hint && <span className="muted">{f.hint}</span>}
+          </label>
+        ))}
+        {check && check.length === 0 && <span className="muted">{t('plugins.settingsNoChanges')}</span>}
+        {diff && <DiffView text={diff} />}
+        {secrets.length > 0 && <span>{t('plugins.settingsSecretReplaced', { list: secrets.map((c) => c.title).join(', ') })}</span>}
+        {check && check.length > 0 && <Banner kind="info">{t('plugins.settingsRestartHint')}</Banner>}
+        {error && <Banner kind="error">{error}</Banner>}
+        <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+          <Button loading={busy && !check} disabled={!st.data || missing.length > 0} onClick={() => void run(true)}>
+            {t('plugins.settingsCheck')}
+          </Button>
+          <Button type="primary" loading={busy && !!check} disabled={!check || check.length === 0} onClick={() => void run(false)}>
+            {t('plugins.settingsSave')}
           </Button>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
           {missing.length > 0 && <span className="muted">{t('plugins.fieldsMissing', { list: missing.map((f) => f.title).join(', ') })}</span>}

@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.4 — 2026-10-25
+
+- **Plugin Settings** for plugins installed on a host: the token,
+  address, zones and the rest change without reinstalling. The hub reads
+  ordinary values from the host and never shows secrets — only “set” and
+  a Replace field. Check shows a diff, Save restarts the service as a
+  job; if the plugin doesn't answer with the new settings, the previous
+  ones come back by themselves. A version history without secrets, with
+  restore. A DNS plugin reconciles the hub's records right after a
+  change. A new plugin version with a new required field gets a “needs
+  settings” mark.
+
 ## v1.14.3 — 2026-10-25
 
 - A **docker-mailserver mail** example: SMTP, IMAP, Rspamd (spam and

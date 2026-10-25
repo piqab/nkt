@@ -65,8 +65,11 @@ type pluginConf struct {
 	Native string `json:"native,omitempty"`
 	// NativeSHA — отпечаток поставленного файла плагина.
 	NativeSHA string `json:"native_sha,omitempty"`
-	Author    string `json:"author,omitempty"`
-	AddedAt   string `json:"added_at,omitempty"`
+	// SettingKeys — какие настройки заданы на хосте (поставлен хабом; nil —
+	// неизвестно): нет обязательной из описания — «нужна настройка».
+	SettingKeys []string `json:"setting_keys,omitempty"`
+	Author      string   `json:"author,omitempty"`
+	AddedAt     string   `json:"added_at,omitempty"`
 }
 
 var pluginsMu sync.Mutex
@@ -215,19 +218,21 @@ func pluginError(w http.ResponseWriter, r *http.Request, p pluginConf, err error
 
 // pluginJSON — плагин в списке: подключение и манифест (или ошибка).
 type pluginJSON struct {
-	Name     string           `json:"name"`
-	Host     string           `json:"host"`
-	Port     int              `json:"port"`
-	Pipeline string           `json:"pipeline,omitempty"`
-	Title    string           `json:"title"`
-	Version  string           `json:"version,omitempty"`
-	Token    string           `json:"token,omitempty"`
-	Native   string           `json:"native,omitempty"`
-	Outdated bool             `json:"outdated,omitempty"`
-	Author   string           `json:"author,omitempty"`
-	AddedAt  string           `json:"added_at,omitempty"`
-	Error    string           `json:"error,omitempty"`
-	Manifest *plugin.Manifest `json:"manifest,omitempty"`
+	Name     string `json:"name"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Pipeline string `json:"pipeline,omitempty"`
+	Title    string `json:"title"`
+	Version  string `json:"version,omitempty"`
+	Token    string `json:"token,omitempty"`
+	Native   string `json:"native,omitempty"`
+	Outdated bool   `json:"outdated,omitempty"`
+	// NeedsSettings — нет обязательной настройки (новая версия плагина).
+	NeedsSettings bool             `json:"needs_settings,omitempty"`
+	Author        string           `json:"author,omitempty"`
+	AddedAt       string           `json:"added_at,omitempty"`
+	Error         string           `json:"error,omitempty"`
+	Manifest      *plugin.Manifest `json:"manifest,omitempty"`
 }
 
 // handlePlugins — GET /hub/plugins: подключённые плагины с манифестами.
@@ -237,7 +242,7 @@ func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	for i, p := range list {
 		out[i] = pluginJSON{Name: p.Name, Host: p.Host, Port: p.Port, Pipeline: p.Pipeline, Title: p.Title, Version: p.Version,
-			Token: p.Token, Native: p.Native, Outdated: nativeOutdated(p), Author: p.Author, AddedAt: p.AddedAt}
+			Token: p.Token, Native: p.Native, Outdated: nativeOutdated(p), NeedsSettings: needsSettings(p), Author: p.Author, AddedAt: p.AddedAt}
 		wg.Add(1)
 		go func(i int, p pluginConf) {
 			defer wg.Done()

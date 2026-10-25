@@ -39,14 +39,15 @@ type PluginInstallParams struct {
 	HostID   int64  `json:"host_id"`
 	HostName string `json:"host_name"`
 	Name     string `json:"name"`
-	// Action — install | update | remove | update_all.
+	// Action — install | update | remove | update_all | settings.
 	Action string `json:"action"`
 	// Port — порт плагина на 127.0.0.1 хоста (у второго экземпляра на том
 	// же хосте — следующий свободный).
 	Port int `json:"port,omitempty"`
 	// Ticket — жетон настроек в oneTime (install).
 	Ticket string `json:"ticket,omitempty"`
-	// Names — update_all: какие плагины обновить.
+	// Names — update_all: какие плагины обновить; settings: какие
+	// настройки меняются (только имена — значения в oneTime).
 	Names []string `json:"names,omitempty"`
 }
 
@@ -314,6 +315,9 @@ func (r *PluginInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 		return nil
 	}
+	if p.Action == "settings" {
+		return r.runSettings(ctx, jc, user, p)
+	}
 	if p.Action == "remove" {
 		jc.StepKey(1, 2, "plugin.stepRemove", p.Name, p.HostName)
 		if _, err := s.hostCall(ctx, user, p.HostID, "POST", "/api/plugins/native/remove", map[string]string{"name": p.Name}, nil); err != nil {
@@ -358,7 +362,13 @@ func (r *PluginInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return nil
 	}
 	jc.StepKey(2, 3, "plugin.stepWait", p.Name)
-	conf := pluginConf{Host: p.HostName, Port: p.Port, Native: pkg.Key, NativeSHA: packageSHA(pkg)}
+	conf := pluginConf{Host: p.HostName, Port: p.Port, Native: pkg.Key, NativeSHA: packageSHA(pkg), SettingKeys: []string{}}
+	for k := range env {
+		if !strings.HasPrefix(k, "NKT_") {
+			conf.SettingKeys = append(conf.SettingKeys, k)
+		}
+	}
+	slices.Sort(conf.SettingKeys)
 	if p.HostID == localHostID {
 		conf.Host = localHostName
 	}

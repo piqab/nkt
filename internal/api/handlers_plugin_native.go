@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -181,7 +182,7 @@ func (s *Server) handlePluginNativeRemove(w http.ResponseWriter, r *http.Request
 	c := s.scanner.Collector()
 	service := "nkt-plugin-" + req.Name
 	_, _ = c.Run(ctx, "systemctl", "disable", "--now", service)
-	for _, p := range []string{fmt.Sprintf(pluginNativeUnit, req.Name), pluginNativeEnv + "/" + req.Name + ".env"} {
+	for _, p := range []string{fmt.Sprintf(pluginNativeUnit, req.Name), pluginNativeEnv + "/" + req.Name + ".env", pluginNativeEnv + "/" + req.Name + ".env.prev"} {
 		_ = c.DeleteFile(p)
 	}
 	if res, err := c.Run(ctx, "rm", "-rf", "--", pluginNativeDir+"/"+req.Name); err == nil && !res.OK() {
@@ -191,4 +192,150 @@ func (s *Server) handlePluginNativeRemove(w http.ResponseWriter, r *http.Request
 	_, _ = c.Run(ctx, "systemctl", "daemon-reload")
 	s.db.Audit(ctx, auth.Username(ctx), "plugin.native.remove", req.Name, "ok", nil)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// pluginNativeEnvRead — настройки плагина с хоста (KEY=value построчно).
+func pluginNativeEnvRead(ctx context.Context, c collect.Collector, path string) (map[string]string, error) {
+	raw, err := c.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	env := map[string]string{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if k, v, ok := strings.Cut(line, "="); ok && pluginNativeEnvRe.MatchString(k) {
+			env[k] = v
+		}
+	}
+	return env, nil
+}
+
+func pluginNativeEnvText(name string, env map[string]string) []byte {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	b.WriteString("# nkt: настройки плагина хаба " + name + " — секреты, только root.\n")
+	for _, k := range keys {
+		b.WriteString(k + "=" + env[k] + "\n")
+	}
+	return []byte(b.String())
+}
+
+// pluginNativeHubKey — настройки, которые ведёт хаб (секрет подписи, адрес
+// и порт): окно «Настройки» их не видит и не меняет.
+func pluginNativeHubKey(k string) bool { return strings.HasPrefix(k, "NKT_") }
+
+// handlePluginNativeSettings — POST /plugins/native/settings {name, op}:
+//
+//   - read {keys, secrets} — значения keys (несекретные, их называет хаб) и
+//     есть ли значения у secrets — самих секретов в ответе нет;
+//   - apply {set} — заменить значения (пусто — убрать), прежний файл — в
+//     .env.prev, перезапуск службы;
+//   - rollback — вернуть .env.prev и перезапустить (плагин не поднялся),
+//     в ответе — последние строки журнала службы;
+//   - commit — плагин ответил: .env.prev удалить.
+func (s *Server) handlePluginNativeSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req struct {
+		Name    string            `json:"name"`
+		Op      string            `json:"op"`
+		Keys    []string          `json:"keys"`
+		Secrets []string          `json:"secrets"`
+		Set     map[string]string `json:"set"`
+	}
+	if err := decodeJSONLimit(r, &req, 1<<20); err != nil || !pluginNativeNameRe.MatchString(req.Name) {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.nativeBad"))
+		return
+	}
+	c := s.scanner.Collector()
+	path := pluginNativeEnv + "/" + req.Name + ".env"
+	prev := path + ".prev"
+	service := "nkt-plugin-" + req.Name
+	restart := func() error {
+		res, err := c.Run(ctx, "systemctl", "restart", service)
+		if err == nil && !res.OK() {
+			err = fmt.Errorf("systemctl restart %s: %s", service, strings.TrimSpace(res.Output()))
+		}
+		return err
+	}
+	env, err := pluginNativeEnvRead(ctx, c, path)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.nativeNoEnv", req.Name))
+		return
+	}
+	switch req.Op {
+	case "read":
+		values, set := map[string]string{}, map[string]bool{}
+		for _, k := range req.Keys {
+			if v, ok := env[k]; ok && pluginNativeEnvRe.MatchString(k) && !pluginNativeHubKey(k) {
+				values[k] = v
+			}
+		}
+		for _, k := range req.Secrets {
+			set[k] = env[k] != ""
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"values": values, "set": set})
+	case "apply":
+		for k, v := range req.Set {
+			if !pluginNativeEnvRe.MatchString(k) || pluginNativeHubKey(k) || strings.ContainsAny(v, "\r\n\"'\\$`") {
+				writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.nativeBadEnv", k))
+				return
+			}
+		}
+		if err := c.WriteFile(prev, pluginNativeEnvText(req.Name, env), 0o600); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		changed := make([]string, 0, len(req.Set))
+		for k, v := range req.Set {
+			if v == "" {
+				delete(env, k)
+			} else {
+				env[k] = v
+			}
+			changed = append(changed, k)
+		}
+		sort.Strings(changed)
+		if err := c.WriteFile(path, pluginNativeEnvText(req.Name, env), 0o600); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		if err := restart(); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		s.db.Audit(ctx, auth.Username(ctx), "plugin.native.settings", req.Name, "ok", map[string]any{"keys": changed})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	case "rollback":
+		old, err := pluginNativeEnvRead(ctx, c, prev)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.nativeNoPrev", req.Name))
+			return
+		}
+		if err := c.WriteFile(path, pluginNativeEnvText(req.Name, old), 0o600); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		_ = c.DeleteFile(prev)
+		tail := ""
+		if res, err := c.Run(ctx, "journalctl", "-u", service, "-n", "15", "--no-pager", "-o", "cat"); err == nil && res.OK() {
+			tail = strings.TrimSpace(res.Stdout)
+		}
+		if err := restart(); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		s.db.Audit(ctx, auth.Username(ctx), "plugin.native.settingsRollback", req.Name, "ok", nil)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "log": tail})
+	case "commit":
+		_ = c.DeleteFile(prev)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	default:
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.nativeBad"))
+	}
 }
