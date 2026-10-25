@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.3 — 2026-10-25
+
+- A **docker-mailserver mail** example: SMTP, IMAP, Rspamd (spam and
+  DKIM), fail2ban; the first `postmaster` mailbox comes from the
+  pipeline's `.env`, the certificate from the host's Certificates, mail
+  ports are public. The README lists what to do before deploying:
+  outbound 25 at the hosting provider, PTR.
+- A **mail plugin** (Install on a host — on the mail host, needs Docker):
+  domains, mailboxes (add, change password, delete), aliases, the DKIM
+  key, `mail …` commands, MCP tools. The password is entered in a masked
+  field and appears neither in command arguments nor in the action log.
+- **DNS records from a plugin**: a domain's DNS records → Set through
+  the DNS plugin — MX, SPF, DKIM, DMARC go to the connected Technitium or
+  Cloudflare; Check shows what changes, Apply sets it. Other values at
+  the same names aren't touched.
+- The hub's action log no longer stores password and token values from
+  plugin operations — `***` instead.
+
 ## v1.14.2 — 2026-10-25
 
 - The **Cloudflare DNS** plugin: zones of your Cloudflare account from the

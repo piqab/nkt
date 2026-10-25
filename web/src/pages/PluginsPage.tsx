@@ -237,7 +237,8 @@ function ActionButton({
   const [result, setResult] = useState<{ text?: string; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const op = action.op ? plugin.manifest?.ops.find((o) => o.name === action.op) : undefined
-  const writes = (action.op && !op?.read_only) || !!action.edit
+  const writes = (action.op && !op?.read_only) || !!action.edit || !!action.dns
+  const [dns, setDns] = useState(false)
   // Что меняет — администратору (сервер проверит и сам).
   if (writes && !admin) return null
 
@@ -266,6 +267,10 @@ function ActionButton({
       setEdit(true)
       return
     }
+    if (action.dns) {
+      setDns(true)
+      return
+    }
     if (action.fields?.length) {
       setForm(true)
       return
@@ -279,6 +284,7 @@ function ActionButton({
         {action.title}
       </Button>
       {form && <FormModal action={action} busy={busy} onClose={() => setForm(false)} onSubmit={async (v) => (await run(v)) && setForm(false)} />}
+      {dns && action.dns && <DNSModal plugin={plugin} action={action} onClose={() => setDns(false)} />}
       {edit && action.edit && <DocModal plugin={plugin} action={action} title={context} onClose={() => setEdit(false)} onSaved={onChanged} />}
       {result && (
         <Modal title={action.title} onClose={() => setResult(null)}>
@@ -326,6 +332,8 @@ function FormModal({
                 options={(f.options ?? []).map((o) => ({ value: o.value, label: o.title || o.value }))}
                 placeholder={f.placeholder}
               />
+            ) : f.type === 'password' ? (
+              <Input.Password autoComplete="new-password" value={String(values[f.name] ?? '')} onChange={(e) => set(f, e.target.value)} />
             ) : f.type === 'bool' ? (
               <Checkbox checked={!!values[f.name]} onChange={(e) => set(f, e.target.checked)} />
             ) : (
@@ -502,6 +510,66 @@ function DocHistory({
           })()}
         </Modal>
       )}
+    </Modal>
+  )
+}
+
+/** Записи, которые нужны плагину (почта: MX, SPF, DKIM), — через
+ * DNS-плагин хаба: «Сверить» показывает, что изменится, «Применить»
+ * ставит. */
+type DNSRec = NonNullable<PluginAction['dns']>['records'][number]
+
+function DNSModal({ plugin, action, onClose }: { plugin: PluginInfo; action: PluginAction; onClose: () => void }) {
+  const { t } = useTranslation()
+  const d = action.dns!
+  const [log, setLog] = useState<{ lines: string[]; error?: string; dry: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+  async function run(dry: boolean) {
+    setBusy(true)
+    try {
+      const r = await api<{ log: string[]; error?: string }>(`/hub/plugins/${plugin.name}/dns`, {
+        method: 'POST',
+        body: { owner: d.owner, records: d.records, dry_run: dry },
+        timeoutMs: 120_000,
+      })
+      setLog({ lines: r.log ?? [], error: r.error, dry })
+    } catch (err) {
+      setLog({ lines: [], error: err instanceof Error ? err.message : String(err), dry })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={action.title} onClose={onClose} width={860} maskClosable={false}>
+      <div className="col small" style={{ gap: '0.6rem' }}>
+        <span className="muted">{t('plugins.dnsRecordsHint')}</span>
+        <div className="table-wrap">
+          <DataTable
+            rowKey={(r) => r.name + r.type}
+            dataSource={d.records}
+            columns={[
+              { title: t('plugins.dnsName'), dataIndex: 'name', key: 'name' },
+              { title: t('plugins.dnsType'), dataIndex: 'type', key: 'type' },
+              { title: t('plugins.dnsValue'), key: 'v', render: (_: unknown, r: DNSRec) => <code className="small">{r.values.join(', ')}</code> },
+            ]}
+          />
+        </div>
+        {log && (log.error ? <Banner kind="error">{log.error}</Banner> : null)}
+        {log && (
+          <pre className="small" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+            {log.lines.length ? log.lines.join('\n') : t('plugins.dnsNothing')}
+          </pre>
+        )}
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <Button loading={busy && !log?.dry} onClick={() => void run(true)}>
+            {t('plugins.dnsCheck')}
+          </Button>
+          <Button type="primary" loading={busy} disabled={!log?.dry || !!log.error} onClick={() => void run(false)}>
+            {t('plugins.dnsApply')}
+          </Button>
+          <Button onClick={onClose}>{t('common.close')}</Button>
+        </div>
+      </div>
     </Modal>
   )
 }

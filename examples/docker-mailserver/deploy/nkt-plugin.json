@@ -1,0 +1,23 @@
+{
+  "name": "mail",
+  "title": {"ru": "Почта (docker-mailserver)", "en": "Mail (docker-mailserver)"},
+  "description": {
+    "ru": "Почтовый сервер docker-mailserver из хаба: домены, ящики (пароль — только в форме, не в журналах), псевдонимы, ключ DKIM и записи MX/SPF/DKIM/DMARC — поставить через DNS-плагин хаба. Ставится на хост почтового сервера: плагину нужен docker.",
+    "en": "The docker-mailserver mail server from the hub: domains, mailboxes (the password goes only through the form, never into logs), aliases, the DKIM key and MX/SPF/DKIM/DMARC records — set them through the hub's DNS plugin. Installed on the mail server host: the plugin needs docker."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9200,
+  "docker": true,
+  "settings": [
+    {"env": "DMS_CONTAINER",
+     "title": {"ru": "Контейнер почтового сервера", "en": "Mail server container"},
+     "hint": {"ru": "пусто — mailserver (как в compose примера)", "en": "empty — mailserver (as in the example's compose)"}},
+    {"env": "MAIL_HOSTNAME", "required": true,
+     "title": {"ru": "Имя почтового сервера", "en": "Mail server host name"},
+     "hint": {"ru": "например, mail.example.com — на него указывает MX", "en": "e.g. mail.example.com — the MX points to it"}},
+    {"env": "MAIL_PUBLIC_IP",
+     "title": {"ru": "Внешний IPv4 сервера", "en": "Server public IPv4"},
+     "hint": {"ru": "для записи A имени сервера и SPF; пусто — без записи A", "en": "for the server name's A record and SPF; empty — no A record"}}
+  ]
+}

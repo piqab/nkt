@@ -13,7 +13,8 @@ before.
 Plugins: [Technitium DNS](/en/guide/hub-plugin-dns) — zones and records of
 your domains on your own name servers, delegation, DNSSEC;
 [Cloudflare DNS](/en/guide/hub-plugin-cloudflare) — the same for zones at
-Cloudflare.
+Cloudflare; [mail](/en/guide/hub-plugin-mail) — docker-mailserver
+mailboxes, aliases and DKIM, MX/SPF/DKIM records through the DNS plugin.
 
 ## How it works
 
@@ -223,9 +224,17 @@ A section's **view** (`view`):
 
 `type` — `table`, `text` (`text`) or `sections` (`items` — views one after
 another). Form fields: `text`, `textarea`, `number`, `select`
-(`options`), `bool`. A document: the `get` operation returns
+(`options`), `bool`, `password` (masked input; the value isn't written to
+the action log). A document: the `get` operation returns
 `result.text`, `put` receives `args.text`; the hub keeps the version
 history.
+
+A button with `dns` — records the plugin needs in DNS (mail: MX, SPF,
+DKIM): `{"title": "…", "dns": {"owner": "domain:example.com", "records":
+[{"name": "example.com", "type": "MX", "values": ["10 mail.example.com."],
+"ttl": 3600}]}}`. The hub sets them through the connected DNS plugin
+(owner `plugin:<name>:<owner>`, types A, AAAA, CNAME, TXT, MX) — a window
+with Check and Apply; rights are those of a data-changing operation.
 
 **Service operations** (not in `ops`, the hub calls them itself):
 

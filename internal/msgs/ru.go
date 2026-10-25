@@ -2112,6 +2112,8 @@ var ruCatalog = map[string]string{
 	"plugin.localInDocker":                                "хаб работает в контейнере — на его машину плагин службой не поставить; выберите другой хост",
 	"plugin.nothingToUpdate":                              "все плагины, поставленные хабом, уже свежие",
 	"plugin.updateAllTitle":                               "Обновление плагинов: %s",
+	"plugin.dnsBadRecords":                                "записи плагина для DNS неверны: %s (имена, типы A, AAAA, CNAME, TXT, MX, до 10 значений)",
+	"plugin.dnsNoProvider":                                "DNS-плагин не подключён — записи поставить некуда («О системе» → «Плагины»)",
 	"plugin.hostGone":                                     "хоста %s нет в хабе",
 	"plugin.noSSH":                                        "до плагина на %s хаб ходит по SSH, а соединения нет: %v",
 	"plugin.unreachable":                                  "плагин %s (%s, 127.0.0.1:%d) не отвечает: %v",

@@ -33,9 +33,13 @@ import (
 // подключённого DNS-плагина ничего этого нет.
 
 const (
-	dnsOwnedKV = "dns.owned"
-	dnsAutoKV  = "dns.autonames"
-	dnsTTL     = 300
+	// dnsPluginRecordsKV — записи, которые попросили поставить плагины
+	// (кнопка «Поставить через DNS-плагин»): владелец plugin:<имя>:… →
+	// записи.
+	dnsPluginRecordsKV = "dns.plugin_records"
+	dnsOwnedKV         = "dns.owned"
+	dnsAutoKV          = "dns.autonames"
+	dnsTTL             = 300
 	// dnsReconcileEvery — сверка: адрес хоста сменился, плагин был
 	// недоступен.
 	dnsReconcileEvery = 10 * time.Minute
@@ -282,6 +286,15 @@ func (s *Server) dnsDesired(ctx context.Context) (map[string][]dnsRecord, []stri
 				recs = append(recs, recordsFor(strings.ToLower(dom), ips, false, 0)...)
 			}
 			want["site:"+pl.Name] = recs
+		}
+	}
+	// Записи от плагинов (почта и т. п.).
+	if raw, ok, err := s.db.KVGet(ctx, dnsPluginRecordsKV); err == nil && ok {
+		var extra map[string][]dnsRecord
+		if json.Unmarshal([]byte(raw), &extra) == nil {
+			for o, recs := range extra {
+				want[o] = recs
+			}
 		}
 	}
 	// Автоимена хостов.
@@ -548,6 +561,108 @@ func (s *Server) handleDNSSync(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"log": lines}
 	if err != nil {
 		out["error"] = msgs.Localize(msgs.FromContext(ctx), err)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+var (
+	dnsOwnerRe = regexp.MustCompile(`^[a-z0-9][a-z0-9:._-]{0,99}$`)
+	dnsNameRe  = regexp.MustCompile(`^(?:\*|_?[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?)(?:\.(?:_?[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?))+$`)
+)
+
+// dnsPluginTypes — какие записи плагин может попросить.
+var dnsPluginTypes = map[string]bool{"A": true, "AAAA": true, "CNAME": true, "TXT": true, "MX": true}
+
+// handlePluginDNS — POST /hub/plugins/{name}/dns {owner, records,
+// dry_run}: записи, которые нужны плагину (кнопка вида с «dns»), — через
+// DNS-плагин хаба от владельца plugin:<имя>:<owner>; пустые records —
+// снять. Сухой прогон — что изменится, ничего не меняя.
+func (s *Server) handlePluginDNS(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	p, ok := s.pluginFromReq(w, r)
+	if !ok {
+		return
+	}
+	if err := s.pluginOpAllowed(ctx, p, plugin.Op{Name: "dns"}); err != nil {
+		writeErr(w, r, http.StatusForbidden, err)
+		return
+	}
+	var req struct {
+		Owner   string      `json:"owner"`
+		Records []dnsRecord `json:"records"`
+		DryRun  bool        `json:"dry_run"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if !dnsOwnerRe.MatchString(req.Owner) || len(req.Records) > 50 {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.dnsBadRecords", req.Owner))
+		return
+	}
+	for i := range req.Records {
+		rec := &req.Records[i]
+		rec.Name = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(rec.Name), "."))
+		rec.Type = strings.ToUpper(rec.Type)
+		bad := !dnsNameRe.MatchString(rec.Name) || !dnsPluginTypes[rec.Type] || len(rec.Values) == 0 || len(rec.Values) > 10 ||
+			rec.TTL != 0 && (rec.TTL < 60 || rec.TTL > 86400)
+		for _, v := range rec.Values {
+			bad = bad || v == "" || len(v) > 2048 || strings.ContainsAny(v, "\r\n")
+		}
+		if bad {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.dnsBadRecords", rec.Name))
+			return
+		}
+		if rec.TTL == 0 {
+			rec.TTL = 3600
+		}
+		rec.Failover, rec.Port = false, 0
+	}
+	if len(s.dnsPlugins(ctx)) == 0 {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.dnsNoProvider"))
+		return
+	}
+	owner := "plugin:" + p.Name + ":" + req.Owner
+	// Сухой прогон — сверка с записями, которые будут, без сохранения.
+	dnsMu.Lock()
+	extra := map[string][]dnsRecord{}
+	if raw, ok, err := s.db.KVGet(ctx, dnsPluginRecordsKV); err == nil && ok {
+		_ = json.Unmarshal([]byte(raw), &extra)
+	}
+	before, had := extra[owner]
+	if len(req.Records) == 0 {
+		delete(extra, owner)
+	} else {
+		extra[owner] = req.Records
+	}
+	raw, _ := json.Marshal(extra)
+	err := s.db.KVSet(ctx, dnsPluginRecordsKV, string(raw))
+	dnsMu.Unlock()
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	lines := []string{}
+	syncErr := s.dnsSync(ctx, func(o string) bool { return o == owner }, req.DryRun, func(key string, args ...any) {
+		lines = append(lines, msgs.Tc(ctx, key, args...))
+	})
+	if req.DryRun {
+		// Вернуть, как было: сухой прогон ничего не сохраняет.
+		dnsMu.Lock()
+		if had {
+			extra[owner] = before
+		} else {
+			delete(extra, owner)
+		}
+		raw, _ := json.Marshal(extra)
+		_ = s.db.KVSet(ctx, dnsPluginRecordsKV, string(raw))
+		dnsMu.Unlock()
+	} else {
+		s.db.Audit(ctx, auth.Username(ctx), "plugin.dnsRecords", owner, auditOutcome(syncErr), req.Records)
+	}
+	out := map[string]any{"log": lines}
+	if syncErr != nil {
+		out["error"] = msgs.Localize(msgs.FromContext(ctx), syncErr)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -44,7 +44,7 @@ export interface PluginInfo {
 export interface PluginField {
   name: string
   title: string
-  type?: 'text' | 'textarea' | 'number' | 'select' | 'bool'
+  type?: 'text' | 'textarea' | 'number' | 'select' | 'bool' | 'password'
   options?: { value: string; title?: string }[]
   required?: boolean
   default?: unknown
@@ -61,6 +61,8 @@ export interface PluginAction {
   danger?: boolean
   open?: string
   edit?: { get: string; put: string; doc: string; language?: string }
+  /** Записи для DNS-плагина хаба (почта: MX, SPF, DKIM). */
+  dns?: { owner: string; records: { name: string; type: string; values: string[]; ttl?: number }[] }
 }
 
 export interface PluginView {

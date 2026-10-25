@@ -230,9 +230,9 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
 
 Примеры (compose, как остальные в `examples/`):
 
-- [ ] **docker-mailserver** (github.com/docker-mailserver/docker-mailserver)
+- [x] **docker-mailserver** (github.com/docker-mailserver/docker-mailserver)
       — почта на своём домене; записи MX, SPF, DKIM, DMARC — DNS-плагином
-      хаба; сертификат — сайтом или Traffic Fly.
+      хаба; сертификат — «Сертификаты» хоста (certbot).
 - [ ] **Vaultwarden** — менеджер паролей команды; сайт и бэкап.
 - [ ] **llama.cpp (llama-server) + Open WebUI** — своя модель; она же —
       модель ассистента хаба и MCP-агентов без внешнего API.
@@ -247,7 +247,7 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
 - [x] **Cloudflare DNS** (`provides: dns`) — DNS-функции хаба (Traffic
       Fly, сайты, автоимена) без своего Technitium; ставится на машину
       хаба или любой хост с интернетом.
-- [ ] **docker-mailserver** — ящики и алиасы из хаба (через `setup` в
+- [x] **docker-mailserver** — ящики и алиасы из хаба (через `setup` в
       контейнере); DKIM сам уходит в DNS-плагин.
 - [ ] **Garage** — бакеты и ключи из хаба; цель для бэкапов.
 - [ ] **Proxmox** — машины Proxmox в карте и списке хостов nkt и действия

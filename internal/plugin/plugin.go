@@ -187,6 +187,21 @@ type Action struct {
 	// Edit — документ: Get возвращает result.text, Put принимает
 	// args.text; Doc — его имя в истории версий хаба.
 	Edit *Edit `json:"edit,omitempty"`
+	// DNS — записи, которые плагину нужны в DNS (почта: MX, SPF, DKIM):
+	// хаб ставит их через подключённый DNS-плагин (provides: dns) от
+	// владельца «plugin:<имя>:<Owner>» — со сверкой перед записью.
+	DNS *ActionDNS `json:"dns,omitempty"`
+}
+
+// ActionDNS — записи для DNS-плагина хаба (формат _dns_sync).
+type ActionDNS struct {
+	Owner   string `json:"owner"`
+	Records []struct {
+		Name   string   `json:"name"`
+		Type   string   `json:"type"`
+		Values []string `json:"values"`
+		TTL    int      `json:"ttl,omitempty"`
+	} `json:"records"`
 }
 
 // Edit — правка документа.
@@ -201,7 +216,7 @@ type Edit struct {
 type Field struct {
 	Name        string   `json:"name"`
 	Title       string   `json:"title"`
-	Type        string   `json:"type,omitempty"` // text | textarea | number | select | bool
+	Type        string   `json:"type,omitempty"` // text | textarea | number | select | bool | password
 	Options     []Option `json:"options,omitempty"`
 	Required    bool     `json:"required,omitempty"`
 	Default     any      `json:"default,omitempty"`

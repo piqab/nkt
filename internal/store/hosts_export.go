@@ -266,7 +266,7 @@ var ExportedSettingKeys = []string{
 	// hub.reencryptPlugins).
 	"plugins",
 	// Записи DNS через плагин: автоимена с историей и что поставлено.
-	"dns.autonames", "dns.autonames.history", "dns.owned",
+	"dns.autonames", "dns.autonames.history", "dns.owned", "dns.plugin_records",
 	// Адрес сайта справки и его история («О системе»).
 	"ui.docs_url", "ui.docs_url.history",
 	// Раскладка меню хаба и хоста с историей.

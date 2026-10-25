@@ -1,0 +1,31 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# docker-mailserver — почта на своём домене из examples/ репозитория nkt.
+# Перед выкладкой: сертификат для MAIL_HOSTNAME (nkt: «Сертификаты»),
+# порты 25, 465, 587, 993 открыты в файрволе хоста и у провайдера, PTR
+# (обратная запись) адреса — на MAIL_HOSTNAME. Подробно — README.md.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/docker-mailserver/deploy/docker-compose.yml
+  project: mail
+  hosts: [mail1]
+  wait_timeout: 5m
+  # Почта — наружу на все адреса хоста (иначе хаб опубликовал бы её на
+  # 127.0.0.1).
+  ports:
+    mailserver:
+      - "0.0.0.0:25:25"
+      - "0.0.0.0:465:465"
+      - "0.0.0.0:587:587"
+      - "0.0.0.0:993:993"
+  env_keys:
+    mail-init: [MAIL_DOMAIN, MAIL_ADMIN_PASSWORD]
+    mailserver: [MAIL_HOSTNAME, MAIL_DOMAIN]
+  env:
+    MAIL_HOSTNAME: mail.example.com        # имя сервера (A-запись и сертификат)
+    MAIL_DOMAIN: example.com               # домен ящиков
+    MAIL_ADMIN_PASSWORD: generate:password # первый ящик postmaster@MAIL_DOMAIN
+    # ENABLE_CLAMAV: "1"                   # антивирус, около 1 ГБ памяти

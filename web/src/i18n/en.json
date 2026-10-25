@@ -3640,6 +3640,10 @@
         "title": "Cloudflare DNS plugin",
         "hint": "A hub plugin for zones at Cloudflare: records from the hub, delegation, “cf …” commands, MCP, records for Traffic Fly and sites. Without Docker — About → Plugins → Install on a host."
       },
+      "docker-mailserver": {
+        "title": "Mail: docker-mailserver",
+        "hint": "Mail on your own domain (SMTP, IMAP, Rspamd, DKIM, fail2ban): the first postmaster mailbox comes from .env, the certificate from Certificates; the hub plugin — mailboxes, aliases and MX/SPF/DKIM records through the DNS plugin (README)"
+      },
       "garage": {
         "title": "Garage (S3 storage)",
         "hint": "S3 for files and backups: the bucket and key are created by the one-shot garage-init, the garage-webui admin panel is on 127.0.0.1:3909, the site has no size limit (max_body: “0”); Filestash is commented out (README)"
@@ -5307,6 +5311,10 @@
     "outdated": "newer version available",
     "localInDocker": "The hub runs in a container — a plugin can't be installed as a service on its machine, so it isn't in the list.",
     "instanceHint": "Unique per instance: a second Cloudflare or Technitium — dns2 and so on. The name gives the nkt-plugin-NAME service, MCP tools and the token action; the hub picks a free port on the host.",
-    "dockerWarn": "The plugin needs Docker access: the service joins the docker group — that's root rights on the host. Install it only on the host of the service it manages."
+    "dockerWarn": "The plugin needs Docker access: the service joins the docker group — that's root rights on the host. Install it only on the host of the service it manages.",
+    "dnsRecordsHint": "The plugin needs these DNS records. The hub sets them through the connected DNS plugin (Technitium, Cloudflare) and remembers what it set: other values at the same names aren't touched. Check first — what changes.",
+    "dnsName": "Name",
+    "dnsType": "Type",
+    "dnsValue": "Value"
   }
 }
