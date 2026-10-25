@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.2 — 2026-10-25
+
+- The **Cloudflare DNS** plugin: zones of your Cloudflare account from the
+  hub — records as a table and the whole zone as text with a diff (TTL
+  `auto`, the `proxied` flag), delegation, `cf …` commands, MCP tools,
+  records for Traffic Fly, sites and host autonames. Installed with
+  “Install on a host” on the hub machine or any host with internet (or by
+  a pipeline); the token — the “Edit zone DNS” template on the needed
+  zones only.
+
 ## v1.14.1 — 2026-10-25
 
 - Plugins: several instances of one plugin (a name in the install window,

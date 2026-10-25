@@ -3636,6 +3636,10 @@
         "title": "Technitium DNS Server",
         "hint": "Your own name server: zones, DNS-01 checks for certificates (cert-manager), failover records, DoH; the secondary is a second pipeline (README)"
       },
+      "cloudflare-plugin": {
+        "title": "Cloudflare DNS plugin",
+        "hint": "A hub plugin for zones at Cloudflare: records from the hub, delegation, “cf …” commands, MCP, records for Traffic Fly and sites. Without Docker — About → Plugins → Install on a host."
+      },
       "garage": {
         "title": "Garage (S3 storage)",
         "hint": "S3 for files and backups: the bucket and key are created by the one-shot garage-init, the garage-webui admin panel is on 127.0.0.1:3909, the site has no size limit (max_body: “0”); Filestash is commented out (README)"

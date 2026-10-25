@@ -1,0 +1,19 @@
+# WARNING: пример использует сторонний сервис (Cloudflare) и образ python — их доступность и безопасность не гарантируются.
+# WARNING: this example uses a third-party service (Cloudflare) and the python image — their availability and security are not guaranteed.
+# Плагин хаба nkt «Cloudflare DNS» контейнером (без Docker — «О системе» →
+# «Плагины» → «Установить на хост»). Слушает только 127.0.0.1 хоста — хаб
+# ходит к нему по SSH; каждый вызов подписан NKT_PLUGIN_SECRET.
+services:
+  plugin:
+    image: python:3.13-alpine
+    restart: unless-stopped
+    command: ["python3", "-I", "/nkt-plugin.py"]
+    environment:
+      NKT_PLUGIN_SECRET: ${NKT_PLUGIN_SECRET}
+      NKT_PLUGIN_PORT: "9190"
+      CF_API_TOKEN: ${CF_API_TOKEN}
+      CF_ZONES: ${CF_ZONES:-}
+    volumes:
+      - ./nkt-plugin.py:/nkt-plugin.py:ro
+    ports:
+      - "127.0.0.1:9190:9190"
