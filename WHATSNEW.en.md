@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.6 — 2026-10-25
+
+- Internal: removed useless assignments in plugin script command handling
+  (a CodeQL finding); behaviour is unchanged.
+
 ## v1.14.5 — 2026-10-25
 
 - A **LiteLLM** example: one OpenAI-compatible address in front of your
