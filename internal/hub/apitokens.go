@@ -399,8 +399,9 @@ var tokenHubRoutes = map[string]string{
 	"POST /mcp": "",
 	// Плагины: список и операции; что меняет — с действием plugin.<имя>
 	// (проверяет handlePluginCall по манифесту).
-	"GET /hub/plugins":              "",
-	"POST /hub/plugins/{name}/call": "",
+	"GET /hub/plugins":               "",
+	"GET /hub/plugins/{name}/agents": "",
+	"POST /hub/plugins/{name}/call":  "",
 	// Кластеры: смотреть и применять манифесты; создание, удаление,
 	// обновление, kubeconfig и Helm — нет.
 	"GET /hub/clusters":             "",

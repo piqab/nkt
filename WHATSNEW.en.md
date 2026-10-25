@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.8 — 2026-10-25
+
+- **For agents** on a plugin page: all its MCP tools exactly as an agent
+  sees them (description, arguments, required ones, who can use them, what
+  deletes, what returns a secret only into a pipeline `.env`), the script
+  commands with examples and **Download JSON** in the `tools/list`
+  format. A warning if MCP is off.
+
 ## v1.14.7 — 2026-10-25
 
 - The **hub export** also carries what appeared recently: the Monitoring

@@ -79,7 +79,7 @@ admin token or a token by permission (within its limits).
 | `service_action`, `container_action` | admin | start / stop / restart services and containers |
 | `fail2ban_ban` | admin | ban / unban addresses on hosts |
 
-Plus the tools of connected [plugins](/en/guide/hub-plugins):
+Plus the tools of connected [plugins](/en/guide/hub-plugins) (exactly which, with arguments and access — Plugins → the plugin → **For agents**, with Download JSON in the `tools/list` format):
 `<name>_<operation>` — read operations for any token, others with the
 “plugin NAME” action.
 

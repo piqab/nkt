@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Checkbox, Input, InputNumber, Select, Tabs } from 'antd'
+import { Button, Checkbox, Input, InputNumber, Select, Tabs, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Card, CodeEditor, DiffView, Empty, Loading, Modal, formatDateTime } from '../components/ui'
@@ -88,11 +88,18 @@ function PluginPanel({ plugin, admin }: { plugin: PluginInfo; admin: boolean }) 
 /** Что умеет плагин: версия, хост, команды сценариев, инструменты MCP. */
 function PluginAbout({ plugin, compact }: { plugin: PluginInfo; compact?: boolean }) {
   const { t } = useTranslation()
+  const [agents, setAgents] = useState(false)
   const m = plugin.manifest
   if (!m) return null
   const tools = m.ops.filter((o) => o.mcp)
   return (
     <div className="small muted" style={{ marginTop: compact ? '0.5rem' : 0 }}>
+      {(tools.length > 0 || (m.commands?.length ?? 0) > 0) && (
+        <Button size="small" style={{ float: 'right' }} onClick={() => setAgents(true)}>
+          {t('plugins.agents')}
+        </Button>
+      )}
+      {agents && <AgentsModal plugin={plugin} onClose={() => setAgents(false)} />}
       {m.title} {m.version} · {plugin.host}:{plugin.port}
       {plugin.pipeline ? ` · ${t('plugins.pipeline')}: ${plugin.pipeline}` : ''}
       {m.description && !compact && <p>{m.description}</p>}
@@ -584,6 +591,105 @@ function DNSModal({ plugin, action, onClose }: { plugin: PluginInfo; action: Plu
             {t('plugins.dnsApply')}
           </Button>
           <Button onClick={onClose}>{t('common.close')}</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+interface AgentTool {
+  tool: { name: string; description: string; inputSchema: { properties?: Record<string, { type?: string; description?: string; enum?: unknown[] }>; required?: string[] } }
+  action?: string
+  reveals?: boolean
+  destructive?: boolean
+}
+
+/** «Для агентов»: инструменты MCP плагина ровно такими, какими их видит
+ * агент (имя, описание, аргументы, кому доступны), команды сценариев и
+ * «Скачать JSON» — тот же формат, что tools/list. */
+function AgentsModal({ plugin, onClose }: { plugin: PluginInfo; onClose: () => void }) {
+  const { t } = useTranslation()
+  const st = useApi<{ title: string; version: string; mcp_enabled: boolean; tools: AgentTool[]; commands: { word: string; usage: string; summary?: string; example?: string }[] }>(
+    `/hub/plugins/${plugin.name}/agents`,
+  )
+  const d = st.data
+  const json = () =>
+    JSON.stringify({ plugin: plugin.name, title: d?.title, version: d?.version, tools: (d?.tools ?? []).map((x) => x.tool), commands: d?.commands ?? [] }, null, 2)
+  function download() {
+    const url = URL.createObjectURL(new Blob([json() + '\n'], { type: 'application/json' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `nkt-plugin-${plugin.name}-agents.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  return (
+    <Modal title={t('plugins.agentsTitle', { name: plugin.title || plugin.name })} onClose={onClose} width={1000}>
+      <div className="col small" style={{ gap: '0.6rem' }}>
+        {st.error && <Banner kind="error">{st.error}</Banner>}
+        {d && !d.mcp_enabled && <Banner kind="warn">{t('plugins.agentsMcpOff')}</Banner>}
+        <span className="muted">{t('plugins.agentsHint', { action: `plugin.${plugin.name}` })}</span>
+        {d && d.tools.length > 0 && (
+          <div className="table-wrap">
+            <DataTable
+              rowKey={(r) => r.tool.name}
+              dataSource={d.tools}
+              columns={[
+                { title: t('plugins.agentsTool'), key: 'name', render: (_: unknown, r: AgentTool) => <code>{r.tool.name}</code> },
+                { title: t('plugins.agentsWhat'), key: 'desc', render: (_: unknown, r: AgentTool) => r.tool.description },
+                {
+                  title: t('plugins.agentsArgs'),
+                  key: 'args',
+                  render: (_: unknown, r: AgentTool) => {
+                    const props = Object.entries(r.tool.inputSchema?.properties ?? {})
+                    if (props.length === 0) return <span className="muted">—</span>
+                    const req = new Set(r.tool.inputSchema?.required ?? [])
+                    return (
+                      <div className="col" style={{ gap: '0.15rem' }}>
+                        {props.map(([k, v]) => (
+                          <span key={k}>
+                            <code>{k}</code>
+                            {req.has(k) && ' *'} <span className="muted">{v.type ?? ''}{v.enum ? `: ${v.enum.join(' | ')}` : ''}</span>
+                            {v.description && <span className="muted"> — {v.description}</span>}
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  },
+                },
+                {
+                  title: t('plugins.agentsAccess'),
+                  key: 'access',
+                  render: (_: unknown, r: AgentTool) => (
+                    <div className="col" style={{ gap: '0.2rem', alignItems: 'flex-start' }}>
+                      {r.action ? <Tag color="orange">{t('plugins.agentsAction', { action: r.action })}</Tag> : <Tag color="green">{t('plugins.agentsRead')}</Tag>}
+                      {r.destructive && <Tag color="red">{t('plugins.agentsDestructive')}</Tag>}
+                      {r.reveals && <Tag color="purple">{t('plugins.agentsReveals')}</Tag>}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
+        )}
+        {d && d.commands.length > 0 && (
+          <>
+            <strong>{t('plugins.commands')}</strong>
+            {d.commands.map((c) => (
+              <div key={c.word} className="col" style={{ gap: '0.2rem' }}>
+                <code>{c.usage}</code>
+                {c.summary && <span className="muted">{c.summary}</span>}
+                {c.example && <pre className="small" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{c.example}</pre>}
+              </div>
+            ))}
+            <span className="muted">{t('plugins.agentsScriptHint', { name: plugin.name })}</span>
+          </>
+        )}
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <Button type="primary" disabled={!d} onClick={download}>
+            {t('plugins.agentsDownload')}
+          </Button>
+          {d && <CopyButton text={json()} title={t('plugins.agentsCopy')} />}
         </div>
       </div>
     </Modal>
