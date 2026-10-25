@@ -33,6 +33,8 @@ export interface PluginInfo {
   token?: string
   /** Поставлен хабом службой на хост: ключ пакета каталога. */
   native?: string
+  /** В каталоге хаба файл плагина новее поставленного. */
+  outdated?: boolean
   author?: string
   added_at?: string
   error?: string

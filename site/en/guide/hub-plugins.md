@@ -68,6 +68,32 @@ Plugins → **Install on a host** → the plugin, the host and its settings
   from the host — the service, files and the connection.
 - Needs nkt on the host of this version or newer (the agent's
   `/api/plugins/native` call).
+- **Several instances** of one plugin (two Cloudflare accounts, two
+  Technitiums) — different names (`dns`, `dns2`): the name gives the
+  `nkt-plugin-<name>` service, MCP tools and the token action; the hub
+  picks a free port on the host. The script word stays with the first, the
+  second one is `plugin dns2 dns …`.
+- **A hub in Docker** — a plugin can't be installed as a service on its
+  machine (no systemd in the container): it isn't in the install window's
+  host list.
+- **Docker access** (`"docker": true` in the install description — say,
+  for a mail server plugin managed by a command inside its container): the
+  service joins the `docker` group, that's root rights on the host — the
+  install window warns beforehand.
+- After a hub update, plugins whose file in the hub's catalog is newer get
+  a **newer version available** mark and an **Update all** button (one
+  job; they don't update by themselves).
+
+## Where to put plugins
+
+| Where | When |
+|---|---|
+| **On the service's own host** | the plugin manages a local service (Technitium, a mail server, Garage): its API is on 127.0.0.1, nothing is exposed |
+| **On the hub machine** | the plugin calls an external API (Cloudflare, Proxmox in the hub's network): simplest; the external system's secrets live on the hub machine |
+| **On a separate “integrations” host** | external APIs too, but the secrets don't belong next to the hub or the hub can't reach the needed network |
+
+A plugin that is down shows an error in its sections, the DNS check
+retries by itself; the rest of the hub works.
 
 The catalog is an install description next to the plugin file in the
 repository (`examples/<example>/deploy/nkt-plugin.json`):

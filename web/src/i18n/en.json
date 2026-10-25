@@ -5298,6 +5298,11 @@
     "nativeTag": "service on the host",
     "nativeUpdate": "Update on the host",
     "nativeRemove": "Remove from the host",
-    "nativeRemoveConfirm": "Remove plugin {{name}} from {{host}}? The service stops, the plugin's files and settings are deleted, the plugin disconnects from the hub. The service itself (Technitium etc.) isn't touched."
+    "nativeRemoveConfirm": "Remove plugin {{name}} from {{host}}? The service stops, the plugin's files and settings are deleted, the plugin disconnects from the hub. The service itself (Technitium etc.) isn't touched.",
+    "updateAll": "Update all ({{n}})",
+    "outdated": "newer version available",
+    "localInDocker": "The hub runs in a container — a plugin can't be installed as a service on its machine, so it isn't in the list.",
+    "instanceHint": "Unique per instance: a second Cloudflare or Technitium — dns2 and so on. The name gives the nkt-plugin-NAME service, MCP tools and the token action; the hub picks a free port on the host.",
+    "dockerWarn": "The plugin needs Docker access: the service joins the docker group — that's root rights on the host. Install it only on the host of the service it manages."
   }
 }

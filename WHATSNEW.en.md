@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.1 — 2026-10-25
+
+- Plugins: several instances of one plugin (a name in the install window,
+  the hub picks a free port); a “newer version available” mark and Update
+  all after a hub update; a hub in Docker no longer tries to install a
+  plugin as a service on its own machine; a warning before installing a
+  plugin with Docker access; a repeated script word of a second instance
+  is a warning, not a refusal. The Plugins guide: where to put them.
+
 ## v1.14.0 — 2026-10-25
 
 A new minor release: everything that went into 1.13.101–1.13.108 in one

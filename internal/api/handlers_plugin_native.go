@@ -39,11 +39,19 @@ type pluginNativeReq struct {
 	File    string `json:"file"`
 	Content string `json:"content"`
 	Port    int    `json:"port"`
+	// Docker — плагину нужен доступ к Docker (служба в группе docker).
+	Docker bool `json:"docker,omitempty"`
 	// Env — настройки плагина; nil — оставить прежние (обновление файла).
 	Env map[string]string `json:"env,omitempty"`
 }
 
-func pluginNativeUnitText(name, run, file string) string {
+func pluginNativeUnitText(name, run, file string, docker bool) string {
+	groups := ""
+	if docker {
+		// Сокет Docker — группе docker: плагин управляет контейнерами
+		// (docker-mailserver). Это права root — хаб предупреждает до установки.
+		groups = "SupplementaryGroups=docker\n"
+	}
 	return fmt.Sprintf(`# nkt: плагин хаба %[1]s («О системе» → «Плагины»). Правит и удаляет хаб.
 [Unit]
 Description=nkt hub plugin %[1]s
@@ -54,7 +62,7 @@ Wants=network-online.target
 ExecStart=%[2]s %[3]s/%[1]s/%[4]s
 EnvironmentFile=%[5]s/%[1]s.env
 DynamicUser=yes
-NoNewPrivileges=yes
+%[6]sNoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
@@ -65,7 +73,7 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-`, name, pluginNativeRuns[run], pluginNativeDir, file, pluginNativeEnv)
+`, name, pluginNativeRuns[run], pluginNativeDir, file, pluginNativeEnv, groups)
 }
 
 // handlePluginNativeInstall — POST /plugins/native: поставить или обновить
@@ -93,6 +101,12 @@ func (s *Server) handlePluginNativeInstall(w http.ResponseWriter, r *http.Reques
 	if !collect.Which(ctx, c, "python3") {
 		writeError(w, http.StatusConflict, msgs.Tc(ctx, "plugin.nativeNoPython"))
 		return
+	}
+	if req.Docker {
+		if res, err := c.Run(ctx, "getent", "group", "docker"); err != nil || !res.OK() {
+			writeError(w, http.StatusConflict, msgs.Tc(ctx, "plugin.nativeNoDocker"))
+			return
+		}
 	}
 	unit := fmt.Sprintf(pluginNativeUnit, req.Name)
 	dir := pluginNativeDir + "/" + req.Name
@@ -134,7 +148,7 @@ func (s *Server) handlePluginNativeInstall(w http.ResponseWriter, r *http.Reques
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.nativeNoEnv", req.Name))
 		return
 	}
-	if err := c.WriteFile(unit, []byte(pluginNativeUnitText(req.Name, req.Run, req.File)), 0o644); err != nil {
+	if err := c.WriteFile(unit, []byte(pluginNativeUnitText(req.Name, req.Run, req.File, req.Docker)), 0o644); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}

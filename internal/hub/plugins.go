@@ -61,9 +61,11 @@ type pluginConf struct {
 	Words []string `json:"words,omitempty"`
 	// Native — поставлен хабом службой на хост (без Docker): из какого
 	// пакета встроенного каталога — для «Обновить» и «Удалить с хоста».
-	Native  string `json:"native,omitempty"`
-	Author  string `json:"author,omitempty"`
-	AddedAt string `json:"added_at,omitempty"`
+	Native string `json:"native,omitempty"`
+	// NativeSHA — отпечаток поставленного файла плагина.
+	NativeSHA string `json:"native_sha,omitempty"`
+	Author    string `json:"author,omitempty"`
+	AddedAt   string `json:"added_at,omitempty"`
 }
 
 var pluginsMu sync.Mutex
@@ -220,6 +222,7 @@ type pluginJSON struct {
 	Version  string           `json:"version,omitempty"`
 	Token    string           `json:"token,omitempty"`
 	Native   string           `json:"native,omitempty"`
+	Outdated bool             `json:"outdated,omitempty"`
 	Author   string           `json:"author,omitempty"`
 	AddedAt  string           `json:"added_at,omitempty"`
 	Error    string           `json:"error,omitempty"`
@@ -233,7 +236,7 @@ func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	for i, p := range list {
 		out[i] = pluginJSON{Name: p.Name, Host: p.Host, Port: p.Port, Pipeline: p.Pipeline, Title: p.Title, Version: p.Version,
-			Token: p.Token, Native: p.Native, Author: p.Author, AddedAt: p.AddedAt}
+			Token: p.Token, Native: p.Native, Outdated: nativeOutdated(p), Author: p.Author, AddedAt: p.AddedAt}
 		wg.Add(1)
 		go func(i int, p pluginConf) {
 			defer wg.Done()
@@ -332,8 +335,9 @@ func (s *Server) handlePluginProbe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, msgs.Tc(r.Context(), "plugin.unreachable", m.Name, conf.Host, conf.Port, err))
 		return
 	}
+	conflicts, warnings := s.pluginConflicts(r.Context(), firstNonEmpty(req.Name, m.Name), m)
 	writeJSON(w, http.StatusOK, map[string]any{"host": conf.Host, "port": conf.Port, "pipeline": conf.Pipeline, "manifest": m,
-		"conflicts": s.pluginConflicts(r.Context(), firstNonEmpty(req.Name, m.Name), m)})
+		"conflicts": conflicts, "warnings": warnings})
 }
 
 func firstNonEmpty(a, b string) string {
@@ -345,8 +349,11 @@ func firstNonEmpty(a, b string) string {
 
 // pluginConflicts — что помешает подключению: имя занято, инструмент MCP
 // или слово сценария уже есть.
-func (s *Server) pluginConflicts(ctx context.Context, name string, m plugin.Manifest) []string {
-	var out []string
+// Блокирует подключение — имя или инструмент MCP заняты (out);
+// слово сценария занято (warn) — не блокирует: слово остаётся за первым
+// плагином, у второго команда пишется «plugin ИМЯ СЛОВО …» (второй
+// экземпляр того же плагина).
+func (s *Server) pluginConflicts(ctx context.Context, name string, m plugin.Manifest) (out, warn []string) {
 	others := s.plugins(ctx)
 	for _, o := range others {
 		if o.Name == name {
@@ -359,13 +366,13 @@ func (s *Server) pluginConflicts(ctx context.Context, name string, m plugin.Mani
 		}
 		for _, c := range m.Commands {
 			if slices.ContainsFunc(om.Commands, func(x plugin.Command) bool { return x.Word == c.Word }) {
-				out = append(out, msgs.Tc(ctx, "plugin.wordTaken", c.Word, o.Name))
+				warn = append(warn, msgs.Tc(ctx, "plugin.wordTaken", c.Word, o.Name))
 			}
 		}
 	}
 	for _, c := range m.Commands {
 		if scriptBuiltinWord(c.Word) {
-			out = append(out, msgs.Tc(ctx, "plugin.wordBuiltin", c.Word))
+			warn = append(warn, msgs.Tc(ctx, "plugin.wordBuiltin", c.Word))
 		}
 	}
 	for _, op := range m.Ops {
@@ -373,7 +380,7 @@ func (s *Server) pluginConflicts(ctx context.Context, name string, m plugin.Mani
 			out = append(out, msgs.Tc(ctx, "plugin.toolTaken", pluginToolName(name, op.Name)))
 		}
 	}
-	return out
+	return out, warn
 }
 
 // handlePluginConnect — POST /hub/plugins: подключить (или
@@ -420,7 +427,7 @@ func (s *Server) connectPlugin(ctx context.Context, conf pluginConf, secret stri
 	defer pluginsMu.Unlock()
 	list := s.plugins(ctx)
 	prev := slices.IndexFunc(list, func(p pluginConf) bool { return p.Name == conf.Name })
-	if conflicts := s.pluginConflicts(ctx, conf.Name, m); len(conflicts) > 0 {
+	if conflicts, _ := s.pluginConflicts(ctx, conf.Name, m); len(conflicts) > 0 {
 		// Повторное подключение того же — не конфликт с самим собой.
 		if prev < 0 || len(conflicts) > 1 {
 			return m, http.StatusConflict, errors.New(strings.Join(conflicts, "; "))

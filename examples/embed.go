@@ -75,7 +75,10 @@ type PluginPackage struct {
 	Run         string            `json:"run"`
 	File        string            `json:"file"`
 	Port        int               `json:"port"`
-	Settings    []PluginSetting   `json:"settings"`
+	// Docker — плагину нужен доступ к Docker на хосте (служба в группе
+	// docker — это права root): хаб показывает это до установки.
+	Docker   bool            `json:"docker,omitempty"`
+	Settings []PluginSetting `json:"settings"`
 	// Content — сам файл плагина (не в JSON-ответах).
 	Content []byte `json:"-"`
 }
