@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Select, Tabs } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -7,7 +7,8 @@ import { DataTable } from '../components/DataTable'
 import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { unifiedDiff } from '../components/textDiff'
-import type { PluginAction, PluginField, PluginInfo, PluginResponse, PluginView } from '../plugins'
+import type { PluginAction, PluginField, PluginInfo, PluginResponse, PluginReveal, PluginView } from '../plugins'
+import { CopyButton } from '../components/CopyButton'
 
 /**
  * Раздел «Плагины»: у каждого подключённого плагина — его разделы
@@ -128,9 +129,14 @@ function PluginPageView({
 }) {
   const [state, setState] = useState<{ view?: PluginView; error?: string } | null>(null)
   const [nonce, setNonce] = useState(0)
+  const shown = useRef('')
   useEffect(() => {
     let cancelled = false
-    setState(null)
+    // Другой раздел — «загрузка»; тот же после операции — прежний вид, пока
+    // не придёт новый: окно результата (и новый ключ в нём, который
+    // показывается один раз) не пропадает вместе с разделом.
+    if (shown.current !== `${plugin.name}/${op}`) setState(null)
+    shown.current = `${plugin.name}/${op}`
     callPlugin(plugin.name, op, args)
       .then((r) => !cancelled && setState({ view: r.view ?? { type: 'text', text: r.text ?? '' } }))
       .catch((err) => !cancelled && setState({ error: err instanceof Error ? err.message : String(err) }))
@@ -234,7 +240,7 @@ function ActionButton({
   const { t } = useTranslation()
   const [form, setForm] = useState(false)
   const [edit, setEdit] = useState(false)
-  const [result, setResult] = useState<{ text?: string; error?: string } | null>(null)
+  const [result, setResult] = useState<{ text?: string; error?: string; reveal?: PluginReveal } | null>(null)
   const [busy, setBusy] = useState(false)
   const op = action.op ? plugin.manifest?.ops.find((o) => o.name === action.op) : undefined
   const writes = (action.op && !op?.read_only) || !!action.edit || !!action.dns
@@ -247,7 +253,7 @@ function ActionButton({
     setBusy(true)
     try {
       const r = await callPlugin(plugin.name, action.op!, { ...(action.args ?? {}), ...values })
-      setResult({ text: r.text || t('plugins.done') })
+      setResult({ text: r.text || t('plugins.done'), reveal: r.reveal })
       onChanged()
       return true
     } catch (err) {
@@ -287,8 +293,18 @@ function ActionButton({
       {dns && action.dns && <DNSModal plugin={plugin} action={action} onClose={() => setDns(false)} />}
       {edit && action.edit && <DocModal plugin={plugin} action={action} title={context} onClose={() => setEdit(false)} onSaved={onChanged} />}
       {result && (
-        <Modal title={action.title} onClose={() => setResult(null)}>
+        <Modal title={action.title} onClose={() => setResult(null)} maskClosable={!result.reveal}>
           {result.error ? <Banner kind="error">{result.error}</Banner> : <pre className="small" style={{ whiteSpace: 'pre-wrap' }}>{result.text}</pre>}
+          {result.reveal && (
+            <div className="col small" style={{ gap: '0.4rem' }}>
+              <Banner kind="warn">{result.reveal.note || t('plugins.revealOnce')}</Banner>
+              {result.reveal.title && <strong>{result.reveal.title}</strong>}
+              <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+                <code style={{ wordBreak: 'break-all' }}>{result.reveal.value}</code>
+                <CopyButton text={result.reveal.value} />
+              </div>
+            </div>
+          )}
         </Modal>
       )}
     </>

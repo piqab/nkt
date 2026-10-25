@@ -1,0 +1,56 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# LiteLLM (https://github.com/BerriAI/litellm) — один OpenAI-совместимый
+# адрес перед любыми моделями (llama.cpp, Ollama, vLLM, OpenAI, Anthropic…)
+# с виртуальными ключами: у каждого — модели, бюджет, лимиты, срок, расход.
+# Для выкладки через хаб nkt; ключи и модели — плагином хаба (README).
+#
+# Модели хранятся в базе (STORE_MODEL_IN_DB): добавляются и убираются без
+# перезапуска. Ключи провайдеров LiteLLM шифрует LITELLM_SALT_KEY — его
+# нельзя менять после первой выкладки.
+services:
+  litellm-db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD}
+    volumes:
+      - litellm-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.103.4
+    restart: unless-stopped
+    command: ["--port", "4000"]
+    environment:
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD}@litellm-db:5432/litellm
+      # Мастер-ключ LiteLLM должен начинаться с «sk-»: в .env — без префикса.
+      LITELLM_MASTER_KEY: sk-${LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      STORE_MODEL_IN_DB: "True"
+      # Своя админка LiteLLM (/ui) выключена: ключи и модели — плагином хаба.
+      # Включить — LITELLM_DISABLE_ADMIN_UI=False в .env (вход мастер-ключом).
+      DISABLE_ADMIN_UI: ${LITELLM_DISABLE_ADMIN_UI:-True}
+    # Только 127.0.0.1 хоста: наружу — сайтом с HTTPS (конвейер), плагин
+    # хаба ходит сюда же.
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\""]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      # Первый запуск создаёт таблицы базы — до пары минут.
+      start_period: 180s
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+
+volumes:
+  litellm-db:

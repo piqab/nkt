@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.5 — 2026-10-25
+
+- A **LiteLLM** example: one OpenAI-compatible address in front of your
+  own and cloud models with virtual keys — each with its models, budget,
+  limits, expiry and spend; PostgreSQL, an HTTPS site, the hub creates
+  the keys.
+- A **LiteLLM plugin** (Install on a host): models (with the provider key
+  in a masked field), keys — create, block, delete, spend, `llm …`
+  commands, MCP tools. A new key is shown **once** in the window with
+  Copy, or goes **straight into the app pipeline's `.env`** — then no one
+  sees it, and that's the only way for scripts and agents.
+- Plugin protocol: a “show once” secret (`reveal`) and “put into a
+  pipeline `.env`” (`store`) — the hub checks rights before calling the
+  plugin and never writes the values to logs.
+
 ## v1.14.4 — 2026-10-25
 
 - **Plugin Settings** for plugins installed on a host: the token,

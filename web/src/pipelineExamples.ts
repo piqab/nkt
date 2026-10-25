@@ -206,6 +206,20 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     ],
   },
   {
+    key: 'litellm',
+    link: `${NKT}/blob/main/examples/litellm/deploy/docker-compose.yml`,
+    project: 'litellm',
+    readme: `${NKT}/tree/main/examples/litellm`,
+    // API наружу: длинные контексты и файлы — без предела размера.
+    site: { service: 'litellm', port: 4000, maxBody: '0' },
+    envKeys: { 'litellm-db': ['LITELLM_DB_PASSWORD'], litellm: ['LITELLM_DB_PASSWORD', 'LITELLM_MASTER_KEY', 'LITELLM_SALT_KEY'] },
+    env: [
+      ['LITELLM_DB_PASSWORD', 'generate:hex32'],
+      ['LITELLM_MASTER_KEY', 'generate:hex32'],
+      ['LITELLM_SALT_KEY', 'generate:hex32'],
+    ],
+  },
+  {
     key: 'garage',
     link: `${NKT}/blob/main/examples/garage/deploy/docker-compose.yml`,
     project: 'garage',

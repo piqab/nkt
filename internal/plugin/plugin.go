@@ -110,6 +110,11 @@ type Op struct {
 	Destructive bool `json:"destructive,omitempty"`
 	// MCP — показать агентам как инструмент «<имя плагина>_<операция>».
 	MCP bool `json:"mcp,omitempty"`
+	// Reveals — операция отдаёт секрет, который показывается один раз
+	// (Response.Reveal: новый ключ API). Токену (API, MCP) хаб её
+	// вызывать не даёт, если секрет не уходит сразу в .env конвейера
+	// (аргументы to_pipeline и env, см. Response.Store).
+	Reveals bool `json:"reveals,omitempty"`
 }
 
 // Page — раздел интерфейса.
@@ -146,6 +151,28 @@ type Response struct {
 	Text   string          `json:"text,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
 	View   *View           `json:"view,omitempty"`
+	// Reveal — секрет для человека, один раз: хаб отдаёт его только окну
+	// браузера, не токенам и не в журналы.
+	Reveal *Reveal `json:"reveal,omitempty"`
+	// Store — секрет в .env конвейера: записывает хаб (проверив права того,
+	// кто вызвал), значение дальше хаба не уходит. Конвейер и имя — те, что
+	// были в запросе: аргументы to_pipeline и env (операция) или слова
+	// «to-pipeline КОНВЕЙЕР env ИМЯ» (команда сценария).
+	Store *Store `json:"store,omitempty"`
+}
+
+// Reveal — секрет, показанный один раз.
+type Reveal struct {
+	Title string `json:"title,omitempty"`
+	Value string `json:"value"`
+	Note  string `json:"note,omitempty"`
+}
+
+// Store — значение в .env конвейера.
+type Store struct {
+	Pipeline string `json:"pipeline"`
+	Env      string `json:"env"`
+	Value    string `json:"value"`
 }
 
 // View — что показать в разделе: таблица, текст или несколько видов
