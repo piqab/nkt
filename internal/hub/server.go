@@ -319,6 +319,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/plugins", s.handlePlugins)
 				r.Get("/hub/dns", s.handleDNSState)
 				r.Post("/hub/plugins/{name}/call", s.handlePluginCall)
+				r.Post("/hub/plugins/{name}/dns", s.handlePluginDNS)
 				r.Get("/hub/plugins/{name}/doc", s.handlePluginDocGet)
 				r.Put("/hub/plugins/{name}/doc", s.handlePluginDocPut)
 				// Опросить хост сейчас (щелчок по значку «недоступен»): на

@@ -12,7 +12,8 @@ title: Плагины
 Плагины: [Technitium DNS](/guide/hub-plugin-dns) — зоны и записи своих
 доменов на своих серверах имён, делегирование, DNSSEC;
 [Cloudflare DNS](/guide/hub-plugin-cloudflare) — то же для зон у
-Cloudflare.
+Cloudflare; [почта](/guide/hub-plugin-mail) — ящики, алиасы и DKIM
+docker-mailserver, записи MX/SPF/DKIM через DNS-плагин.
 
 ## Как это устроено
 
@@ -218,9 +219,17 @@ plugin ИМЯ СЛОВО аргументы…
 ```
 
 `type` — `table`, `text` (`text`) или `sections` (`items` — виды подряд).
-Поля формы: `text`, `textarea`, `number`, `select` (`options`), `bool`.
+Поля формы: `text`, `textarea`, `number`, `select` (`options`), `bool`,
+`password` (скрытый ввод; значение не пишется в журнал действий).
 Документ: операция `get` отдаёт `result.text`, `put` получает
 `args.text`; историю версий ведёт хаб.
+
+Кнопка с `dns` — записи, которые плагину нужны в DNS (почта: MX, SPF,
+DKIM): `{"title": "…", "dns": {"owner": "domain:example.com", "records":
+[{"name": "example.com", "type": "MX", "values": ["10 mail.example.com."],
+"ttl": 3600}]}}`. Хаб ставит их через подключённый DNS-плагин (владелец
+`plugin:<имя>:<owner>`, типы A, AAAA, CNAME, TXT, MX) — окно «Сверить» и
+«Применить», права — как у операции, меняющей данные.
 
 **Служебные операции** (их нет в `ops`, хаб вызывает сам):
 

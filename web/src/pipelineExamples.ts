@@ -192,6 +192,20 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     ],
   },
   {
+    key: 'docker-mailserver',
+    link: `${NKT}/blob/main/examples/docker-mailserver/deploy/docker-compose.yml`,
+    project: 'mail',
+    readme: `${NKT}/tree/main/examples/docker-mailserver`,
+    // Почта — наружу на все адреса хоста, не 127.0.0.1.
+    ports: { mailserver: ['0.0.0.0:25:25', '0.0.0.0:465:465', '0.0.0.0:587:587', '0.0.0.0:993:993'] },
+    envKeys: { 'mail-init': ['MAIL_DOMAIN', 'MAIL_ADMIN_PASSWORD'], mailserver: ['MAIL_HOSTNAME', 'MAIL_DOMAIN'] },
+    env: [
+      ['MAIL_HOSTNAME', 'mail.example.com'],
+      ['MAIL_DOMAIN', 'example.com'],
+      ['MAIL_ADMIN_PASSWORD', 'generate:password'],
+    ],
+  },
+  {
     key: 'garage',
     link: `${NKT}/blob/main/examples/garage/deploy/docker-compose.yml`,
     project: 'garage',

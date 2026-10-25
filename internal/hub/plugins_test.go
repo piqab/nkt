@@ -309,3 +309,110 @@ func TestPluginDNSSync(t *testing.T) {
 		t.Fatalf("log: %v", lines)
 	}
 }
+
+// Записи от плагина (почта): через DNS-плагин хаба от владельца
+// plugin:<имя>:…; сухой прогон ничего не сохраняет; пустые — сняты.
+func TestPluginDNSRecordsFromPlugin(t *testing.T) {
+	srv, db, _ := localFixtureHub(t)
+	h := srv.Handler()
+	ctx := context.Background()
+	const secret = "plugin-secret-0123456789"
+	var mu sync.Mutex
+	var syncs []map[string]any
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if !plugin.Verify(secret, r, body, time.Now()) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == plugin.PathManifest {
+			_ = json.NewEncoder(w).Encode(plugin.Manifest{Protocol: 1, Name: "dns", Title: "DNS", Version: "1", Ops: []plugin.Op{{Name: "zones", ReadOnly: true}}, Provides: []string{"dns"}})
+			return
+		}
+		var req plugin.Request
+		_ = json.Unmarshal(body, &req)
+		resp := plugin.Response{OK: true}
+		switch req.Op {
+		case plugin.OpDNSZones:
+			resp.Result, _ = json.Marshal(map[string]any{"zones": []string{"example.com"}})
+		case plugin.OpDNSSync:
+			mu.Lock()
+			req.Args["dry_run"] = req.DryRun
+			syncs = append(syncs, req.Args)
+			mu.Unlock()
+			resp.Text = "+ example.com MX 10 mail.example.com."
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer fake.Close()
+	u, _ := url.Parse(fake.URL)
+	port, _ := strconv.Atoi(u.Port())
+	enc, _ := secretbox.Encrypt(srv.hub.key, []byte(secret))
+	// «mail» — источник записей (к нему не ходим), «dns» — DNS-плагин.
+	_ = srv.savePlugins(ctx, []pluginConf{{Name: "dns", Host: localHostName, Port: port, SecretEnc: enc}, {Name: "mail", Host: localHostName, Port: 1, SecretEnc: enc}})
+	forgetManifests("dns")
+
+	do := func(body any, set func(*http.Request)) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest("POST", "/api/hub/plugins/mail/dns", strings.NewReader(string(raw)))
+		req.Header.Set("Content-Type", "application/json")
+		if set != nil {
+			set(req)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	login := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{"username":"admin","password":"admin-password-1234"}`))
+	login.Header.Set("Content-Type", "application/json")
+	lr := httptest.NewRecorder()
+	h.ServeHTTP(lr, login)
+	var cookie *http.Cookie
+	for _, c := range lr.Result().Cookies() {
+		if c.Name == auth.SessionCookie {
+			cookie = c
+		}
+	}
+	session := func(r *http.Request) { r.AddCookie(cookie) }
+	recs := []map[string]any{{"name": "example.com", "type": "MX", "values": []string{"10 mail.example.com."}},
+		{"name": "mail._domainkey.example.com", "type": "TXT", "values": []string{`"v=DKIM1; k=rsa; p=abc"`}}}
+
+	if rec := do(map[string]any{"owner": "domain:example.com", "records": recs}, nil); rec.Code != 401 {
+		t.Fatalf("anonymous: %d", rec.Code)
+	}
+	if rec := do(map[string]any{"owner": "domain:example.com", "records": []map[string]any{{"name": "x.example.com", "type": "NS", "values": []string{"a."}}}}, session); rec.Code != 400 {
+		t.Fatalf("NS accepted: %d %s", rec.Code, rec.Body)
+	}
+	rec := do(map[string]any{"owner": "domain:example.com", "records": recs, "dry_run": true}, session)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "MX") {
+		t.Fatalf("dry: %d %s", rec.Code, rec.Body)
+	}
+	if raw, _, _ := db.KVGet(ctx, dnsPluginRecordsKV); strings.Contains(raw, "domain:example.com") {
+		t.Fatal("dry run saved records")
+	}
+	if len(syncs) != 1 || syncs[0]["owner"] != "plugin:mail:domain:example.com" || syncs[0]["dry_run"] != true {
+		t.Fatalf("dry sync: %+v", syncs)
+	}
+	if rec := do(map[string]any{"owner": "domain:example.com", "records": recs}, session); rec.Code != 200 {
+		t.Fatalf("apply: %d %s", rec.Code, rec.Body)
+	}
+	if _, ok := srv.dnsOwnedAll(ctx)["plugin:mail:domain:example.com"]; !ok {
+		t.Fatal("not owned after apply")
+	}
+	// Пустые записи — сняты (плагину уходит previous).
+	if rec := do(map[string]any{"owner": "domain:example.com", "records": []any{}}, session); rec.Code != 200 {
+		t.Fatalf("remove: %d %s", rec.Code, rec.Body)
+	}
+	last := syncs[len(syncs)-1]
+	if len(last["records"].([]any)) != 0 || len(last["previous"].([]any)) != 2 {
+		t.Fatalf("removal sync: %+v", last)
+	}
+}
+
+// Пароль из поля password (и токены) не попадает в журнал действий.
+func TestPluginAuditArgsRedacted(t *testing.T) {
+	got := pluginAuditArgs(map[string]any{"email": "a@example.com", "password": "hunter22", "api_token": "x", "domain": "example.com"})
+	if got["password"] != "***" || got["api_token"] != "***" || got["email"] != "a@example.com" || got["domain"] != "example.com" {
+		t.Fatalf("%v", got)
+	}
+}

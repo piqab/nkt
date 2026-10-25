@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -564,6 +565,22 @@ func (s *Server) pluginFromReq(w http.ResponseWriter, r *http.Request) (pluginCo
 	return p, ok
 }
 
+// pluginSecretArg — аргументы, значения которых в журнал действий не
+// пишутся (пароль ящика из поля password, токены).
+var pluginSecretArg = regexp.MustCompile(`(?i)(pass|secret|token|key)`)
+
+// pluginAuditArgs — аргументы операции для журнала: секретные — «***».
+func pluginAuditArgs(args map[string]any) map[string]any {
+	out := make(map[string]any, len(args))
+	for k, v := range args {
+		if pluginSecretArg.MatchString(k) {
+			v = "***"
+		}
+		out[k] = v
+	}
+	return out
+}
+
 // handlePluginCall — POST /hub/plugins/{name}/call {op, args, dry_run}.
 func (s *Server) handlePluginCall(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -592,7 +609,7 @@ func (s *Server) handlePluginCall(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.pluginCall(ctx, p, plugin.Request{Op: req.Op, Args: req.Args, DryRun: req.DryRun})
 	if !op.ReadOnly && !req.DryRun {
-		s.db.Audit(ctx, auth.Username(ctx), "plugin.op", p.Name+" "+req.Op, auditOutcome(err), req.Args)
+		s.db.Audit(ctx, auth.Username(ctx), "plugin.op", p.Name+" "+req.Op, auditOutcome(err), pluginAuditArgs(req.Args))
 	}
 	if err != nil {
 		pluginError(w, r, p, err)

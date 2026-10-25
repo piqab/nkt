@@ -1,0 +1,82 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# docker-mailserver (https://github.com/docker-mailserver/docker-mailserver)
+# — почта на своём домене для выкладки через хаб nkt: Postfix, Dovecot,
+# Rspamd (спам и DKIM), fail2ban. Первый ящик (postmaster) заводит разовый
+# mail-init из .env; дальше ящики, алиасы и DKIM — плагином хаба (README).
+#
+# Сертификат — certbot на хосте (nkt: «Сертификаты»), смонтирован только
+# для чтения: обновлённый docker-mailserver подхватывает сам.
+services:
+  # Разовый: первый ящик postmaster@MAIL_DOMAIN, если ящиков ещё нет
+  # (хеш SHA512-CRYPT — openssl; пароль — из .env, не в командной строке).
+  mail-init:
+    image: alpine:3.22
+    restart: "no"
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN}
+      MAIL_ADMIN_PASSWORD: ${MAIL_ADMIN_PASSWORD}
+    command:
+      - sh
+      - -ec
+      - |
+        f=/config/postfix-accounts.cf
+        if [ -s "$$f" ]; then echo "mail-init: ящики уже есть — ничего не делаю"; exit 0; fi
+        apk add --no-cache openssl >/dev/null
+        hash=$$(printf '%s' "$$MAIL_ADMIN_PASSWORD" | openssl passwd -6 -stdin)
+        printf 'postmaster@%s|{SHA512-CRYPT}%s\n' "$$MAIL_DOMAIN" "$$hash" > "$$f"
+        chmod 600 "$$f"
+        echo "mail-init: ящик postmaster@$$MAIL_DOMAIN заведён"
+    volumes:
+      - config:/config
+
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:15.1.0
+    # Постоянное имя контейнера — по нему плагин хаба зовёт setup.
+    container_name: mailserver
+    hostname: ${MAIL_HOSTNAME}
+    restart: unless-stopped
+    environment:
+      POSTMASTER_ADDRESS: postmaster@${MAIL_DOMAIN}
+      # Спам и DKIM — Rspamd (без OpenDKIM, OpenDMARC, SpamAssassin, Amavis).
+      ENABLE_RSPAMD: "1"
+      ENABLE_OPENDKIM: "0"
+      ENABLE_OPENDMARC: "0"
+      ENABLE_POLICYD_SPF: "0"
+      ENABLE_AMAVIS: "0"
+      ENABLE_SPAMASSASSIN: "0"
+      # Антивирус — около 1 ГБ памяти; включите, если она есть.
+      ENABLE_CLAMAV: ${ENABLE_CLAMAV:-0}
+      ENABLE_FAIL2BAN: "1"
+      SPOOF_PROTECTION: "1"
+      PERMIT_DOCKER: none
+      # Сертификат Let's Encrypt с хоста: /etc/letsencrypt/live/MAIL_HOSTNAME.
+      SSL_TYPE: letsencrypt
+      ONE_DIR: "1"
+    # 25 — приём почты, 465/587 — отправка клиентами, 993 — IMAP. Наружу —
+    # ports: в конвейере (хаб иначе опубликовал бы их на 127.0.0.1).
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - mail-data:/var/mail
+      - mail-state:/var/mail-state
+      - mail-logs:/var/log/mail
+      - config:/tmp/docker-mailserver
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /etc/localtime:/etc/localtime:ro
+    # fail2ban в контейнере банит адреса через iptables.
+    cap_add:
+      - NET_ADMIN
+    stop_grace_period: 1m
+    depends_on:
+      mail-init:
+        condition: service_completed_successfully
+
+volumes:
+  mail-data:
+  mail-state:
+  mail-logs:
+  config:

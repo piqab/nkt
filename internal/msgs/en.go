@@ -2113,6 +2113,8 @@ var enCatalog = map[string]string{
 	"plugin.localInDocker":                                "the hub runs in a container — a plugin can't be installed as a service on its machine; pick another host",
 	"plugin.nothingToUpdate":                              "all plugins installed by the hub are up to date",
 	"plugin.updateAllTitle":                               "Updating plugins: %s",
+	"plugin.dnsBadRecords":                                "the plugin's DNS records are wrong: %s (names, types A, AAAA, CNAME, TXT, MX, up to 10 values)",
+	"plugin.dnsNoProvider":                                "no DNS plugin is connected — nowhere to set the records (About → Plugins)",
 	"plugin.hostGone":                                     "host %s is not on the hub",
 	"plugin.noSSH":                                        "the hub reaches the plugin on %s over SSH, and there is no connection: %v",
 	"plugin.unreachable":                                  "plugin %s (%s, 127.0.0.1:%d) does not answer: %v",
