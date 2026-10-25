@@ -29,6 +29,18 @@ title: 'Плагин: Technitium DNS'
 
 ![Плагин Technitium DNS: зоны](/screens/ru/hub-plugin-dns.png)
 
+### Technitium уже работает (нативно или своим compose)
+
+Перенести его в стек nkt на том же хосте — без потери зон, записей и
+ключей: резервная копия из старой консоли (Settings → Backup Settings) →
+`/srv/compose/technitium/import/backup.zip` → в конвейере
+`IMPORT_BACKUP: /import/backup.zip` → сценарий «остановить службу `dns` →
+выложить». `dns-init` восстановит копию на пустой сервер, ключи TSIG из
+неё оставит как были (ns2 продолжит забирать зоны), учётные записи — только
+с `IMPORT_AUTH`. Откат — «Остановить» выкладку и снова включить службу
+`dns`. По шагам, с резолвером хоста, ns2 и откатом — §9 [README
+примера](https://github.com/piqab/nkt/tree/main/examples/technitium#9-переезд-с-уже-работающего-technitium).
+
 ## Несколько доменов
 
 Каждый домен — своя зона. **«Добавить зону»** (или `dns zone add …` в

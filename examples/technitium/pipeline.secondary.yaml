@@ -26,5 +26,11 @@ compose:
     # Тот же ключ, что TSIG_TRANSFER первичного: скопируйте из его
     # секретов («Секреты» → «.env» → «Показать») вместо этой строки.
     TSIG_TRANSFER: <TSIG_TRANSFER первичного>
+    # Переезд с уже работающего Technitium (нативного или другого): копия
+    # из его консоли (Settings → Backup Settings) — в
+    # /srv/compose/technitium/import/backup.zip («Диски» → «Файлы»), старую
+    # службу остановить, затем выложить. Подробно — README, «Переезд».
+    # IMPORT_BACKUP: /import/backup.zip
+    # IMPORT_AUTH: "true"      # и учётные записи; тогда DNS_ADMIN_PASSWORD — пароль старого сервера
     # FORWARDERS: https://cloudflare-dns.com/dns-query (1.1.1.1)
     # FORWARDER_PROTOCOL: Https

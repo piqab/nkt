@@ -29,6 +29,19 @@ deployments don't touch DNS.
 
 ![The Technitium DNS plugin: zones](/screens/en/hub-plugin-dns.png)
 
+### Technitium already runs (natively or with your own compose)
+
+Move it into the nkt stack on the same host without losing zones, records
+and keys: a backup from the old console (Settings → Backup Settings) →
+`/srv/compose/technitium/import/backup.zip` → `IMPORT_BACKUP:
+/import/backup.zip` in the pipeline → a script “stop the `dns` service →
+deploy”. `dns-init` restores the backup onto the empty server, keeps the
+TSIG keys from it as they were (ns2 keeps transferring zones), accounts —
+only with `IMPORT_AUTH`. Rollback — Stop the deployment and enable the
+`dns` service again. Step by step, with the host resolver, ns2 and
+rollback — §9 of the [example's
+README](https://github.com/piqab/nkt/tree/main/examples/technitium#9-moving-from-a-technitium-that-already-runs).
+
 ## Several domains
 
 Each domain is its own zone. **Add zone** (or `dns zone add …` in a

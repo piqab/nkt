@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.107 — 2026-10-25
+
+- Technitium DNS: moving from a server that already runs (a native install
+  or your own compose) into the nkt stack on the same host —
+  `IMPORT_BACKUP`: `dns-init` restores the old console's backup onto the
+  empty server (zones, records, TSIG keys, apps, DNS settings; accounts —
+  with `IMPORT_AUTH`). TSIG keys already on the server aren't overwritten
+  (`TSIG_OVERWRITE` — replace). Steps, move and rollback scripts — the
+  example's README, §9.
+- Plan: post-quantum migration (PQC) and lighter OS work — TODO.md.
+
 ## v1.13.106 — 2026-10-24
 
 - The DNS plugin sets records for the hub: names of Traffic Fly routes

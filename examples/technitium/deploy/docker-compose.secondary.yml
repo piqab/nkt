@@ -44,8 +44,15 @@ services:
       PRIMARY_IP: ${PRIMARY_IP}
       TSIG_TRANSFER: ${TSIG_TRANSFER}
       INSTALL_FAILOVER: ${INSTALL_FAILOVER:-true}
+      # Переезд с другой установки: резервная копия старого сервера
+      # (README, «Переезд с нативной установки»).
+      IMPORT_BACKUP: ${IMPORT_BACKUP:-}
+      IMPORT_AUTH: ${IMPORT_AUTH:-false}
+      TSIG_OVERWRITE: ${TSIG_OVERWRITE:-false}
     volumes:
       - ./init.py:/init.py:ro
+      # Сюда — backup.zip старого сервера («Файлы» хоста в nkt).
+      - ./import:/import:ro
     depends_on:
       dns:
         condition: service_healthy

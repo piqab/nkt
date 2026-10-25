@@ -247,6 +247,91 @@ registrar delegation check, DNSSEC and DS. Details — the
 Don't need the plugin — remove the `plugin` service from the compose file
 or just don't connect it in the hub.
 
+## 9. Moving from a Technitium that already runs
+
+Technitium is installed by hand (natively — `install.sh`, the `dns`
+service, or with your own compose) and everything has to move into the nkt
+stack **on the same host**: zones, records, TSIG keys, apps, DNS settings.
+One server at a time: ns1 first, then ns2 — while one moves, the other
+answers for all zones. The server itself is down for a minute or two.
+
+**Preparation (the old server keeps running):**
+
+1. **Docker on the host** — in nkt: host → Docker → Install.
+2. **Version:** the old console, at the bottom of the page. The example's
+   image (`15.6.2`) must be **no older** — Technitium carries settings
+   forward only. Yours is newer — change the image tag in the compose file.
+3. **Backup:** the old console → **Settings → Backup Settings** →
+   download the zip.
+4. **Put it on the host:** nkt → host → Disks → Files →
+   `/srv/compose/technitium/import/backup.zip`.
+5. **The host's own resolver:** `cat /etc/resolv.conf`. If it says
+   `nameserver 127.0.0.1` (the Technitium installer may have set it), the
+   host can't resolve names during the move — and the deployment can't
+   pull images. Put ns2's address (or 1.1.1.1) there for the time being.
+   After the move the new Technitium listens on 53 at the interface
+   address (`ports:`), so `resolv.conf` needs the host's address, not
+   127.0.0.1.
+6. **Images in advance** (optional, for a shorter outage): the host's
+   terminal — `docker pull technitium/dns-server:15.6.2` and
+   `docker pull python:3.13-alpine`.
+7. **A pipeline** from the example (“Technitium DNS Server”, this host),
+   **not deployed yet**:
+   - `ports:` — the host's interface address;
+   - uncomment `IMPORT_BACKUP: /import/backup.zip`;
+   - `ZONES:` — **empty** (or new zones only): the moved zones come from
+     the backup, while zones from `ZONES` join the catalog zone — the
+     catalog on ns2 would then take them too, where you already have your
+     own secondaries;
+   - `SECONDARY_IP`, `SECONDARY_NS` — as they are now.
+
+   TSIG keys from the backup stay as they were (ns2 transfers zones with
+   them); the `TSIG_*` values in `.env` don't replace them (to replace —
+   `TSIG_OVERWRITE: "true"`). The old server's accounts aren't moved:
+   sign in as `admin` with the password the hub created. Need them too —
+   `IMPORT_AUTH: "true"` and the old server's password in
+   `DNS_ADMIN_PASSWORD`.
+
+**The move — with a script** (Profiles → Scripts, `HOST` — the host, the
+pipeline — `technitium`):
+
+```
+param HOST "host with the old Technitium"
+on ${HOST} service dns stop
+on ${HOST} service dns disable
+deploy technitium
+wait ${HOST} port 53 2m
+```
+
+The installer's service is `dns` (some wrappers name it `technitium`).
+`dns-init` sees an empty server and the backup — restores it and goes on
+with the usual setup; the deployment log says “backup … restored: zones —
+N”.
+
+**Check:** `dig @<host address> example.com SOA` — the same serial as
+before; the console — `ssh -L 5380:127.0.0.1:5380 host`.
+
+**Rollback** — while the old files are intact (`/opt/technitium/dns`,
+`/etc/dns`):
+
+```
+param HOST "host"
+deploy technitium stop
+on ${HOST} service dns enable
+on ${HOST} service dns start
+```
+
+**ns2** — the same with `pipeline.secondary.yaml` on its host: its own
+backup from its console, `PRIMARY_IP` — ns1's address. Its secondary zones
+come from the backup and keep transferring from ns1 as before; new zones —
+through the catalog.
+
+**The plugin** — after ns1 has moved: About → Plugins → From a pipeline.
+
+After a week, if all is well, remove the old installation
+(`/opt/technitium/dns`, `/etc/systemd/system/dns.service`). Don't run their
+`uninstall.sh`: it removes .NET too and rewrites `/etc/resolv.conf`.
+
 ## Troubleshooting
 
 - **Deployment: "address already in use" on 53** — systemd-resolved, see §2.
