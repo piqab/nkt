@@ -42,6 +42,11 @@ func TestExportImportV5(t *testing.T) {
 	mustSite(store.Site{Domains: []string{"hub.example.com"}, HostID: localHostID, Proxy: "caddy", Upstream: "127.0.0.1:8443"})
 	mustSite(store.Site{Domains: []string{"old.example.com"}, HostID: gone, Proxy: "haproxy", Upstream: "127.0.0.1:81"})
 	_ = db1.KVSet(ctx, "ui.docs_url", "https://docs.example.com/")
+	// Пороги «Мониторинга» и история «Настроек» плагина — едут; чужое под
+	// тем же началом имени — нет.
+	_ = db1.KVSet(ctx, "mon.settings", `{"disk_warn_days":9}`)
+	_ = db1.KVSet(ctx, "plugin.settings.dns", `[{"at":"2026-10-25T00:00:00Z","user":"admin","values":{"DNS_DOMAIN":"ns1.example.com"}}]`)
+	_ = db1.KVSet(ctx, "plugin.settings.dns/../x", "bad")
 
 	export, err := m1.ExportHub(ctx, true, false)
 	if err != nil {
@@ -81,6 +86,15 @@ func TestExportImportV5(t *testing.T) {
 	rep := m2.ImportHosts(ctx, decoded, nil)
 	if len(rep.Errors) != 1 || !strings.Contains(rep.Errors[0], "old.example.com") {
 		t.Fatalf("errors: %v", rep.Errors)
+	}
+	if _, bad := export.Settings["plugin.settings.dns/../x"]; bad {
+		t.Fatal("prefix key with a bad name exported")
+	}
+	if v, _, _ := db2.KVGet(ctx, "mon.settings"); !strings.Contains(v, "disk_warn_days") {
+		t.Fatalf("mon.settings: %q", v)
+	}
+	if v, _, _ := db2.KVGet(ctx, "plugin.settings.dns"); !strings.Contains(v, "ns1.example.com") {
+		t.Fatalf("plugin settings history: %q", v)
 	}
 
 	pipes, _ := db2.ListPipelines(ctx)

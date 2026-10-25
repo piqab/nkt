@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.7 — 2026-10-25
+
+- The **hub export** also carries what appeared recently: the Monitoring
+  thresholds and the plugin Settings history (without secrets). Plugins,
+  DNS records through plugins and experimental features were carried
+  before — now the docs say so. The export guard test also sees new hub
+  settings, so the export no longer falls behind unnoticed.
+
 ## v1.14.6 — 2026-10-25
 
 - Internal: removed useless assignments in plugin script command handling

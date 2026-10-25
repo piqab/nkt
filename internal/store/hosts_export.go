@@ -7,6 +7,7 @@ import (
 	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 // validAdminUser mirrors internal/hub's own check on the same field — kept
@@ -275,7 +276,13 @@ var ExportedSettingKeys = []string{
 	"ui.experimental", "ui.experimental.history",
 	// Кэш пакетов хаба включён («О системе»).
 	"aptcache.enabled",
+	// Пороги разбора «Мониторинга» (прогнозы и оповещения).
+	"mon.settings",
 }
+
+// ExportedSettingPrefixes — ключи kv по началу имени (по ключу на объект):
+// история «Настроек» плагинов (только несекретные значения) — по плагину.
+var ExportedSettingPrefixes = []string{"plugin.settings."}
 
 // ExportHosts returns every managed host in the shape GET /hub/export sends
 // to the browser as a downloadable file.
@@ -421,6 +428,20 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 				out.Settings = map[string]string{}
 			}
 			out.Settings[key] = v
+		}
+	}
+	for _, prefix := range ExportedSettingPrefixes {
+		kv, err := d.KVPrefix(ctx, prefix)
+		if err != nil {
+			return HubExport{}, err
+		}
+		for key, v := range kv {
+			if v != "" && exportedSettingKey(key) {
+				if out.Settings == nil {
+					out.Settings = map[string]string{}
+				}
+				out.Settings[key] = v
+			}
 		}
 	}
 	return out, nil
@@ -770,9 +791,17 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport, res ImportResolu
 	return rep
 }
 
+// settingSuffixRe — имя объекта после префикса (плагин): без «/» и «..».
+var settingSuffixRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+
 func exportedSettingKey(key string) bool {
 	for _, k := range ExportedSettingKeys {
 		if k == key {
+			return true
+		}
+	}
+	for _, p := range ExportedSettingPrefixes {
+		if rest, ok := strings.CutPrefix(key, p); ok && settingSuffixRe.MatchString(rest) {
 			return true
 		}
 	}

@@ -617,7 +617,12 @@ webhooks** and the Telegram and Slack **bots** (tokens and secrets; hosts
 in a scope go by name, and a token or recipient whose host is missing is
 not imported), hub settings
 (alerts, package cache, model analysis with the API key, every edited
-instruction and the “Check tools” result, beta channel, the help site address with its history, the hub and host menu layouts), saved cluster form presets, fallback channel
+instruction and the “Check tools” result, beta channel, the help site address with its history, the hub and host menu layouts,
+experimental features, the Monitoring thresholds), **plugins** (connections
+with the signing secret and the plugin's token; ones installed on a host —
+the package, port and Settings history without secrets; the settings and
+the service themselves stay on the host), **DNS records through plugins**
+(autonames with history, what the hub set, records from plugins — mail), saved cluster form presets, fallback channel
 switches and tokens, **Traffic Fly routes** with their version history
 and the tunnel address and port allocation, **container move records**
 (map marks, "Roll back" and "Remove old"). With the "Web interface user accounts" checkbox it
@@ -626,7 +631,7 @@ also carries logins, roles, password hashes and assistant favorites. The file is
 
 - **The hub's encryption key travels in the file**: the receiving hub
   decrypts the secrets with it (of hosts, clusters, pipelines with the
-  `.env` history, edge, tokens, bots, the
+  `.env` history, edge, tokens, bots, plugins, the
   model key) and re-encrypts them with its own right away. That's why the
   export **insists** on encrypting the file with a password (Web Crypto,
   PBKDF2 + AES-256-GCM, the password never leaves the browser); an empty
