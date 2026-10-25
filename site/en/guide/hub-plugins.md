@@ -45,6 +45,47 @@ outside nkt). Disconnect removes the sections, commands and tools from the
 hub and revokes the plugin's token; the plugin itself and its data stay on
 the host.
 
+## Install on a host (no Docker)
+
+A plugin from the hub's built-in catalog (Technitium DNS for now) can be
+installed as a service right on the host, without a container: About →
+Plugins → **Install on a host** → the plugin, the host and its settings
+(each plugin has its own form) → a job in the standard log window.
+
+![Install a plugin on a host](/screens/en/hub-plugin-install.png)
+
+- The hub puts **its own version** of the plugin file into
+  `/opt/nkt-plugins/<name>/`, the settings into
+  `/etc/nkt-plugins/<name>.env` (`0600`, root only, no config history), a
+  `nkt-plugin-<name>.service` unit: a separate user (`DynamicUser`),
+  `ProtectSystem=strict`, listening on `127.0.0.1` only.
+- Secrets (tokens from the form and the signing secret the hub creates
+  itself) don't go into the job parameters: a one-time in-memory store on
+  the hub, 15 minutes.
+- No `python3` — the job installs the package.
+- The plugin connects to the hub by itself. Update on the host — the
+  hub's version of the plugin file and a restart (settings stay); Remove
+  from the host — the service, files and the connection.
+- Needs nkt on the host of this version or newer (the agent's
+  `/api/plugins/native` call).
+
+The catalog is an install description next to the plugin file in the
+repository (`examples/<example>/deploy/nkt-plugin.json`):
+
+```json
+{
+  "name": "dns",
+  "title": {"ru": "Technitium DNS", "en": "Technitium DNS"},
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9180,
+  "settings": [
+    {"env": "DNS_API", "default": "http://127.0.0.1:5380/api", "title": {"ru": "…", "en": "…"}},
+    {"env": "DNS_API_TOKEN", "secret": true, "required": true, "title": {"ru": "…", "en": "…"}}
+  ]
+}
+```
+
 ## Rights
 
 | Who | What |

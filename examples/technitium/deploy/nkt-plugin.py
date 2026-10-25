@@ -37,6 +37,9 @@ VERSION = "1.0.0"
 API = os.environ.get("DNS_API", "http://dns:5380/api")
 SECRET = os.environ.get("NKT_PLUGIN_SECRET", "")
 PORT = int(os.environ.get("NKT_PLUGIN_PORT", "9180") or 9180)
+# Где слушать: в контейнере — 0.0.0.0 (наружу публикует compose на
+# 127.0.0.1), службой на хосте — 127.0.0.1.
+LISTEN = os.environ.get("NKT_PLUGIN_LISTEN", "0.0.0.0").strip() or "0.0.0.0"
 NS1 = os.environ.get("DNS_DOMAIN", "").strip().rstrip(".").lower()
 NS2 = os.environ.get("SECONDARY_NS", "").strip().rstrip(".").lower()
 SECONDARY_IP = os.environ.get("SECONDARY_IP", "").strip()
@@ -56,7 +59,7 @@ T = {
         "dnssec": "DNSSEC", "name": "Имя", "ttl": "TTL", "value": "Значение", "values": "Значения",
         "on_ns2": "на ns2", "catalog_yes": "да (каталог)", "catalog_no": "нет",
         "zones_note": "Новая зона — первичная на ns1; ns2 получает её сам (зона каталога). Свои записи — «Записи», целиком — «Текстом».",
-        "zones_note_single": "Вторичного нет (SECONDARY_IP не задан): зоны только на ns1.",
+        "zones_note_single": "Зоны этого сервера. Вторичный, если он есть, получает их своими средствами Technitium: перенос, зона каталога или кластер.",
         "add_zone": "Добавить зону", "template": "Шаблон", "tpl_none": "без шаблона",
         "tpl_site": "сайт: @ и www на адрес", "tpl_mail": "почта: MX, SPF, DMARC", "ip": "Адрес (для шаблона)",
         "ip_hint": "IPv4 или IPv6 сервера сайта или почты",
@@ -109,7 +112,7 @@ T = {
         "dnssec": "DNSSEC", "name": "Name", "ttl": "TTL", "value": "Value", "values": "Values",
         "on_ns2": "on ns2", "catalog_yes": "yes (catalog)", "catalog_no": "no",
         "zones_note": "A new zone is primary on ns1; ns2 gets it by itself (the catalog zone). Records — “Records”, the whole zone — “As text”.",
-        "zones_note_single": "No secondary (SECONDARY_IP is not set): zones are on ns1 only.",
+        "zones_note_single": "This server's zones. A secondary, if any, gets them by Technitium's own means: transfer, a catalog zone or a cluster.",
         "add_zone": "Add zone", "template": "Template", "tpl_none": "no template",
         "tpl_site": "site: @ and www at the address", "tpl_mail": "mail: MX, SPF, DMARC", "ip": "Address (for the template)",
         "ip_hint": "IPv4 or IPv6 of the site or mail server",
@@ -198,6 +201,13 @@ class Technitium:
             return {"status": "ok", "text": text}
 
     def login(self):
+        # API-токен из консоли Technitium (Administration → Sessions →
+        # Create Token) — без пароля администратора; не принят — ошибка,
+        # а не повторный вход.
+        token = os.environ.get("DNS_API_TOKEN", "").strip()
+        if token:
+            self.token = token
+            return
         res = self._raw("user/login", {"user": "admin", "pass": os.environ.get("DNS_ADMIN_PASSWORD", "")})
         if res.get("status") != "ok":
             raise Fail(f"Technitium: {res.get('errorMessage') or res.get('status')}")
@@ -208,7 +218,7 @@ class Technitium:
             if not self.token:
                 self.login()
             res = self._raw(path, {**params, "token": self.token})
-            if res.get("status") == "invalid-token" and attempt == 0:
+            if res.get("status") == "invalid-token" and attempt == 0 and not os.environ.get("DNS_API_TOKEN"):
                 self.token = ""
                 continue
             if res.get("status") != "ok":
@@ -969,8 +979,8 @@ def main():
     if len(SECRET) < 16:
         log("NKT_PLUGIN_SECRET не задан или короче 16 знаков — хаб не подключится")
         sys.exit(1)
-    log(f"{VERSION}: 0.0.0.0:{PORT}, Technitium {API}")
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    log(f"{VERSION}: {LISTEN}:{PORT}, Technitium {API}")
+    ThreadingHTTPServer((LISTEN, PORT), Handler).serve_forever()
 
 
 if __name__ == "__main__":

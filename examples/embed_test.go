@@ -25,3 +25,22 @@ func TestPipelines(t *testing.T) {
 		}
 	}
 }
+
+func TestPluginPackages(t *testing.T) {
+	list := PluginPackages()
+	if len(list) != 1 || list[0].Key != "technitium" || list[0].Run != "python3" || len(list[0].Content) < 1000 {
+		t.Fatalf("packages: %+v", list)
+	}
+	secret := false
+	for _, s := range list[0].Settings {
+		if s.Env == "DNS_API_TOKEN" && s.Secret && s.Required {
+			secret = true
+		}
+		if s.Title["ru"] == "" || s.Title["en"] == "" {
+			t.Errorf("%s: no title", s.Env)
+		}
+	}
+	if !secret {
+		t.Fatal("no DNS_API_TOKEN secret setting")
+	}
+}

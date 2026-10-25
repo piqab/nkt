@@ -49,7 +49,11 @@ func localFixtureHub(t *testing.T) (*Server, *store.DB, string) {
 	var idx map[string]any
 	_ = json.Unmarshal(raw, &idx)
 	idx["commands"] = append(idx["commands"].([]any), map[string]any{"match": []string{"docker", "compose"},
-		"stdout": `{"services":{"web":{"ports":[]}}}`})
+		"stdout": `{"services":{"web":{"ports":[]}}}`},
+		// Плагин службой (plugininstall_test.go).
+		map[string]any{"match": []string{"sh", "-c", "command -v python3"}, "stdout": "/usr/bin/python3\n"},
+		map[string]any{"match": []string{"systemctl", "daemon-reload"}, "stdout": ""},
+		map[string]any{"match": []string{"rm", "-rf", "--", "/opt/nkt-plugins/dns"}, "stdout": ""})
 	raw, _ = json.Marshal(idx)
 	_ = os.WriteFile(idxPath, raw, 0o644)
 	stack := filepath.Join(root, "srv", "compose", "shop")
@@ -104,6 +108,7 @@ func localFixtureHub(t *testing.T) (*Server, *store.DB, string) {
 	jm.Register(KindSiteRemove, NewSiteRemoveRunner(srv))
 	jm.Register(KindPipelineRemove, NewPipelineRemoveRunner(srv))
 	jm.Register(KindPipelinePower, NewPipelinePowerRunner(srv))
+	jm.Register(KindPluginInstall, NewPluginInstallRunner(srv))
 
 	return srv, db, root
 }

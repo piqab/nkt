@@ -51,6 +51,14 @@ type EnvEntry struct {
 // Stored — значение уже в .env конвейера.
 func (e EnvEntry) Stored() bool { return e.Value == EnvStored }
 
+// Empty — значения нет («KEY:» или «KEY: ""»): это не секрет, строка
+// остаётся в описании как есть, в .env не уходит (compose подставит
+// умолчание). Иначе «@secret» встало бы вплотную к двоеточию.
+func (e EnvEntry) Empty() bool { return strings.TrimSpace(e.Value) == "" }
+
+// Kept — строка остаётся в описании: уже «@secret» или пустая.
+func (e EnvEntry) Kept() bool { return e.Stored() || e.Empty() }
+
 // Generate — вид generate: (пусто — не он).
 func (e EnvEntry) Generate() string {
 	if k, ok := strings.CutPrefix(e.Value, envGenPrefix); ok {
@@ -161,14 +169,20 @@ func scalarSpan(line string, col int, style yaml.Style) (int, int) {
 func StripEnvValues(content string, entries []EnvEntry) string {
 	lines := strings.Split(content, "\n")
 	for _, e := range entries {
-		if e.Stored() || e.Line < 1 || e.Line > len(lines) {
+		if e.Kept() || e.Line < 1 || e.Line > len(lines) {
 			continue
 		}
 		l := lines[e.Line-1]
 		if e.Col > len(l) || e.End > len(l) || e.Col > e.End {
 			continue
 		}
-		lines[e.Line-1] = l[:e.Col] + `"` + EnvStored + `"` + l[e.End:]
+		// Значение сразу после двоеточия — с пробелом, иначе это уже не
+		// пара «ключ: значение» в YAML.
+		sep := ""
+		if e.Col > 0 && l[e.Col-1] == ':' {
+			sep = " "
+		}
+		lines[e.Line-1] = l[:e.Col] + sep + `"` + EnvStored + `"` + l[e.End:]
 	}
 	return strings.Join(lines, "\n")
 }
@@ -176,7 +190,7 @@ func StripEnvValues(content string, entries []EnvEntry) string {
 // HasEnvValues — в блоке env есть значения, которые надо перенести.
 func HasEnvValues(entries []EnvEntry) bool {
 	for _, e := range entries {
-		if !e.Stored() {
+		if !e.Kept() {
 			return true
 		}
 	}

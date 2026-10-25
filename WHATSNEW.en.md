@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.13.108 — 2026-10-25
+
+- Plugins: “Install on a host (no Docker)” — a plugin from the hub's
+  built-in catalog (Technitium DNS for now) is installed as a systemd
+  service on the chosen host by a job: the hub's version of the plugin
+  file, settings in a root-only file, a separate user, 127.0.0.1 only;
+  secrets stay out of the job parameters; no python3 — the package is
+  installed; the plugin connects by itself; Update on the host and Remove
+  from the host.
+- Technitium DNS: a plugin for a server that already runs (native or your
+  own compose) without moving it — signing in with a Technitium API token
+  (`DNS_API_TOKEN`), no admin password needed.
+- Pipeline description: an empty value in `env:` (`ZONES:`) no longer
+  turns into `"@secret"` and breaks the YAML — the line stays as it is.
+
 ## v1.13.107 — 2026-10-25
 
 - Technitium DNS: moving from a server that already runs (a native install

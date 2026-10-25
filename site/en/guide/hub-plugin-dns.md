@@ -29,7 +29,27 @@ deployments don't touch DNS.
 
 ![The Technitium DNS plugin: zones](/screens/en/hub-plugin-dns.png)
 
-### Technitium already runs (natively or with your own compose)
+### Technitium already runs — a plugin for it, no move
+
+A native install (`install.sh`, the `dns` service) or your own compose —
+Technitium itself isn't touched, the plugin is installed next to it as a
+service:
+
+1. **An API token** in the Technitium console: Administration → Users →
+   a user `nkt` in the DNS Administrators group (zones and DNS settings,
+   no user management) → Sessions → **Create Token** as that user. The
+   plugin doesn't need the admin password.
+2. About → Plugins → **Install on a host** → Technitium DNS, the host
+   with Technitium, the token; the server names (ns1, ns2) — for the
+   delegation check and the NS of new zones.
+3. The job installs the plugin as the `nkt-plugin-dns` service and
+   connects it — Plugins → Technitium DNS appears in the menu.
+
+The secondary gets new zones the way it does now (transfer, a catalog or a
+Technitium cluster) — the plugin doesn't interfere. No plugin is needed on
+the secondary.
+
+### Or move Technitium into the nkt stack
 
 Move it into the nkt stack on the same host without losing zones, records
 and keys: a backup from the old console (Settings → Backup Settings) →

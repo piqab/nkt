@@ -528,6 +528,9 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/fail2ban/templates/apply", s.handleF2BTemplateApply)
 				r.Post("/fail2ban/regex-test", s.handleF2BRegexTest)
 				r.Post("/compose/stacks/deploy", s.handleComposeDeploy)
+				// Плагин хаба как служба systemd (без Docker).
+				r.Post("/plugins/native", s.handlePluginNativeInstall)
+				r.Post("/plugins/native/remove", s.handlePluginNativeRemove)
 				r.Post("/compose/stacks/check", s.handleComposeCheck)
 				r.Post("/compose/stacks/remove", s.handleComposeRemove)
 				r.Post("/compose/stacks/power", s.handleComposePower)
