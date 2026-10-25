@@ -41,6 +41,12 @@ compose:
     # Плагин хаба: секрет подписи вызовов — хаб возьмёт его из .env сам
     # при подключении («О системе» → «Плагины» → «С конвейера»).
     NKT_PLUGIN_SECRET: generate:hex32
+    # Переезд с уже работающего Technitium (нативного или другого): копия
+    # из его консоли (Settings → Backup Settings) — в
+    # /srv/compose/technitium/import/backup.zip («Диски» → «Файлы»), старую
+    # службу остановить, затем выложить. Подробно — README, «Переезд».
+    # IMPORT_BACKUP: /import/backup.zip
+    # IMPORT_AUTH: "true"      # и учётные записи; тогда DNS_ADMIN_PASSWORD — пароль старого сервера
     # Исходящий DNS по UDP закрыт — пересылка по DoH:
     # FORWARDERS: https://cloudflare-dns.com/dns-query (1.1.1.1)
     # FORWARDER_PROTOCOL: Https

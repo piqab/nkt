@@ -19,9 +19,19 @@ dns-init стека, запускается при каждой выкладке
 Вторичный (ROLE=secondary): ключ zone-transfer, вторичная зона каталога с
 первичного PRIMARY_IP (зоны приходят с ней), приложение Failover. Каталог
 выключен (CATALOG_ZONE пустая) — вторичные зоны из ZONES, как раньше.
+
+Переезд с другой установки (IMPORT_BACKUP — резервная копия из консоли
+старого сервера, Settings → Backup Settings): на сервере ещё нет ни одной
+зоны — копия восстанавливается до остальной настройки (зоны, настройки
+DNS, ключи TSIG, приложения, списки). Учётные записи старого сервера — только
+с IMPORT_AUTH=true (тогда DNS_ADMIN_PASSWORD — пароль старого сервера).
+Повторная выкладка копию не трогает: зоны уже есть. Ключи TSIG, которые уже
+есть на сервере (из копии или заведённые в консоли), не перезаписываются —
+только с TSIG_OVERWRITE=true.
 """
 import json
 import os
+import secrets
 import sys
 import time
 import urllib.error
@@ -74,9 +84,15 @@ def login():
 
 
 def set_tsig(wanted):
-    """Свои ключи — с нашими секретами; остальные ключи сервера — как были."""
+    """Свои ключи — с нашими секретами; остальные ключи сервера — как были.
+    Ключ с таким именем уже есть (переезд, консоль) — остаётся, если не
+    TSIG_OVERWRITE=true: иначе вторичный перестал бы забирать зоны."""
     keys = {k["keyName"]: k for k in call("settings/get").get("tsigKeys", [])}
+    overwrite = os.environ.get("TSIG_OVERWRITE", "").lower() == "true"
     for name, secret in wanted.items():
+        if name in keys and keys[name].get("sharedSecret") != secret and not overwrite:
+            log(f"ключ TSIG {name} уже есть на сервере — оставлен как был (TSIG_OVERWRITE=true — заменить)")
+            continue
         keys[name] = {"keyName": name, "sharedSecret": secret, "algorithmName": "hmac-sha256"}
     flat = []
     for k in keys.values():
@@ -178,8 +194,42 @@ def secondary():
     install_failover()
 
 
+def restore_backup():
+    """Резервная копия старого сервера — на пустой сервер (см. в начале)."""
+    path = os.environ.get("IMPORT_BACKUP", "").strip()
+    if not path:
+        return
+    if not os.path.isfile(path):
+        log(f"IMPORT_BACKUP={path}: файла нет — импорт пропущен")
+        return
+    have = [z for z in zones().values() if z.get("type") not in ("Internal",)]
+    if have:
+        log(f"импорт пропущен: на сервере уже есть зоны ({len(have)}) — копия восстанавливается только на пустой")
+        return
+    auth = os.environ.get("IMPORT_AUTH", "").lower() == "true"
+    params = {"blockLists": "true", "logs": "false", "scopes": "true", "apps": "true", "stats": "true",
+              "zones": "true", "allowedZones": "true", "blockedZones": "true", "dnsSettings": "true",
+              "logSettings": "false", "authConfig": "true" if auth else "false", "deleteExistingFiles": "true",
+              "token": TOKEN}
+    boundary = "nkt" + secrets.token_hex(12)
+    with open(path, "rb") as f:
+        data = f.read()
+    body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"fileBackupZip\"; filename=\"backup.zip\"\r\n"
+            f"Content-Type: application/zip\r\n\r\n").encode() + data + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(f"{API}/settings/restore?{urllib.parse.urlencode(params)}", data=body,
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        res = json.load(r)
+    if res.get("status") != "ok":
+        raise RuntimeError(f"settings/restore: {res.get('errorMessage') or res.get('status')}")
+    log(f"резервная копия {path} восстановлена: зон — {len(zones())}" + ("" if auth else "; учётные записи старого сервера не перенесены (IMPORT_AUTH)"))
+    if auth:
+        login()  # пароль теперь — старого сервера
+
+
 def main():
     login()
+    restore_backup()
     if ROLE == "secondary":
         secondary()
     else:

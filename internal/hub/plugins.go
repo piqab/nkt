@@ -33,7 +33,7 @@ import (
 const (
 	pluginsKV = "plugins"
 	// pluginSecretEnv / pluginPortEnv — ключи .env конвейера плагина.
-	pluginSecretEnv = "NKT_PLUGIN_SECRET"
+	pluginSecretEnv = "NKT_PLUGIN_SECRET" // #nosec G101 -- имя переменной .env, а не секрет
 	pluginPortEnv   = "NKT_PLUGIN_PORT"
 	// pluginDefaultPort — порт плагина по умолчанию.
 	pluginDefaultPort = 9180
