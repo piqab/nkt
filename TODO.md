@@ -222,27 +222,33 @@ RHEL (Leapp, ELevate), для Debian/Ubuntu готового «снимок → 
 - [ ] Путь «новый хост рядом» — разделом справки на готовом (перенос
       стеков, профили, переключение Traffic Fly и DNS-плагином).
 
-## Примеры конвейеров и плагины (выбрано 2026-10-25: все и Proxmox)
+## Примеры конвейеров и плагины (выбрано 2026-10-25)
+
+Порядок: Cloudflare DNS → docker-mailserver → llama.cpp + Open WebUI →
+Backrest → Garage → Proxmox (с действиями) → Vaultwarden, step-ca,
+Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
 
 Примеры (compose, как остальные в `examples/`):
 
-- [ ] **Stalwart Mail** — почта целиком; записи MX, SPF, DKIM, DMARC и
-      autoconfig — DNS-плагином хаба; сертификат — сайтом или Traffic Fly.
+- [ ] **docker-mailserver** (github.com/docker-mailserver/docker-mailserver)
+      — почта на своём домене; записи MX, SPF, DKIM, DMARC — DNS-плагином
+      хаба; сертификат — сайтом или Traffic Fly.
 - [ ] **Vaultwarden** — менеджер паролей команды; сайт и бэкап.
-- [ ] **Ollama + Open WebUI** — своя модель; она же — модель ассистента
-      хаба и MCP-агентов без внешнего API.
+- [ ] **llama.cpp (llama-server) + Open WebUI** — своя модель; она же —
+      модель ассистента хаба и MCP-агентов без внешнего API.
 - [ ] **Backrest (restic) → Garage** — бэкапы томов стеков в своё S3.
 - [ ] **step-ca** — свой удостоверяющий центр с ACME для внутренних
       служб; опора для плана PQC (смена подписей).
 - [ ] **Headscale** — свой сервер для клиентов Tailscale (Fly — наружу,
       Headscale — для своих).
-- [ ] Nextcloud, Authentik, Matrix (Synapse + Element) — тяжёлые, после.
 
 Плагины (протокол плагинов, установка конвейером или «Установить на хост»):
 
 - [ ] **Cloudflare DNS** (`provides: dns`) — DNS-функции хаба (Traffic
-      Fly, сайты, автоимена) без своего Technitium.
-- [ ] **Stalwart** — домены и ящики из хаба; DKIM сам уходит в DNS-плагин.
+      Fly, сайты, автоимена) без своего Technitium; ставится на машину
+      хаба или любой хост с интернетом.
+- [ ] **docker-mailserver** — ящики и алиасы из хаба (через `setup` в
+      контейнере); DKIM сам уходит в DNS-плагин.
 - [ ] **Garage** — бакеты и ключи из хаба; цель для бэкапов.
-- [ ] **Proxmox** — машины Proxmox в карте и списке хостов nkt (API-токен
-      Proxmox, только чтение сначала).
+- [ ] **Proxmox** — машины Proxmox в карте и списке хостов nkt и действия
+      (включить, выключить, снимок) по API-токену Proxmox.

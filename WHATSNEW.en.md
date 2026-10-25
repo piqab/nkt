@@ -8,6 +8,25 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.0 — 2026-10-25
+
+A new minor release: everything that went into 1.13.101–1.13.108 in one
+list.
+
+- **External plugins** (About → Plugins): a protocol for your own plugins
+  in any language, a Plugins section in the menu, script commands, MCP
+  tools, “plugin NAME” token rights; connecting from a pipeline or
+  installing on a host without Docker.
+- **The Technitium DNS plugin**: zones of several domains, records as a
+  table and as text with a diff, delegation, DNSSEC; for a server that
+  already runs — with an API token, no move; moving into the nkt stack —
+  by its backup.
+- **DNS for the hub through a plugin**: Traffic Fly route names (with
+  Failover), pipeline site domains (`site.dns`), host autonames.
+- **MCP**: an agent creates, edits and removes pipelines; a “create
+  pipelines” token action — its own pipelines.
+- A **Forgejo Actions runner** example with Docker-in-Docker.
+
 ## v1.13.108 — 2026-10-25
 
 - Plugins: “Install on a host (no Docker)” — a plugin from the hub's
