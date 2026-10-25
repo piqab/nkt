@@ -1,0 +1,19 @@
+{
+  "name": "cloudflare",
+  "title": {"ru": "Cloudflare DNS", "en": "Cloudflare DNS"},
+  "description": {
+    "ru": "Зоны своего аккаунта Cloudflare из хаба: записи таблицей и текстом с диффом, делегирование, команды «cf …», инструменты MCP, записи для Traffic Fly, сайтов и имён хостов. Ставится на машину хаба или любой хост с интернетом.",
+    "en": "Zones of your Cloudflare account from the hub: records as a table and as text with a diff, delegation, “cf …” commands, MCP tools, records for Traffic Fly, sites and host names. Installed on the hub machine or any host with internet access."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9190,
+  "settings": [
+    {"env": "CF_API_TOKEN", "secret": true, "required": true,
+     "title": {"ru": "API-токен Cloudflare", "en": "Cloudflare API token"},
+     "hint": {"ru": "dash.cloudflare.com → My Profile → API Tokens → Create Token → шаблон «Edit zone DNS», Zone Resources — только нужные зоны", "en": "dash.cloudflare.com → My Profile → API Tokens → Create Token → the “Edit zone DNS” template, Zone Resources — only the zones you need"}},
+    {"env": "CF_ZONES",
+     "title": {"ru": "Только эти зоны (через запятую)", "en": "Only these zones (comma-separated)"},
+     "hint": {"ru": "пусто — все зоны, которые видит токен", "en": "empty — all zones the token can see"}}
+  ]
+}

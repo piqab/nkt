@@ -180,6 +180,18 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     ],
   },
   {
+    key: 'cloudflare-plugin',
+    link: `${NKT}/blob/main/examples/cloudflare/deploy/docker-compose.yml`,
+    project: 'cloudflare-plugin',
+    readme: `${NKT}/tree/main/examples/cloudflare`,
+    files: ['examples/cloudflare/deploy/nkt-plugin.py'],
+    envKeys: { plugin: ['CF_API_TOKEN', 'NKT_PLUGIN_SECRET'] },
+    env: [
+      ['CF_API_TOKEN', 'paste-cloudflare-token-here'],
+      ['NKT_PLUGIN_SECRET', 'generate:hex32'],
+    ],
+  },
+  {
     key: 'garage',
     link: `${NKT}/blob/main/examples/garage/deploy/docker-compose.yml`,
     project: 'garage',

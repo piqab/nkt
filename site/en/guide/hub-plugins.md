@@ -10,8 +10,10 @@ an ordinary pipeline: updated and removed by the pipeline too, while the
 hub only connects to it. Without connected plugins the hub works as
 before.
 
-The first plugin is [Technitium DNS](/en/guide/hub-plugin-dns): zones and
-records of your domains on your own name servers, delegation, DNSSEC.
+Plugins: [Technitium DNS](/en/guide/hub-plugin-dns) — zones and records of
+your domains on your own name servers, delegation, DNSSEC;
+[Cloudflare DNS](/en/guide/hub-plugin-cloudflare) — the same for zones at
+Cloudflare.
 
 ## How it works
 

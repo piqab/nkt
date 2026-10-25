@@ -1,0 +1,22 @@
+# WARNING: пример использует сторонний сервис (Cloudflare) и образ python — их доступность и безопасность не гарантируются.
+# WARNING: this example uses a third-party service (Cloudflare) and the python image — their availability and security are not guaranteed.
+# Плагин хаба «Cloudflare DNS» контейнером из examples/ репозитория nkt.
+# Без Docker — «О системе» → «Плагины» → «Установить на хост». Подробно —
+# README.md.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/cloudflare/deploy/docker-compose.yml
+  project: cloudflare-plugin
+  # Машина хаба или любой хост с выходом в интернет.
+  hosts: [localhost]
+  files: [examples/cloudflare/deploy/nkt-plugin.py]
+  env_keys:
+    plugin: [CF_API_TOKEN, NKT_PLUGIN_SECRET]
+  env:
+    # Токен: шаблон «Edit zone DNS», только нужные зоны.
+    CF_API_TOKEN: paste-cloudflare-token-here
+    # CF_ZONES: example.com, example1.com
+    NKT_PLUGIN_SECRET: generate:hex32

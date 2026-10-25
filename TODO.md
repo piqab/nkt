@@ -244,7 +244,7 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
 
 Плагины (протокол плагинов, установка конвейером или «Установить на хост»):
 
-- [ ] **Cloudflare DNS** (`provides: dns`) — DNS-функции хаба (Traffic
+- [x] **Cloudflare DNS** (`provides: dns`) — DNS-функции хаба (Traffic
       Fly, сайты, автоимена) без своего Technitium; ставится на машину
       хаба или любой хост с интернетом.
 - [ ] **docker-mailserver** — ящики и алиасы из хаба (через `setup` в

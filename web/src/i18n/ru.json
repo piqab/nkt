@@ -3644,6 +3644,10 @@
         "title": "Technitium DNS Server",
         "hint": "Свой сервер имён: зоны, проверка DNS-01 для сертификатов (cert-manager), failover-записи, DoH; вторичный — вторым конвейером (README)"
       },
+      "cloudflare-plugin": {
+        "title": "Плагин Cloudflare DNS",
+        "hint": "Плагин хаба для зон у Cloudflare: записи из хаба, делегирование, команды «cf …», MCP, записи для Traffic Fly и сайтов. Без Docker — «О системе» → «Плагины» → «Установить на хост»."
+      },
       "garage": {
         "title": "Garage (S3-хранилище)",
         "hint": "S3 для файлов и бэкапов: бакет и ключ создаёт разовый garage-init, админка garage-webui — на 127.0.0.1:3909, сайт без предела размера (max_body: \"0\"); Filestash — закомментирован (README)"
