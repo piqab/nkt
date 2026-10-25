@@ -971,11 +971,10 @@ func (s *Server) pluginStep(ctx context.Context, jc *jobs.Context, st script.Ste
 		}
 		return msgs.Errorf("plugin.unreachable", p.Name, p.Host, p.Port, err)
 	}
-	// Секрет из команды — только в .env конвейера; показа в журнале нет.
-	resp.Reveal = nil
+	// Секрет из команды — только в .env конвейера: в журнал задания идёт
+	// лишь resp.Text, Reveal и значение Store дальше этой функции не уходят.
 	if resp.Store != nil {
 		line, err := s.pluginStoreApply(ctx, jc.Job.Author, p.Name, target, toEnv, resp.Store)
-		resp.Store = nil
 		if err != nil {
 			return err
 		}
