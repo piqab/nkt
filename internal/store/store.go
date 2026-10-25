@@ -832,6 +832,24 @@ func (d *DB) KVGet(ctx context.Context, key string) (string, bool, error) {
 	return v, true, nil
 }
 
+// KVPrefix — все ключи kv, начинающиеся с prefix.
+func (d *DB) KVPrefix(ctx context.Context, prefix string) (map[string]string, error) {
+	rows, err := d.QueryContext(ctx, `SELECT key, value FROM kv WHERE substr(key, 1, length(?)) = ?`, prefix, prefix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		out[k] = v
+	}
+	return out, rows.Err()
+}
+
 // KVSet writes a scalar setting.
 func (d *DB) KVSet(ctx context.Context, key, value string) error {
 	_, err := d.ExecContext(ctx,

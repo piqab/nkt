@@ -22,6 +22,7 @@ func TestEveryHubKVKeyIsExportedOrExplained(t *testing.T) {
 		"hub.edge": "nkt-edge", "hub.edges": "nkt-edge", "hub.telegram": "боты", "hub.slack": "боты",
 		"hub.webhooks.out": "исходящие вебхуки", "pipeline.": "конвейеры: где выложен стек, оставшиеся",
 		"deploy.stopped.": "конвейеры: метка «остановлена»", "assistant.favorites.": "учётные записи: избранное ассистента",
+		"hub.legacy_sign_keys": "полный экспорт с ключом: legacy_sign_keys (свой ключ подписи и прежних хабов)",
 	}
 	// Не переносятся.
 	notExported := map[string]string{
@@ -31,9 +32,15 @@ func TestEveryHubKVKeyIsExportedOrExplained(t *testing.T) {
 		"hub.telegram.offset": "смещение очереди бота — у каждого хаба своё",
 		"mon.k8s.":            "кэш мониторинга кластеров — соберётся опросом",
 		"plugin.doc.":         "история правок документов плагина — сами документы живут в плагине",
+		"mon.alerted":         "о чём «Мониторинг» уже оповестил — у каждого хаба своё",
+		"sites.cert_alerted":  "о каких сертификатах уже оповещено — у каждого хаба своё",
 	}
 	settings := map[string]bool{}
 	for _, k := range store.ExportedSettingKeys {
+		settings[k] = true
+	}
+	// По началу имени (plugin.settings.<плагин>).
+	for _, k := range store.ExportedSettingPrefixes {
 		settings[k] = true
 	}
 	// Ключи по шаблону: инструкции моделей и раскладка меню — все виды.
@@ -52,7 +59,8 @@ func TestEveryHubKVKeyIsExportedOrExplained(t *testing.T) {
 	templated := []string{"ai.prompt.", "ui.nav."}
 
 	lit := regexp.MustCompile(`KVSet\(\s*ctx[^,]*,\s*"([^"]+)"`)
-	cons := regexp.MustCompile(`(?m)^\s*(?:const\s+)?\w*(?:Key|KVKey)\w*\s*=\s*"([a-z][a-z0-9_./-]*)"`)
+	// Имена констант — …Key, …KVKey и …KV (pluginsKV, dnsOwnedKV).
+	cons := regexp.MustCompile(`(?m)^\s*(?:const\s+)?\w*(?:Key|KV)\w*\s*=\s*"([a-z][a-z0-9_./-]*)"`)
 	fn := regexp.MustCompile(`func \w*[Kk]ey\([^)]*\) string \{\s*return "([a-z][a-z0-9_./-]*)"`)
 	files, _ := filepath.Glob("*.go")
 	found := 0
