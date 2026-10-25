@@ -28,6 +28,8 @@ func TestPluginInstallNative(t *testing.T) {
 	}
 	srv, db, root := localFixtureHub(t)
 	h := srv.Handler()
+	pluginStartWait = 2 * time.Second
+	defer func() { pluginStartWait = 45 * time.Second }()
 	envPath := filepath.Join(root, "etc/nkt-plugins/dns.env")
 	secret := func() string {
 		f, err := os.Open(envPath)
@@ -120,6 +122,46 @@ func TestPluginInstallNative(t *testing.T) {
 	if !ok || p.Native != "technitium" || p.Host != localHostName {
 		t.Fatalf("connected: %+v %v", p, ok)
 	}
+	// Каталог хаба новее поставленного — пометка и «Обновить все».
+	pluginsMu.Lock()
+	list := srv.plugins(t.Context())
+	list[0].NativeSHA = "old"
+	_ = srv.savePlugins(t.Context(), list)
+	pluginsMu.Unlock()
+	if rec := do("GET", "/api/hub/plugins", nil, session); !strings.Contains(rec.Body.String(), `"outdated":true`) {
+		t.Fatalf("no outdated mark: %s", rec.Body)
+	}
+	rec = do("POST", "/api/hub/plugins/native/update-all", nil, session)
+	_ = json.Unmarshal(rec.Body.Bytes(), &started)
+	if job := waitJobDone(t, db, started.JobID); job.Status != "succeeded" {
+		t.Fatalf("update all: %s %s", job.Status, job.Error)
+	}
+	if rec := do("GET", "/api/hub/plugins", nil, session); strings.Contains(rec.Body.String(), `"outdated":true`) {
+		t.Fatalf("still outdated: %s", rec.Body)
+	}
+	expectCode := func(rec *httptest.ResponseRecorder, code int, what string) {
+		t.Helper()
+		if rec.Code != code {
+			t.Fatalf("%s: %d %s", what, rec.Code, rec.Body)
+		}
+	}
+	expectCode(do("POST", "/api/hub/plugins/native/update-all", nil, session), 400, "nothing to update")
+	// Второй экземпляр на том же хосте — свой порт (9181).
+	rec = do("POST", "/api/hub/plugins/install", map[string]any{"package": "technitium", "host": "localhost", "name": "dns2",
+		"settings": map[string]string{"DNS_API_TOKEN": token}}, session)
+	expectCode(rec, 200, "second instance")
+	_ = json.Unmarshal(rec.Body.Bytes(), &started)
+	j, _ := db.JobByID(t.Context(), started.JobID)
+	if !strings.Contains(string(j.Params), `"port":9181`) {
+		t.Fatalf("second port: %s", j.Params)
+	}
+	waitJobDone(t, db, started.JobID) // не подключится: поддельный плагин только на 9180
+	// Хаб в контейнере — на свою машину не ставит.
+	hubInContainer = func() bool { return true }
+	defer func() { hubInContainer = func() bool { return false } }()
+	expectCode(do("POST", "/api/hub/plugins/install", map[string]any{"package": "technitium", "host": "localhost", "name": "dns3",
+		"settings": map[string]string{"DNS_API_TOKEN": token}}, session), 400, "hub in a container")
+	hubInContainer = func() bool { return false }
 	// Обновление и удаление.
 	rec = do("POST", "/api/hub/plugins/dns/native/update", nil, session)
 	_ = json.Unmarshal(rec.Body.Bytes(), &started)

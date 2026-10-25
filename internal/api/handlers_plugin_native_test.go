@@ -20,10 +20,13 @@ import (
 // 409; удаление — файлы прочь.
 func TestPluginNativeInstall(t *testing.T) {
 	root := t.TempDir()
-	python := true
+	python, docker := true, true
 	write := func() {
 		cmds := []map[string]any{{"match": []string{"systemctl", "daemon-reload"}, "stdout": ""},
 			{"match": []string{"rm", "-rf", "--", "/opt/nkt-plugins/dns"}, "stdout": ""}}
+		if docker {
+			cmds = append(cmds, map[string]any{"match": []string{"getent", "group", "docker"}, "stdout": "docker:x:999:\n"})
+		}
 		if python {
 			cmds = append(cmds, map[string]any{"match": []string{"sh", "-c", "command -v python3"}, "stdout": "/usr/bin/python3\n"})
 		}
@@ -82,6 +85,16 @@ func TestPluginNativeInstall(t *testing.T) {
 	if rec := call(s.handlePluginNativeInstall, map[string]any{"name": "../x", "run": "python3", "file": "a.py", "content": "x", "port": 9180}); rec.Code != 400 {
 		t.Fatalf("bad name accepted: %d", rec.Code)
 	}
+	// Доступ к Docker: служба в группе docker.
+	req["docker"] = true
+	if rec := call(s.handlePluginNativeInstall, req); rec.Code != 200 {
+		t.Fatalf("docker install: %d %s", rec.Code, rec.Body)
+	}
+	unit, _ = os.ReadFile(filepath.Join(root, "etc/systemd/system/nkt-plugin-dns.service"))
+	if !strings.Contains(string(unit), "SupplementaryGroups=docker") {
+		t.Fatalf("no docker group:\n%s", unit)
+	}
+	delete(req, "docker")
 	// Удаление.
 	if rec := call(s.handlePluginNativeRemove, map[string]string{"name": "dns"}); rec.Code != 200 {
 		t.Fatalf("remove: %d %s", rec.Code, rec.Body)
@@ -89,7 +102,15 @@ func TestPluginNativeInstall(t *testing.T) {
 	if _, err := os.Stat(env); !os.IsNotExist(err) {
 		t.Fatal("env left")
 	}
-	// Без python3 — 409.
+	// Нет группы docker — 409; без python3 — 409.
+	docker = false
+	write()
+	s = &Server{cfg: cfg, db: db, scanner: inventory.New(cfg, collect.NewFixtures(root), nil)}
+	req["docker"] = true
+	if rec := call(s.handlePluginNativeInstall, req); rec.Code != http.StatusConflict {
+		t.Fatalf("no docker: %d %s", rec.Code, rec.Body)
+	}
+	delete(req, "docker")
 	python = false
 	write()
 	s = &Server{cfg: cfg, db: db, scanner: inventory.New(cfg, collect.NewFixtures(root), nil)}

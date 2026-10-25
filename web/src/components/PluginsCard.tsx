@@ -24,6 +24,16 @@ export function PluginsCard({ admin }: { admin: boolean }) {
   const [install, setInstall] = useState(false)
   const [job, setJob] = useState<Job | null>(null)
   const plugins = list.data?.plugins ?? []
+  const outdated = plugins.filter((p) => p.outdated)
+
+  async function updateAll() {
+    try {
+      const res = await api<{ job_id: number }>('/hub/plugins/native/update-all', { method: 'POST' })
+      setJob(await fetchHubJob<Job>(res.job_id))
+    } catch (err) {
+      await confirmAction(err instanceof Error ? err.message : String(err), { danger: false })
+    }
+  }
 
   // Плагин, поставленный хабом службой: обновить файл или удалить с хоста.
   async function native(p: PluginInfo, action: 'update' | 'remove') {
@@ -53,6 +63,11 @@ export function PluginsCard({ admin }: { admin: boolean }) {
       actions={
         admin && (
           <>
+            {outdated.length > 0 && (
+              <Button size="small" type="primary" onClick={() => void updateAll()}>
+                {t('plugins.updateAll', { n: outdated.length })}
+              </Button>
+            )}
             <Button size="small" onClick={() => setInstall(true)}>
               {t('plugins.install')}
             </Button>
@@ -77,6 +92,12 @@ export function PluginsCard({ admin }: { admin: boolean }) {
                 {p.pipeline ? ` · ${t('plugins.pipeline')}: ${p.pipeline}` : ''}
                 {p.token ? ` · ${t('plugins.token')}: ${p.token}` : ''}
                 {p.native ? ` · ${t('plugins.nativeTag')}` : ''}
+                {p.outdated && (
+                  <>
+                    {' '}
+                    <Tag color="processing">{t('plugins.outdated')}</Tag>
+                  </>
+                )}
                 {p.added_at ? ` · ${formatRelative(p.added_at)}` : ''}
               </span>
               {p.error && <span style={{ color: 'var(--status-critical)' }}>{p.error}</span>}
@@ -128,6 +149,7 @@ export function PluginsCard({ admin }: { admin: boolean }) {
 interface CatalogPackage {
   key: string
   name: string
+  docker?: boolean
   title: string
   description: string
   run: string
@@ -139,15 +161,22 @@ interface CatalogPackage {
  * службой systemd на выбранный хост, заданием; подключается сам. */
 function InstallModal({ onClose, onJob }: { onClose: () => void; onJob: (job: Job) => void }) {
   const { t } = useTranslation()
-  const catalog = useApi<{ packages: CatalogPackage[] }>('/hub/plugins/catalog')
+  const catalog = useApi<{ packages: CatalogPackage[]; local_ok: boolean }>('/hub/plugins/catalog')
+  const installed = useApi<{ plugins: PluginInfo[] }>('/hub/plugins')
   const hosts = useApi<{ name: string }[]>('/hub/hosts')
   const [key, setKey] = useState<string | undefined>()
   const [host, setHost] = useState<string | undefined>()
   const [values, setValues] = useState<Record<string, string>>({})
+  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const pkgs = catalog.data?.packages ?? []
   const pkg = pkgs.find((p) => p.key === (key ?? pkgs[0]?.key))
+  // Имя занято (второй экземпляр) — предложить следующее: dns2, dns3…
+  const taken = new Set((installed.data?.plugins ?? []).map((p) => p.name))
+  let suggested = pkg?.name ?? ''
+  for (let i = 2; suggested && taken.has(suggested); i++) suggested = `${pkg?.name}${i}`
+  const hostOptions = (hosts.data ?? []).filter((h) => catalog.data?.local_ok !== false || h.name !== 'localhost')
   const missing = (pkg?.settings ?? []).filter((f) => f.required && !(values[f.env] ?? f.default ?? '').trim())
 
   async function start() {
@@ -155,7 +184,10 @@ function InstallModal({ onClose, onJob }: { onClose: () => void; onJob: (job: Jo
     setBusy(true)
     setError(null)
     try {
-      const res = await api<{ job_id: number }>('/hub/plugins/install', { method: 'POST', body: { package: pkg.key, host, settings: values } })
+      const res = await api<{ job_id: number }>('/hub/plugins/install', {
+        method: 'POST',
+        body: { package: pkg.key, host, name: name.trim() || suggested, settings: values },
+      })
       onJob(await fetchHubJob<Job>(res.job_id))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -174,8 +206,15 @@ function InstallModal({ onClose, onJob }: { onClose: () => void; onJob: (job: Jo
         {pkg && <span className="muted">{pkg.description}</span>}
         <label className="col" style={{ gap: '0.2rem' }}>
           {t('plugins.host')}
-          <Select showSearch value={host} onChange={setHost} options={(hosts.data ?? []).map((h) => ({ value: h.name, label: h.name }))} />
+          <Select showSearch value={host} onChange={setHost} options={hostOptions.map((h) => ({ value: h.name, label: h.name }))} />
+          {catalog.data?.local_ok === false && <span className="muted">{t('plugins.localInDocker')}</span>}
         </label>
+        <label className="col" style={{ gap: '0.2rem' }}>
+          {t('plugins.name')}
+          <Input value={name} placeholder={suggested} onChange={(e) => setName(e.target.value.trim().toLowerCase())} />
+          <span className="muted">{t('plugins.instanceHint')}</span>
+        </label>
+        {pkg?.docker && <Banner kind="warn">{t('plugins.dockerWarn')}</Banner>}
         {(pkg?.settings ?? []).map((f) => (
           <label key={f.env} className="col" style={{ gap: '0.2rem' }}>
             <span>
@@ -366,7 +405,8 @@ interface Probe {
   port: number
   pipeline?: string
   manifest: PluginManifest
-  conflicts?: string[]
+  conflicts?: string[] | null
+  warnings?: string[] | null
 }
 
 function ConnectModal({ onClose }: { onClose: () => void }) {
@@ -506,7 +546,8 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
                 {t('plugins.provides')}: {m.provides!.map((p) => t(`plugins.provide.${p}`)).join(', ')}
               </div>
             )}
-            {(probe.conflicts?.length ?? 0) > 0 && <Banner kind="warn">{probe.conflicts!.join('; ')}</Banner>}
+            {(probe.conflicts?.length ?? 0) > 0 && <Banner kind="error">{probe.conflicts!.join('; ')}</Banner>}
+            {(probe.warnings?.length ?? 0) > 0 && <Banner kind="warn">{probe.warnings!.join('; ')}</Banner>}
             {asks.length > 0 && (
               <Banner kind="warn">
                 <div className="col" style={{ gap: '0.35rem' }}>
