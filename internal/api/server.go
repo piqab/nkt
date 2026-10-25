@@ -531,6 +531,7 @@ func (s *Server) Handler() http.Handler {
 				// Плагин хаба как служба systemd (без Docker).
 				r.Post("/plugins/native", s.handlePluginNativeInstall)
 				r.Post("/plugins/native/remove", s.handlePluginNativeRemove)
+				r.Post("/plugins/native/settings", s.handlePluginNativeSettings)
 				r.Post("/compose/stacks/check", s.handleComposeCheck)
 				r.Post("/compose/stacks/remove", s.handleComposeRemove)
 				r.Post("/compose/stacks/power", s.handleComposePower)

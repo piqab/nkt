@@ -119,3 +119,66 @@ func TestPluginNativeInstall(t *testing.T) {
 		t.Fatalf("no python: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// «Настройки»: read отдаёт только названные несекретные значения (секреты —
+// «задан», ключи хаба NKT_ — никогда); apply хранит прежний файл, rollback
+// его возвращает, commit удаляет.
+func TestPluginNativeSettings(t *testing.T) {
+	root := t.TempDir()
+	envPath := filepath.Join(root, "etc/nkt-plugins/dns.env")
+	_ = os.MkdirAll(filepath.Dir(envPath), 0o755)
+	_ = os.WriteFile(envPath, []byte("# nkt\nDNS_API_TOKEN=tok-1\nDNS_DOMAIN=ns1.example.com\nNKT_PLUGIN_SECRET=s3cret\nNKT_PLUGIN_PORT=9180\n"), 0o600)
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	cfg := &config.Config{}
+	s := &Server{cfg: cfg, db: db, scanner: inventory.New(cfg, collect.NewFixtures(root), nil)}
+	call := func(body any) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(body)
+		rec := httptest.NewRecorder()
+		s.handlePluginNativeSettings(rec, httptest.NewRequest(http.MethodPost, "/api/plugins/native/settings", strings.NewReader(string(raw))))
+		return rec
+	}
+	rec := call(map[string]any{"name": "dns", "op": "read", "keys": []string{"DNS_DOMAIN", "NKT_PLUGIN_SECRET"}, "secrets": []string{"DNS_API_TOKEN"}})
+	if b := rec.Body.String(); rec.Code != 200 || !strings.Contains(b, `"DNS_DOMAIN":"ns1.example.com"`) || !strings.Contains(b, `"DNS_API_TOKEN":true`) ||
+		strings.Contains(b, "tok-1") || strings.Contains(b, "s3cret") {
+		t.Fatalf("read: %d %s", rec.Code, b)
+	}
+	for _, bad := range []map[string]string{{"NKT_PLUGIN_PORT": "1"}, {"DNS_DOMAIN": "a$b"}, {"bad-key": "x"}} {
+		if rec := call(map[string]any{"name": "dns", "op": "apply", "set": bad}); rec.Code != 400 {
+			t.Fatalf("apply %v: %d", bad, rec.Code)
+		}
+	}
+	if rec := call(map[string]any{"name": "dns", "op": "apply", "set": map[string]string{"DNS_DOMAIN": "ns2.example.com", "DNS_API_TOKEN": ""}}); rec.Code != 200 {
+		t.Fatalf("apply: %d %s", rec.Code, rec.Body)
+	}
+	raw, _ := os.ReadFile(envPath)
+	if !strings.Contains(string(raw), "DNS_DOMAIN=ns2.example.com") || strings.Contains(string(raw), "DNS_API_TOKEN") || !strings.Contains(string(raw), "NKT_PLUGIN_SECRET=s3cret") {
+		t.Fatalf("after apply:\n%s", raw)
+	}
+	if st, err := os.Stat(envPath + ".prev"); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("prev: %v %v", st, err)
+	}
+	if rec := call(map[string]any{"name": "dns", "op": "rollback"}); rec.Code != 200 {
+		t.Fatalf("rollback: %d %s", rec.Code, rec.Body)
+	}
+	raw, _ = os.ReadFile(envPath)
+	if !strings.Contains(string(raw), "DNS_DOMAIN=ns1.example.com") || !strings.Contains(string(raw), "DNS_API_TOKEN=tok-1") {
+		t.Fatalf("after rollback:\n%s", raw)
+	}
+	if _, err := os.Stat(envPath + ".prev"); !os.IsNotExist(err) {
+		t.Fatal("prev left after rollback")
+	}
+	if rec := call(map[string]any{"name": "dns", "op": "rollback"}); rec.Code != 400 {
+		t.Fatalf("second rollback: %d", rec.Code)
+	}
+	_ = call(map[string]any{"name": "dns", "op": "apply", "set": map[string]string{"DNS_DOMAIN": "ns3.example.com"}})
+	if rec := call(map[string]any{"name": "dns", "op": "commit"}); rec.Code != 200 {
+		t.Fatalf("commit: %d", rec.Code)
+	}
+	if _, err := os.Stat(envPath + ".prev"); !os.IsNotExist(err) {
+		t.Fatal("prev left after commit")
+	}
+}

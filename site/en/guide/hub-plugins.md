@@ -69,6 +69,19 @@ Plugins → **Install on a host** → the plugin, the host and its settings
 - The plugin connects to the hub by itself. Update on the host — the
   hub's version of the plugin file and a restart (settings stay); Remove
   from the host — the service, files and the connection.
+- **Settings** — the same fields as at install (token, address, zones…),
+  without reinstalling. The hub reads ordinary values from the host;
+  secrets are shown to no one: “set” and a Replace field (empty keeps the
+  current one). Check — a diff; Save — as a job: the settings file and a
+  service restart; if the plugin doesn't answer, the previous settings
+  come back by themselves, and the job log has the service's last log
+  lines. The history of ordinary values (20 versions, no secrets) is kept
+  on the hub, a version can be restored. For a DNS plugin the hub
+  reconciles its records right after saving. A new plugin version added a
+  required field — a “needs settings” mark. For a plugin deployed by a
+  pipeline, the settings are the pipeline's `.env`.
+
+  ![Plugin settings](/screens/en/hub-plugin-settings.png)
 - Needs nkt on the host of this version or newer (the agent's
   `/api/plugins/native` call).
 - **Several instances** of one plugin (two Cloudflare accounts, two
