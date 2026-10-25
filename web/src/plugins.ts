@@ -84,9 +84,17 @@ export interface PluginResponse {
   text?: string
   result?: unknown
   view?: PluginView
+  /** Секрет один раз (новый ключ API): только окну, не токену. */
+  reveal?: PluginReveal
 }
 
 /** Инструмент MCP операции: <плагин>_<операция>. */
 export function pluginToolName(plugin: string, op: string): string {
   return `${plugin.replace(/-/g, '_')}_${op}`
+}
+
+export interface PluginReveal {
+  title?: string
+  value: string
+  note?: string
 }

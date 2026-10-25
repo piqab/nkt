@@ -1,0 +1,31 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# LiteLLM — шлюз к моделям с виртуальными ключами из examples/ репозитория
+# nkt. После выкладки: плагин хаба «LiteLLM» («О системе» → «Плагины» →
+# «Установить на хост») — модели, ключи, расход. Подробно — README.md.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/litellm/deploy/docker-compose.yml
+  project: litellm
+  hosts: [llm1]
+  wait_timeout: 10m
+  env_keys:
+    litellm-db: [LITELLM_DB_PASSWORD]
+    litellm: [LITELLM_DB_PASSWORD, LITELLM_MASTER_KEY, LITELLM_SALT_KEY]
+  # .env стека прямо здесь: при сохранении значения уйдут в секреты
+  # конвейера, generate: — значение создаст хаб.
+  env:
+    LITELLM_DB_PASSWORD: generate:hex32
+    LITELLM_MASTER_KEY: generate:hex32  # мастер-ключ: «sk-» + это значение
+    LITELLM_SALT_KEY: generate:hex32    # шифрует ключи провайдеров — не менять!
+    # LITELLM_DISABLE_ADMIN_UI: "False" # своя админка LiteLLM на /ui
+  # API наружу — сайт с HTTPS. Без предела размера: длинные контексты и
+  # файлы; потоковые ответы идут без буферизации.
+  site:
+    domains: [llm.example.com]
+    service: litellm
+    port: 4000
+    max_body: "0"

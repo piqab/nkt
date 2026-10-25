@@ -14,7 +14,9 @@ Plugins: [Technitium DNS](/en/guide/hub-plugin-dns) — zones and records of
 your domains on your own name servers, delegation, DNSSEC;
 [Cloudflare DNS](/en/guide/hub-plugin-cloudflare) — the same for zones at
 Cloudflare; [mail](/en/guide/hub-plugin-mail) — docker-mailserver
-mailboxes, aliases and DKIM, MX/SPF/DKIM records through the DNS plugin.
+mailboxes, aliases and DKIM, MX/SPF/DKIM records through the DNS plugin;
+[LiteLLM](/en/guide/hub-plugin-litellm) — virtual model keys with budgets
+and limits, models, spend.
 
 ## How it works
 
@@ -248,6 +250,21 @@ DKIM): `{"title": "…", "dns": {"owner": "domain:example.com", "records":
 "ttl": 3600}]}}`. The hub sets them through the connected DNS plugin
 (owner `plugin:<name>:<owner>`, types A, AAAA, CNAME, TXT, MX) — a window
 with Check and Apply; rights are those of a data-changing operation.
+
+**Secrets from a plugin** (a new API key):
+
+- `"reveals": true` on an operation and `"reveal": {"title", "value",
+  "note"}` in the answer — the secret is shown **once** to the browser
+  window with a Copy button. The hub doesn't let a token (API, MCP) call
+  such an operation unless the secret goes straight into a `.env`.
+- `"store": {"pipeline", "env", "value"}` in the answer — the hub writes
+  the value into the pipeline's `.env` itself (with version history) and
+  removes it from the answer. Where — only what the request said: the
+  `to_pipeline` and `env` arguments (an operation) or the words
+  `to-pipeline PIPELINE env NAME` (a script command). The hub checks the
+  rights (an admin or a token with “pipeline.create” within its limits)
+  **before** calling the plugin.
+- The values reach neither the action log nor the job log.
 
 **Service operations** (not in `ops`, the hub calls them itself):
 

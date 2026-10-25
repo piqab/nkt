@@ -1,0 +1,19 @@
+{
+  "name": "litellm",
+  "title": {"ru": "LiteLLM", "en": "LiteLLM"},
+  "description": {
+    "ru": "Шлюз к моделям LiteLLM из хаба: виртуальные ключи с моделями, бюджетом, лимитами и сроком (новый ключ — один раз в окне или сразу в .env конвейера), модели, расход, команды «llm …», инструменты MCP. Ставится на хост LiteLLM.",
+    "en": "The LiteLLM model gateway from the hub: virtual keys with models, budget, limits and expiry (a new key — once in the window or straight into a pipeline .env), models, spend, “llm …” commands, MCP tools. Installed on the LiteLLM host."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9210,
+  "settings": [
+    {"env": "LITELLM_MASTER_KEY", "secret": true, "required": true,
+     "title": {"ru": "Мастер-ключ LiteLLM", "en": "LiteLLM master key"},
+     "hint": {"ru": "из .env конвейера примера (LITELLM_MASTER_KEY; «sk-» плагин добавит сам)", "en": "from the example pipeline's .env (LITELLM_MASTER_KEY; the plugin adds “sk-” itself)"}},
+    {"env": "LITELLM_URL", "default": "http://127.0.0.1:4000",
+     "title": {"ru": "Адрес LiteLLM", "en": "LiteLLM address"},
+     "hint": {"ru": "на этом хосте; по умолчанию http://127.0.0.1:4000", "en": "on this host; http://127.0.0.1:4000 by default"}}
+  ]
+}

@@ -612,6 +612,23 @@ func (s *Server) handlePluginCall(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusForbidden, err)
 		return
 	}
+	// Секрет — в .env конвейера: права проверяются до вызова (иначе плагин
+	// создал бы ключ, который некуда деть).
+	_, isTok := tokenFromContext(ctx)
+	toPipeline, toEnv := pluginStoreTarget(req.Args)
+	var target store.Pipeline
+	if toPipeline != "" || toEnv != "" {
+		t, err := s.pluginStoreCheck(ctx, auth.Username(ctx), toPipeline, toEnv)
+		if err != nil {
+			writeErr(w, r, http.StatusForbidden, err)
+			return
+		}
+		target = t
+	} else if op.Reveals && isTok {
+		// Показ один раз — только человеку в окне, не токену и не агенту.
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("plugin.revealToken", p.Name+"_"+op.Name))
+		return
+	}
 	resp, err := s.pluginCall(ctx, p, plugin.Request{Op: req.Op, Args: req.Args, DryRun: req.DryRun})
 	if !op.ReadOnly && !req.DryRun {
 		s.db.Audit(ctx, auth.Username(ctx), "plugin.op", p.Name+" "+req.Op, auditOutcome(err), pluginAuditArgs(req.Args))
@@ -619,6 +636,19 @@ func (s *Server) handlePluginCall(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		pluginError(w, r, p, err)
 		return
+	}
+	if resp.Store != nil {
+		st := resp.Store
+		resp.Store = nil
+		line, err := s.pluginStoreApply(ctx, auth.Username(ctx), p.Name, target, toEnv, st)
+		if err != nil {
+			writeErr(w, r, http.StatusBadGateway, err)
+			return
+		}
+		resp.Text = strings.TrimSpace(resp.Text + "\n" + line)
+	}
+	if resp.Reveal != nil && isTok {
+		resp.Reveal = nil
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -923,6 +953,13 @@ func (s *Server) pluginStep(ctx context.Context, jc *jobs.Context, st script.Ste
 		return err
 	}
 	c.Timeout = 10 * time.Minute
+	toPipeline, toEnv := scriptStoreTarget(st.List)
+	var target store.Pipeline
+	if toPipeline != "" {
+		if target, err = s.pluginStoreCheck(ctx, jc.Job.Author, toPipeline, toEnv); err != nil {
+			return err
+		}
+	}
 	resp, err := c.Call(ctx, plugin.Request{Op: plugin.OpCommand, Args: map[string]any{"argv": st.List}, User: jc.Job.Author, DryRun: dry})
 	if !dry {
 		s.db.Audit(ctx, jc.Job.Author, "plugin.command", p.Name+" "+strings.Join(st.List, " "), auditOutcome(err), nil)
@@ -933,6 +970,16 @@ func (s *Server) pluginStep(ctx context.Context, jc *jobs.Context, st script.Ste
 			return msgs.Errorf("plugin.commandFailed", p.Name, ce.Msg)
 		}
 		return msgs.Errorf("plugin.unreachable", p.Name, p.Host, p.Port, err)
+	}
+	// Секрет из команды — только в .env конвейера; показа в журнале нет.
+	resp.Reveal = nil
+	if resp.Store != nil {
+		line, err := s.pluginStoreApply(ctx, jc.Job.Author, p.Name, target, toEnv, resp.Store)
+		resp.Store = nil
+		if err != nil {
+			return err
+		}
+		resp.Text = strings.TrimSpace(resp.Text + "\n" + line)
 	}
 	for _, line := range strings.Split(strings.TrimSpace(resp.Text), "\n") {
 		if line != "" {
