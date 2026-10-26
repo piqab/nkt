@@ -36,6 +36,7 @@ import (
 // открыты и для манифестов (k8s.apply), логов и helm — helm через рендер
 // на хосте и те же проверки манифеста, что у токена.
 
+// #nosec G101 -- имена учётной записи и секрета Kubernetes, а не учётные данные.
 const (
 	ownNSKV       = "k8s.ownns"
 	ownNSAccount  = "nkt-client"
