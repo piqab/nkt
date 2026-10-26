@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.14.9 — 2026-10-26
+
+- The **LiteLLM** example: `cert: auto` on the site and a commented
+  variant through **Traffic Fly** (the certificate on the gateway, the A
+  record to the gateway through the hub's DNS plugin) — both in the
+  example file and in the Examples window. The README explains that
+  `stream: true` is set by the client and that the gateway waits up to 5
+  minutes for an ordinary answer to start.
+- The Traffic Fly variant in the Examples window has a `dns: plugin` line.
+- The “MCP for AI agents” guide is checked against the code by a test: a
+  new tool without a line in the guide won't pass the build.
+
 ## v1.14.8 — 2026-10-25
 
 - **For agents** on a plugin page: all its MCP tools exactly as an agent
