@@ -166,6 +166,33 @@ nesting. Pool ports and Fly routes are for KVM machines so far.
   the domain the record is set automatically.
 - When a machine is deleted, its ports and token routes go with it.
 
+**Own namespace in a shared cluster** (the “own namespaces” action):
+
+```sh
+curl -sS -X POST -H "Authorization: Bearer $NKT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"cluster":"shared","namespace":"shop"}' https://hub.example.com/api/hub/k8s/own \
+  | jq -r .kubeconfig > shop.kubeconfig
+kubectl --kubeconfig shop.kubeconfig get pods
+```
+
+- The cluster comes from the token's cluster list (empty — any within its
+  scope); the name is new (an existing namespace is never taken over), not
+  `kube-*`, `default` or `nkt-*`; up to the “own namespaces” limit (empty —
+  none).
+- The hub labels the namespace with Pod Security `restricted`, sets the
+  quota and LimitRange from the token's limits, a NetworkPolicy “ingress only
+  from this namespace” and the service account `nkt-client` with the `edit`
+  role in it only.
+- That account's kubeconfig is returned **once** (via the API, not MCP);
+  `POST /api/hub/k8s/own/{cluster}/{ns}/kubeconfig` reissues it and the old
+  token stops working.
+- Own namespaces are open to the token's manifests (`k8s.apply`), pod logs
+  (`GET …/{cluster}/{ns}/logs?pod=…`) and helm (`POST …/{cluster}/{ns}/helm`):
+  the chart is rendered on the cluster (`helm template`, no host
+  repositories), passes the same checks as a token manifest and is applied;
+  `dry_run` only renders and checks. `DELETE …/{cluster}/{ns}` deletes the
+  namespace with everything in it.
+
 **Own k8s cluster** — `k8s CLUSTER create` and `destroy` in a script —
 only with the “own Kubernetes cluster” action.
 
@@ -293,6 +320,9 @@ to the hub through the tunnel. Conditions:
 | `GET`, `POST /api/hub/hosts/{id}/lxd` | admin | a host's LXD instances (a token — its own); create (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
 | `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | admin | `start`, `stop`, `restart`; vCPU, memory, disk; delete |
 | `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | admin | instance snapshots (a token — within its limit) |
+| `GET`, `POST /api/hub/k8s/own` | by permission | own namespaces; create (`{"cluster","namespace"}`) → `kubeconfig` once |
+| `POST /api/hub/k8s/own/{cluster}/{ns}/kubeconfig`, `DELETE /api/hub/k8s/own/{cluster}/{ns}` | by permission | reissue the kubeconfig; delete the namespace |
+| `GET …/{cluster}/{ns}/logs?pod=&container=&tail=`, `POST …/{cluster}/{ns}/helm` | by permission | pod log; helm via render and checks (`{"repo_url","chart","version","release","values","dry_run"}`) |
 | `GET`, `PUT /api/hub/hosts/{id}/port-pool` | admin | the host's port pool (`{"from":20000,"to":20999}`; `from` 0 — off) |
 | `GET`, `POST /api/hub/hosts/{id}/vm/ports`, `DELETE …/vm/ports/{port}` | admin | pool ports to a machine (`{"vm_port":22,"proto":"tcp"}`) → `port`, `address`; by permission — “ports”, within the limit |
 | `GET`, `POST /api/hub/own/fly`, `DELETE /api/hub/own/fly/{route}` | by permission | own Traffic Fly routes (`{"name":"…","host_id":…,"port":8080}`) → the apply `job_id` |

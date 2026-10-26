@@ -168,7 +168,7 @@ func (s *Server) tokenK8sCheck(ctx context.Context, t store.APIToken, req manife
 			}
 		}
 	}
-	return tokenK8sNamespaces(req.Content, t.Perms.Namespaces)
+	return tokenK8sNamespaces(req.Content, s.tokenAllowedNamespaces(ctx, t))
 }
 
 // tokenK8sPrepare — квоты namespace токена в кластерах до применения:

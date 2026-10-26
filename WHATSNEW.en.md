@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.8 — 2026-10-26
+
+- **An own namespace in a shared cluster for a token.** A new “own namespaces” action and an “own namespaces” limit (empty — none).
+  - **Creation.** The token creates a namespace in an allowed cluster. An existing namespace is never taken over.
+  - **What the hub sets:** Pod Security `restricted` labels, a quota and LimitRange from the limits, a NetworkPolicy “ingress only from this namespace” and the service account `nkt-client` with the `edit` role in it only.
+  - **kubeconfig.** Returned once through the API (not MCP); a reissue disables the old one.
+- **What else works in an own namespace:** the token's manifests, pod logs and helm. A chart is rendered on the cluster and passes the same checks as a token manifest — cluster-wide kinds and node access are refused.
+- **MCP:** `k8s_own_namespaces`, `k8s_own_logs`, `k8s_own_helm`, `k8s_own_namespace_delete`.
+
 ## v1.17.7 — 2026-10-26
 
 - **LXD on a par with KVM machines — for an administrator and for a token “by permission” with the “machines” action.**

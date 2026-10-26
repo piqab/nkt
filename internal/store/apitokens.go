@@ -45,11 +45,14 @@ const (
 	// TokenActFlyOwn — свои маршруты Traffic Fly: имена в выданном домене
 	// (FlyDomain), цели — свои машины. Карту целиком не правит.
 	TokenActFlyOwn = "fly.own"
+	// TokenActK8sNamespace — свои namespace в общем кластере (с квотой,
+	// политикой и kubeconfig учётной записи только на них).
+	TokenActK8sNamespace = "k8s.namespace"
 )
 
 // TokenActions — все действия по порядку (окно токена, проверка).
 var TokenActions = []string{TokenActPipelineDeploy, TokenActPipelinePower, TokenActPipelineCreate, TokenActScriptRun, TokenActK8sApply, TokenActVMManage,
-	TokenActContainer, TokenActService, TokenActFly, TokenActMigrate, TokenActFail2ban, TokenActVulnScan, TokenActK8sCluster, TokenActVMPorts, TokenActFlyOwn}
+	TokenActContainer, TokenActService, TokenActFly, TokenActMigrate, TokenActFail2ban, TokenActVulnScan, TokenActK8sCluster, TokenActVMPorts, TokenActFlyOwn, TokenActK8sNamespace}
 
 // TokenPerms — права и потолки токена «по правам».
 type TokenPerms struct {
@@ -96,6 +99,8 @@ type TokenLimits struct {
 	// Fly; 0 — нельзя.
 	Ports     int `json:"ports,omitempty"`
 	FlyRoutes int `json:"fly_routes,omitempty"`
+	// Своих namespace в общих кластерах; 0 — нельзя.
+	K8sNamespaces int `json:"k8s_namespaces,omitempty"`
 	// k8s: квота одного namespace (ResourceQuota), подов в нём.
 	K8sCPU       float64 `json:"k8s_cpu,omitempty"`
 	K8sMemMB     int64   `json:"k8s_mem_mb,omitempty"`

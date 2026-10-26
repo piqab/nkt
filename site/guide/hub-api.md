@@ -158,6 +158,32 @@ create` в сценарии), включить, выключить и удали
   ставится сама.
 - Машину удалили — её порты и маршруты токенов уходят вместе с ней.
 
+**Свой namespace в общем кластере** (действие «свои namespace»):
+
+```sh
+curl -sS -X POST -H "Authorization: Bearer $NKT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"cluster":"shared","namespace":"shop"}' https://hub.example.com/api/hub/k8s/own \
+  | jq -r .kubeconfig > shop.kubeconfig
+kubectl --kubeconfig shop.kubeconfig get pods
+```
+
+- Кластер — из списка кластеров токена (пусто — любой в его пределах);
+  имя — новое (существующий namespace не забирается), не `kube-*`,
+  `default` и `nkt-*`; не больше потолка «своих namespace» (пусто —
+  нельзя).
+- Хаб ставит в namespace метки Pod Security `restricted`, квоту и
+  LimitRange по потолкам токена, NetworkPolicy «входящие — только из этого
+  namespace» и учётную запись `nkt-client` с ролью `edit` только в нём.
+- kubeconfig этой учётной записи отдаётся **один раз** (через API, не через
+  MCP); `POST /api/hub/k8s/own/{cluster}/{ns}/kubeconfig` — перевыпуск:
+  прежний токен перестаёт работать.
+- Свои namespace открыты манифестам токена (`k8s.apply`), логам подов
+  (`GET …/{cluster}/{ns}/logs?pod=…`) и helm (`POST …/{cluster}/{ns}/helm`):
+  чарт рендерится на кластере (`helm template`, без репозиториев хоста),
+  проходит те же проверки, что манифест токена, и применяется;
+  `dry_run` — только рендер и проверка. `DELETE …/{cluster}/{ns}` — удалить
+  namespace со всем содержимым.
+
 **Свой кластер k8s** — `k8s КЛАСТЕР create` и `destroy` в сценарии —
 только с действием «свой кластер Kubernetes».
 
@@ -283,6 +309,9 @@ function sign(secret, method, uri, body = '') {
 | `GET`, `POST /api/hub/hosts/{id}/lxd` | администратор | экземпляры LXD хоста (токену — свои); создать (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
 | `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | администратор | `start`, `stop`, `restart`; vCPU, память, диск; удалить |
 | `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | администратор | снимки экземпляра (токену — в потолке) |
+| `GET`, `POST /api/hub/k8s/own` | по правам | свои namespace; завести (`{"cluster","namespace"}`) → `kubeconfig` один раз |
+| `POST /api/hub/k8s/own/{cluster}/{ns}/kubeconfig`, `DELETE /api/hub/k8s/own/{cluster}/{ns}` | по правам | перевыпустить kubeconfig; удалить namespace |
+| `GET …/{cluster}/{ns}/logs?pod=&container=&tail=`, `POST …/{cluster}/{ns}/helm` | по правам | журнал пода; helm через рендер и проверки (`{"repo_url","chart","version","release","values","dry_run"}`) |
 | `GET`, `PUT /api/hub/hosts/{id}/port-pool` | администратор | пул портов хоста (`{"from":20000,"to":20999}`; `from` 0 — выключить) |
 | `GET`, `POST /api/hub/hosts/{id}/vm/ports`, `DELETE …/vm/ports/{port}` | администратор | порты пула на машину (`{"vm_port":22,"proto":"tcp"}`) → `port`, `address`; по правам — «порты», в потолке |
 | `GET`, `POST /api/hub/own/fly`, `DELETE /api/hub/own/fly/{route}` | по правам | свои маршруты Traffic Fly (`{"name":"…","host_id":…,"port":8080}`) → `job_id` раскладки |

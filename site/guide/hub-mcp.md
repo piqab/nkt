@@ -77,6 +77,7 @@ MCP работает с [API-токеном](/guide/hub-api#токены), а н
 | `vm_ports`, `vm_port_open`, `vm_port_close` | администратор | порты пула хоста на машину (TCP/UDP; адрес машины закрепляется); токену — действие «порты», в потолке портов |
 | `lxd_instances`, `lxd_create`, `lxd_power`, `lxd_resize`, `lxd_delete` | администратор | экземпляры LXD (контейнер или машина LXD) на хосте: список, создать (задание), старт, стоп, перезапуск, потолки, удалить; токену — свои, в потолках машин, в сети токена |
 | `lxd_snapshots`, `lxd_snapshot`, `lxd_snapshot_restore`, `lxd_snapshot_delete` | администратор | снимки экземпляра LXD (токену — не больше потолка снимков) |
+| `k8s_own_namespaces`, `k8s_own_logs`, `k8s_own_helm`, `k8s_own_namespace_delete` | токен по правам | свои namespace в общих кластерах: список, логи пода, helm (рендер, проверки токена, применение), удалить; завести namespace и получить kubeconfig — только API |
 | `fly_own_routes`, `fly_own_add`, `fly_own_remove` | токен по правам | свои маршруты Traffic Fly: HTTPS по имени в выданном домене на свою машину |
 | `vm_resize`, `vm_reinstall`, `vm_delete` | администратор | vCPU, память и диск (диск только растёт); переустановка из образа (задание); удаление машины целиком с дисками и записью (задание) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | администратор | план переноса, перенос, откат / удаление старой копии |

@@ -77,6 +77,7 @@ admin token or a token by permission (within its limits).
 | `vm_ports`, `vm_port_open`, `vm_port_close` | admin | host pool ports to a machine (TCP/UDP; the machine's address is pinned); a token — the “ports” action, within its ports limit |
 | `lxd_instances`, `lxd_create`, `lxd_power`, `lxd_resize`, `lxd_delete` | admin | LXD instances (a container or an LXD machine) on a host: list, create (a job), start, stop, restart, limits, delete; a token — its own, within machine limits, in the token's network |
 | `lxd_snapshots`, `lxd_snapshot`, `lxd_snapshot_restore`, `lxd_snapshot_delete` | admin | LXD instance snapshots (a token — up to its snapshot limit) |
+| `k8s_own_namespaces`, `k8s_own_logs`, `k8s_own_helm`, `k8s_own_namespace_delete` | token by permission | own namespaces in shared clusters: list, pod logs, helm (render, token checks, apply), delete; creating a namespace and getting its kubeconfig — API only |
 | `fly_own_routes`, `fly_own_add`, `fly_own_remove` | token by permission | own Traffic Fly routes: HTTPS by name in the assigned domain to its machine |
 | `vm_resize`, `vm_reinstall`, `vm_delete` | admin | vCPU, memory and disk (the disk only grows); reinstall from an image (a job); delete the machine with its disks and record (a job) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |

@@ -4271,6 +4271,7 @@
       "fly.manage": "Traffic Fly routes",
       "migrate": "stack moves",
       "fail2ban.manage": "fail2ban bans",
+      "k8s.namespace": "own namespaces in shared clusters (quota, policy, kubeconfig)",
       "vm.ports": "host pool ports to its own machines",
       "fly.own": "own Traffic Fly routes (in the assigned domain)",
       "vuln.scan": "vulnerability scans"
@@ -4300,6 +4301,7 @@
       "vm_mem_mb": "Memory each",
       "vm_disk_gb": "Disk each",
       "vm_snapshots": "Snapshots per machine (empty — none)",
+      "k8s_namespaces": "Own namespaces (empty — none)",
       "ports": "Pool ports (empty — none)",
       "fly_routes": "Routes (empty — none)",
       "k8s_cpu": "CPU",

@@ -4291,6 +4291,7 @@
       "fly.manage": "маршруты Traffic Fly",
       "migrate": "перенос стеков",
       "fail2ban.manage": "бан адресов fail2ban",
+      "k8s.namespace": "свои namespace в общих кластерах (квота, политика, kubeconfig)",
       "vm.ports": "порты пула хоста на свои машины",
       "fly.own": "свои маршруты Traffic Fly (в выданном домене)",
       "vuln.scan": "проверка уязвимостей"
@@ -4320,6 +4321,7 @@
       "vm_mem_mb": "Память одной",
       "vm_disk_gb": "Диск одной",
       "vm_snapshots": "Снимков на машину (пусто — нельзя)",
+      "k8s_namespaces": "Своих namespace (пусто — нельзя)",
       "ports": "Портов из пула (пусто — нельзя)",
       "fly_routes": "Маршрутов (пусто — нельзя)",
       "k8s_cpu": "CPU",
