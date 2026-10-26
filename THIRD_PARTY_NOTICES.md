@@ -91,7 +91,7 @@ English version: [THIRD_PARTY_NOTICES.en.md](THIRD_PARTY_NOTICES.en.md).
   Fedora, Red Hat, CentOS, Rocky, AlmaLinux, openSUSE, Arch, NixOS, Linux,
   Linux Mint, FreeBSD, Gentoo, Kali, Manjaro, Pop!_OS, Raspberry Pi) — значок
   ОС перед именем хоста, машины и контейнера; значки устройств (Apple для
-  macOS, MikroTik, OpenWrt, Keenetic, Yandex Cloud) — у хостов плагинов
+  macOS, MikroTik, OpenWrt, Keenetic, Yandex Cloud, Home Assistant) — у хостов плагинов
   (только в веб-интерфейсе).
 - **Где лежит:** `web/src/components/osGlyphs.ts` и
   `mobile/shared/ui/src/commonMain/kotlin/com/netknownsthat/ui/common/OsGlyphs.kt`

@@ -93,7 +93,7 @@ The full package list with versions is in `web/package-lock.json`.
   Fedora, Red Hat, CentOS, Rocky, AlmaLinux, openSUSE, Arch, NixOS, Linux,
   Linux Mint, FreeBSD, Gentoo, Kali, Manjaro, Pop!_OS, Raspberry Pi) — the OS
   icon before the name of a host, machine and container; device icons (Apple
-  for macOS, MikroTik, OpenWrt, Keenetic, Yandex Cloud) — on plugin hosts
+  for macOS, MikroTik, OpenWrt, Keenetic, Yandex Cloud, Home Assistant) — on plugin hosts
   (web interface only).
 - **Location:** `web/src/components/osGlyphs.ts` and
   `mobile/shared/ui/src/commonMain/kotlin/com/netknownsthat/ui/common/OsGlyphs.kt`

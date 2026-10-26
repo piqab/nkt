@@ -316,12 +316,16 @@ func TestPluginHostOS(t *testing.T) {
 		{"routeros", "RouterOS", "mikrotik"}, {"windows", "Microsoft Windows 11 Pro", "windows"}, {"snmp-printer", "", "printer"},
 		{"linux-ssh", "CentOS Linux", "centos"}, {"linux-ssh", "", "linux"}, {"something", "x", "device"},
 	} {
-		got := pluginHostOS(c.typ, &plugin.HostInfo{OS: c.os, Model: "M1", Version: "7.16"})
+		got := pluginHostOS(plugin.HostType{ID: c.typ}, &plugin.HostInfo{OS: c.os, Model: "M1", Version: "7.16"})
 		if got.ID != c.want || got.Source != "plugin" || !strings.HasPrefix(got.Name, "M1") {
 			t.Errorf("%s/%q → %+v, want %s", c.typ, c.os, got, c.want)
 		}
 	}
-	if got := pluginHostOS("routeros", nil); got.ID != "mikrotik" || got.Name != "" {
+	if got := pluginHostOS(plugin.HostType{ID: "routeros"}, nil); got.ID != "mikrotik" || got.Name != "" {
 		t.Errorf("no info → %+v", got)
+	}
+	// Значок из манифеста плагина важнее подбора по типу.
+	if got := pluginHostOS(plugin.HostType{ID: "my-ups", Icon: "ups"}, nil); got.ID != "ups" {
+		t.Errorf("icon from manifest → %+v", got)
 	}
 }
