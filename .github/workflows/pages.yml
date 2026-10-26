@@ -48,16 +48,24 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      # Каталог плагинов: тест каждого плагина на подделках — упавший в
+      # Каталог плагинов: каждый плагин (по deploy/nkt-plugin.json) проходит
+      # nkt-catalog lint (состав, пакет, опасный код, живой манифест той же
+      # проверкой, что в хабе) и свой тест на подделках — не прошёл, в
       # каталог не попадает (остальные выходят); версия плагина обязана
       # вырасти, если его файлы изменились (сверка с опубликованным).
       - name: Тесты плагинов
         id: tests
         run: |
+          go build -o "$RUNNER_TEMP/nkt-catalog" ./cmd/nkt-catalog
+          "$RUNNER_TEMP/nkt-catalog" lint -all examples -static >/dev/null || echo "::warning::lint -all нашёл замечания (порты или пакеты) — подробности ниже"
           failed=""
-          for t in examples/*/deploy/test_plugin.py; do
-            key=$(basename "$(dirname "$(dirname "$t")")")
-            if ! (cd "$(dirname "$t")" && timeout 600 python3 -I test_plugin.py); then
+          for j in examples/*/deploy/nkt-plugin.json; do
+            dir=$(dirname "$(dirname "$j")"); key=$(basename "$dir")
+            case "$key" in _*) continue;; esac  # заготовки — не в каталог
+            if ! "$RUNNER_TEMP/nkt-catalog" lint -dir "$dir"; then
+              echo "::warning::lint плагина $key не прошёл — плагин не попадёт в каталог"
+              failed="$failed,$key"
+            elif ! (cd "$dir/deploy" && timeout 600 python3 -I test_plugin.py); then
               echo "::warning::тест плагина $key не прошёл — плагин не попадёт в каталог"
               failed="$failed,$key"
             fi

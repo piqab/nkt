@@ -359,6 +359,11 @@ is off, the window says so.
 
 ## Your own plugin: the shortest one
 
+The full guide is [Writing a plugin](/en/guide/plugin-authoring) (also
+`examples/AGENTS.en.md` for agents in the repository), a working template with
+a test — [examples/_template](https://github.com/piqab/nkt/tree/main/examples/_template),
+the check — `go run ./cmd/nkt-catalog lint -dir examples/<name>`.
+
 Python without dependencies, one section and one command:
 
 ```python

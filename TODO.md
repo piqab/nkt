@@ -275,6 +275,8 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
       под `***`), ИБП (`snmp-ups`, `nut-ups`), камеры (`onvif-camera`, диски
       регистраторов Hikvision/Dahua).
 - [x] Home Assistant — отдельным плагином в каталоге (home-assistant 1.0.0).
+- [x] Руководство для агентов (examples/AGENTS.md), заготовка examples/_template, nkt-catalog lint в CI, плагин Forgejo 1.0.0 (1.17.0).
+- [ ] Forgejo: пакеты (реестр), устройство в «Хостах» — по запросу; 2FA и открытая регистрация — нет в API.
 - [ ] Метрики ИБП (заряд, нагрузка, время от батареи) в «Мониторинге» — в
       протоколе пока только cpu/mem/disk/temp/net; сейчас — таблица в составе.
 

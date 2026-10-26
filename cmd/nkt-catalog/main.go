@@ -5,6 +5,7 @@
 //	nkt-catalog sign -dir DIR          (закрытый ключ PEM — в переменной NKT_CATALOG_KEY)
 //	nkt-catalog verify -dir DIR [-pub key.pem]
 //	nkt-catalog pack -dir DIR -out catalog.tar.gz
+//	nkt-catalog lint -dir examples/NAME [-static]   (или -all examples)
 //
 // Ключ — ed25519 из openssl (genpkey -algorithm ed25519); подпись проверяет
 // и «openssl pkeyutl -verify -rawin».
@@ -39,6 +40,8 @@ func main() {
 		err = verify(os.Args[2:])
 	case "pack":
 		err = pack(os.Args[2:])
+	case "lint":
+		err = lint(os.Args[2:])
 	default:
 		usage()
 	}
@@ -49,7 +52,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: nkt-catalog build|sign|verify|pack …")
+	fmt.Fprintln(os.Stderr, "usage: nkt-catalog build|sign|verify|pack|lint …")
 	os.Exit(2)
 }
 
@@ -177,4 +180,61 @@ func pack(args []string) error {
 		return err
 	}
 	return gz.Close()
+}
+
+// lint — проверка плагина (или всех плагинов каталога) до сборки.
+func lint(args []string) error {
+	fl := flag.NewFlagSet("lint", flag.ExitOnError)
+	dir := fl.String("dir", "", "one plugin: examples/NAME")
+	all := fl.String("all", "", "every plugin under this directory (examples)")
+	static := fl.Bool("static", false, "no live check (do not start the plugin)")
+	_ = fl.Parse(args)
+	var dirs []string
+	switch {
+	case *dir != "":
+		dirs = []string{*dir}
+	case *all != "":
+		m, _ := filepath.Glob(filepath.Join(*all, "*", "deploy", "nkt-plugin.json"))
+		for _, f := range m {
+			dirs = append(dirs, filepath.Dir(filepath.Dir(f)))
+		}
+	default:
+		return fmt.Errorf("lint: -dir or -all")
+	}
+	failed := 0
+	if len(dirs) > 1 {
+		// Порт — свой у каждого плагина каталога: два на одном хосте иначе
+		// не встанут рядом (хаб сдвигает только экземпляры одного плагина).
+		seen := map[int]string{}
+		for _, d := range dirs {
+			raw, err := os.ReadFile(filepath.Join(d, "deploy", "nkt-plugin.json"))
+			if err != nil {
+				continue
+			}
+			var p catalog.Plugin
+			if json.Unmarshal(raw, &p) != nil || p.Port == 0 {
+				continue
+			}
+			if other, dup := seen[p.Port]; dup {
+				fmt.Printf("%s: port %d is taken by %s\n", d, p.Port, other)
+				failed++
+			}
+			seen[p.Port] = d
+		}
+	}
+	for _, d := range dirs {
+		problems := catalog.Lint(d, !*static)
+		if len(problems) == 0 {
+			fmt.Printf("ok: %s\n", d)
+			continue
+		}
+		failed++
+		for _, p := range problems {
+			fmt.Printf("%s: %s\n", d, p)
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d plugin(s) with problems", failed)
+	}
+	return nil
 }
