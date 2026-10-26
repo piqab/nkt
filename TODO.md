@@ -264,7 +264,7 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
       Storage, Cloud DNS, Managed PostgreSQL/MySQL, баланс (1.15.2).
 - [ ] Yandex Cloud: расходы по сервисам (через выгрузку детализации в
       бакет — у API счетов нет разбивки), метрики ВМ из Monitoring.
-- [ ] Windows: OpenSSH + PowerShell (JSON).
+- [x] Windows: OpenSSH + PowerShell (JSON) (1.15.3).
 - [ ] Потом: обратное подключение (плагин подключается к хабу) вместе с
       Android-приложением в режиме «устройство»; 1С, AWS, Google.
       ADB и iOS — не делаем.
