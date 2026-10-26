@@ -442,6 +442,13 @@ var tokenHubRoutes = map[string]string{
 	"DELETE /hub/hosts/{id}/lxd/{name}/snapshots/{snap}":       store.TokenActVMManage,
 	"POST /hub/hosts/{id}/lxd/{name}/resize":                   store.TokenActVMManage,
 	"DELETE /hub/hosts/{id}/lxd/{name}":                        store.TokenActVMManage,
+	// Свои namespace в общих кластерах: завести, kubeconfig, логи, helm.
+	"GET /hub/k8s/own":                            store.TokenActK8sNamespace,
+	"POST /hub/k8s/own":                           store.TokenActK8sNamespace,
+	"POST /hub/k8s/own/{cluster}/{ns}/kubeconfig": store.TokenActK8sNamespace,
+	"DELETE /hub/k8s/own/{cluster}/{ns}":          store.TokenActK8sNamespace,
+	"GET /hub/k8s/own/{cluster}/{ns}/logs":        store.TokenActK8sNamespace,
+	"POST /hub/k8s/own/{cluster}/{ns}/helm":       store.TokenActK8sNamespace,
 	// Порты из пула хоста на свои машины; свои маршруты Traffic Fly.
 	"GET /hub/hosts/{id}/vm/ports":           store.TokenActVMPorts,
 	"POST /hub/hosts/{id}/vm/ports":          store.TokenActVMPorts,
