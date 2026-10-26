@@ -29,9 +29,16 @@ Start-Service sshd
 Set-Service sshd -StartupType Automatic
 ```
 
-The user — an administrator (some findings and all actions need rights).
-Log in with a password or a key: for Windows administrators the keys go
-into `C:\ProgramData\ssh\administrators_authorized_keys`.
+The user — an administrator (some findings and all actions need rights):
+the local name from `whoami`; for a Microsoft account also the local name,
+not the email, and the account password, not the PIN. Log in with a
+password or a key: for administrators the keys go into
+`C:\ProgramData\ssh\administrators_authorized_keys` (rights via `icacls`:
+Administrators and SYSTEM only). A “Public” network needs the SSH rule for
+every profile: `Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -Enabled
+True -Profile Any`. Details, and where to install the plugin when Windows
+is a VM (macvtap: the KVM host cannot reach its own VM) — in the
+[Plugin hosts](https://piqab.github.io/nkt/en/guide/hub-plugin-hosts) guide.
 
 ## Install
 

@@ -35,7 +35,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 SECRET = os.environ.get("NKT_PLUGIN_SECRET", "")
 PORT = int(os.environ.get("NKT_PLUGIN_PORT", "9230") or 9230)
 LISTEN = os.environ.get("NKT_PLUGIN_LISTEN", "0.0.0.0").strip() or "0.0.0.0"
@@ -127,15 +127,27 @@ def log(msg):
 
 def split_addr(addr, port):
     addr = str(addr or "").strip()
-    if not re.match(r"^[A-Za-z0-9.\-:\[\]]{1,255}$", addr):
+    # Первый знак — не «-»: адрес уходит в argv ssh и ssh-keyscan.
+    if not re.match(r"^[A-Za-z0-9\[][A-Za-z0-9.\-:\[\]]{0,254}$", addr):
         raise Fail(f"bad address {addr!r}")
     m = re.match(r"^\[([^\]]+)\](?::(\d{1,5}))?$", addr)
     if m:
         return m.group(1), int(m.group(2) or port)
     if addr.count(":") == 1:
         h, p = addr.split(":")
+        if not h or not p.isdigit() or not 0 < int(p) < 65536:
+            raise Fail(f"bad address {addr!r}")
         return h, int(p)
     return addr, port
+
+def ssh_user(user):
+    """Имя для ssh -l: не с «-» и без управляющих знаков; пробел и «@» можно
+    (локальные имена Windows с пробелом, домен user@corp.local)."""
+    user = user.strip()
+    if not user or user.startswith("-") or len(user) > 256 or any(ord(ch) < 32 or ord(ch) == 127 for ch in user):
+        raise Fail(f"bad user {user!r}")
+    return user
+
 
 
 # --- SSH -------------------------------------------------------------------------
@@ -162,7 +174,7 @@ class SSHLink:
         self.c = c
         self.addr = str(conn.get("address") or "")
         self.host, self.port = split_addr(self.addr, 22)
-        self.user = str(conn.get("user") or "root")
+        self.user = ssh_user(str(conn.get("user") or "root"))
         self.password = str(conn.get("password") or "")
         self.key = pem_lines(str(conn.get("key") or ""))
         self.pin = str(conn.get("fingerprint") or "").strip()
@@ -176,7 +188,7 @@ class SSHLink:
         self.tmp = tempfile.mkdtemp(prefix="nkt-connector-")
         os.chmod(self.tmp, 0o700)
         try:
-            out = subprocess.run([SSH_KEYSCAN, "-T", "8", "-p", str(self.port), self.host], capture_output=True, text=True, timeout=TIMEOUT).stdout
+            out = subprocess.run([SSH_KEYSCAN, "-T", "8", "-p", str(self.port), "--", self.host], capture_output=True, text=True, timeout=TIMEOUT).stdout
         except subprocess.TimeoutExpired:
             raise self.c.fail("unreachable", addr=self.addr, err="ssh-keyscan timeout")
         keys = [l for l in out.splitlines() if l.strip() and not l.startswith("#") and len(l.split()) >= 3]
@@ -213,7 +225,7 @@ class SSHLink:
         else:
             args += ["-o", "PubkeyAuthentication=no", "-o", "PreferredAuthentications=password,keyboard-interactive", "-o", "NumberOfPasswordPrompts=1"]
             env.update(SSH_ASKPASS=os.path.join(self.tmp, "askpass"), SSH_ASKPASS_REQUIRE="force", DISPLAY=env.get("DISPLAY", ":0"), NKT_SSH_PASS=self.password)
-        args += [f"{self.user}@{self.host}", cmd]
+        args += ["-l", self.user, "--", self.host, cmd]
         try:
             r = subprocess.run(args, capture_output=True, text=True, timeout=timeout or TIMEOUT, env=env, stdin=subprocess.DEVNULL, start_new_session=True)
         except subprocess.TimeoutExpired:

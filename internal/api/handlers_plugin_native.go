@@ -188,11 +188,14 @@ func (s *Server) handlePluginNativeRemove(w http.ResponseWriter, r *http.Request
 	for _, p := range []string{fmt.Sprintf(pluginNativeUnit, req.Name), pluginNativeEnv + "/" + req.Name + ".env", pluginNativeEnv + "/" + req.Name + ".env.prev"} {
 		_ = c.DeleteFile(p)
 	}
-	if res, err := c.Run(ctx, "rm", "-rf", "--", pluginNativeDir+"/"+req.Name); err == nil && !res.OK() {
-		writeError(w, http.StatusInternalServerError, strings.TrimSpace(res.Output()))
+	_, _ = c.Run(ctx, "systemctl", "daemon-reload")
+	// Каталог /opt/nkt-plugins под ProtectSystem=strict агента закрыт —
+	// RemoveAll удаляет его вне песочницы.
+	dir := pluginNativeDir + "/" + req.Name
+	if err := c.RemoveAll(dir); err != nil {
+		writeErr(w, r, http.StatusInternalServerError, msgs.Errorf("plugin.nativeRemoveDir", dir, err))
 		return
 	}
-	_, _ = c.Run(ctx, "systemctl", "daemon-reload")
 	s.db.Audit(ctx, auth.Username(ctx), "plugin.native.remove", req.Name, "ok", nil)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

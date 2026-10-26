@@ -64,6 +64,50 @@ actions, commands and the login — an admin or a by-permission token with
 the “plugin NAME” action. Removing a device from nkt changes nothing on
 the device itself.
 
+## Windows: login, firewall, virtual machines
+
+**User.** The local name — what follows “\\” in `whoami`. For a Microsoft
+account (`name@outlook.com`) the field also takes the local name, not the
+email (usually the same as the folder in `C:\Users`), and the password is
+the account's, not the Windows Hello PIN. If Windows only allows Windows
+Hello sign-in, a password login over SSH may fail — use a key then:
+
+```powershell
+Add-Content C:\ProgramData\ssh\administrators_authorized_keys "ssh-ed25519 AAAA… nkt"
+icacls C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r /grant "*S-1-5-32-544:F" /grant "*S-1-5-18:F"
+```
+
+Without `icacls` sshd silently ignores the file; SIDs instead of group
+names, because localized Windows names the groups differently. The private
+key goes into “SSH private key”, the password stays empty. (RDP, by
+contrast, takes a Microsoft account by its email.)
+
+**Firewall.** A VM network or a new Windows network is usually “Public”,
+while the SSH rule may be enabled for private networks only:
+
+```powershell
+Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -Enabled True -Profile Any
+```
+
+Check reachability by the port (`nc -zv -w 5 ADDRESS 22`), not `ping`:
+Windows does not answer ping by default.
+
+**Windows in a virtual machine.** The plugin goes on a host **that can
+reach the Windows address** — not always the host running the VM. The VM
+network type: `virsh domiflist VM` (the Type column).
+
+| VM network | Who reaches Windows | Where to install the plugin |
+|---|---|---|
+| macvtap (`direct`) | the whole network **except the KVM host itself** | the hub or any other host on that network, **not** the KVM host |
+| Linux bridge (`bridge`, `br0`) | everyone, the KVM host too | the KVM host or any host on the network |
+| NAT `default` or isolated (`network`) | **only the KVM host** | only the KVM host |
+| VirtualBox NAT with a port forward | the VM's host | the VM's host, address `127.0.0.1:PORT` |
+
+macvtap is a Linux limitation, not a setting: the host exchanges no
+packets with its own macvtap VMs, and the firewall has nothing to do with
+it. A wireless adapter usually cannot be bridged — the access point drops
+foreign MACs.
+
 ## Scripts and MCP
 
 The script command `on HOST run "COMMAND"` — or a block up to `end`:

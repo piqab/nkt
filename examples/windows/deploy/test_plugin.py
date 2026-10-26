@@ -80,7 +80,7 @@ class PluginTest(unittest.TestCase):
         with open(sshp, "w") as f:
             f.write(FAKE_SSH)
         with open(ksp, "w") as f:
-            f.write("#!/bin/sh\necho \"$5 ssh-ed25519 " + HOSTKEY + "\"\n")
+            f.write("#!/bin/sh\necho \"$6 ssh-ed25519 " + HOSTKEY + "\"\n")
         for p in (sshp, ksp):
             os.chmod(p, stat.S_IRWXU)
         cls.log = os.path.join(cls.tmp, "ssh.log")
@@ -132,6 +132,11 @@ class PluginTest(unittest.TestCase):
         self.assertIn("host key changed", self.call("_host_check", conn={"address": "10.0.0.20", "password": PASS, "fingerprint": "SHA256:other"})["error"])
         self.assertIn("SSH refused", self.call("_host_check", conn={"address": "10.0.0.20", "password": "nope"})["error"])
         self.assertFalse(any(PASS in " ".join(x["argv"]) or PASS in x["script"] for x in self.logs()))
+        # Локальное имя с пробелом — одним аргументом -l; адрес — после «--».
+        self.assertTrue(self.call("_host_check", conn={"address": "10.0.0.20", "user": "Иван Петров", "password": PASS})["ok"])
+        self.assertEqual(self.logs()[-1]["argv"][-5:-1], ["-l", "Иван Петров", "--", "10.0.0.20"])
+        self.assertIn("bad user", self.call("_host_check", conn={"address": "10.0.0.20", "user": "-oProxyCommand=calc", "password": PASS})["error"])
+        self.assertIn("bad address", self.call("_host_check", conn={"address": "-oProxyCommand", "password": PASS})["error"])
 
     def test_3_snapshot_metrics(self):
         s = self.call("_host_snapshot")["result"]

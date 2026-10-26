@@ -33,7 +33,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 SECRET = os.environ.get("NKT_PLUGIN_SECRET", "")
 PORT = int(os.environ.get("NKT_PLUGIN_PORT", "9250") or 9250)
 LISTEN = os.environ.get("NKT_PLUGIN_LISTEN", "0.0.0.0").strip() or "0.0.0.0"
@@ -46,7 +46,7 @@ T = {
         "title": "Windows",
         "desc": "Windows как хосты nkt через встроенный OpenSSH и PowerShell: состав, метрики, находки, конфигурация с диффом, службы, обновления, команды PowerShell.",
         "type": "Windows", "hint": "OpenSSH Server: Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0; Start-Service sshd; Set-Service sshd -StartupType Automatic. Пользователь — администратор (для находок и действий).",
-        "f_address": "Адрес", "f_address_hint": "IP или имя; порт — через двоеточие, если не 22", "f_user": "Пользователь", "f_password": "Пароль",
+        "f_address": "Адрес", "f_address_hint": "IP или имя; порт — через двоеточие, если не 22", "f_user": "Пользователь", "f_user_hint": "локальное имя (whoami, часть после «\\»); для учётной записи Microsoft — тоже локальное имя, не почта; пароль — от учётной записи, не PIN", "f_password": "Пароль",
         "f_key": "Закрытый ключ SSH", "f_key_hint": "вставьте целиком (BEGIN … END) — вместо пароля; хранит хаб",
         "f_fingerprint": "Отпечаток ключа хоста", "f_fingerprint_hint": "пусто — запомнится при «Проверить»",
         "reboot": "Перезагрузить", "reboot_confirm": "Перезагрузить Windows? Пользователи и службы будут прерваны.",
@@ -74,7 +74,7 @@ T = {
         "title": "Windows",
         "desc": "Windows as nkt hosts via the built-in OpenSSH and PowerShell: inventory, metrics, findings, configuration with a diff, services, updates, PowerShell commands.",
         "type": "Windows", "hint": "OpenSSH Server: Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0; Start-Service sshd; Set-Service sshd -StartupType Automatic. The user — an administrator (for findings and actions).",
-        "f_address": "Address", "f_address_hint": "IP or name; a port after a colon if not 22", "f_user": "User", "f_password": "Password",
+        "f_address": "Address", "f_address_hint": "IP or name; a port after a colon if not 22", "f_user": "User", "f_user_hint": "the local name (whoami, the part after “\\”); for a Microsoft account also the local name, not the email; the account password, not the PIN", "f_password": "Password",
         "f_key": "SSH private key", "f_key_hint": "paste it whole (BEGIN … END) — instead of a password; the hub keeps it",
         "f_fingerprint": "Host key fingerprint", "f_fingerprint_hint": "empty — remembered on Check",
         "reboot": "Reboot", "reboot_confirm": "Reboot Windows? Users and services will be interrupted.",
@@ -140,15 +140,27 @@ def key_fingerprint(b64):
 
 def split_addr(addr):
     addr = str(addr or "").strip()
-    if not re.match(r"^[A-Za-z0-9.\-:\[\]]{1,255}$", addr):
+    # Первый знак — не «-»: адрес уходит в argv ssh и ssh-keyscan.
+    if not re.match(r"^[A-Za-z0-9\[][A-Za-z0-9.\-:\[\]]{0,254}$", addr):
         raise Fail(f"bad address {addr!r}")
     m = re.match(r"^\[([^\]]+)\](?::(\d{1,5}))?$", addr)
     if m:
         return m.group(1), int(m.group(2) or 22)
     if addr.count(":") == 1:
         h, p = addr.split(":")
+        if not h or not p.isdigit() or not 0 < int(p) < 65536:
+            raise Fail(f"bad address {addr!r}")
         return h, int(p)
     return addr, 22
+
+def ssh_user(user):
+    """Имя для ssh -l: не с «-» и без управляющих знаков; пробел и «@» можно
+    (локальные имена Windows с пробелом, домен user@corp.local)."""
+    user = user.strip()
+    if not user or user.startswith("-") or len(user) > 256 or any(ord(ch) < 32 or ord(ch) == 127 for ch in user):
+        raise Fail(f"bad user {user!r}")
+    return user
+
 
 
 # Загрузчик: вывод в UTF-8, сценарий — целиком из стандартного ввода.
@@ -161,7 +173,7 @@ class Win:
         self.c = c
         self.addr = str(conn.get("address") or "")
         self.host, self.port = split_addr(self.addr)
-        self.user = str(conn.get("user") or "Administrator")
+        self.user = ssh_user(str(conn.get("user") or "Administrator"))
         self.password = str(conn.get("password") or "")
         self.key = pem_lines(str(conn.get("key") or ""))
         self.pin = str(conn.get("fingerprint") or "").strip()
@@ -175,7 +187,7 @@ class Win:
         self.tmp = tempfile.mkdtemp(prefix="nkt-windows-")
         os.chmod(self.tmp, 0o700)
         try:
-            out = subprocess.run([SSH_KEYSCAN, "-T", "8", "-p", str(self.port), self.host], capture_output=True, text=True, timeout=30).stdout
+            out = subprocess.run([SSH_KEYSCAN, "-T", "8", "-p", str(self.port), "--", self.host], capture_output=True, text=True, timeout=30).stdout
         except subprocess.TimeoutExpired:
             raise self.c.fail("unreachable", addr=self.addr, err="ssh-keyscan timeout")
         keys = [l for l in out.splitlines() if l.strip() and not l.startswith("#") and len(l.split()) >= 3]
@@ -210,7 +222,7 @@ class Win:
         else:
             args += ["-o", "PubkeyAuthentication=no", "-o", "PreferredAuthentications=password,keyboard-interactive", "-o", "NumberOfPasswordPrompts=1"]
             env.update(SSH_ASKPASS=os.path.join(self.tmp, "askpass"), SSH_ASKPASS_REQUIRE="force", DISPLAY=env.get("DISPLAY", ":0"), NKT_SSH_PASS=self.password)
-        args += [f"{self.user}@{self.host}", BOOT_CMD]
+        args += ["-l", self.user, "--", self.host, BOOT_CMD]
         try:
             r = subprocess.run(args, input=script, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                timeout=timeout or TIMEOUT, env=env, start_new_session=True)
@@ -439,7 +451,7 @@ def manifest(c):
         "host_types": [{
             "id": "windows", "title": c.t("type"), "hint": c.t("hint"),
             "fields": [{"name": "address", "title": c.t("f_address"), "required": True, "hint": c.t("f_address_hint"), "placeholder": "192.168.1.20"},
-                       {"name": "user", "title": c.t("f_user"), "default": "Administrator"},
+                       {"name": "user", "title": c.t("f_user"), "hint": c.t("f_user_hint"), "default": "Administrator"},
                        {"name": "password", "title": c.t("f_password"), "type": "password"},
                        {"name": "key", "title": c.t("f_key"), "type": "password", "hint": c.t("f_key_hint")},
                        {"name": "fingerprint", "title": c.t("f_fingerprint"), "hint": c.t("f_fingerprint_hint")}],
