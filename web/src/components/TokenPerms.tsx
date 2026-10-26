@@ -81,7 +81,7 @@ const PRESETS: Record<string, TokenPerms | 'read'> = {
     limits: { cpu: 2, mem_mb: 4096, host_cpu: 2, host_mem_mb: 4096, service_cpu: 1, service_mem_mb: 1024, min_free_gb: 5, deploys_per_hour: 30 },
   },
   k8s: { actions: ['k8s.apply'], namespaces: ['team-a'], limits: { k8s_cpu: 4, k8s_mem_mb: 8192, k8s_storage_gb: 50, k8s_pods: 30, service_cpu: 1, service_mem_mb: 1024, deploys_per_hour: 30 } },
-  vps: { actions: ['vm.manage'], limits: { vms: 3, vm_cpu: 2, vm_mem_mb: 4096, vm_disk_gb: 40, cpu: 6, mem_mb: 12288, disk_gb: 120 } },
+  machines: { actions: ['vm.manage'], limits: { vms: 3, vm_cpu: 2, vm_mem_mb: 4096, vm_disk_gb: 40, cpu: 6, mem_mb: 12288, disk_gb: 120 } },
 }
 
 /** Подпись действия: plugin.<имя> — «плагин <имя>: его действия». */

@@ -4244,7 +4244,7 @@
       "ci": "CI: deploy a pipeline",
       "compose": "Agent: compose with limits",
       "k8s": "k8s: own namespace with a quota",
-      "vps": "VPS: up to 3 machines"
+      "machines": "Machines: up to 3"
     },
     "actions": "Actions",
     "pipelines": "Pipelines",
@@ -4261,6 +4261,7 @@
       "script.run": "run saved scripts",
       "k8s.apply": "manifests into its own namespace",
       "vm.manage": "machines: create, start, stop its own",
+      "k8s.cluster": "its own Kubernetes cluster: create, delete",
       "container.action": "containers: start, stop, restart",
       "service.action": "services: start, stop, restart",
       "fly.manage": "Traffic Fly routes",

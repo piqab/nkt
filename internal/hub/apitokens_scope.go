@@ -15,7 +15,10 @@ import (
 // clusterInScope — все узлы кластера (и его хост) доступны токену.
 func (s *Server) clusterInScope(ctx context.Context, id int64) bool {
 	allow := s.scopeFilter(ctx)
-	if allow == nil {
+	// Без предела по хостам — любой кластер из списка токена: узлы общего
+	// кластера бывают машинами администратора, и это не мешает работать в
+	// своём namespace.
+	if t, _ := tokenFromContext(ctx); allow == nil || !t.Scoped() {
 		return true
 	}
 	cl, err := s.db.ClusterByID(ctx, id)
@@ -61,8 +64,30 @@ func (s *Server) scriptScopeError(ctx context.Context, sc script.Script) error {
 		}
 		return msgs.Errorf("auth.tokenScriptHost", line, name)
 	}
+	tok, _ := tokenFromContext(ctx)
+	// Шагу нужно действие токена «по правам» — то же, что у API.
+	need := func(st script.Step, action string) error {
+		if tok.Limited() && !tok.Can(action) {
+			return msgs.Errorf("auth.tokenScriptAction", st.Line, action)
+		}
+		return nil
+	}
 	for _, st := range sc.Steps {
 		var err error
+		switch st.Kind {
+		case script.KindVMCreate, script.KindVMAction:
+			if err := need(st, store.TokenActVMManage); err != nil {
+				return err
+			}
+		case script.KindK8sCreate, script.KindK8sDestroy:
+			if err := need(st, store.TokenActK8sCluster); err != nil {
+				return err
+			}
+		case script.KindK8sApply:
+			if err := need(st, store.TokenActK8sApply); err != nil {
+				return err
+			}
+		}
 		switch st.Kind {
 		case script.KindHost, script.KindGroup, script.KindFlyRoute, script.KindFlyApply:
 			return msgs.Errorf("auth.tokenScriptGlobal", st.Line, st.Text)

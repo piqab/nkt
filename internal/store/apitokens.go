@@ -37,11 +37,14 @@ const (
 	TokenActMigrate        = "migrate"
 	TokenActFail2ban       = "fail2ban.manage"
 	TokenActVulnScan       = "vuln.scan"
+	// TokenActK8sCluster — свой кластер Kubernetes (создать, удалить) — в
+	// сценариях и MCP; без него «k8s create» токену недоступен.
+	TokenActK8sCluster = "k8s.cluster"
 )
 
 // TokenActions — все действия по порядку (окно токена, проверка).
 var TokenActions = []string{TokenActPipelineDeploy, TokenActPipelinePower, TokenActPipelineCreate, TokenActScriptRun, TokenActK8sApply, TokenActVMManage,
-	TokenActContainer, TokenActService, TokenActFly, TokenActMigrate, TokenActFail2ban, TokenActVulnScan}
+	TokenActContainer, TokenActService, TokenActFly, TokenActMigrate, TokenActFail2ban, TokenActVulnScan, TokenActK8sCluster}
 
 // TokenPerms — права и потолки токена «по правам».
 type TokenPerms struct {

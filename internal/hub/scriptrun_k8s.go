@@ -90,6 +90,21 @@ func (r *ScriptRunner) k8sApply(ctx context.Context, jc *jobs.Context, done *scr
 	if err != nil {
 		return err
 	}
+	// Токен «по правам»: те же проверки, что у manifest_apply — кластер и
+	// namespace из его списков, без объектов уровня кластера, квоты
+	// namespace — до применения.
+	if t, ok := tokenFromContext(ctx); ok && t.Limited() {
+		req := manifestRequest{Name: "script", Content: st.Block, Clusters: []int64{cl.ID}}
+		nss, err := r.s.tokenK8sCheck(ctx, t, req)
+		if err != nil {
+			return err
+		}
+		if !dry {
+			if err := r.s.tokenK8sPrepare(ctx, jc.Lang(), t, req, nss); err != nil {
+				return err
+			}
+		}
+	}
 	if dry {
 		var res struct {
 			Diff string `json:"diff"`

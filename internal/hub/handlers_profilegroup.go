@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -151,6 +152,11 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 	// Токен «по правам»: потолки одной машины и суммы токена; машина
 	// учитывается сразу (не создалась — запись снимет задание).
 	tok, byToken := tokenFromContext(r.Context())
+	// Хост вне области токена — отказ, как у остальных действий с хостом.
+	if byToken && !s.tokenHostAllowed(r.Context(), tok, strconv.FormatInt(host.ID, 10)) {
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenHostDenied"))
+		return
+	}
 	if byToken && tok.Limited() {
 		if err := s.tokenVMCheck(r.Context(), tok, host, req.Spec); err != nil {
 			writeErr(w, r, http.StatusForbidden, err)

@@ -60,8 +60,8 @@ CPU”, “an own namespace in a cluster with a quota”, “up to three machine
 of 2 vCPU”.
 
 - **Presets** fill in the fields: read only; CI — deploy a pipeline;
-  agent — compose with limits; k8s — own namespace with a quota; VPS — up
-  to three machines.
+  agent — compose with limits; k8s — own namespace with a quota; machines — up
+  to three.
 - **Actions** — what else is allowed besides reading: deploy (and roll
   back, dry run), “Start” / “Stop”, **create pipelines** (its own: compose
   only on the token's hosts, edit and remove only those it created; no
@@ -110,8 +110,27 @@ ResourceQuota…), and without node access (`privileged`, `hostNetwork`,
 limit — default and maximum per container) into the namespace: the
 cluster itself holds the quota, even for pods created from inside.
 
-**Machines** — create (`create_vm` in MCP, “New machine” over the API),
-start, stop and delete only its own: created by this token.
+**Machines** — create (`create_vm` in MCP, “New machine” over the API,
+`vm create` in a script), start, stop and delete only its own: created
+by this token. A token's machines are isolated:
+
+- a machine can be created only on a host within the token's limits
+  (hosts and groups), otherwise 403;
+- a token by permission does not see other machines (of other tokens
+  and of the administrator) in lists, monitoring or scripts;
+- its own machines stay visible and reachable for a token limited by
+  hosts, even when the machine itself is not in the token's host list.
+
+**Own k8s cluster** — `k8s CLUSTER create` and `destroy` in a script —
+only with the “own Kubernetes cluster” action.
+
+**A script run by a token** is checked the same way as the API: each
+line needs its action (`vm …` — “machines”, `k8s … apply` — “k8s
+manifests”, `k8s … create` — “own cluster”), machines — limits and
+usage, manifests — the token's namespaces, quota and restrictions.
+Hub-wide commands (`host`, `group`, Traffic Fly) are not allowed for a
+limited token. If the token is deleted or expires, its job stops at the
+next step.
 
 **MCP** shows the agent only the allowed tools. Connection examples are
 in the token window (“MCP examples”), with the issued secret — right

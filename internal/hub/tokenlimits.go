@@ -250,6 +250,29 @@ func cutTokenAuthor(author string) (string, bool) {
 	return "", false
 }
 
+// tokenScriptContext — задание, запущенное токеном (автор «token:имя»):
+// контекст с этим токеном, чтобы шаги проверяли его права, квоты и
+// машины. Токен удалён или истёк — задание не продолжается.
+func (s *Server) tokenScriptContext(ctx context.Context, author string) (context.Context, error) {
+	name, ok := cutTokenAuthor(author)
+	if !ok {
+		return ctx, nil
+	}
+	tokens, err := s.db.ListAPITokens(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	for _, t := range tokens {
+		if t.Name == name {
+			if t.Expired(time.Now()) {
+				break
+			}
+			return withToken(ctx, t), nil
+		}
+	}
+	return ctx, msgs.Errorf("auth.tokenGone", name)
+}
+
 // tokenVMCheck — машина в потолках токена «по правам»: vCPU, память и
 // диск одной машины, суммы и хост; при успехе — запись в учёт.
 func (s *Server) tokenVMCheck(ctx context.Context, t store.APIToken, host store.Host, spec vmcreate.Spec) error {
