@@ -2095,6 +2095,7 @@ var ruCatalog = map[string]string{
 	"plugin.nativeNoPython":                               "на хосте нет python3",
 	"plugin.nativeNoEnv":                                  "у плагина %s на хосте нет файла настроек — поставьте его заново",
 	"plugin.nativeRemoveDir":                              "служба плагина остановлена, юнит и настройки удалены, но каталог %s не удалён: %v",
+	"plugin.nativeUser":                                   "пользователь службы плагина %s не создан: %v",
 	"plugin.unknownPackage":                               "плагина %s нет во встроенном каталоге",
 	"plugin.settingsTitle":                                "Настройки плагина %s на %s",
 	"plugin.stepSettings":                                 "плагин %s: новые настройки на %s, перезапуск службы",

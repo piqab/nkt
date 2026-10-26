@@ -23,7 +23,7 @@ func TestPluginNativeInstall(t *testing.T) {
 	python, docker := true, true
 	write := func() {
 		cmds := []map[string]any{{"match": []string{"systemctl", "daemon-reload"}, "stdout": ""},
-			{"match": []string{"rm", "-rf", "--", "/opt/nkt-plugins/dns"}, "stdout": ""}}
+			{"match": []string{"useradd", "--system"}, "stdout": ""}}
 		if docker {
 			cmds = append(cmds, map[string]any{"match": []string{"getent", "group", "docker"}, "stdout": "docker:x:999:\n"})
 		}
@@ -35,6 +35,9 @@ func TestPluginNativeInstall(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(root, ".commands", "index.json"), raw, 0o644)
 	}
 	write()
+	// NSS отдаёт временных пользователей systemd — служба с DynamicUser.
+	_ = os.MkdirAll(filepath.Join(root, "etc"), 0o755)
+	_ = os.WriteFile(filepath.Join(root, "etc/nsswitch.conf"), []byte("passwd:         files systemd\ngroup:          files systemd\n"), 0o644)
 	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -95,6 +98,19 @@ func TestPluginNativeInstall(t *testing.T) {
 		t.Fatalf("no docker group:\n%s", unit)
 	}
 	delete(req, "docker")
+	// Без модуля systemd в NSS ssh внутри плагина не узнает своего uid —
+	// постоянный пользователь nktp-<имя>.
+	_ = os.WriteFile(filepath.Join(root, "etc/nsswitch.conf"), []byte("passwd:         files\n"), 0o644)
+	if rec := call(s.handlePluginNativeInstall, req); rec.Code != 200 {
+		t.Fatalf("static user install: %d %s", rec.Code, rec.Body)
+	}
+	unit, _ = os.ReadFile(filepath.Join(root, "etc/systemd/system/nkt-plugin-dns.service"))
+	if strings.Contains(string(unit), "DynamicUser") || !strings.Contains(string(unit), "User=nktp-dns\nGroup=nktp-dns\n") || !strings.Contains(string(unit), "StateDirectory=nkt-plugin-dns") {
+		t.Fatalf("static user unit:\n%s", unit)
+	}
+	if got := pluginNativeUserName(strings.Repeat("a", 32)); len(got) > 32 || !strings.HasPrefix(got, "nktp-") {
+		t.Fatalf("long user name %q", got)
+	}
 	// Удаление.
 	if rec := call(s.handlePluginNativeRemove, map[string]string{"name": "dns"}); rec.Code != 200 {
 		t.Fatalf("remove: %d %s", rec.Code, rec.Body)
@@ -111,6 +127,20 @@ func TestPluginNativeInstall(t *testing.T) {
 		t.Fatalf("no docker: %d %s", rec.Code, rec.Body)
 	}
 	delete(req, "docker")
+	// useradd отказал — 500 с именем пользователя.
+	write()
+	idx := filepath.Join(root, ".commands", "index.json")
+	raw2, _ := os.ReadFile(idx)
+	failing := strings.Replace(string(raw2), `"match":["useradd","--system"],"stdout":""`, `"match":["useradd","--system"],"stdout":"","stderr":"useradd: cannot lock /etc/passwd","exit_code":1`, 1)
+	if failing == string(raw2) {
+		t.Fatal("useradd fixture not found")
+	}
+	_ = os.WriteFile(idx, []byte(failing), 0o644)
+	s = &Server{cfg: cfg, db: db, scanner: inventory.New(cfg, collect.NewFixtures(root), nil)}
+	req["env"] = map[string]string{"A": "b"}
+	if rec := call(s.handlePluginNativeInstall, req); rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "nktp-dns") || !strings.Contains(rec.Body.String(), "cannot lock") {
+		t.Fatalf("useradd failure: %d %s", rec.Code, rec.Body)
+	}
 	python = false
 	write()
 	s = &Server{cfg: cfg, db: db, scanner: inventory.New(cfg, collect.NewFixtures(root), nil)}

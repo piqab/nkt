@@ -757,8 +757,10 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 
 	// lxc из snap не запускается из песочницы юнита (snap-confine —
 	// setuid, а у юнита NoNewPrivileges): выполняется снаружи, как virsh.
+	// useradd/userdel пишут /etc/passwd — пользователь службы плагина хаба
+	// там, где systemd не отдаёт DynamicUser через NSS.
 	if cfg.Mode != config.ModeFixtures {
-		collect.SetEscape([]string{"lxc"}, func(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+		collect.SetEscape([]string{"lxc", "useradd", "userdel"}, func(ctx context.Context, argv ...string) (collect.CommandResult, error) {
 			return api.RunTooling(ctx, argv...)
 		})
 		// ufw пишет правила в /etc/ufw — у старых юнитов он под песочницей

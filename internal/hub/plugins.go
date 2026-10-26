@@ -228,11 +228,14 @@ type pluginJSON struct {
 	Native   string `json:"native,omitempty"`
 	Outdated bool   `json:"outdated,omitempty"`
 	// NeedsSettings — нет обязательной настройки (новая версия плагина).
-	NeedsSettings bool             `json:"needs_settings,omitempty"`
-	Author        string           `json:"author,omitempty"`
-	AddedAt       string           `json:"added_at,omitempty"`
-	Error         string           `json:"error,omitempty"`
-	Manifest      *plugin.Manifest `json:"manifest,omitempty"`
+	NeedsSettings bool `json:"needs_settings,omitempty"`
+	// NoSettings — у пакета плагина нет своих настроек (windows, mikrotik,
+	// connector: учётки устройств хранит хаб) — «Настроить» не нужна.
+	NoSettings bool             `json:"no_settings,omitempty"`
+	Author     string           `json:"author,omitempty"`
+	AddedAt    string           `json:"added_at,omitempty"`
+	Error      string           `json:"error,omitempty"`
+	Manifest   *plugin.Manifest `json:"manifest,omitempty"`
 }
 
 // handlePlugins — GET /hub/plugins: подключённые плагины с манифестами.
@@ -242,7 +245,7 @@ func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	for i, p := range list {
 		out[i] = pluginJSON{Name: p.Name, Host: p.Host, Port: p.Port, Pipeline: p.Pipeline, Title: p.Title, Version: p.Version,
-			Token: p.Token, Native: p.Native, Outdated: nativeOutdated(p), NeedsSettings: needsSettings(p), Author: p.Author, AddedAt: p.AddedAt}
+			Token: p.Token, Native: p.Native, Outdated: nativeOutdated(p), NeedsSettings: needsSettings(p), NoSettings: noSettings(p), Author: p.Author, AddedAt: p.AddedAt}
 		wg.Add(1)
 		go func(i int, p pluginConf) {
 			defer wg.Done()

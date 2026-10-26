@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -46,12 +49,18 @@ type pluginNativeReq struct {
 	Env map[string]string `json:"env,omitempty"`
 }
 
-func pluginNativeUnitText(name, run, file string, docker bool) string {
+// pluginNativeUnitText — юнит службы; user пусто — DynamicUser, иначе
+// постоянный системный пользователь (см. pluginNativeUser).
+func pluginNativeUnitText(name, run, file string, docker bool, user string) string {
 	groups := ""
 	if docker {
 		// Сокет Docker — группе docker: плагин управляет контейнерами
 		// (docker-mailserver). Это права root — хаб предупреждает до установки.
 		groups = "SupplementaryGroups=docker\n"
+	}
+	account := "DynamicUser=yes\n"
+	if user != "" {
+		account = "User=" + user + "\nGroup=" + user + "\n"
 	}
 	return fmt.Sprintf(`# nkt: плагин хаба %[1]s («О системе» → «Плагины»). Правит и удаляет хаб.
 [Unit]
@@ -62,8 +71,7 @@ Wants=network-online.target
 [Service]
 ExecStart=%[2]s %[3]s/%[1]s/%[4]s
 EnvironmentFile=%[5]s/%[1]s.env
-DynamicUser=yes
-# Свой каталог данных (профили connector и т. п.): systemd создаёт его и
+%[7]s# Свой каталог данных (профили connector и т. п.): systemd создаёт его и
 # передаёт путь в STATE_DIRECTORY; остальная система — только для чтения.
 StateDirectory=nkt-plugin-%[1]s
 %[6]sNoNewPrivileges=yes
@@ -77,7 +85,32 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-`, name, pluginNativeRuns[run], pluginNativeDir, file, pluginNativeEnv, groups)
+`, name, pluginNativeRuns[run], pluginNativeDir, file, pluginNativeEnv, groups, account)
+}
+
+// pluginNativeUser — системный пользователь службы плагина там, где
+// DynamicUser не годится: uid временного пользователя systemd без модуля
+// NSS «systemd» (libnss-systemd) ни на какое имя не отображается, и ssh
+// внутри плагина (windows, connector) падает с «No user exists for uid …».
+// Пусто — DynamicUser годится. Имя не длиннее 32 знаков (предел useradd).
+func pluginNativeUser(c collect.Collector, name string) string {
+	if raw, err := c.ReadFile("/etc/nsswitch.conf"); err == nil {
+		for _, line := range strings.Split(string(raw), "\n") {
+			if f := strings.Fields(line); len(f) > 1 && f[0] == "passwd:" && slices.Contains(f[1:], "systemd") {
+				return ""
+			}
+		}
+	}
+	return pluginNativeUserName(name)
+}
+
+func pluginNativeUserName(name string) string {
+	user := "nktp-" + name
+	if len(user) > 32 {
+		sum := sha256.Sum256([]byte(name))
+		user = user[:23] + "-" + hex.EncodeToString(sum[:4])
+	}
+	return user
 }
 
 // handlePluginNativeInstall — POST /plugins/native: поставить или обновить
@@ -152,7 +185,20 @@ func (s *Server) handlePluginNativeInstall(w http.ResponseWriter, r *http.Reques
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.nativeNoEnv", req.Name))
 		return
 	}
-	if err := c.WriteFile(unit, []byte(pluginNativeUnitText(req.Name, req.Run, req.File, req.Docker)), 0o644); err != nil {
+	user := pluginNativeUser(c, req.Name)
+	if user != "" {
+		if res, err := c.Run(ctx, "getent", "passwd", user); err != nil || !res.OK() {
+			res, err := c.Run(ctx, "useradd", "--system", "--user-group", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", user)
+			if err == nil && !res.OK() {
+				err = fmt.Errorf("%s", strings.TrimSpace(res.Output()))
+			}
+			if err != nil {
+				writeErr(w, r, http.StatusInternalServerError, msgs.Errorf("plugin.nativeUser", user, err))
+				return
+			}
+		}
+	}
+	if err := c.WriteFile(unit, []byte(pluginNativeUnitText(req.Name, req.Run, req.File, req.Docker, user)), 0o644); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
@@ -189,6 +235,11 @@ func (s *Server) handlePluginNativeRemove(w http.ResponseWriter, r *http.Request
 		_ = c.DeleteFile(p)
 	}
 	_, _ = c.Run(ctx, "systemctl", "daemon-reload")
+	// Пользователь службы, если его заводил хаб (без DynamicUser).
+	user := pluginNativeUserName(req.Name)
+	if res, err := c.Run(ctx, "getent", "passwd", user); err == nil && res.OK() {
+		_, _ = c.Run(ctx, "userdel", user)
+	}
 	// Каталог /opt/nkt-plugins под ProtectSystem=strict агента закрыт —
 	// RemoveAll удаляет его вне песочницы.
 	dir := pluginNativeDir + "/" + req.Name

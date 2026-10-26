@@ -67,7 +67,16 @@ Plugins → **Install on a host** → the plugin, the host and its settings
   `/opt/nkt-plugins/<name>/`, the settings into
   `/etc/nkt-plugins/<name>.env` (`0600`, root only, no config history), a
   `nkt-plugin-<name>.service` unit: a separate user (`DynamicUser`),
-  `ProtectSystem=strict`, listening on `127.0.0.1` only.
+  `ProtectSystem=strict`, listening on `127.0.0.1` only. If the host's
+  `/etc/nsswitch.conf` lacks the `systemd` module (the `libnss-systemd`
+  package), a systemd dynamic user maps to no name, and `ssh` inside the
+  plugin (Windows, connector) fails with “No user exists for uid …”. The
+  hub then creates a permanent system user `nktp-<name>` with no login and
+  no home and removes it together with the plugin. An installed plugin
+  switches to it on “Update on the host”.
+- The agent creates and removes the plugin directories in
+  `/opt/nkt-plugins` outside its sandbox, the way it writes configs —
+  `/opt` is read-only for the nkt service.
 - Secrets (tokens from the form and the signing secret the hub creates
   itself) don't go into the job parameters: a one-time in-memory store on
   the hub, 15 minutes.
@@ -75,7 +84,9 @@ Plugins → **Install on a host** → the plugin, the host and its settings
 - The plugin connects to the hub by itself. Update on the host — the
   hub's version of the plugin file and a restart (settings stay); Remove
   from the host — the service, files and the connection.
-- **Settings** — the same fields as at install (token, address, zones…),
+- **Settings** — plugins without settings of their own (Windows,
+  MikroTik, connector: the hub keeps the device logins) have no such
+  button. The rest — the same fields as at install (token, address, zones…),
   without reinstalling. The hub reads ordinary values from the host;
   secrets are shown to no one: “set” and a Replace field (empty keeps the
   current one). Check — a diff; Save — as a job: the settings file and a
