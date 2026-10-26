@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/netip"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,6 +39,9 @@ type tokenReq struct {
 
 // validate — проверка и приведение полей; хосты и группы — только
 // существующие.
+// flyDomainRe — домен своих маршрутов Fly: имена DNS без звёздочки.
+var flyDomainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
+
 func (s *Server) validateTokenReq(r *http.Request, req *tokenReq) error {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || utf8.RuneCountInString(req.Name) > 64 || strings.ContainsAny(req.Name, "\n\r\t") {
@@ -400,10 +404,20 @@ func (s *Server) validateTokenPerms(ctx context.Context, p *store.TokenPerms) er
 	if slices.Contains(acts, store.TokenActK8sApply) && len(nss) == 0 {
 		return bad("namespaces")
 	}
+	p.FlyDomain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(p.FlyDomain), "."))
+	if p.FlyDomain != "" && (!flyDomainRe.MatchString(p.FlyDomain) || !strings.Contains(p.FlyDomain, ".")) {
+		return bad("fly_domain")
+	}
+	if slices.Contains(acts, store.TokenActFlyOwn) && p.FlyDomain == "" {
+		return bad("fly_domain")
+	}
+	if p.FlyGateway < 0 {
+		return bad("fly_gateway")
+	}
 	l := p.Limits
 	if l.CPU < 0 || l.CPU > 4096 || l.HostCPU < 0 || l.HostCPU > 4096 || l.ServiceCPU < 0 || l.ServiceCPU > 1024 || l.K8sCPU < 0 || l.K8sCPU > 4096 ||
 		l.MemMB < 0 || l.HostMemMB < 0 || l.ServiceMemMB < 0 || l.K8sMemMB < 0 || l.DiskGB < 0 || l.K8sStorageGB < 0 || l.MinFreeGB < 0 ||
-		l.VMs < 0 || l.VMs > 1000 || l.VMCPU < 0 || l.VMCPU > 512 || l.VMMemMB < 0 || l.VMDiskGB < 0 || l.VMSnapshots < 0 || l.VMSnapshots > 100 || l.K8sPods < 0 || l.DeploysPerHour < 0 || l.DeploysPerHour > 10000 {
+		l.VMs < 0 || l.VMs > 1000 || l.VMCPU < 0 || l.VMCPU > 512 || l.VMMemMB < 0 || l.VMDiskGB < 0 || l.VMSnapshots < 0 || l.VMSnapshots > 100 || l.Ports < 0 || l.Ports > 1000 || l.FlyRoutes < 0 || l.FlyRoutes > 1000 || l.K8sPods < 0 || l.DeploysPerHour < 0 || l.DeploysPerHour > 10000 {
 		return bad("limits")
 	}
 	if slices.Contains(acts, store.TokenActPipelineDeploy) && (l.CPU > 0 || l.HostCPU > 0) && l.ServiceCPU == 0 {

@@ -74,6 +74,8 @@ admin token or a token by permission (within its limits).
 | `pipeline_power` | admin | stop a deployment or bring up the same version (`action`: `stop` / `start`) |
 | `create_vm`, `vm_power` | admin | a machine on a host from a cloud image (own `user_data` — `#cloud-config`); start, shut down, force off, reboot (a token by permission — its own, within limits) |
 | `vm_snapshots`, `vm_snapshot`, `vm_snapshot_revert`, `vm_snapshot_delete` | admin | machine snapshots: list, take, revert, delete (a token — up to its snapshots-per-machine limit) |
+| `vm_ports`, `vm_port_open`, `vm_port_close` | admin | host pool ports to a machine (TCP/UDP; the machine's address is pinned); a token — the “ports” action, within its ports limit |
+| `fly_own_routes`, `fly_own_add`, `fly_own_remove` | token by permission | own Traffic Fly routes: HTTPS by name in the assigned domain to its machine |
 | `vm_resize`, `vm_reinstall`, `vm_delete` | admin | vCPU, memory and disk (the disk only grows); reinstall from an image (a job); delete the machine with its disks and record (a job) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |
 | `fly_apply`, `fly_ops` | admin, no limit | apply the map, point edits of targets |

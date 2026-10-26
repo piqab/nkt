@@ -1473,6 +1473,10 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 			fail(w, r, err)
 			return
 		}
+		if opts.VM && host.ParentID != 0 {
+			s.releaseVMPorts(r.Context(), host)
+			s.releaseVMFly(r.Context(), host)
+		}
 		user := auth.Username(r.Context())
 		jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
 			Kind: KindHostPurge, TitleKey: "hub.hostPurgeJob", TitleArgs: []any{host.Name},

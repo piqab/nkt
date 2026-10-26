@@ -505,3 +505,26 @@ func TestReinstall(t *testing.T) {
 		t.Fatal("touched a foreign domain")
 	}
 }
+
+// Закреплённый адрес: бронь DHCP по MAC интерфейса в сети libvirt;
+// уже есть — замена; адреса нет — ошибка без net-update.
+func TestFixAddress(t *testing.T) {
+	esc := &fakeEscape{out: map[string]string{
+		"virsh domstate app1":                     "running\n",
+		"virsh domiflist app1":                    " Interface  Type     Source   Model    MAC\n vnet0      network  nkt-t3   virtio   52:54:00:aa:bb:cc\n",
+		"virsh domifaddr app1 --source lease":     " Name   MAC address          Protocol     Address\n vnet0  52:54:00:aa:bb:cc    ipv4         192.168.130.10/24\n",
+		"virsh net-update nkt-t3 add-last":        "",
+	}}
+	r := testRunner(t, esc)
+	ip, err := r.FixAddress(context.Background(), "app1")
+	if err != nil || ip != "192.168.130.10" {
+		t.Fatalf("%q %v", ip, err)
+	}
+	if j := strings.Join(esc.calls, "\n"); !strings.Contains(j, "net-update nkt-t3 add-last ip-dhcp-host <host mac='52:54:00:aa:bb:cc' name='app1' ip='192.168.130.10'/> --live --config") {
+		t.Fatalf("calls:\n%s", j)
+	}
+	esc2 := &fakeEscape{out: map[string]string{"virsh domstate app1": "running\n", "virsh domiflist app1": esc.out["virsh domiflist app1"]}}
+	if _, err := testRunner(t, esc2).FixAddress(context.Background(), "app1"); err == nil || strings.Contains(strings.Join(esc2.calls, "\n"), "net-update") {
+		t.Fatalf("no address: %v", err)
+	}
+}

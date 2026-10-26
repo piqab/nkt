@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Checkbox, Collapse, InputNumber, Select, Space, Typography } from 'antd'
+import { Button, Checkbox, Collapse, Input, InputNumber, Select, Space, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Loading } from './ui'
@@ -26,6 +26,8 @@ export interface TokenLimits {
   vm_mem_mb?: number
   vm_disk_gb?: number
   vm_snapshots?: number
+  ports?: number
+  fly_routes?: number
   k8s_cpu?: number
   k8s_mem_mb?: number
   k8s_storage_gb?: number
@@ -39,6 +41,8 @@ export interface TokenPerms {
   scripts?: string[]
   clusters?: string[]
   namespaces?: string[]
+  fly_domain?: string
+  fly_gateway?: number
   limits: TokenLimits
 }
 
@@ -55,6 +59,9 @@ export const TOKEN_ACTIONS = [
   'migrate',
   'fail2ban.manage',
   'vuln.scan',
+  'k8s.cluster',
+  'vm.ports',
+  'fly.own',
 ]
 
 export function emptyPerms(): TokenPerms {
@@ -64,12 +71,14 @@ export function emptyPerms(): TokenPerms {
 type T = (k: string, o?: Record<string, unknown>) => string
 
 // Поля потолков по группам: ключ, шаг, единица.
-const LIMIT_GROUPS: { key: string; fields: { k: keyof TokenLimits; step: number; unit: string }[] }[] = [
+// zero — пустое значение значит «нельзя», а не «без потолка».
+const LIMIT_GROUPS: { key: string; fields: { k: keyof TokenLimits; step: number; unit: string; zero?: boolean }[] }[] = [
   { key: 'total', fields: [{ k: 'cpu', step: 0.5, unit: 'cpu' }, { k: 'mem_mb', step: 256, unit: 'mb' }, { k: 'disk_gb', step: 10, unit: 'gb' }] },
   { key: 'host', fields: [{ k: 'host_cpu', step: 0.5, unit: 'cpu' }, { k: 'host_mem_mb', step: 256, unit: 'mb' }] },
   { key: 'service', fields: [{ k: 'service_cpu', step: 0.25, unit: 'cpu' }, { k: 'service_mem_mb', step: 128, unit: 'mb' }, { k: 'min_free_gb', step: 5, unit: 'gb' }] },
-  { key: 'vm', fields: [{ k: 'vms', step: 1, unit: 'count' }, { k: 'vm_cpu', step: 1, unit: 'cpu' }, { k: 'vm_mem_mb', step: 512, unit: 'mb' }, { k: 'vm_disk_gb', step: 10, unit: 'gb' }, { k: 'vm_snapshots', step: 1, unit: 'count' }] },
+  { key: 'vm', fields: [{ k: 'vms', step: 1, unit: 'count' }, { k: 'vm_cpu', step: 1, unit: 'cpu' }, { k: 'vm_mem_mb', step: 512, unit: 'mb' }, { k: 'vm_disk_gb', step: 10, unit: 'gb' }, { k: 'vm_snapshots', step: 1, unit: 'count', zero: true }, { k: 'ports', step: 1, unit: 'count', zero: true }] },
   { key: 'k8s', fields: [{ k: 'k8s_cpu', step: 0.5, unit: 'cpu' }, { k: 'k8s_mem_mb', step: 256, unit: 'mb' }, { k: 'k8s_storage_gb', step: 5, unit: 'gb' }, { k: 'k8s_pods', step: 1, unit: 'count' }] },
+  { key: 'fly', fields: [{ k: 'fly_routes', step: 1, unit: 'count', zero: true }] },
   { key: 'rate', fields: [{ k: 'deploys_per_hour', step: 1, unit: 'count' }] },
 ]
 
@@ -97,6 +106,7 @@ export function permsText(p: TokenPerms, t: T): string[] {
   if (p.scripts?.length) out.push(`${t('tokens.scripts')}: ${p.scripts.join(', ')}`)
   if (p.clusters?.length) out.push(`${t('tokens.clusters')}: ${p.clusters.join(', ')}`)
   if (p.namespaces?.length) out.push(`${t('tokens.namespaces')}: ${p.namespaces.join(', ')}`)
+  if (p.fly_domain) out.push(`${t('tokens.flyDomain')}: ${p.fly_domain}${p.fly_gateway ? ` (${t('tokens.flyGateway')} ${p.fly_gateway})` : ''}`)
   for (const g of LIMIT_GROUPS) {
     for (const f of g.fields) {
       const v = p.limits[f.k]
@@ -113,6 +123,7 @@ export function TokenPermsEditor({ perms, onChange, onRole }: { perms: TokenPerm
   const clusters = useApi<{ clusters: { name: string }[] } | { name: string }[]>('/hub/clusters')
   // Действия подключённых плагинов: plugin.<имя>.
   const plugins = useApi<{ plugins: { name: string }[] }>('/hub/plugins')
+  const edges = useApi<{ edges: { id: number; address?: string; domain?: string; roles: string[] }[] }>(perms.actions.includes('fly.own') ? '/hub/edges' : null)
   const actions = [...TOKEN_ACTIONS, ...(plugins.data?.plugins ?? []).map((p) => `plugin.${p.name}`)]
   const clusterNames = (() => {
     const d = clusters.data
@@ -169,6 +180,26 @@ export function TokenPermsEditor({ perms, onChange, onRole }: { perms: TokenPerm
           </label>
         </>
       )}
+      {has('fly.own') && (
+        <>
+          <label className="small">
+            {t('tokens.flyDomain')}
+            <Input value={perms.fly_domain ?? ''} placeholder="client.example.com" onChange={(e) => onChange({ ...perms, fly_domain: e.target.value })} />
+            <span className="muted">{t('tokens.flyDomainHint')}</span>
+          </label>
+          <label className="small">
+            {t('tokens.flyGateway')}
+            <Select
+              allowClear
+              style={{ width: '100%' }}
+              value={perms.fly_gateway || undefined}
+              placeholder={t('tokens.flyGatewayAuto')}
+              onChange={(v?: number) => onChange({ ...perms, fly_gateway: v ?? 0 })}
+              options={(edges.data?.edges ?? []).filter((e) => e.roles.includes('fly')).map((e) => ({ value: e.id, label: e.domain || e.address || `#${e.id}` }))}
+            />
+          </label>
+        </>
+      )}
       <div className="small">{t('tokens.limits')}</div>
       <span className="small muted">{t('tokens.limitsHint')}</span>
       {LIMIT_GROUPS.map((g) => (
@@ -178,7 +209,7 @@ export function TokenPermsEditor({ perms, onChange, onRole }: { perms: TokenPerm
             {g.fields.map((f) => (
               <label key={f.k} className="small" style={{ display: 'inline-flex', flexDirection: 'column' }}>
                 {t(`tokens.limit.${f.k}`)}
-                <InputNumber min={0} step={f.step} value={perms.limits[f.k] ?? null} placeholder="∞" onChange={(v) => setLimit(f.k, v)} style={{ width: 130 }} addonAfter={t(`tokens.unit.${f.unit}`)} />
+                <InputNumber min={0} step={f.step} value={perms.limits[f.k] ?? null} placeholder={f.zero ? '0' : '∞'} onChange={(v) => setLimit(f.k, v)} style={{ width: 130 }} addonAfter={t(`tokens.unit.${f.unit}`)} />
               </label>
             ))}
           </Space>

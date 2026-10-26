@@ -13,6 +13,11 @@ echo 1 > /proc/sys/net/ipv4/ip_forward
 ip netns add vm && ip link add vmh type veth peer name vmg && ip link set vmg netns vm
 ip link set vmh master virbr5 && ip link set vmh up
 ip netns exec vm sh -c 'ip link set lo up; ip addr add 192.168.5.10/24 dev vmg; ip link set vmg up; ip route add default via 192.168.5.1'
+# Машина другого токена — в своём мосту virbr6.
+ip link add virbr6 type bridge && ip addr add 192.168.6.1/24 dev virbr6 && ip link set virbr6 up
+ip netns add vm2 && ip link add vm2h type veth peer name vm2g && ip link set vm2g netns vm2
+ip link set vm2h master virbr6 && ip link set vm2h up
+ip netns exec vm2 sh -c 'ip link set lo up; ip addr add 192.168.6.11/24 dev vm2g; ip link set vm2g up; ip route add default via 192.168.6.1'
 ip netns add lan && ip link set lan1 netns lan
 ip netns exec lan sh -c 'ip link set lo up; ip addr add 10.9.0.2/24 dev lan1; ip link set lan1 up; ip route add default via 10.9.0.1'
 L='import socket,sys
@@ -33,6 +38,19 @@ echo "vm -> host lan ip 10.9.0.1:22   : $(pr vm 10.9.0.1 22) want closed"
 echo "vm -> lan 10.9.0.2:80           : $(pr vm 10.9.0.2 80) want closed"
 echo "lan -> vm 192.168.5.10:8080     : $(pr lan 192.168.5.10 8080) want closed"
 echo "host -> vm 192.168.5.10:8080    : $(python3 -c "$P" 192.168.5.10 8080) want open"
+# Проброс порта хоста (DNAT, как пул портов и Traffic Fly): снаружи —
+# проходит; из сети токена через тот же порт хоста — нет.
+nft -f - <<'NFT'
+table ip pf {
+	chain pre {
+		type nat hook prerouting priority dstnat;
+		tcp dport 2222 dnat to 192.168.5.10:8080
+	}
+}
+NFT
+echo "lan -> host:2222 (dnat to vm)   : $(pr lan 10.9.0.1 2222) want open"
+echo "vm2 (other token) -> host:2222  : $(pr vm2 10.9.0.1 2222) want closed"
+echo "vm2 (other token) -> vm 8080    : $(pr vm2 192.168.5.10 8080) want closed"
 nft delete table inet nkt_isolation
 echo "без правил vm -> lan 10.9.0.2:80 : $(pr vm 10.9.0.2 80) want open"
 echo "без правил vm -> host 22         : $(pr vm 192.168.5.1 22) want open"

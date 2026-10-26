@@ -531,3 +531,19 @@ func (s *Server) handleVMReinstall(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }
+
+// handleVMFixAddress закрепляет текущий адрес машины (бронь DHCP).
+func (s *Server) handleVMFixAddress(w http.ResponseWriter, r *http.Request) {
+	if s.vmimages == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.machineManagementUnavailable"))
+		return
+	}
+	name := chi.URLParam(r, "name")
+	ip, err := vmcreate.NewCreateRunner(s.vmimages, s.scanner.Collector(), RunTooling).FixAddress(r.Context(), name)
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "vm.fix_address", name, map[bool]string{true: "ok", false: "error"}[err == nil], ip)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"address": ip})
+}

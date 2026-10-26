@@ -432,6 +432,13 @@ var tokenHubRoutes = map[string]string{
 	"POST /hub/hosts/{id}/vm/resize":                  store.TokenActVMManage,
 	"POST /hub/hosts/{id}/vm/reinstall":               store.TokenActVMManage,
 	"DELETE /hub/hosts/{id}/vm":                       store.TokenActVMManage,
+	// Порты из пула хоста на свои машины; свои маршруты Traffic Fly.
+	"GET /hub/hosts/{id}/vm/ports":           store.TokenActVMPorts,
+	"POST /hub/hosts/{id}/vm/ports":          store.TokenActVMPorts,
+	"DELETE /hub/hosts/{id}/vm/ports/{port}": store.TokenActVMPorts,
+	"GET /hub/own/fly":                       store.TokenActFlyOwn,
+	"POST /hub/own/fly":                      store.TokenActFlyOwn,
+	"DELETE /hub/own/fly/{route}":            store.TokenActFlyOwn,
 }
 
 // tokenHostAction — запись в разделы хоста через прокси: какое действие

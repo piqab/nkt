@@ -4252,6 +4252,10 @@
     "clusters": "Clusters",
     "namespaces": "k8s namespaces",
     "namespacesHint": " — the token applies manifests only there; the hub puts a quota and limits there",
+    "flyDomain": "Domain for own Traffic Fly routes",
+    "flyDomainHint": " — the domain itself and names under it; a route is HTTPS with a certificate on the gateway, the target is an own machine",
+    "flyGateway": "Gateway",
+    "flyGatewayAuto": "the only Fly gateway",
     "allInScope": "all within the token's hosts",
     "act": {
       "pipeline.deploy": "deploy, roll back, dry run",
@@ -4267,6 +4271,8 @@
       "fly.manage": "Traffic Fly routes",
       "migrate": "stack moves",
       "fail2ban.manage": "fail2ban bans",
+      "vm.ports": "host pool ports to its own machines",
+      "fly.own": "own Traffic Fly routes (in the assigned domain)",
       "vuln.scan": "vulnerability scans"
     },
     "limits": "Limits",
@@ -4277,6 +4283,7 @@
       "service": "Compose service (gets this limit without its own limits)",
       "vm": "Machines",
       "k8s": "k8s namespace quota",
+      "fly": "Own Traffic Fly routes",
       "rate": "Rate"
     },
     "limit": {
@@ -4293,6 +4300,8 @@
       "vm_mem_mb": "Memory each",
       "vm_disk_gb": "Disk each",
       "vm_snapshots": "Snapshots per machine (empty — none)",
+      "ports": "Pool ports (empty — none)",
+      "fly_routes": "Routes (empty — none)",
       "k8s_cpu": "CPU",
       "k8s_mem_mb": "Memory",
       "k8s_storage_gb": "Storage",
@@ -5472,5 +5481,14 @@
     "saved": "saved",
     "connSaved": "Checked and saved: {{info}}",
     "checkSave": "Check and save"
+  },
+  "portPool": {
+    "button": "Port pool",
+    "title": "Port pool — {{name}}",
+    "hint": "Owners of this host's machines (an administrator or a token “by permission” with the “ports” action) take a host port from the pool to their machine: TCP or UDP, the machine's address is pinned. 1024–65535, up to 10,000 ports, not overlapping the Traffic Fly service ports (40000–41999).",
+    "range": "{{from}}–{{to}}",
+    "off": "no pool",
+    "turnOff": "Turn off",
+    "used": "Ports given out: {{count}} (turning the pool off does not close them)"
   }
 }

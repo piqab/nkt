@@ -317,6 +317,9 @@ func (s *Server) handleVMDeleteHub(w http.ResponseWriter, r *http.Request) {
 
 // startVMDelete ставит задание удаления машины целиком.
 func (s *Server) startVMDelete(ctx context.Context, vm store.Host, author string) (int64, error) {
+	// Порты и маршруты Fly токенов на эту машину — до её удаления.
+	s.releaseVMPorts(ctx, vm)
+	s.releaseVMFly(ctx, vm)
 	return s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindHostPurge, TitleKey: "hub.hostPurgeJob", TitleArgs: []any{vm.Name},
 		Queue: "host-install:" + strconv.FormatInt(vm.ID, 10), Author: author, Steps: 2,

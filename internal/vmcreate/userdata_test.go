@@ -11,12 +11,12 @@ import (
 // складываются с пакетами nkt; учётная запись и ключ хаба остаются.
 func TestUserDataMerge(t *testing.T) {
 	for text, bad := range map[string]bool{
-		"#cloud-config\nruncmd: [\"echo hi\"]\n":         false,
-		"#!/bin/sh\necho hi\n":                           true,
-		"#include\nhttps://example.com/x\n":              true,
-		"#cloud-config\nusers: []\n":                     true,
-		"#cloud-config\nssh_authorized_keys: [\"x\"]\n":  true,
-		"#cloud-config\n- a\n":                           true,
+		"#cloud-config\nruncmd: [\"echo hi\"]\n":        false,
+		"#!/bin/sh\necho hi\n":                          true,
+		"#include\nhttps://example.com/x\n":             true,
+		"#cloud-config\nusers: []\n":                    true,
+		"#cloud-config\nssh_authorized_keys: [\"x\"]\n": true,
+		"#cloud-config\n- a\n":                          true,
 		"#cloud-config\n" + strings.Repeat("#", 70<<10): true,
 	} {
 		if _, err := CheckUserData(text); (err != nil) != bad {

@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.5 — 2026-10-26
+
+- **Host ports to machines.** An administrator sets a host's port pool: “Hosts” → “Port pool”. There is no pool by default.
+  - A machine's owner takes a host port from the pool to the machine, TCP or UDP. A token needs the “ports” action and stays within a new “pool ports” limit (empty — none).
+  - The machine's address is pinned with a DHCP reservation, the rule is DNAT on the host.
+  - Token network isolation holds: another token's machine cannot get in through that host port. This was checked on live traffic.
+- **Own Traffic Fly routes for a token.** A new “own Traffic Fly routes” action and a domain in the token's permissions.
+  - The token publishes its machine by a name in that domain: HTTPS with a certificate on the gateway.
+  - A new “routes” limit; a taken name is refused. With a DNS plugin connected, the record is set automatically.
+  - The token neither sees nor edits the whole Fly map and can remove only its own route.
+- Deleting a machine releases its ports and token routes.
+- **MCP:** `vm_ports`, `vm_port_open`, `vm_port_close`, `fly_own_routes`, `fly_own_add`, `fly_own_remove`.
+- The token permissions window now shows the “own Kubernetes cluster” action: it was added on the server in 1.17.2 but was missing from the window.
+
 ## v1.17.4 — 2026-10-26
 
 - **A machine's full lifecycle through the hub** — for an administrator and for a token “by permission” with the “machines” action (its own machines only, within its limits):
