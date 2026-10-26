@@ -1,0 +1,15 @@
+{
+  "name": "home-assistant",
+  "version": "1.0.0",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
+  "title": {"ru": "Home Assistant", "en": "Home Assistant"},
+  "description": {
+    "ru": "Home Assistant как хост nkt: «Хосты» → «Добавить устройство» → «Home Assistant» (адрес и долгоживущий токен). Версия, области, интеграции, автоматизации; находки — недоступные устройства, разряженные батареи, обновления, давно нет резервной копии; конфигурация (какие сущности и интеграции) с диффом; перезапуск, установка обновлений, сценарии и автоматизации; вызов служб HA в сценариях и MCP. Ставится на машину хаба или любой хост, откуда виден Home Assistant.",
+    "en": "Home Assistant as an nkt host: Hosts → Add a device → “Home Assistant” (address and a long-lived token). Version, areas, integrations, automations; findings — unavailable devices, low batteries, updates, no recent backup; configuration (which entities and integrations) with a diff; restart, installing updates, scripts and automations; calling HA services in scripts and MCP. Installed on the hub machine or any host Home Assistant is reachable from."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9260,
+  "settings": []
+}

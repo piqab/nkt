@@ -97,3 +97,15 @@ func TestWindowsPluginPython(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+// Плагин Home Assistant — против поддельного REST API Home Assistant.
+func TestHomeAssistantPluginPython(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	out, err := exec.Command(py, "-I", "home-assistant/deploy/test_plugin.py").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
