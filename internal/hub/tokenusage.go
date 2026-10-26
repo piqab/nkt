@@ -97,7 +97,73 @@ type tokenUsageView struct {
 		MemMB  int64   `json:"mem_mb"`
 		DiskGB int64   `json:"disk_gb"`
 		VMs    int     `json:"vms"`
+		// Порты пула, свои маршруты Fly, namespace и кластеры (1.17.10).
+		Ports      int `json:"ports"`
+		FlyRoutes  int `json:"fly_routes"`
+		Namespaces int `json:"k8s_namespaces"`
+		Clusters   int `json:"k8s_clusters"`
 	} `json:"used"`
+	// Actions и FlyDomain — что токену можно (для самого клиента).
+	Actions   []string `json:"actions,omitempty"`
+	FlyDomain string   `json:"fly_domain,omitempty"`
+}
+
+// tokenUsageViewFor — «занято из» токена со сверкой.
+func (s *Server) tokenUsageViewFor(ctx context.Context, t store.APIToken) (tokenUsageView, error) {
+	s.reconcileTokenUsage(ctx)
+	usage, err := s.db.ListTokenUsage(ctx, t.ID)
+	if err != nil {
+		return tokenUsageView{}, err
+	}
+	v := tokenUsageView{Limits: t.Perms.Limits, Usage: usage, Actions: t.Perms.Actions, FlyDomain: t.Perms.FlyDomain}
+	if v.Usage == nil {
+		v.Usage = []store.TokenUsage{}
+	}
+	for _, u := range usage {
+		v.Used.CPU += u.CPU
+		v.Used.MemMB += u.MemMB
+		v.Used.DiskGB += u.DiskGB
+		if u.Kind == store.UsageVM {
+			v.Used.VMs++
+		}
+	}
+	for _, a := range s.portAllocs(ctx) {
+		if a.Token == t.Name {
+			v.Used.Ports++
+		}
+	}
+	for _, r := range s.flyDoc(ctx).Routes {
+		if strings.HasPrefix(r.ID, ownFlyPrefix(t)) {
+			v.Used.FlyRoutes++
+		}
+	}
+	for _, o := range s.ownNamespaces(ctx) {
+		if o.TokenID == t.ID {
+			v.Used.Namespaces++
+		}
+	}
+	for _, o := range s.ownClusters(ctx) {
+		if o.TokenID == t.ID {
+			v.Used.Clusters++
+		}
+	}
+	return v, nil
+}
+
+// handleTokenSelfUsage — GET /hub/tokens/self/usage: «занято из» своего
+// токена — для клиента (и MCP my_usage).
+func (s *Server) handleTokenSelfUsage(w http.ResponseWriter, r *http.Request) {
+	t, ok := tokenFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "auth.tokenOnly"))
+		return
+	}
+	v, err := s.tokenUsageViewFor(r.Context(), t)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }
 
 // handleTokenUsage — GET /hub/tokens/{id}/usage (со сверкой).
@@ -112,20 +178,10 @@ func (s *Server) handleTokenUsage(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	s.reconcileTokenUsage(r.Context())
-	usage, err := s.db.ListTokenUsage(r.Context(), id)
+	v, err := s.tokenUsageViewFor(r.Context(), t)
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
-	}
-	v := tokenUsageView{Limits: t.Perms.Limits, Usage: usage}
-	for _, u := range usage {
-		v.Used.CPU += u.CPU
-		v.Used.MemMB += u.MemMB
-		v.Used.DiskGB += u.DiskGB
-		if u.Kind == store.UsageVM {
-			v.Used.VMs++
-		}
 	}
 	writeJSON(w, http.StatusOK, v)
 }

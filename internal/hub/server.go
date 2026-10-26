@@ -294,6 +294,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/ai/answers", s.handleAIAnswers)
 				// Traffic Fly: карту и конфигурацию видит любой вошедший;
 				// IP клиентов — только администратор (handleFlyStatus).
+				r.Get("/hub/tokens/self/usage", s.handleTokenSelfUsage)
 				r.Get("/hub/fly", s.handleFly)
 				r.Get("/hub/fly/status", s.handleFlyStatus)
 				r.Get("/hub/fly/versions", s.handleFlyVersions)

@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.10 — 2026-10-26
+
+- **The client sees its own limits.** `GET /api/hub/tokens/self/usage` and the MCP tool `my_usage` (for any token) show the token's limits and usage: CPU, memory, disk, machines, pool ports, own Fly routes, namespaces and clusters. The usage rows and allowed actions are there too.
+- The administrator's token window now also shows the counters of ports, Fly routes, namespaces and clusters.
+
 ## v1.17.9 — 2026-10-26
 
 - **A token's own cluster.** With the “own Kubernetes cluster” action and a new “own clusters” limit (empty — none) a token creates k3s on its own machines.
