@@ -76,6 +76,8 @@ admin token or a token by permission (within its limits).
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |
 | `fly_apply`, `fly_ops` | admin, no limit | apply the map, point edits of targets |
 | `manifest_diff`, `manifest_apply` | admin | a manifest to clusters |
+| `device_snapshot`, `device_findings`, `device_config` | read | a [plugin host](/en/guide/hub-plugin-hosts) (MikroTik, Windows…): inventory, findings, configuration versions (`fresh` — read the device now) |
+| `device_action`, `device_exec` | admin | an action of the plugin host's type (reboot, update…) and a command in its language (RouterOS, PowerShell); `dry_run` — only say what would happen |
 | `service_action`, `container_action` | admin | start / stop / restart services and containers |
 | `fail2ban_ban` | admin | ban / unban addresses on hosts |
 

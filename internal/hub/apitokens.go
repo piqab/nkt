@@ -401,7 +401,17 @@ var tokenHubRoutes = map[string]string{
 	// (проверяет handlePluginCall по манифесту).
 	"GET /hub/plugins":               "",
 	"GET /hub/plugins/{name}/agents": "",
-	"POST /hub/plugins/{name}/call":  "",
+	// Хосты плагинов: смотреть; действия и команды — с действием
+	// plugin.<имя> (проверяет обработчик), хост — в пределах токена.
+	"GET /hub/plugin-hosts/types":         "",
+	"GET /hub/plugin-hosts/{id}":          "",
+	"GET /hub/plugin-hosts/{id}/snapshot": "",
+	"GET /hub/plugin-hosts/{id}/findings": "",
+	"GET /hub/plugin-hosts/{id}/metrics":  "",
+	"GET /hub/plugin-hosts/{id}/config":   "",
+	"POST /hub/plugin-hosts/{id}/action":  "",
+	"POST /hub/plugin-hosts/{id}/exec":    "",
+	"POST /hub/plugins/{name}/call":       "",
 	// Кластеры: смотреть и применять манифесты; создание, удаление,
 	// обновление, kubeconfig и Helm — нет.
 	"GET /hub/clusters":             "",
@@ -546,7 +556,7 @@ func (s *Server) hostGroups(ctx context.Context) map[int64]string { return s.hub
 
 func (m *Manager) hostGroups(ctx context.Context) map[int64]string {
 	out := map[int64]string{}
-	hosts, err := m.db.ListHosts(ctx)
+	hosts, err := m.db.ListAllHosts(ctx)
 	if err != nil {
 		return out
 	}

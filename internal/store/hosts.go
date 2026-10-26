@@ -134,6 +134,68 @@ type Host struct {
 	// use, except this one is actually enforced after the first sighting
 	// instead of trusted forever.
 	TunnelCertSHA256 []byte `json:"-"`
+
+	// Kind — HostKindPlugin: устройство, которое читает и которым управляет
+	// плагин хаба (MikroTik, Windows, облачная ВМ…), без агента nkt. Пусто —
+	// обычный хост с агентом. ListHosts таких не отдаёт — у них нет агента,
+	// и всё, что ходит к агенту, их не видит; ListPluginHosts — только они.
+	Kind string `json:"kind,omitempty"`
+	// Plugin, PluginType — плагин в хабе и тип устройства из его манифеста.
+	Plugin     string `json:"plugin,omitempty"`
+	PluginType string `json:"plugin_type,omitempty"`
+	// ConnEnc — поля подключения из формы «Добавить хост» (адрес, логин,
+	// пароль…), JSON под мастер-ключом хаба: плагину — в каждом вызове.
+	ConnEnc []byte `json:"-"`
+}
+
+// HostKindPlugin — хост плагина (Host.Kind).
+const HostKindPlugin = "plugin"
+
+// IsPlugin — хост плагина, без агента nkt.
+func (h Host) IsPlugin() bool { return h.Kind == HostKindPlugin }
+
+// CreatePluginHost — хост плагина: устройство с учётками подключения
+// (connEnc — зашифрованный JSON), сразу «online» — «Проверить» прошло.
+func (d *DB) CreatePluginHost(ctx context.Context, name, addr, group, plugin, pluginType string, connEnc []byte) (int64, error) {
+	res, err := d.ExecContext(ctx,
+		`INSERT INTO hosts(name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc, status, created_at, group_name, kind, plugin, plugin_type, conn_enc)
+		 VALUES(?, ?, 0, '', ?, X'', ?, ?, ?, ?, ?, ?, ?)`,
+		name, addr, HostAuthPassword, HostStatusOnline, Now(), group, HostKindPlugin, plugin, pluginType, connEnc)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// SetPluginHostConn — новые поля подключения хоста плагина (и адрес).
+func (d *DB) SetPluginHostConn(ctx context.Context, id int64, addr string, connEnc []byte) error {
+	_, err := d.ExecContext(ctx, `UPDATE hosts SET addr = ?, conn_enc = ? WHERE id = ? AND kind = ?`, addr, connEnc, id, HostKindPlugin)
+	return err
+}
+
+// ListPluginHosts — хосты плагинов (без агента nkt), по имени.
+func (d *DB) ListPluginHosts(ctx context.Context) ([]Host, error) {
+	return d.listHosts(ctx, `kind = '`+HostKindPlugin+`'`)
+}
+
+// ListAllHosts — все хосты: с агентом и хосты плагинов.
+func (d *DB) ListAllHosts(ctx context.Context) ([]Host, error) { return d.listHosts(ctx, `1 = 1`) }
+
+func (d *DB) listHosts(ctx context.Context, where string) ([]Host, error) {
+	rows, err := d.QueryContext(ctx, `SELECT `+hostColumns+` FROM hosts WHERE `+where+` ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Host{}
+	for rows.Next() {
+		h, err := scanHost(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }
 
 // CreateHost inserts a host with an already-encrypted SSH secret.
@@ -154,7 +216,8 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, COALESCE(NULLIF(sudo_mode, ''), sudo_status), terminal_enabled,
 	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name,
-	parent_id, profile_id, apt_via_hub, cluster_id, k8s_role, binary_via, via, ssh_host_key, api_port`
+	parent_id, profile_id, apt_via_hub, cluster_id, k8s_role, binary_via, via, ssh_host_key, api_port,
+	kind, plugin, plugin_type, conn_enc`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -163,7 +226,8 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
 		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group,
-		&h.ParentID, &h.ProfileID, &h.AptViaHub, &h.ClusterID, &h.K8sRole, &h.BinaryVia, &h.Via, &h.SSHHostKey, &h.APIPort)
+		&h.ParentID, &h.ProfileID, &h.AptViaHub, &h.ClusterID, &h.K8sRole, &h.BinaryVia, &h.Via, &h.SSHHostKey, &h.APIPort,
+		&h.Kind, &h.Plugin, &h.PluginType, &h.ConnEnc)
 	if err != nil {
 		return Host{}, err
 	}
@@ -243,23 +307,11 @@ func (d *DB) HostByID(ctx context.Context, id int64) (Host, error) {
 	return h, err
 }
 
-// ListHosts returns every managed host, ordered by name.
+// ListHosts returns every managed host with an nkt agent, ordered by name.
+// Хосты плагинов (без агента) — ListPluginHosts / ListAllHosts: всё, что
+// перебирает хосты и ходит к агенту, их так и не увидит.
 func (d *DB) ListHosts(ctx context.Context) ([]Host, error) {
-	rows, err := d.QueryContext(ctx, `SELECT `+hostColumns+` FROM hosts ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := []Host{}
-	for rows.Next() {
-		h, err := scanHost(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, h)
-	}
-	return out, rows.Err()
+	return d.listHosts(ctx, `kind = ''`)
 }
 
 // DeleteHost removes a host from the registry. It does not undo anything on

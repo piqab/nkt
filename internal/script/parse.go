@@ -88,6 +88,7 @@ func (sc Script) AskKeys() []string {
 var onCommands = map[string]bool{
 	"packages": true, "service": true, "firewall": true, "docker": true, "vm": true,
 	"apply": true, "file": true, "user": true, "system": true, "cert": true, "git": true, "k8s": true,
+	"run": true,
 }
 
 var k8sNodesRe = regexp.MustCompile(`^(single|[13]\+\d{1,2})$`)
@@ -472,6 +473,18 @@ func parseOn(toks []string) (Step, error) {
 		return false
 	}
 	switch toks[0] {
+	case "run":
+		// Команда одной строкой в кавычках — или блок до «end».
+		switch len(toks) {
+		case 1:
+			return Step{Kind: KindRun}, nil
+		case 2:
+			if strings.TrimSpace(toks[1]) == "" {
+				return Step{}, msgs.Errorf("script.badRun")
+			}
+			return Step{Kind: KindRun, Args: map[string]string{"command": toks[1]}}, nil
+		}
+		return Step{}, msgs.Errorf("script.badRun")
 	case "packages":
 		if len(toks) < 3 || !oneOf(toks[1], "install", "remove") {
 			return Step{}, msgs.Errorf("script.badPackages")
@@ -992,6 +1005,9 @@ var yamlKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]*:(\s|$)`)
 // похожа на YAML (отступ, «ключ:», «---») или это сразу «end»; иначе up
 // поднимает файл, который уже лежит на хосте.
 func blockFollows(step Step, lines []string, i int) bool {
+	if step.Kind == KindRun {
+		return step.Args["command"] == ""
+	}
 	if step.Kind != KindDockerStack {
 		return true
 	}

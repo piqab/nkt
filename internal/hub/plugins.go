@@ -981,7 +981,30 @@ func (s *Server) checkScript(ctx context.Context, sc script.Script, refs script.
 	if len(issues) > 0 || sc.Unresolved {
 		return issues
 	}
+	var pluginHosts map[string]bool
 	for _, st := range sc.Steps {
+		if st.Kind == script.KindRun {
+			issues = append(issues, s.checkRunStep(ctx, st)...)
+			continue
+		}
+		// Хосту плагина — только «run»: у него нет агента nkt.
+		if doc := script.DocFor(st.Kind); doc != nil && doc.OnHost {
+			if pluginHosts == nil {
+				pluginHosts = map[string]bool{}
+				if list, err := s.db.ListPluginHosts(ctx); err == nil {
+					for _, h := range list {
+						pluginHosts[h.Name] = true
+					}
+				}
+			}
+			for _, name := range append([]string{st.Host}, st.Hosts...) {
+				if pluginHosts[name] {
+					issues = append(issues, script.Issue{Line: st.Line, Err: msgs.Errorf("script.runOnlyRun", name)})
+					break
+				}
+			}
+			continue
+		}
 		if st.Kind != script.KindPlugin {
 			continue
 		}
@@ -1059,4 +1082,38 @@ func reencryptPlugins(raw string, reenc func([]byte) ([]byte, error)) (string, e
 	}
 	out, err := json.Marshal(list)
 	return string(out), err
+}
+
+// checkRunStep — «Проверить» для «on ХОСТ run»: хост — хост плагина с
+// командами, и плагин разбирает команду (check), ничего не выполняя.
+// Хоста, которого ещё нет (заводит сценарий), — не проверить.
+func (s *Server) checkRunStep(ctx context.Context, st script.Step) []script.Issue {
+	hosts := st.Hosts
+	if len(hosts) == 0 {
+		hosts = []string{st.Host}
+	}
+	all, err := s.db.ListAllHosts(ctx)
+	if err != nil {
+		return nil
+	}
+	cmd := st.Args["command"]
+	if cmd == "" {
+		cmd = st.Block
+	}
+	var out []script.Issue
+	for _, name := range hosts {
+		i := slices.IndexFunc(all, func(h store.Host) bool { return h.Name == name })
+		if i < 0 {
+			continue
+		}
+		h := all[i]
+		if !h.IsPlugin() {
+			out = append(out, script.Issue{Line: st.Line, Err: msgs.Errorf("script.runNotPluginHost", h.Name)})
+			continue
+		}
+		if _, err := s.pluginHostExec(ctx, h, cmd, true, false); err != nil {
+			out = append(out, script.Issue{Line: st.Line, Err: err})
+		}
+	}
+	return out
 }

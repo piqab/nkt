@@ -82,7 +82,8 @@ func (s *Server) monHosts(ctx context.Context) []store.Host {
 	if s.local != nil {
 		out = append(out, store.Host{ID: localHostID, Name: "localhost"})
 	}
-	if hosts, err := s.db.ListHosts(ctx); err == nil {
+	// Хосты плагинов — тоже: их метрики хаб опрашивает сам.
+	if hosts, err := s.db.ListAllHosts(ctx); err == nil {
 		out = append(out, hosts...)
 	}
 	return out

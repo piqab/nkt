@@ -972,6 +972,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	server.StartCertWatch(ctx)
 	server.StartTokenUsageReconcile(ctx)
 	server.StartDNSReconcile(ctx)
+	server.StartPluginHostPoll(ctx)
 	server.StartTelegram(ctx)
 	server.StartSlack()
 

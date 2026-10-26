@@ -88,6 +88,11 @@ export interface OSInfo {
 }
 
 export interface HubHost {
+  /** «plugin» — хост плагина (MikroTik, Windows…), без агента nkt. */
+  kind?: string
+  /** Плагин и тип устройства хоста плагина. */
+  plugin?: string
+  plugin_type?: string
   /** ОС хоста по опросу хаба (значок перед именем). */
   os_info?: OSInfo
   /** ИБП хоста по последнему опросу хаба. */
