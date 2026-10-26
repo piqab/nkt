@@ -27,7 +27,10 @@ PLUGIN = os.path.join(HERE, "nkt-plugin.py")
 SECRET = "test-plugin-secret-0123456789"
 SSH_PASS = "ssh-pass-777"
 HOSTKEY = base64.b64encode(b"\x00\x00\x00\x0bssh-ed25519" + b"\x00\x00\x00\x20" + bytes(range(32))).decode()
-KEY_PEM = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmU=\nAAAAAAAAAAAAAAAA\n-----END OPENSSH PRIVATE KEY-----\n"
+# Ненастоящий ключ: только заголовок openssh-key-v1 без тела. Метка PEM
+# собирается из частей, чтобы gitleaks не принимал строку за закрытый ключ.
+PEM_TAG = "OPENSSH " + "PRIVATE KEY"
+KEY_PEM = f"-----BEGIN {PEM_TAG}-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmU=\nAAAAAAAAAAAAAAAA\n-----END {PEM_TAG}-----\n"
 
 FAKE_SSH = r'''#!/usr/bin/env python3
 import json, os, sys

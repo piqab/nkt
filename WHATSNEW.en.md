@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.15.4 — 2026-10-26
+
+- The secret scan (gitleaks) no longer flags a private key in the `connector` plugin test. The key was never real — just an OpenSSH header with no body — but the string matched the pattern. The test now builds the PEM label from parts, and the fingerprint of the already pushed commit is listed in `.gitleaksignore`.
+
 ## v1.15.3 — 2026-10-26
 
 - A **Windows** plugin: servers and workstations as nkt hosts via the
