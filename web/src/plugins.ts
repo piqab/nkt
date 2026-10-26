@@ -37,6 +37,8 @@ export interface PluginInfo {
   outdated?: boolean
   /** Нет обязательной настройки (новая версия плагина добавила поле). */
   needs_settings?: boolean
+  /** У пакета плагина нет своих настроек (учётки устройств хранит хаб). */
+  no_settings?: boolean
   author?: string
   added_at?: string
   error?: string

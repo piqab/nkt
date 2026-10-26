@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.15.6 — 2026-10-26
+
+- **The Windows and connector plugins connect over SSH where they used to fail with “No user exists for uid …”.** The plugin service runs as a systemd dynamic user, and without the `systemd` NSS module (the `libnss-systemd` package) `ssh` cannot find its own user. In that case the hub now creates a permanent system user `nktp-<name>` for the plugin — no login, no home — and removes it together with the plugin. An installed plugin switches to it on “Update on the host”.
+- **No more “Settings” on plugins without settings of their own** (Windows, MikroTik, connector): the hub keeps their device logins, and the window used to open empty, with just “Check”. If such a window still opens for a third-party plugin, it explains this instead of showing an empty form.
+
 ## v1.15.5 — 2026-10-26
 
 - **A hub plugin installs and uninstalls on a host where the agent runs as a service.** “Install on a host” used to fail with “mkdir /opt/nkt-plugins/…: read-only file system”, and removal with “rm: … Read-only file system”: the nkt service sandbox closes `/opt`. The plugin directory is now created and removed outside the sandbox, the way files already were written. If the removal still fails, the message names the directory and says that the service and settings are already gone.

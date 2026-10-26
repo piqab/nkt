@@ -5330,6 +5330,8 @@
     "settingsCheck": "Check",
     "settingsSave": "Save",
     "settingsNoChanges": "Nothing changes.",
+    "settingsNone": "The plugin has no settings of its own — nothing to check or save.",
+    "settingsNoneHosts": "Devices and their logins are set in Hosts → Add a device; the hub keeps the logins.",
     "settingsSecretReplaced": "Secrets to be replaced: {{list}}",
     "settingsRestartHint": "The plugin service restarts; it's unavailable for a few seconds.",
     "settingsPipeline": "Plugin {{name}} is deployed by pipeline “{{pipeline}}”: its settings are the pipeline's .env (Deployments → the pipeline → Access → .env). Deploy the pipeline again after editing.",

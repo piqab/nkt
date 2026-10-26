@@ -117,7 +117,7 @@ export function PluginsCard({ admin }: { admin: boolean }) {
                 {p.added_at ? ` · ${formatRelative(p.added_at)}` : ''}
               </span>
               {p.error && <span style={{ color: 'var(--status-critical)' }}>{p.error}</span>}
-              {admin && (p.native || p.pipeline) && (
+              {admin && (p.native || p.pipeline) && !p.no_settings && (
                 <Button size="small" onClick={() => void openSettings(p)}>
                   {t('plugins.settings')}
                 </Button>
@@ -346,6 +346,22 @@ function SettingsModal({ plugin, onClose, onJob }: { plugin: PluginInfo; onClose
   for (const c of check ?? []) if (!c.secret) after[c.env] = c.new ?? ''
   const diff = check ? unifiedDiff(text(current), text(after), t('plugins.settingsOnHost'), t('editModal.draft')) : ''
   const secrets = (check ?? []).filter((c) => c.secret)
+
+  // Полей нет (чужой плагин без настроек) — сверять нечего: объяснение
+  // вместо пустой формы.
+  if (st.data && fields.length === 0) {
+    return (
+      <Modal title={t('plugins.settingsTitle', { name: plugin.name, host: plugin.host })} onClose={onClose} width={560}>
+        <div className="col small" style={{ gap: '0.6rem' }}>
+          <span>{t('plugins.settingsNone')}</span>
+          {plugin.manifest?.provides?.includes('hosts') && <span>{t('plugins.settingsNoneHosts')}</span>}
+          <div className="row">
+            <Button onClick={onClose}>{t('common.close')}</Button>
+          </div>
+        </div>
+      </Modal>
+    )
+  }
 
   return (
     <Modal title={t('plugins.settingsTitle', { name: plugin.name, host: plugin.host })} onClose={onClose} width={760} maskClosable={false}>

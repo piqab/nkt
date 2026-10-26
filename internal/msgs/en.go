@@ -2096,6 +2096,7 @@ var enCatalog = map[string]string{
 	"plugin.nativeNoPython":                               "python3 is not on the host",
 	"plugin.nativeNoEnv":                                  "plugin %s has no settings file on the host — install it again",
 	"plugin.nativeRemoveDir":                              "the plugin service is stopped and its unit and settings are removed, but the directory %s was not: %v",
+	"plugin.nativeUser":                                   "the plugin service user %s was not created: %v",
 	"plugin.unknownPackage":                               "plugin %s is not in the built-in catalog",
 	"plugin.settingsTitle":                                "Settings of plugin %s on %s",
 	"plugin.stepSettings":                                 "plugin %s: new settings on %s, restarting the service",

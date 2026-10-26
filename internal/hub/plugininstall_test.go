@@ -27,6 +27,9 @@ func TestPluginInstallNative(t *testing.T) {
 		t.Skip("port 9180 busy:", err)
 	}
 	srv, db, root := localFixtureHub(t)
+	// NSS отдаёт временных пользователей systemd — служба с DynamicUser.
+	_ = os.MkdirAll(filepath.Join(root, "etc"), 0o755)
+	_ = os.WriteFile(filepath.Join(root, "etc/nsswitch.conf"), []byte("passwd: files systemd\n"), 0o644)
 	h := srv.Handler()
 	pluginStartWait = 2 * time.Second
 	defer func() { pluginStartWait = 45 * time.Second }()
@@ -247,5 +250,15 @@ func TestPluginInstallNative(t *testing.T) {
 	}
 	if _, err := os.Stat(envPath); !os.IsNotExist(err) {
 		t.Fatal("env left on the host")
+	}
+}
+
+// «Настроить» не нужна плагинам из пакетов без настроек (учётки устройств —
+// в хабе); у чужого плагина и у выложенного конвейером — неизвестно.
+func TestPluginNoSettings(t *testing.T) {
+	for native, want := range map[string]bool{"windows": true, "mikrotik": true, "connector": true, "technitium": false, "": false, "unknown": false} {
+		if got := noSettings(pluginConf{Name: "p", Native: native}); got != want {
+			t.Errorf("noSettings(%q) = %v, want %v", native, got, want)
+		}
 	}
 }

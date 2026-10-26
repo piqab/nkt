@@ -128,6 +128,13 @@ func needsSettings(p pluginConf) bool {
 	return false
 }
 
+// noSettings — плагин поставлен хабом из пакета, у которого настроек нет.
+// Чужой плагин (пакета нет) — неизвестно, «Настроить» остаётся.
+func noSettings(p pluginConf) bool {
+	pkg, ok := pluginPackage(p.Native)
+	return p.Native != "" && ok && len(pkg.Settings) == 0
+}
+
 // handlePluginSettings — GET /hub/plugins/{name}/settings: поля с текущими
 // значениями (секреты — только «задан») и история.
 func (s *Server) handlePluginSettings(w http.ResponseWriter, r *http.Request) {
