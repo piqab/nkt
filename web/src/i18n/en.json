@@ -5264,6 +5264,7 @@
     "upload": "Upload an archive",
     "source": "Catalog source",
     "lastError": "The last update failed ({{time}}), the previous copy is in use: {{error}}",
+    "firstError": "The catalog was not downloaded ({{time}}): {{error}}. HTTP 404 — the catalog is not published on the site yet; without internet — Upload an archive.",
     "empty": "The catalog has no plugins.",
     "testsPassed": "tests against fakes passed",
     "needsNKT": "needs nkt {{version}} or newer",
