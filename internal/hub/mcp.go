@@ -512,7 +512,7 @@ var mcpTools = []mcpTool{
 	{Name: "container_action", Description: "start, stop or restart a Docker container on a host.", Method: "POST", Path: "/hosts/{host_id}/containers/{name}/{action}",
 		Props:    map[string]map[string]any{"host_id": prop("integer", "Host id"), "name": prop("string", "Container name"), "action": prop("string", "start | stop | restart")},
 		Required: []string{"host_id", "name", "action"}, Admin: true, Destructive: true},
-	{Name: "create_vm", Description: "Create a virtual machine on a host from a cloud image (like the “New machine” window). A limited token: within its vCPU, memory, disk and machine-count limits; the machine is the token's own.", Method: "POST", Path: "/hub/vm/provision",
+	{Name: "create_vm", Description: "Create a virtual machine on a host from a cloud image (like the “New machine” window). A limited token: within its vCPU, memory, disk and machine-count limits; the machine is the token's own and lives in the token's own isolated NAT network (network and bridge cannot be set).", Method: "POST", Path: "/hub/vm/provision",
 		Props: map[string]map[string]any{"host_id": prop("integer", "Host to create on"), "spec": prop("object", "name, image_id, vcpus, memory_mb, disk_gb, user, ssh_key (optional: network, packages, autostart)"),
 			"install_nkt": prop("boolean", "Install nkt inside")},
 		Required: []string{"host_id", "spec"}, Body: []string{"host_id", "spec", "install_nkt"}, Admin: true, Job: true, Destructive: true},

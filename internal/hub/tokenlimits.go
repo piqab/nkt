@@ -15,6 +15,7 @@ import (
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/vmcreate"
+	"github.com/piqab/nkt/internal/vmnet"
 )
 
 // Токен «по правам»: какие объекты ему можно (конвейеры, сценарии,
@@ -254,11 +255,15 @@ func cutTokenAuthor(author string) (string, bool) {
 // контекст с этим токеном, чтобы шаги проверяли его права, квоты и
 // машины. Токен удалён или истёк — задание не продолжается.
 func (s *Server) tokenScriptContext(ctx context.Context, author string) (context.Context, error) {
+	return tokenAuthorContext(ctx, s.db, author)
+}
+
+func tokenAuthorContext(ctx context.Context, db *store.DB, author string) (context.Context, error) {
 	name, ok := cutTokenAuthor(author)
 	if !ok {
 		return ctx, nil
 	}
-	tokens, err := s.db.ListAPITokens(ctx)
+	tokens, err := db.ListAPITokens(ctx)
 	if err != nil {
 		return ctx, err
 	}
@@ -271,6 +276,18 @@ func (s *Server) tokenScriptContext(ctx context.Context, author string) (context
 		}
 	}
 	return ctx, msgs.Errorf("auth.tokenGone", name)
+}
+
+// tokenVMIsolate — машина токена «по правам» живёт в сети своего токена
+// (vmnet.IsolatedName): хост закрывает её правилами nftables. Свою сеть
+// или мост токен указать не может.
+func tokenVMIsolate(t store.APIToken, spec *vmcreate.Spec) error {
+	own := vmnet.IsolatedName(t.ID)
+	if spec.Bridge != "" || (spec.Network != "" && spec.Network != own) {
+		return msgs.Errorf("auth.tokenVMNetwork")
+	}
+	spec.Network, spec.Isolated = own, true
+	return nil
 }
 
 // tokenVMCheck — машина в потолках токена «по правам»: vCPU, память и

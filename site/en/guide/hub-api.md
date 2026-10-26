@@ -116,6 +116,11 @@ by this token. A token's machines are isolated:
 
 - a machine can be created only on a host within the token's limits
   (hosts and groups), otherwise 403;
+- a token's machine lives in the token's own NAT network on the host
+  (`nkt-t<number>`): it can reach the internet, but the host only for DNS
+  and DHCP, and not the LAN, other tokens' networks or the metadata
+  address ([Token networks](/en/guide/containers#libvirt-kvm-virtual-machines));
+  the token cannot set a network or a bridge — 403;
 - a token by permission does not see other machines (of other tokens
   and of the administrator) in lists, monitoring or scripts;
 - its own machines stay visible and reachable for a token limited by

@@ -30,6 +30,7 @@ var enAPICatalog = map[string]string{
 	"auth.tokenScriptGlobal":    "line %d: “%s” — not allowed for a limited token (by hosts or by permission) (hosts, groups, Traffic Fly, a pipeline by group or not compose)",
 	"auth.tokenScriptAction":    "line %d: the token needs the %s action",
 	"auth.tokenGone":            "the token %s is gone (deleted or expired) — the job is stopped",
+	"auth.tokenVMNetwork":       "the hub picks a token machine's network (the token's own network): network and bridge cannot be set",
 	"auth.tokenScriptCluster":   "line %d: cluster “%s” is not entirely on the token's hosts",
 	"auth.tokenScriptPipeline":  "line %d: pipeline “%s” is not entirely on the token's hosts",
 	"auth.tokenHostDenied":      "The host is outside the API token's scope",

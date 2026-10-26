@@ -158,6 +158,10 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if byToken && tok.Limited() {
+		if err := tokenVMIsolate(tok, &req.Spec); err != nil {
+			writeErr(w, r, http.StatusForbidden, err)
+			return
+		}
 		if err := s.tokenVMCheck(r.Context(), tok, host, req.Spec); err != nil {
 			writeErr(w, r, http.StatusForbidden, err)
 			return

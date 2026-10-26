@@ -417,3 +417,40 @@ func TestCreateSkipsNetworkWithBridge(t *testing.T) {
 		t.Errorf("сеть libvirt тронута, хотя машина в мосту:\n%s", joined)
 	}
 }
+
+// Машина токена: сеть токена заводится, nftables ставится, если его нет,
+// правила — до первого запуска; не встали правила — машина не стартует.
+func TestCreateIsolatedNetwork(t *testing.T) {
+	m, db := newManager(t)
+	esc := &fakeEscape{missing: map[string]bool{"nft": true}}
+	esc.installs = func() { delete(esc.missing, "nft") }
+	m.Register(KindCreate, testRunner(t, esc))
+	spec := createSpec()
+	spec.Network, spec.Isolated = "nkt-t7", true
+	id, _ := m.Start(context.Background(), jobs.Spec{Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: spec}})
+	waitJob(t, db, id, store2Succeeded)
+	joined := strings.Join(esc.calls, "\n")
+	install := strings.Index(joined, "apt-get install -y nftables")
+	rules := strings.Index(joined, "nft -f ")
+	start := strings.Index(joined, "virsh start web-01")
+	if install < 0 || rules < install || start < rules || len(esc.defined) != 1 || esc.defined[0] != "nkt-t7" {
+		t.Fatalf("order or network: %v\n%s", esc.defined, joined)
+	}
+
+	m2, db2 := newManager(t)
+	esc2 := &fakeEscape{fail: map[string]bool{"nft": true}}
+	m2.Register(KindCreate, testRunner(t, esc2))
+	id, _ = m2.Start(context.Background(), jobs.Spec{Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: spec}})
+	waitJob(t, db2, id, "failed")
+	if strings.Contains(strings.Join(esc2.calls, "\n"), "virsh start") {
+		t.Fatal("started without isolation rules")
+	}
+	// Признак без сети токена или с мостом — отказ ещё до команд.
+	for _, bad := range []Spec{{Network: "default", Isolated: true}, {Network: "nkt-t7", Bridge: "br0", Isolated: true}} {
+		s := createSpec()
+		s.Network, s.Bridge, s.Isolated = bad.Network, bad.Bridge, bad.Isolated
+		if s.Validate() == nil {
+			t.Errorf("%+v accepted", bad)
+		}
+	}
+}

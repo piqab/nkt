@@ -46,6 +46,7 @@ import (
 	"github.com/piqab/nkt/internal/tunnel"
 	"github.com/piqab/nkt/internal/vmcreate"
 	"github.com/piqab/nkt/internal/vmimage"
+	"github.com/piqab/nkt/internal/vmnet"
 	"github.com/piqab/nkt/internal/webui"
 )
 
@@ -438,6 +439,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	cmdjobSecrets = r.guestCreds.Secret
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
 		r.sysconfig, r.collector, r.vmimages, r.scanner)
+	keepTokenNetworks(ctx, r.cfg, r.vmimages, log)
 	r.jobs.Register(files.KindClone, r.cloneRun)
 	r.jobs.Register(api.KindUploadRollback, &api.UploadRollbackRunner{DB: r.db, Configs: r.configs, Files: r.files})
 	// Задания, оставшиеся идущими от прошлого запуска, разбираются до
@@ -985,6 +987,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	cmdjobSecrets = r.guestCreds.Secret
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
 		r.sysconfig, r.collector, r.vmimages, r.scanner)
+	keepTokenNetworks(ctx, r.cfg, r.vmimages, log)
 	r.jobs.Register(files.KindClone, r.cloneRun)
 	r.jobs.Register(api.KindUploadRollback, &api.UploadRollbackRunner{DB: r.db, Configs: r.configs, Files: r.files})
 	// То же, что в runServer: незавершённые задания разбираются до
@@ -1060,6 +1063,15 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 
 // vmimageStore — кэш облачных образов; образы идут через кэш хаба, когда
 // тот держит проброс порта на этом хосте.
+// keepTokenNetworks держит правила nftables сетей машин токенов (после
+// перезагрузки хоста их нет, «nft flush ruleset» их сносит).
+func keepTokenNetworks(ctx context.Context, cfg *config.Config, images *vmimage.Store, log *slog.Logger) {
+	if cfg.Mode == config.ModeFixtures || images == nil {
+		return
+	}
+	go vmnet.KeepIsolation(ctx, vmnet.NewManager(vmnet.Runner(api.RunTooling), images.Dir()), log)
+}
+
 func vmimageStore(cfg *config.Config) *vmimage.Store {
 	st := vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images"))
 	st.Proxy = func() string { return api.HubCacheURL(cfg) }

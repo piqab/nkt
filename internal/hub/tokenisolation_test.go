@@ -12,6 +12,7 @@ import (
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/script"
 	"github.com/piqab/nkt/internal/store"
+	"github.com/piqab/nkt/internal/vmcreate"
 )
 
 // Изоляция машин токенов (1.17.2): создание машины — только на хостах
@@ -70,6 +71,22 @@ func TestTokenMachineIsolation(t *testing.T) {
 	}
 	if u, _ := db.ListTokenUsage(ctx, scopedID); len(u) != 0 {
 		t.Fatalf("usage after denied provision: %+v", u)
+	}
+
+	// Сеть машины токена выбирает хаб: мост или чужая сеть — 403 ещё до
+	// задания; без них — сеть токена с признаком изоляции.
+	bridged := `{"name":"x2","image_id":"ubuntu-24.04","disk_gb":5,"memory_mb":512,"vcpus":1,"user":"app","bridge":"br0"}`
+	rec = do("POST", "/api/hub/vm/provision", `{"host_id":`+strconv.FormatInt(kvm1, 10)+`,"spec":`+bridged+`}`, scoped)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "bridge") && !strings.Contains(rec.Body.String(), "мост") {
+		t.Fatalf("bridge by token: %d %s", rec.Code, rec.Body)
+	}
+	tok0, _ := db.APITokenByID(ctx, scopedID)
+	vs := vmcreate.Spec{Name: "x3"}
+	if err := tokenVMIsolate(tok0, &vs); err != nil || vs.Network != "nkt-t"+strconv.FormatInt(scopedID, 10) || !vs.Isolated {
+		t.Fatalf("isolate: %v %+v", err, vs)
+	}
+	if err := tokenVMIsolate(tok0, &vmcreate.Spec{Network: "default"}); err == nil {
+		t.Fatal("token picked the default network")
 	}
 
 	// Своя машина на kvm2 доступна токену с пределом по хостам; чужая — нет.

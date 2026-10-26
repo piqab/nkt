@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.3 — 2026-10-26
+
+- **A token's machines get their own network.** The hub creates a machine of a token “by permission” in that token's NAT network on the host (`nkt-t<number>`, one network per token); the token cannot set a network or a bridge.
+  - **What is closed.** From such a network the host is reachable only for DNS and DHCP (and ping). The host's LAN, other token and libvirt networks, the metadata address and IPv6 are not. Only replies come in from outside. Internet access works.
+  - **How it holds.** The rules live in a separate nftables table `nkt_isolation` and are set before the machine first starts; if `nft` is missing, the host installs the `nftables` package itself. If the rules are not set, the machine does not start. nkt re-checks the table at start and every 10 minutes, so it comes back after a host reboot or `nft flush ruleset`.
+  - Token machines created earlier stay in their old network: re-create them to isolate them.
+
 ## v1.17.2 — 2026-10-26
 
 - **Token machines are isolated.** A token creates a machine only on hosts within its limits (otherwise 403), a token by permission does not see other machines, and its own machines stay reachable for a token limited by hosts.
