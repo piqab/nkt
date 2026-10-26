@@ -111,6 +111,19 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 			}
 		}
 	}()
+	// Машина токена «по правам» — только в сети токена, как бы ни
+	// запускали задание (API, MCP, сценарий, кластер токена).
+	if _, ok := cutTokenAuthor(jc.Job.Author); ok {
+		tctx, err := tokenAuthorContext(ctx, r.m.db, jc.Job.Author)
+		if err != nil {
+			return err
+		}
+		if t, _ := tokenFromContext(tctx); t.Limited() {
+			if err := tokenVMIsolate(t, &p.Spec); err != nil {
+				return err
+			}
+		}
+	}
 	if err := p.Spec.Validate(); err != nil {
 		return err
 	}

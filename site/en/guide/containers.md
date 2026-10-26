@@ -238,6 +238,14 @@ live output) and **storage pools** (read-only).
 - **libvirt networks**: list, a NAT network with DHCP and autostart (the
   subnet is checked against the host's networks and interfaces), a bridge
   onto a host interface.
+- **Token networks** `nkt-t<number>`: the hub creates machines of tokens
+  “by permission” in them, one network per token. The nftables table
+  `nkt_isolation` lets such a network reach the host only for DNS and DHCP
+  (and ping), keeps it out of private networks (the host's LAN, other
+  libvirt and token networks, the metadata address) and IPv6, and lets
+  only replies in from outside. The rules are set before the machine first
+  starts (no `nft` — the `nftables` package is installed) and are
+  re-checked when nkt starts and every 10 minutes.
 - The domain XML is edited in the config editor with a `virt-xml-validate`
   check and applied via `virsh define`.
 

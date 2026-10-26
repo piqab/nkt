@@ -10,6 +10,7 @@ package vmcreate
 import (
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/vmnet"
 	"html"
 	"regexp"
 	"strings"
@@ -125,6 +126,10 @@ type Spec struct {
 	// PasswordHash — bcrypt-хэш пароля для входа на экран и в консоль машины (по
 	// SSH всё равно только ключ: ssh_pwauth выключен).
 	PasswordHash string `json:"password_hash,omitempty"`
+	// Isolated — машина токена (1.17.3): только в сети токена
+	// (vmnet.IsolatedName), сеть закрыта правилами nftables до запуска
+	// машины. Ставит хаб, не оператор.
+	Isolated bool `json:"isolated,omitempty"`
 }
 
 // Validate проверяет то, что уйдёт в команды и в XML.
@@ -142,6 +147,8 @@ func (s Spec) Validate() error {
 		return msgs.Errorf("vmcreate.coresMustBetween1", maxVCPUs)
 	case !userRe.MatchString(s.User):
 		return msgs.Errorf("vmcreate.userNameInsideMachineInvalid", s.User)
+	case s.Isolated && (s.Bridge != "" || !vmnet.IsIsolated(s.Network)):
+		return msgs.Errorf("vmcreate.isolatedNeedsNetwork")
 	}
 	for _, key := range append([]string{s.SSHKey}, s.ExtraKeys...) {
 		key = strings.TrimSpace(key)

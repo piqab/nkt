@@ -30,6 +30,7 @@ var ruAPICatalog = map[string]string{
 	"auth.tokenScriptGlobal":    "строка %d: «%s» — токену с пределами (по хостам или «по правам») нельзя (хосты, группы, Traffic Fly, конвейер по группе или не compose)",
 	"auth.tokenScriptAction":    "строка %d: токену нужно действие %s",
 	"auth.tokenGone":            "токена %s больше нет (удалён или истёк) — задание остановлено",
+	"auth.tokenVMNetwork":       "сеть машины токена выбирает хаб (отдельная сеть токена): сеть и мост указывать нельзя",
 	"auth.tokenScriptCluster":   "строка %d: кластер «%s» не целиком на хостах токена",
 	"auth.tokenScriptPipeline":  "строка %d: конвейер «%s» не целиком на хостах токена",
 	"auth.tokenHostDenied":      "Хост вне пределов API-токена",

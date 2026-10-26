@@ -171,6 +171,13 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			return err
 		}
 	}
+	// Сеть токена закрывается до первого запуска машины — и по признаку,
+	// и по имени сети: машина в ней без правил не стартует.
+	if spec.Isolated || vmnet.IsIsolated(spec.Network) {
+		if err := r.isolate(ctx, jc, spec.Network); err != nil {
+			return err
+		}
+	}
 	if res, err := r.run(ctx, "virsh", "start", spec.Name); err != nil {
 		return err
 	} else if res.ExitCode != 0 && !strings.Contains(res.Output(), "already active") {
@@ -477,6 +484,27 @@ func (r *CreateRunner) ensureNetwork(ctx context.Context, jc *jobs.Context, name
 	} else {
 		jc.Log("vmcreate.libvirtNetworkPlace", name)
 	}
+	return nil
+}
+
+// isolate ставит правила nftables сетей токенов (nft нет — ставит
+// nftables).
+func (r *CreateRunner) isolate(ctx context.Context, jc *jobs.Context, network string) error {
+	if res, err := r.run(ctx, "sh", "-c", "command -v nft"); err != nil || res.ExitCode != 0 {
+		jc.Log("vmcreate.installingNft")
+		res, err := r.run(ctx, "apt-get", "install", "-y", "nftables")
+		if err != nil {
+			return err
+		}
+		if res.ExitCode != 0 {
+			return fmt.Errorf("apt-get install nftables: %s", commandError(res.Stderr, res.Stdout))
+		}
+	}
+	bridges, err := vmnet.NewManager(vmnet.Runner(r.run), r.store.Dir()).ApplyIsolation(ctx)
+	if err != nil {
+		return err
+	}
+	jc.Log("vmcreate.isolationApplied", network, strings.Join(bridges, ", "))
 	return nil
 }
 

@@ -955,6 +955,9 @@ func (r *ScriptRunner) createVM(ctx context.Context, jc *jobs.Context, p *Script
 	// Токен «по правам»: потолки машины и суммы, машина — его (как у
 	// create_vm); не создалась — учёт снимет задание создания.
 	if t, ok := tokenFromContext(ctx); ok && t.Limited() {
+		if err := tokenVMIsolate(t, &spec); err != nil {
+			return err
+		}
 		if err := spec.Validate(); err != nil {
 			return err
 		}
