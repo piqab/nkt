@@ -1,0 +1,12 @@
+{
+  "name": "windows",
+  "title": {"ru": "Windows (OpenSSH + PowerShell)", "en": "Windows (OpenSSH + PowerShell)"},
+  "description": {
+    "ru": "Windows как хосты nkt: «Хосты» → «Добавить устройство» → «Windows». Состав, метрики, находки (обновления, Defender, брандмауэр, RDP без NLA, SMBv1, BitLocker, ошибки журналов), конфигурация с диффом, службы, установка обновлений, команды PowerShell. Через встроенный OpenSSH Server, без WinRM; нужен ssh-клиент на хосте плагина.",
+    "en": "Windows as nkt hosts: Hosts → Add a device → “Windows”. Inventory, metrics, findings (updates, Defender, firewall, RDP without NLA, SMBv1, BitLocker, log errors), configuration with a diff, services, update installation, PowerShell commands. Via the built-in OpenSSH Server, no WinRM; needs the ssh client on the plugin host."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9250,
+  "settings": []
+}

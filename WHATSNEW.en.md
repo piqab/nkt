@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.15.3 — 2026-10-26
+
+- A **Windows** plugin: servers and workstations as nkt hosts via the
+  built-in **OpenSSH Server and PowerShell** — no WinRM and no agent. Add a
+  device → “Windows” → address, user, password or key.
+- **Inventory:** OS and build, programs, updates (KB), ports and their
+  processes, administrators, roles. **Metrics** — into Monitoring.
+- **Findings:** updates pending, a reboot needed, Defender or its
+  signatures, the firewall off, RDP without NLA, SMBv1, Guest, BitLocker,
+  a full drive, log errors over a day.
+- **Configuration with a diff** (firewall rules, service start types,
+  administrators), **actions** (reboot, services, background update
+  installation, winget), **PowerShell commands** — in the window, scripts
+  (`on win1 run "…"`) and MCP.
+
 ## v1.15.2 — 2026-10-26
 
 - A **Yandex Cloud** plugin: VMs (start, stop, restart, boot disk

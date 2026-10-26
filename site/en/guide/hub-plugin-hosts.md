@@ -14,7 +14,11 @@ export.
 Plugins: **MikroTik (RouterOS 7)** — [README](https://github.com/piqab/nkt/tree/main/examples/mikrotik);
 **connector** — devices by profiles without code of your own (macOS,
 FreeBSD, OpenWrt, agentless Linux, Keenetic, printers and switches over
-SNMP) — [below](#connector-devices-by-profiles).
+SNMP) — [below](#connector-devices-by-profiles); **Windows** — via the
+built-in OpenSSH and PowerShell, no WinRM: findings (updates, Defender,
+firewall, RDP without NLA, SMBv1, BitLocker), services, update
+installation, PowerShell commands — [README](https://github.com/piqab/nkt/tree/main/examples/windows);
+**Yandex Cloud VMs** — [the Yandex Cloud plugin](/en/guide/hub-plugin-yandex-cloud).
 
 ## Add a device
 
@@ -52,6 +56,8 @@ The row in the host list is like any other: state, findings, address,
 ![Device: inventory](/screens/en/hub-device-overview.png)
 
 ![Device: configuration diff](/screens/en/hub-device-config.png)
+
+![Windows: findings](/screens/en/hub-device-windows.png)
 
 Anyone who sees the host can view (and a read token within its hosts);
 actions, commands and the login — an admin or a by-permission token with

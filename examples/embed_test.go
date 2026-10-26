@@ -36,7 +36,7 @@ func TestPluginPackages(t *testing.T) {
 	for _, p := range list {
 		keys = append(keys, p.Key)
 	}
-	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,litellm,mikrotik,technitium,yandex-cloud" || list[5].Run != "python3" || len(list[5].Content) < 1000 {
+	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,litellm,mikrotik,technitium,windows,yandex-cloud" || list[5].Run != "python3" || len(list[5].Content) < 1000 {
 		t.Fatalf("packages: %v", keys)
 	}
 	for i, p := range list {
@@ -52,7 +52,10 @@ func TestPluginPackages(t *testing.T) {
 	if list[4].Port != 9220 || len(list[4].Settings) != 0 || list[1].Port != 9230 || len(list[1].Settings) != 0 {
 		t.Fatalf("mikrotik / connector: %+v %+v", list[4], list[1])
 	}
-	if yc := list[6]; yc.Port != 9240 || len(yc.Settings) != 3 || !yc.Settings[0].Secret || !yc.Settings[1].Required {
+	if w := list[6]; w.Port != 9250 || len(w.Settings) != 0 {
+		t.Fatalf("windows: %+v", w)
+	}
+	if yc := list[7]; yc.Port != 9240 || len(yc.Settings) != 3 || !yc.Settings[0].Secret || !yc.Settings[1].Required {
 		t.Fatalf("yandex-cloud: %+v", yc.Settings)
 	}
 	list = list[5:6]
@@ -142,6 +145,19 @@ func TestYandexCloudPluginPython(t *testing.T) {
 		t.Skip("no python3")
 	}
 	out, err := exec.Command(py, "-I", "yandex-cloud/deploy/test_plugin.py").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+// Плагин Windows — против поддельного ssh: загрузчик PowerShell,
+// ответы JSON, пароль не в аргументах.
+func TestWindowsPluginPython(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	out, err := exec.Command(py, "-I", "windows/deploy/test_plugin.py").CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}

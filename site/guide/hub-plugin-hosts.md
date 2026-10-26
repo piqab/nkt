@@ -13,7 +13,11 @@ Windows-сервер, облачная ВМ: у них нет агента, за
 Плагины: **MikroTik (RouterOS 7)** — [README](https://github.com/piqab/nkt/tree/main/examples/mikrotik);
 **connector** — устройства по профилям без своего кода (macOS, FreeBSD,
 OpenWrt, Linux без агента, Keenetic, принтеры и коммутаторы по SNMP) —
-[ниже](#connector-устройства-по-профилям).
+[ниже](#connector-устройства-по-профилям); **Windows** — через встроенный
+OpenSSH и PowerShell, без WinRM: находки (обновления, Defender, брандмауэр,
+RDP без NLA, SMBv1, BitLocker), службы, установка обновлений, команды
+PowerShell — [README](https://github.com/piqab/nkt/tree/main/examples/windows);
+**ВМ Yandex Cloud** — [плагин Yandex Cloud](/guide/hub-plugin-yandex-cloud).
 
 ## Добавить устройство
 
@@ -51,6 +55,8 @@ OpenWrt, Linux без агента, Keenetic, принтеры и коммута
 ![Устройство: состав](/screens/ru/hub-device-overview.png)
 
 ![Устройство: дифф конфигурации](/screens/ru/hub-device-config.png)
+
+![Windows: находки](/screens/ru/hub-device-windows.png)
 
 Смотреть может любой, кто видит хост (и токен чтения в пределах его
 хостов); действия, команды и учётки — администратор или токен «по
