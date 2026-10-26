@@ -1,5 +1,8 @@
 {
   "name": "mikrotik",
+  "version": "1.0.0",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
   "title": {"ru": "MikroTik (RouterOS 7)", "en": "MikroTik (RouterOS 7)"},
   "description": {
     "ru": "Роутеры и коммутаторы MikroTik как хосты nkt: «Хосты» → «Добавить» → тип «MikroTik RouterOS». Состав, метрики, находки, конфигурация «/export» с диффом, действия, команды RouterOS в сценариях. Учётки роутеров хранит хаб. Ставится на машину хаба или любой хост, откуда видны роутеры.",

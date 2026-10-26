@@ -1,5 +1,8 @@
 {
   "name": "connector",
+  "version": "1.0.1",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
   "title": {"ru": "Connector (профили устройств)", "en": "Connector (device profiles)"},
   "description": {
     "ru": "Устройства без агента nkt по профилям, без своего кода: macOS, FreeBSD, OpenWrt и Linux без агента — по SSH, Keenetic — по HTTP API, принтеры и коммутаторы — по SNMP. Свои профили — в разделе плагина «Профили». Нужен ssh-клиент на хосте плагина (openssh-client).",

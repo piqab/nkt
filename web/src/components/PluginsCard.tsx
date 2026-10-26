@@ -8,6 +8,7 @@ import { Banner, Card, DiffView, Modal, formatRelative } from './ui'
 import { unifiedDiff } from './textDiff'
 import { confirmAction } from './confirm'
 import { pluginToolName, type PluginInfo, type PluginManifest } from '../plugins'
+import { CatalogModal } from './PluginCatalog'
 
 /**
  * «О системе» → «Плагины»: подключённые внешние плагины и подключение
@@ -21,7 +22,8 @@ export function PluginsCard({ admin }: { admin: boolean }) {
   const { t } = useTranslation()
   const list = useApi<{ plugins: PluginInfo[] }>('/hub/plugins')
   const [connect, setConnect] = useState(false)
-  const [install, setInstall] = useState(false)
+  const [install, setInstall] = useState<string | boolean>(false)
+  const [catalogOpen, setCatalogOpen] = useState(false)
   const [settings, setSettings] = useState<PluginInfo | null>(null)
   const [job, setJob] = useState<Job | null>(null)
   const plugins = list.data?.plugins ?? []
@@ -71,7 +73,11 @@ export function PluginsCard({ admin }: { admin: boolean }) {
       title={t('plugins.title')}
       subtitle={t('plugins.hint')}
       actions={
-        admin && (
+        <>
+          <Button size="small" onClick={() => setCatalogOpen(true)}>
+            {t('catalog.open')}
+          </Button>
+          {admin && (
           <>
             {outdated.length > 0 && (
               <Button size="small" type="primary" onClick={() => void updateAll()}>
@@ -85,7 +91,8 @@ export function PluginsCard({ admin }: { admin: boolean }) {
               {t('plugins.connect')}
             </Button>
           </>
-        )
+          )}
+        </>
       }
     >
       {list.error && <Banner kind="error">{list.error}</Banner>}
@@ -143,8 +150,23 @@ export function PluginsCard({ admin }: { admin: boolean }) {
       )}
       {plugins.length > 0 && <DNSBlock admin={admin} />}
       {connect && <ConnectModal onClose={() => setConnect(false)} />}
+      {catalogOpen && (
+        <CatalogModal
+          admin={admin}
+          onClose={() => setCatalogOpen(false)}
+          onInstall={(key) => {
+            setCatalogOpen(false)
+            setInstall(key)
+          }}
+          onJob={(j) => {
+            setCatalogOpen(false)
+            setJob(j)
+          }}
+        />
+      )}
       {install && (
         <InstallModal
+          initialKey={typeof install === 'string' ? install : undefined}
           onClose={() => setInstall(false)}
           onJob={(j) => {
             setInstall(false)
@@ -185,17 +207,20 @@ interface CatalogPackage {
   description: string
   run: string
   port: number
+  version?: string
+  compatible?: boolean
+  min_nkt?: string
   settings: { env: string; title: string; hint?: string; default?: string; secret?: boolean; required?: boolean }[]
 }
 
-/** «Установить на хост (без Docker)»: плагин из встроенного каталога —
+/** «Установить на хост (без Docker)»: плагин из каталога плагинов —
  * службой systemd на выбранный хост, заданием; подключается сам. */
-function InstallModal({ onClose, onJob }: { onClose: () => void; onJob: (job: Job) => void }) {
+function InstallModal({ initialKey, onClose, onJob }: { initialKey?: string; onClose: () => void; onJob: (job: Job) => void }) {
   const { t } = useTranslation()
-  const catalog = useApi<{ packages: CatalogPackage[]; local_ok: boolean }>('/hub/plugins/catalog')
+  const catalog = useApi<{ packages: CatalogPackage[]; local_ok: boolean; catalog_loaded: boolean }>('/hub/plugins/catalog')
   const installed = useApi<{ plugins: PluginInfo[] }>('/hub/plugins')
   const hosts = useApi<{ name: string }[]>('/hub/hosts')
-  const [key, setKey] = useState<string | undefined>()
+  const [key, setKey] = useState<string | undefined>(initialKey)
   const [host, setHost] = useState<string | undefined>()
   const [values, setValues] = useState<Record<string, string>>({})
   const [name, setName] = useState('')
@@ -230,11 +255,17 @@ function InstallModal({ onClose, onJob }: { onClose: () => void; onJob: (job: Jo
     <Modal title={t('plugins.installTitle')} onClose={onClose} width={720} maskClosable={false}>
       <div className="col small" style={{ gap: '0.6rem' }}>
         <span className="muted">{t('plugins.installHint')}</span>
+        {catalog.data && !catalog.data.catalog_loaded && <Banner kind="warn">{t('catalog.notLoadedInstall')}</Banner>}
         <label className="col" style={{ gap: '0.2rem' }}>
           {t('plugins.package')}
-          <Select value={pkg?.key} onChange={setKey} options={pkgs.map((p) => ({ value: p.key, label: p.title }))} />
+          <Select
+            value={pkg?.key}
+            onChange={setKey}
+            options={pkgs.map((p) => ({ value: p.key, label: p.version ? `${p.title} · ${p.version}` : p.title, disabled: p.compatible === false }))}
+          />
         </label>
         {pkg && <span className="muted">{pkg.description}</span>}
+        {pkg?.compatible === false && <Banner kind="warn">{t('catalog.needsNKT', { version: pkg.min_nkt })}</Banner>}
         <label className="col" style={{ gap: '0.2rem' }}>
           {t('plugins.host')}
           <Select showSearch value={host} onChange={setHost} options={hostOptions.map((h) => ({ value: h.name, label: h.name }))} />

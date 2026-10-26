@@ -52,11 +52,11 @@ PowerShell — [README](https://github.com/piqab/nkt/tree/main/examples/windows)
 | **Команды** | команда на языке устройства (RouterOS, PowerShell) — с подтверждением, в журнал действий |
 | **Учётки** | сменить логин и пароль (пусто — прежний), с «Проверить» и диффом |
 
-![Устройство: состав](/screens/ru/hub-device-overview.png)
+![Устройство: состав](/plugin-screens/mikrotik/ru/hub-device-overview.png)
 
-![Устройство: дифф конфигурации](/screens/ru/hub-device-config.png)
+![Устройство: дифф конфигурации](/plugin-screens/mikrotik/ru/hub-device-config.png)
 
-![Windows: находки](/screens/ru/hub-device-windows.png)
+![Windows: находки](/plugin-screens/windows/ru/hub-device-windows.png)
 
 Смотреть может любой, кто видит хост (и токен чтения в пределах его
 хостов); действия, команды и учётки — администратор или токен «по

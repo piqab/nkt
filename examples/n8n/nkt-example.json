@@ -1,0 +1,58 @@
+{
+  "key": "n8n",
+  "link": "https://github.com/n8n-io/n8n-hosting/blob/main/docker-compose/withPostgres/docker-compose.yml",
+  "project": "n8n",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/n8n",
+  "site": {
+    "service": "n8n",
+    "port": 5678
+  },
+  "files": [
+    "docker-compose/withPostgres/init-data.sh"
+  ],
+  "envKeys": {
+    "n8n": [
+      "WEBHOOK_URL",
+      "N8N_PROXY_HOPS"
+    ]
+  },
+  "env": [
+    [
+      "N8N_VERSION",
+      "2.41.4"
+    ],
+    [
+      "POSTGRES_USER",
+      "postgres"
+    ],
+    [
+      "POSTGRES_PASSWORD",
+      "generate:password"
+    ],
+    [
+      "POSTGRES_DB",
+      "n8n"
+    ],
+    [
+      "POSTGRES_NON_ROOT_USER",
+      "n8n"
+    ],
+    [
+      "POSTGRES_NON_ROOT_PASSWORD",
+      "generate:password"
+    ],
+    [
+      "RUNNERS_AUTH_TOKEN",
+      "generate:hex16"
+    ],
+    [
+      "WEBHOOK_URL",
+      "https://{domain}/"
+    ],
+    [
+      "N8N_PROXY_HOPS",
+      "1"
+    ]
+  ],
+  "order": 40
+}

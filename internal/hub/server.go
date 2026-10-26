@@ -317,6 +317,8 @@ func (s *Server) Handler() http.Handler {
 				// Плагины: список и операции — всем вошедшим; что меняет —
 				// администратору или токену с plugin.<имя> (pluginOpAllowed).
 				r.Get("/hub/plugins", s.handlePlugins)
+				r.Get("/hub/catalog", s.handleCatalog)
+				r.Get("/hub/catalog/files/{key}/*", s.handleCatalogFile)
 				r.Get("/hub/plugins/{name}/agents", s.handlePluginAgents)
 				// Хосты плагинов: смотреть — всем; действия и команды —
 				// администратору или токену «плагин ИМЯ» (проверка внутри).
@@ -467,6 +469,10 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/plugins", s.handlePluginConnect)
 					r.Delete("/hub/plugins/{name}", s.handlePluginDisconnect)
 					r.Get("/hub/plugins/catalog", s.handlePluginCatalog)
+					r.Post("/hub/catalog/refresh", s.handleCatalogRefresh)
+					r.Post("/hub/catalog/upload", s.handleCatalogUpload)
+					r.Get("/hub/catalog/settings", s.handleCatalogSettings)
+					r.Post("/hub/catalog/settings", s.handleCatalogSettingsSave)
 					r.Post("/hub/plugins/install", s.handlePluginInstall)
 					r.Post("/hub/plugins/native/update-all", s.handlePluginUpdateAll)
 					r.Post("/hub/plugin-hosts/check", s.handlePluginHostCheck)

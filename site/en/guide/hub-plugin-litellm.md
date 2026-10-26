@@ -25,7 +25,7 @@ through the plugin.
 
 ## What it does
 
-![LiteLLM keys in the hub](/screens/en/hub-plugin-litellm-keys.png)
+![LiteLLM keys in the hub](/plugin-screens/litellm/en/hub-plugin-litellm-keys.png)
 
 - **Models** — add (a name for clients, `provider/model`, the API address,
   the provider key in a masked field) and delete. `openai/…` with an
@@ -38,7 +38,7 @@ through the plugin.
     the app pipeline's `.env` with version history; it reaches the stack
     with the next deploy.
 
-  ![A new key — once](/screens/en/hub-plugin-litellm-reveal.png)
+  ![A new key — once](/plugin-screens/litellm/en/hub-plugin-litellm-reveal.png)
 - **Spend** — per key and in total.
 - **Scripts:** `llm keys`, `llm key block|unblock|rm NAME`,
   `llm key add NAME [models a,b] [budget 20] [budget-reset 30d] [rpm 60]

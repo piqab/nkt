@@ -1,0 +1,60 @@
+{
+  "key": "technitium",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/technitium/deploy/docker-compose.yml",
+  "project": "technitium",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/technitium",
+  "site": {
+    "service": "dns",
+    "port": 80
+  },
+  "files": [
+    "examples/technitium/deploy/init.py",
+    "examples/technitium/deploy/nkt-plugin.py"
+  ],
+  "ports": {
+    "dns": [
+      "{hostip}:53:53/udp",
+      "{hostip}:53:53/tcp",
+      "127.0.0.1:5380:5380"
+    ]
+  },
+  "env": [
+    [
+      "DNS_DOMAIN",
+      "ns1.example.com"
+    ],
+    [
+      "DNS_ADMIN_PASSWORD",
+      "generate:password"
+    ],
+    [
+      "ZONES",
+      "example.com"
+    ],
+    [
+      "ACME_ZONE",
+      "acme.example.com"
+    ],
+    [
+      "SECONDARY_IP",
+      ""
+    ],
+    [
+      "SECONDARY_NS",
+      "ns2.example.com"
+    ],
+    [
+      "TSIG_CERT_MANAGER",
+      "generate:base64-32"
+    ],
+    [
+      "TSIG_TRANSFER",
+      "generate:base64-32"
+    ],
+    [
+      "NKT_PLUGIN_SECRET",
+      "generate:hex32"
+    ]
+  ],
+  "order": 90
+}

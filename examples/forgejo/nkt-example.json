@@ -1,0 +1,49 @@
+{
+  "key": "forgejo",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/forgejo/deploy/docker-compose.yml",
+  "project": "forgejo",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/forgejo",
+  "site": {
+    "service": "forgejo",
+    "port": 3000
+  },
+  "ports": {
+    "forgejo": [
+      "0.0.0.0:2222:2222"
+    ]
+  },
+  "envKeys": {
+    "forgejo-admin": [
+      "FORGEJO_ADMIN_USER",
+      "FORGEJO_ADMIN_PASSWORD",
+      "FORGEJO_ADMIN_EMAIL"
+    ]
+  },
+  "env": [
+    [
+      "POSTGRES_PASSWORD",
+      "generate:password"
+    ],
+    [
+      "FORGEJO_DOMAIN",
+      "{domain}"
+    ],
+    [
+      "FORGEJO_ROOT_URL",
+      "https://{domain}/"
+    ],
+    [
+      "FORGEJO_ADMIN_USER",
+      "gitadmin"
+    ],
+    [
+      "FORGEJO_ADMIN_PASSWORD",
+      "generate:password"
+    ],
+    [
+      "FORGEJO_ADMIN_EMAIL",
+      "admin@example.com"
+    ]
+  ],
+  "order": 50
+}

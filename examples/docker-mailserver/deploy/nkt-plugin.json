@@ -1,5 +1,8 @@
 {
   "name": "mail",
+  "version": "1.0.0",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
   "title": {"ru": "Почта (docker-mailserver)", "en": "Mail (docker-mailserver)"},
   "description": {
     "ru": "Почтовый сервер docker-mailserver из хаба: домены, ящики (пароль — только в форме, не в журналах), псевдонимы, ключ DKIM и записи MX/SPF/DKIM/DMARC — поставить через DNS-плагин хаба. Ставится на хост почтового сервера: плагину нужен docker.",

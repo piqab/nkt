@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/piqab/nkt/examples"
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/catalog"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/plugin"
@@ -60,7 +60,7 @@ type pluginSettingsChange struct {
 }
 
 // pluginNativeTarget — плагин, поставленный хабом: пакет каталога и хост.
-func (s *Server) pluginNativeTarget(ctx context.Context, p pluginConf) (examples.PluginPackage, targetHost, error) {
+func (s *Server) pluginNativeTarget(ctx context.Context, p pluginConf) (catalog.PluginPackage, targetHost, error) {
 	pkg, ok := pluginPackage(p.Native)
 	if p.Native == "" || !ok {
 		return pkg, targetHost{}, msgs.Errorf("plugin.notNative", p.Name)
@@ -73,7 +73,7 @@ func (s *Server) pluginNativeTarget(ctx context.Context, p pluginConf) (examples
 }
 
 // pluginSettingsRead — текущие несекретные значения и какие секреты заданы.
-func (s *Server) pluginSettingsRead(ctx context.Context, user string, p pluginConf, pkg examples.PluginPackage, hostID int64) (map[string]string, map[string]bool, error) {
+func (s *Server) pluginSettingsRead(ctx context.Context, user string, p pluginConf, pkg catalog.PluginPackage, hostID int64) (map[string]string, map[string]bool, error) {
 	keys, secrets := []string{}, []string{}
 	for _, f := range pkg.Settings {
 		if f.Secret {

@@ -1,0 +1,54 @@
+{
+  "key": "garage",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/garage/deploy/docker-compose.yml",
+  "project": "garage",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/garage",
+  "site": {
+    "service": "garage",
+    "port": 3900,
+    "maxBody": "0"
+  },
+  "files": [
+    "examples/garage/deploy/init.py"
+  ],
+  "configs": {
+    "garage": [
+      {
+        "target": "/etc/garage.toml",
+        "file": "examples/garage/deploy/garage.toml",
+        "mode": "0400"
+      }
+    ]
+  },
+  "env": [
+    [
+      "S3_DOMAIN",
+      "{domain}"
+    ],
+    [
+      "BUCKET",
+      "files"
+    ],
+    [
+      "CAPACITY",
+      "100G"
+    ],
+    [
+      "GARAGE_RPC_SECRET",
+      "generate:hex32"
+    ],
+    [
+      "GARAGE_ADMIN_TOKEN",
+      "generate:hex32"
+    ],
+    [
+      "S3_KEY_HEX",
+      "generate:hex12"
+    ],
+    [
+      "S3_SECRET",
+      "generate:hex32"
+    ]
+  ],
+  "order": 130
+}

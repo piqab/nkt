@@ -1,0 +1,46 @@
+{
+  "key": "plausible",
+  "link": "https://github.com/plausible/community-edition/blob/v3.2.1/compose.yml",
+  "project": "plausible",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/plausible",
+  "site": {
+    "service": "plausible",
+    "port": 8000
+  },
+  "files": [
+    "clickhouse/"
+  ],
+  "envKeys": {
+    "plausible_db": [
+      "POSTGRES_PASSWORD"
+    ]
+  },
+  "waitTimeout": "10m",
+  "env": [
+    [
+      "BASE_URL",
+      "https://{domain}"
+    ],
+    [
+      "SECRET_KEY_BASE",
+      "generate:base64-48"
+    ],
+    [
+      "TOTP_VAULT_KEY",
+      "generate:base64-32"
+    ],
+    [
+      "POSTGRES_PASSWORD",
+      "generate:password"
+    ],
+    [
+      "DATABASE_URL",
+      "postgres://postgres:${POSTGRES_PASSWORD}@plausible_db:5432/plausible_db"
+    ],
+    [
+      "DISABLE_REGISTRATION",
+      "invite_only"
+    ]
+  ],
+  "order": 150
+}

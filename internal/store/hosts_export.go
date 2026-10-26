@@ -282,6 +282,8 @@ var ExportedSettingKeys = []string{
 	"ui.experimental", "ui.experimental.history",
 	// Кэш пакетов хаба включён («О системе»).
 	"aptcache.enabled",
+	// Свой источник каталога плагинов (адрес и открытые ключи) с историей.
+	"catalog.settings",
 	// Пороги разбора «Мониторинга» (прогнозы и оповещения).
 	"mon.settings",
 }

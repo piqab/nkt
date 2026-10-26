@@ -1,5 +1,8 @@
 {
   "name": "windows",
+  "version": "1.0.1",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
   "title": {"ru": "Windows (OpenSSH + PowerShell)", "en": "Windows (OpenSSH + PowerShell)"},
   "description": {
     "ru": "Windows как хосты nkt: «Хосты» → «Добавить устройство» → «Windows». Состав, метрики, находки (обновления, Defender, брандмауэр, RDP без NLA, SMBv1, BitLocker, ошибки журналов), конфигурация с диффом, службы, установка обновлений, команды PowerShell. Через встроенный OpenSSH Server, без WinRM; нужен ssh-клиент на хосте плагина.",

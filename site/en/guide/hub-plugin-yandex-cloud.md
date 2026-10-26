@@ -8,7 +8,7 @@ The cloud from the nkt hub: VMs, disks and snapshots, security groups,
 Object Storage, Cloud DNS, managed PostgreSQL and MySQL, balance. A VM can
 also be added as an nkt host — with findings and actions.
 
-![Yandex Cloud in the hub](/screens/en/hub-plugin-yc.png)
+![Yandex Cloud in the hub](/plugin-screens/yandex-cloud/en/hub-plugin-yc.png)
 
 | Section | What |
 |---|---|

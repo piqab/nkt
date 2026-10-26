@@ -1,0 +1,39 @@
+{
+  "key": "docker-mailserver",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/docker-mailserver/deploy/docker-compose.yml",
+  "project": "mail",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/docker-mailserver",
+  "ports": {
+    "mailserver": [
+      "0.0.0.0:25:25",
+      "0.0.0.0:465:465",
+      "0.0.0.0:587:587",
+      "0.0.0.0:993:993"
+    ]
+  },
+  "envKeys": {
+    "mail-init": [
+      "MAIL_DOMAIN",
+      "MAIL_ADMIN_PASSWORD"
+    ],
+    "mailserver": [
+      "MAIL_HOSTNAME",
+      "MAIL_DOMAIN"
+    ]
+  },
+  "env": [
+    [
+      "MAIL_HOSTNAME",
+      "mail.example.com"
+    ],
+    [
+      "MAIL_DOMAIN",
+      "example.com"
+    ],
+    [
+      "MAIL_ADMIN_PASSWORD",
+      "generate:password"
+    ]
+  ],
+  "order": 110
+}

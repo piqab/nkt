@@ -14,16 +14,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/piqab/nkt/examples"
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/catalog"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 )
 
 // Установка плагина на хост без Docker («О системе» → «Плагины» →
-// «Установить на хост»): плагин из встроенного каталога (examples/*/deploy/
-// nkt-plugin.json) ставится службой systemd через агент nkt хоста
+// «Установить на хост»): плагин из каталога (internal/catalog — подписанный
+// каталог из examples/ репозитория, копия в DataDir/catalog) ставится службой systemd через агент nkt хоста
 // (/api/plugins/native) и подключается к хабу. Секреты (настройки с
 // secret и секрет подписи, который создаёт хаб) — не в параметрах
 // задания: в одноразовом хранилище памяти хаба, задание забирает их по
@@ -67,7 +67,7 @@ var hubInContainer = func() bool {
 
 // packageSHA — отпечаток файла плагина в каталоге: другой у поставленного —
 // «есть версия новее».
-func packageSHA(p examples.PluginPackage) string {
+func packageSHA(p catalog.PluginPackage) string {
 	sum := sha256.Sum256(p.Content)
 	return hex.EncodeToString(sum[:8])
 }
@@ -81,21 +81,16 @@ func nativeOutdated(p pluginConf) bool {
 	return ok && p.NativeSHA != packageSHA(pkg)
 }
 
-func pluginPackage(key string) (examples.PluginPackage, bool) {
-	for _, p := range examples.PluginPackages() {
+func pluginPackage(key string) (catalog.PluginPackage, bool) {
+	for _, p := range catalog.PluginPackages() {
 		if p.Key == key {
 			return p, true
 		}
 	}
-	return examples.PluginPackage{}, false
+	return catalog.PluginPackage{}, false
 }
 
-func pick(m map[string]string, lang string) string {
-	if v := m[lang]; v != "" {
-		return v
-	}
-	return m["ru"]
-}
+func pick(m map[string]string, lang string) string { return catalog.Pick(m, lang) }
 
 // handlePluginCatalog — GET /hub/plugins/catalog: что можно поставить на
 // хост без Docker (на языке запроса).
@@ -117,18 +112,22 @@ func (s *Server) handlePluginCatalog(w http.ResponseWriter, r *http.Request) {
 		Run         string  `json:"run"`
 		Port        int     `json:"port"`
 		Docker      bool    `json:"docker,omitempty"`
+		Version     string  `json:"version"`
+		MinNKT      string  `json:"min_nkt,omitempty"`
+		Compatible  bool    `json:"compatible"`
 		Settings    []field `json:"settings"`
 	}
 	out := []pkg{}
-	for _, p := range examples.PluginPackages() {
-		item := pkg{Key: p.Key, Name: p.Name, Title: pick(p.Title, lang), Description: pick(p.Description, lang), Run: p.Run, Port: p.Port, Docker: p.Docker, Settings: []field{}}
+	for _, p := range catalog.PluginPackages() {
+		item := pkg{Key: p.Key, Name: p.Name, Title: pick(p.Title, lang), Description: pick(p.Description, lang), Run: p.Run, Port: p.Port, Docker: p.Docker,
+			Version: p.Version, MinNKT: p.MinNKT, Compatible: s.compatibleNKT(p.MinNKT), Settings: []field{}}
 		for _, f := range p.Settings {
 			item.Settings = append(item.Settings, field{Env: f.Env, Title: pick(f.Title, lang), Hint: pick(f.Hint, lang), Default: f.Default, Secret: f.Secret, Required: f.Required})
 		}
 		out = append(out, item)
 	}
 	// На машину хаба — только если хаб не в контейнере.
-	writeJSON(w, http.StatusOK, map[string]any{"packages": out, "local_ok": !hubInContainer()})
+	writeJSON(w, http.StatusOK, map[string]any{"packages": out, "local_ok": !hubInContainer(), "catalog_loaded": catalog.Current() != nil})
 }
 
 // handlePluginInstall — POST /hub/plugins/install {package, host, name,
@@ -147,7 +146,11 @@ func (s *Server) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, ok := pluginPackage(req.Package)
 	if !ok {
-		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("plugin.unknownPackage", req.Package))
+		writeErr(w, r, http.StatusBadRequest, catalogUnavailable(req.Package))
+		return
+	}
+	if !s.compatibleNKT(pkg.MinNKT) {
+		writeErr(w, r, http.StatusConflict, msgs.Errorf("catalog.needsNewerNKT", pkg.Key, pkg.Version, pkg.MinNKT, s.hub.Version()))
 		return
 	}
 	name := firstNonEmpty(req.Name, pkg.Name)
@@ -328,7 +331,7 @@ func (r *PluginInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	pkg, ok := pluginPackage(p.Package)
 	if !ok {
-		return msgs.Errorf("plugin.unknownPackage", p.Package)
+		return catalogUnavailable(p.Package)
 	}
 	if p.Port == 0 {
 		p.Port = pkg.Port
@@ -403,7 +406,10 @@ func (r *PluginInstallRunner) installFiles(ctx context.Context, jc *jobs.Context
 	s := r.s
 	pkg, ok := pluginPackage(p.Package)
 	if !ok {
-		return msgs.Errorf("plugin.unknownPackage", p.Package)
+		return catalogUnavailable(p.Package)
+	}
+	if !s.compatibleNKT(pkg.MinNKT) {
+		return msgs.Errorf("catalog.needsNewerNKT", pkg.Key, pkg.Version, pkg.MinNKT, s.hub.Version())
 	}
 	body := map[string]any{"name": p.Name, "run": pkg.Run, "file": pkg.File, "content": string(pkg.Content), "port": p.Port, "docker": pkg.Docker}
 	if env != nil {
