@@ -510,10 +510,10 @@ func TestReinstall(t *testing.T) {
 // уже есть — замена; адреса нет — ошибка без net-update.
 func TestFixAddress(t *testing.T) {
 	esc := &fakeEscape{out: map[string]string{
-		"virsh domstate app1":                     "running\n",
-		"virsh domiflist app1":                    " Interface  Type     Source   Model    MAC\n vnet0      network  nkt-t3   virtio   52:54:00:aa:bb:cc\n",
-		"virsh domifaddr app1 --source lease":     " Name   MAC address          Protocol     Address\n vnet0  52:54:00:aa:bb:cc    ipv4         192.168.130.10/24\n",
-		"virsh net-update nkt-t3 add-last":        "",
+		"virsh domstate app1":                 "running\n",
+		"virsh domiflist app1":                " Interface  Type     Source   Model    MAC\n vnet0      network  nkt-t3   virtio   52:54:00:aa:bb:cc\n",
+		"virsh domifaddr app1 --source lease": " Name   MAC address          Protocol     Address\n vnet0  52:54:00:aa:bb:cc    ipv4         192.168.130.10/24\n",
+		"virsh net-update nkt-t3 add-last":    "",
 	}}
 	r := testRunner(t, esc)
 	ip, err := r.FixAddress(context.Background(), "app1")
