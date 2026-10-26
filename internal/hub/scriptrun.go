@@ -1209,6 +1209,20 @@ func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, done
 	if err != nil {
 		return err
 	}
+	// Токен «по правам» — те же правила, что у своего кластера по API.
+	if t, ok := tokenFromContext(ctx); ok && t.Limited() {
+		if err := r.s.tokenClusterPrepare(ctx, t, &spec); err != nil {
+			return err
+		}
+		host, _ := r.m.db.HostByID(ctx, spec.HostID)
+		_, jobID, err := r.s.startOwnCluster(ctx, t, spec, host, jc.Job.Author)
+		if err != nil {
+			releaseClusterToken(context.WithoutCancel(ctx), r.m.db, spec, host.Name)
+			return err
+		}
+		jc.Log("hub.scriptClusterJob", spec.Name, jobID)
+		return r.waitHubJobFor(ctx, jc, jobID, 3*time.Hour)
+	}
 	raw, _ := json.Marshal(spec)
 	cpHost := h
 	if len(spec.Placements) > 0 && spec.HostID != h.ID {

@@ -29,6 +29,7 @@ export interface TokenLimits {
   ports?: number
   fly_routes?: number
   k8s_namespaces?: number
+  k8s_clusters?: number
   k8s_cpu?: number
   k8s_mem_mb?: number
   k8s_storage_gb?: number
@@ -79,7 +80,7 @@ const LIMIT_GROUPS: { key: string; fields: { k: keyof TokenLimits; step: number;
   { key: 'host', fields: [{ k: 'host_cpu', step: 0.5, unit: 'cpu' }, { k: 'host_mem_mb', step: 256, unit: 'mb' }] },
   { key: 'service', fields: [{ k: 'service_cpu', step: 0.25, unit: 'cpu' }, { k: 'service_mem_mb', step: 128, unit: 'mb' }, { k: 'min_free_gb', step: 5, unit: 'gb' }] },
   { key: 'vm', fields: [{ k: 'vms', step: 1, unit: 'count' }, { k: 'vm_cpu', step: 1, unit: 'cpu' }, { k: 'vm_mem_mb', step: 512, unit: 'mb' }, { k: 'vm_disk_gb', step: 10, unit: 'gb' }, { k: 'vm_snapshots', step: 1, unit: 'count', zero: true }, { k: 'ports', step: 1, unit: 'count', zero: true }] },
-  { key: 'k8s', fields: [{ k: 'k8s_cpu', step: 0.5, unit: 'cpu' }, { k: 'k8s_mem_mb', step: 256, unit: 'mb' }, { k: 'k8s_storage_gb', step: 5, unit: 'gb' }, { k: 'k8s_pods', step: 1, unit: 'count' }, { k: 'k8s_namespaces', step: 1, unit: 'count', zero: true }] },
+  { key: 'k8s', fields: [{ k: 'k8s_cpu', step: 0.5, unit: 'cpu' }, { k: 'k8s_mem_mb', step: 256, unit: 'mb' }, { k: 'k8s_storage_gb', step: 5, unit: 'gb' }, { k: 'k8s_pods', step: 1, unit: 'count' }, { k: 'k8s_namespaces', step: 1, unit: 'count', zero: true }, { k: 'k8s_clusters', step: 1, unit: 'count', zero: true }] },
   { key: 'fly', fields: [{ k: 'fly_routes', step: 1, unit: 'count', zero: true }] },
   { key: 'rate', fields: [{ k: 'deploys_per_hour', step: 1, unit: 'count' }] },
 ]

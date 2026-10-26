@@ -158,6 +158,24 @@ create` в сценарии), включить, выключить и удали
   ставится сама.
 - Машину удалили — её порты и маршруты токенов уходят вместе с ней.
 
+**Свой кластер** (действие «свой кластер Kubernetes», потолок «своих
+кластеров»; пусто — нельзя): `POST /api/hub/k8s/clusters/own
+{"name":"lab","topology":"cp1","workers":2,"image_id":"ubuntu-24.04",
+"cp_vcpus":2,"cp_memory_mb":4096,"cp_disk_gb":20,"w_vcpus":1,"w_memory_mb":2048,
+"w_disk_gb":20}` — задание.
+
+- k3s на машинах токена: `single` (одна машина) или `cp1` (control plane и
+  worker'ы), все на одном хосте (`host_id` 0 — хост выбирает хаб), в сети
+  токена под правилами nftables; каждый узел — машина токена (общий счёт и
+  потолки), образ — из каталога.
+- API кластера открывается портом из пула хоста (нет пула — отказ); в
+  ответе — `api_port` и `address`.
+- kubeconfig (`cluster-admin` своего кластера) —
+  `POST /api/hub/k8s/clusters/own/{id}/kubeconfig`, **один раз**, после
+  готовности; повторно не выдаётся.
+- `DELETE /api/hub/k8s/clusters/own/{id}` — кластер с машинами, учётом и
+  портом. Те же правила — у `k8s … create` в сценарии от токена.
+
 **Свой namespace в общем кластере** (действие «свои namespace»):
 
 ```sh
@@ -184,7 +202,7 @@ kubectl --kubeconfig shop.kubeconfig get pods
   `dry_run` — только рендер и проверка. `DELETE …/{cluster}/{ns}` — удалить
   namespace со всем содержимым.
 
-**Свой кластер k8s** — `k8s КЛАСТЕР create` и `destroy` в сценарии —
+**Свой кластер k8s в сценарии** — `k8s КЛАСТЕР create` и `destroy` в сценарии —
 только с действием «свой кластер Kubernetes».
 
 **Сценарий от токена** проверяется так же, как API: каждой строке нужно
@@ -309,6 +327,8 @@ function sign(secret, method, uri, body = '') {
 | `GET`, `POST /api/hub/hosts/{id}/lxd` | администратор | экземпляры LXD хоста (токену — свои); создать (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
 | `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | администратор | `start`, `stop`, `restart`; vCPU, память, диск; удалить |
 | `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | администратор | снимки экземпляра (токену — в потолке) |
+| `GET`, `POST /api/hub/k8s/clusters/own` | по правам | свои кластеры; создать (single или cp1 на машинах токена) → `id`, `job_id`, `api_port`, `address` |
+| `POST /api/hub/k8s/clusters/own/{id}/kubeconfig`, `DELETE /api/hub/k8s/clusters/own/{id}` | по правам | kubeconfig один раз; удалить кластер с машинами → `job_id` |
 | `GET`, `POST /api/hub/k8s/own` | по правам | свои namespace; завести (`{"cluster","namespace"}`) → `kubeconfig` один раз |
 | `POST /api/hub/k8s/own/{cluster}/{ns}/kubeconfig`, `DELETE /api/hub/k8s/own/{cluster}/{ns}` | по правам | перевыпустить kubeconfig; удалить namespace |
 | `GET …/{cluster}/{ns}/logs?pod=&container=&tail=`, `POST …/{cluster}/{ns}/helm` | по правам | журнал пода; helm через рендер и проверки (`{"repo_url","chart","version","release","values","dry_run"}`) |

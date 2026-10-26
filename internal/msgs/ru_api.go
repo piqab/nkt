@@ -41,6 +41,7 @@ var ruAPICatalog = map[string]string{
 	"auth.tokenFlyGateway":      "шлюз Traffic Fly для токена не выбран: задайте его в правах токена (шлюзов несколько или нет ни одного)",
 	"auth.tokenFlyNotOwn":       "маршрут %s — не этого токена",
 	"auth.tokenNamespaces":      "своих namespace не больше %d (потолок токена)",
+	"auth.tokenClusters":        "своих кластеров не больше %d (потолок токена)",
 	"auth.tokenScriptCluster":   "строка %d: кластер «%s» не целиком на хостах токена",
 	"auth.tokenScriptPipeline":  "строка %d: конвейер «%s» не целиком на хостах токена",
 	"auth.tokenHostDenied":      "Хост вне пределов API-токена",
