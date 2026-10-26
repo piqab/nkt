@@ -170,6 +170,10 @@ func (s *Server) handleVMResizeHub(w http.ResponseWriter, r *http.Request) {
 // vmResize меняет размеры машины; токену — в его потолках (учёт меняется
 // сразу; хост отказал — прежняя запись возвращается).
 func (s *Server) vmResize(ctx context.Context, vm store.Host, req vmResizeRequest) (map[string]any, int, error) {
+	// Границы — до преобразований в int: те же, что у хоста.
+	if req.VCPUs < 0 || req.VCPUs > 128 || req.MemoryMB < 0 || req.MemoryMB > 1<<20 || req.DiskGB < 0 || req.DiskGB > 65536 {
+		return nil, http.StatusBadRequest, msgs.Errorf("control.invalidResize")
+	}
 	var restore *store.TokenUsage
 	if t, byToken := tokenFromContext(ctx); byToken && t.Limited() {
 		old, ok := s.tokenVMUsage(ctx, t, vm)

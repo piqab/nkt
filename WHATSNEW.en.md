@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.11 — 2026-10-26
+
+- Fixed findings of the code security checks (CodeQL, gosec): machine sizes are bounds-checked before number conversion (the API and `vm resize` in scripts), and a file size in an own plugin's zip is checked before conversion to a 64-bit number.
+
 ## v1.17.10 — 2026-10-26
 
 - **The client sees its own limits.** `GET /api/hub/tokens/self/usage` and the MCP tool `my_usage` (for any token) show the token's limits and usage: CPU, memory, disk, machines, pool ports, own Fly routes, namespaces and clusters. The usage rows and allowed actions are there too.

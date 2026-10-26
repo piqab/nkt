@@ -126,6 +126,9 @@ func ReadUpload(data []byte) (files map[string][]byte, skipped []string, err err
 			if !mode.IsRegular() {
 				return nil, nil, fmt.Errorf("%s: links and special files are not allowed", f.Name)
 			}
+			if f.UncompressedSize64 > UploadMaxFile {
+				return nil, nil, fmt.Errorf("%s: larger than %d MB", f.Name, UploadMaxFile>>20)
+			}
 			rc, err := f.Open()
 			if err != nil {
 				return nil, nil, err

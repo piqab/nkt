@@ -954,8 +954,9 @@ func (r *ScriptRunner) vmLifecycle(ctx context.Context, jc *jobs.Context, h stor
 		_, err := r.s.hostCall(ctx, jc.Job.Author, h.ID, "POST", vmPath(vm, "/snapshots/"+st.Args["snap"]+"/revert"), nil, nil)
 		return err
 	case "resize":
-		n := func(k string) int64 { v, _ := strconv.ParseInt(st.Args[k], 10, 64); return v }
-		out, _, err := r.s.vmResize(ctx, vm, vmResizeRequest{VCPUs: int(n("cpu")), MemoryMB: n("mem"), DiskGB: n("disk")})
+		// Разбор в 32 бита: дальше значения проверяются и идут в int.
+		n := func(k string) int32 { v, _ := strconv.ParseInt(st.Args[k], 10, 32); return int32(v) }
+		out, _, err := r.s.vmResize(ctx, vm, vmResizeRequest{VCPUs: int(n("cpu")), MemoryMB: int64(n("mem")), DiskGB: int64(n("disk"))})
 		if err == nil && out["restart_needed"] == true {
 			jc.Log("hub.scriptVMRestartNeeded", st.Name)
 		}
