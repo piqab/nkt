@@ -4292,6 +4292,7 @@
       "vm_cpu": "vCPU each",
       "vm_mem_mb": "Memory each",
       "vm_disk_gb": "Disk each",
+      "vm_snapshots": "Snapshots per machine (empty — none)",
       "k8s_cpu": "CPU",
       "k8s_mem_mb": "Memory",
       "k8s_storage_gb": "Storage",

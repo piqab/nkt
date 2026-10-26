@@ -31,6 +31,8 @@ type fakeEscape struct {
 	networks map[string]bool
 	// defined — какие сети задание завело само.
 	defined []string
+	// out — ответы на команды по началу строки команды.
+	out map[string]string
 }
 
 // contains отвечает, есть ли слово среди аргументов.
@@ -60,6 +62,12 @@ func betweenTags(doc, open, close string) string {
 func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResult, error) {
 	f.calls = append(f.calls, strings.Join(argv, " "))
 	res := collect.CommandResult{Argv: argv}
+	for prefix, stdout := range f.out {
+		if strings.HasPrefix(strings.Join(argv, " "), prefix) {
+			res.Stdout = stdout
+			return res, nil
+		}
+	}
 	// Проверка наличия программ идёт тем же путём, что и остальные
 	// команды: отвечаем на неё так же, как настоящая оболочка.
 	if len(argv) == 3 && argv[0] == "sh" && strings.HasPrefix(argv[2], "command -v ") {
@@ -452,5 +460,48 @@ func TestCreateIsolatedNetwork(t *testing.T) {
 		if s.Validate() == nil {
 			t.Errorf("%+v accepted", bad)
 		}
+	}
+}
+
+// Переустановка: только машина nkt (её диск в domblklist); размеры — из
+// описания домена и старого диска; старый диск, снимки и seed — заново;
+// машина токена — правила до запуска.
+func TestReinstall(t *testing.T) {
+	m, db := newManager(t)
+	esc := &fakeEscape{}
+	cr := testRunner(t, esc)
+	m.Register(KindReinstall, NewReinstallRunner(cr))
+	spec := Spec{Name: "web-01", ImageID: "ubuntu-22.04", User: "deploy", ExtraKeys: []string{"ssh-ed25519 AAAAHUB hub"}, Network: "nkt-t3", Isolated: true}
+	esc.out = map[string]string{
+		"virsh domblklist web-01":                 " vda  /var/lib/libvirt/images/web-01.qcow2\n sda  /var/lib/libvirt/images/web-01-seed.iso\n",
+		"virsh dumpxml --inactive web-01":         "<domain><vcpu placement='static'>2</vcpu><memory unit='KiB'>2097152</memory></domain>",
+		"virsh snapshot-list web-01 --name":       "s1\ns2\n",
+		"qemu-img info -U --output=json /var/lib": `{"virtual-size": 21474836480}`,
+	}
+	id, _ := m.Start(context.Background(), jobs.Spec{Kind: KindReinstall, Queue: "host", Params: ReinstallParams{Spec: spec}})
+	waitJob(t, db, id, store2Succeeded)
+	joined := strings.Join(esc.calls, "\n")
+	order := []string{"virsh destroy web-01", "snapshot-delete web-01 s1 --metadata", "rm -f /var/lib/libvirt/images/web-01.qcow2",
+		"qemu-img convert", "qemu-img resize /var/lib/libvirt/images/web-01.qcow2 20G", "cloud-localds", "nft -f", "virsh start web-01"}
+	at := -1
+	for _, want := range order {
+		i := strings.Index(joined, want)
+		if i <= at {
+			t.Fatalf("%q out of order:\n%s", want, joined)
+		}
+		at = i
+	}
+	if strings.Contains(joined, "virsh define") {
+		t.Fatal("the domain was redefined")
+	}
+
+	// Чужой домен (диск не по имени машины) — отказ до всяких действий.
+	m2, db2 := newManager(t)
+	esc2 := &fakeEscape{out: map[string]string{"virsh domblklist web-01": " vda  /srv/other.qcow2\n"}}
+	m2.Register(KindReinstall, NewReinstallRunner(testRunner(t, esc2)))
+	id, _ = m2.Start(context.Background(), jobs.Spec{Kind: KindReinstall, Queue: "host", Params: ReinstallParams{Spec: spec}})
+	waitJob(t, db2, id, "failed")
+	if strings.Contains(strings.Join(esc2.calls, "\n"), "destroy") {
+		t.Fatal("touched a foreign domain")
 	}
 }

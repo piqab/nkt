@@ -305,6 +305,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/lxd/storage", s.handleLXDStorage)
 			r.Get("/backups", s.handleBackupsList)
 			r.Get("/vms", s.handleVMs)
+			r.Get("/vms/{name}/snapshots", s.handleVMSnapshots)
 			r.Get("/misc", s.handleMisc)
 			r.Get("/interfaces", s.handleInterfaces)
 			r.Get("/firewall", s.handleFirewall)
@@ -567,6 +568,10 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/lxd/instances/{name}/{action}", s.handleLXDInstanceAction)
 				r.Delete("/lxd/instances/{name}", s.handleLXDInstanceDelete)
 				r.Post("/vms/disks", s.handleVMCreateDisk)
+				r.Post("/vms/{name}/snapshots", s.handleVMSnapshotCreate)
+				r.Post("/vms/{name}/snapshots/{snap}/revert", s.handleVMSnapshotRevert)
+				r.Delete("/vms/{name}/snapshots/{snap}", s.handleVMSnapshotDelete)
+				r.Post("/vms/{name}/resize", s.handleVMResize)
 				r.Post("/vms/{name}/{action}", s.handleVMAction)
 				r.Delete("/vms/{name}", s.handleVMDelete)
 
@@ -593,6 +598,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vm/networks", s.handleVMNetworkCreate)
 				r.Post("/vm/networks/{name}/{action}", s.handleVMNetworkAction)
 				r.Post("/vm/create", s.handleVMCreate)
+				r.Post("/vm/reinstall", s.handleVMReinstall)
 				r.Post("/vm/templates", s.handleVMTemplateSave)
 				r.Delete("/vm/templates/{id}", s.handleVMTemplateDelete)
 

@@ -53,7 +53,15 @@ func localFixtureHub(t *testing.T) (*Server, *store.DB, string) {
 		// Плагин службой (plugininstall_test.go).
 		map[string]any{"match": []string{"sh", "-c", "command -v python3"}, "stdout": "/usr/bin/python3\n"},
 		map[string]any{"match": []string{"systemctl", "daemon-reload"}, "stdout": ""},
-		map[string]any{"match": []string{"rm", "-rf", "--", "/opt/nkt-plugins/dns"}, "stdout": ""})
+		map[string]any{"match": []string{"rm", "-rf", "--", "/opt/nkt-plugins/dns"}, "stdout": ""},
+		// Цикл машины (vmlifecycle_test.go): машина app1 запущена, у неё
+		// один снимок.
+		map[string]any{"match": []string{"virsh", "-c", "", "domstate", "app1"}, "stdout": "running\n"},
+		map[string]any{"match": []string{"virsh", "-c", "", "snapshot-list", "app1"}, "stdout": "before\n"},
+		map[string]any{"match": []string{"virsh", "-c", "", "snapshot-create-as", "app1"}, "stdout": ""},
+		map[string]any{"match": []string{"virsh", "-c", "", "setvcpus", "app1"}, "stdout": ""},
+		map[string]any{"match": []string{"virsh", "-c", "", "setmem", "app1"}, "stdout": ""},
+		map[string]any{"match": []string{"virsh", "-c", "", "setmaxmem", "app1"}, "stdout": ""})
 	raw, _ = json.Marshal(idx)
 	_ = os.WriteFile(idxPath, raw, 0o644)
 	stack := filepath.Join(root, "srv", "compose", "shop")
@@ -97,6 +105,7 @@ func localFixtureHub(t *testing.T) (*Server, *store.DB, string) {
 		Firewall:  control.NewFirewallManager(cfg, collector, db),
 		Firewalld: control.NewFirewalldManager(cfg, collector, db),
 		Certs:     control.NewCertManager(cfg, collector, db, services, scanner, nil),
+		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner, nil),
 		Jobs:      jm, Log: slog.New(slog.DiscardHandler), Version: "test",
 	})
 	secret, _ := secretbox.GenerateKey()

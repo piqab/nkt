@@ -36,7 +36,7 @@ Every command of the hub script language — the same ones “Check”, the “R
 | [`on HOST docker install`](#cmd-docker-install) | Installs Docker from the official docker.com repository. |
 | [`on HOST docker stack PATH up\|down\|start\|stop`](#cmd-docker-stack) | Brings a compose stack up or down, starts or stops it. |
 | [`on HOST vm create NAME image …`](#cmd-vm-create) | Creates a virtual machine on the host from a cloud image — like the “New machine” dialog. |
-| [`on HOST vm start\|shutdown\|destroy NAME`](#cmd-vm-action) | Starts, shuts down or force-stops a machine on the host. |
+| [`on HOST vm start\|shutdown\|destroy\|reboot\|delete NAME · …`](#cmd-vm-action) | Starts, shuts down, force-stops, reboots or deletes (with its disks and record) a machine on the host; a snapshot and reverting to it; vCPU, memory and disk (the disk only grows; vCPU and memory take effect after shutdown and start). |
 | [`on HOST apply profile PROFILE`](#cmd-apply) | Applies a hub profile to the host in full: builds the plan and executes every item. |
 | [`on HOST file put PATH`](#cmd-file-put) | Writes a file to the host from the block (through the config editor: with a check and history when it knows the path). |
 | [`on HOST user add NAME`](#cmd-user-add) | Creates an account on the host with an SSH key and, optionally, passwordless sudo. |
@@ -294,19 +294,21 @@ Example:
 on web1 vm create app1 image ubuntu-24.04 cpu 2 mem 2048 disk 20 profile app install
 ```
 
-### `on HOST vm start|shutdown|destroy NAME` {#cmd-vm-action}
+### `on HOST vm start|shutdown|destroy|reboot|delete NAME · vm snapshot|revert NAME SNAPSHOT · vm resize NAME [cpu N] [mem MB] [disk GB]` {#cmd-vm-action}
 
-Starts, shuts down or force-stops a machine on the host.
+Starts, shuts down, force-stops, reboots or deletes (with its disks and record) a machine on the host; a snapshot and reverting to it; vCPU, memory and disk (the disk only grows; vCPU and memory take effect after shutdown and start). A token: only its own machines, within its limits.
 
 | Argument | Required | What it is |
 |---|---|---|
-| `action` | ✓ | start, shutdown, destroy |
+| `action` | ✓ | start, shutdown, destroy, reboot, delete, snapshot, revert, resize |
 | `NAME` | ✓ | machine name |
+| `SNAPSHOT` |  | snapshot name (snapshot, revert) |
+| `cpu / mem / disk` |  | new vCPU, memory in MB, disk in GB (resize; at least one) |
 
 Example:
 
 ```
-on web1 vm start app1
+on web1 vm snapshot app1 before-upgrade
 ```
 
 ### `on HOST apply profile PROFILE` {#cmd-apply}

@@ -72,7 +72,9 @@ admin token or a token by permission (within its limits).
 | `deploy_pipeline`, `dry_run_pipeline` | admin | deploy; a dry run of a saved pipeline or of a description text (`content`) |
 | `create_pipeline`, `update_pipeline`, `remove_pipeline` | admin | create a pipeline from a description, replace the description (a new version, the diff in the answer), remove it with its stack (a token by permission — the “create pipelines” action, compose only on its hosts and only its own) |
 | `pipeline_power` | admin | stop a deployment or bring up the same version (`action`: `stop` / `start`) |
-| `create_vm`, `vm_power` | admin | a machine on a host from a cloud image; start, shut down, force off (a token by permission — its own, within limits) |
+| `create_vm`, `vm_power` | admin | a machine on a host from a cloud image (own `user_data` — `#cloud-config`); start, shut down, force off, reboot (a token by permission — its own, within limits) |
+| `vm_snapshots`, `vm_snapshot`, `vm_snapshot_revert`, `vm_snapshot_delete` | admin | machine snapshots: list, take, revert, delete (a token — up to its snapshots-per-machine limit) |
+| `vm_resize`, `vm_reinstall`, `vm_delete` | admin | vCPU, memory and disk (the disk only grows); reinstall from an image (a job); delete the machine with its disks and record (a job) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |
 | `fly_apply`, `fly_ops` | admin, no limit | apply the map, point edits of targets |
 | `manifest_diff`, `manifest_apply` | admin | a manifest to clusters |

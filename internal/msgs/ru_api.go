@@ -31,6 +31,8 @@ var ruAPICatalog = map[string]string{
 	"auth.tokenScriptAction":    "строка %d: токену нужно действие %s",
 	"auth.tokenGone":            "токена %s больше нет (удалён или истёк) — задание остановлено",
 	"auth.tokenVMNetwork":       "сеть машины токена выбирает хаб (отдельная сеть токена): сеть и мост указывать нельзя",
+	"auth.tokenSnapshots":       "машина %s: снимков не больше %d (потолок токена)",
+	"auth.tokenVMHostImage":     "токену нельзя образ из каталога дисков хоста (host:…) — только из каталога образов",
 	"auth.tokenScriptCluster":   "строка %d: кластер «%s» не целиком на хостах токена",
 	"auth.tokenScriptPipeline":  "строка %d: конвейер «%s» не целиком на хостах токена",
 	"auth.tokenHostDenied":      "Хост вне пределов API-токена",

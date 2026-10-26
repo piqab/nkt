@@ -210,7 +210,9 @@ func (m *LibvirtManager) UndefineVM(ctx context.Context, user, name string, remo
 		}
 	}
 
-	args := []string{"-c", m.cfg.LibvirtURI, "undefine", name}
+	// Снимки (метаданные) мешают undefine; сами снимки внутри qcow2 и
+	// уходят вместе с диском.
+	args := []string{"-c", m.cfg.LibvirtURI, "undefine", name, "--snapshots-metadata"}
 	if removeStorage {
 		args = append(args, "--remove-all-storage")
 	}

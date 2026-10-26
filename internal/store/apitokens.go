@@ -80,6 +80,9 @@ type TokenLimits struct {
 	VMCPU    int   `json:"vm_cpu,omitempty"`
 	VMMemMB  int64 `json:"vm_mem_mb,omitempty"`
 	VMDiskGB int64 `json:"vm_disk_gb,omitempty"`
+	// Снимков на одну машину. В отличие от потолков выше 0 — «нельзя»:
+	// снимки занимают диск хоста мимо потолка диска машины.
+	VMSnapshots int `json:"vm_snapshots,omitempty"`
 	// k8s: квота одного namespace (ResourceQuota), подов в нём.
 	K8sCPU       float64 `json:"k8s_cpu,omitempty"`
 	K8sMemMB     int64   `json:"k8s_mem_mb,omitempty"`

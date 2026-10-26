@@ -494,3 +494,40 @@ func (s *Server) handleVMTemplateDelete(w http.ResponseWriter, r *http.Request) 
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "vm.template.delete", tpl.Name, "ok", nil)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// handleVMReinstall переустанавливает машину nkt заданием (диск и
+// настройки первого запуска заново, домен тот же).
+func (s *Server) handleVMReinstall(w http.ResponseWriter, r *http.Request) {
+	var req vmcreate.ReinstallParams
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if req.Spec.ImageID == "" || req.Spec.User == "" {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "vmcreate.imageSelected"))
+		return
+	}
+	if req.Spec.UserData != "" {
+		if _, err := vmcreate.CheckUserData(req.Spec.UserData); err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+	}
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
+		return
+	}
+	user := auth.Username(r.Context())
+	id, err := s.jobs.Start(r.Context(), jobs.Spec{
+		Kind:     vmcreate.KindReinstall,
+		TitleKey: "api.machineReinstallJobTitle", TitleArgs: []any{req.Spec.Name},
+		Queue: "host", Author: user, Steps: 4,
+		Params: req,
+	})
+	s.db.Audit(r.Context(), user, "vm.reinstall", req.Spec.Name, map[bool]string{true: "ok", false: "error"}[err == nil], req.Spec.ImageID)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
+}

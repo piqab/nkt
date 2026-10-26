@@ -280,3 +280,22 @@ func TestParseRun(t *testing.T) {
 		t.Fatalf("block step: %+v", st)
 	}
 }
+
+// vm: перезагрузка, удаление, снимки, размеры.
+func TestParseVMLifecycle(t *testing.T) {
+	sc, issues := Parse("on web1 vm reboot app1\non web1 vm snapshot app1 before\non web1 vm revert app1 before\non web1 vm resize app1 cpu 4 disk 40\non web1 vm delete app1\n", nil)
+	if len(issues) > 0 || len(sc.Steps) != 5 {
+		t.Fatalf("%v %+v", issues, sc.Steps)
+	}
+	if st := sc.Steps[3]; st.Action != "resize" || st.Args["cpu"] != "4" || st.Args["disk"] != "40" {
+		t.Errorf("resize: %+v", st)
+	}
+	if st := sc.Steps[1]; st.Action != "snapshot" || st.Args["snap"] != "before" {
+		t.Errorf("snapshot: %+v", st)
+	}
+	for _, bad := range []string{"on web1 vm resize app1", "on web1 vm resize app1 cpu 0", "on web1 vm snapshot app1", "on web1 vm snapshot app1 --x"} {
+		if _, issues := Parse(bad, nil); len(issues) == 0 {
+			t.Errorf("%s: accepted", bad)
+		}
+	}
+}

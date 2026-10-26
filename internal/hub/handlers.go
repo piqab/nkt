@@ -1359,7 +1359,7 @@ func (s *Server) handleVMDomainAction(w http.ResponseWriter, r *http.Request) {
 	}
 	action := chi.URLParam(r, "action")
 	switch action {
-	case "start", "shutdown", "destroy":
+	case "start", "shutdown", "destroy", "reboot":
 	default:
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.unknownMachineAction"))
 		return
@@ -1375,7 +1375,7 @@ func (s *Server) handleVMDomainAction(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 	path := "/api/vms/" + url.PathEscape(host.Name) + "/" + action
-	if _, err := s.hub.HostAPI(r.Context(), host.ParentID, "POST", path, nil, nil); err != nil {
+	if _, err := s.hostCall(r.Context(), user, host.ParentID, "POST", path, nil, nil); err != nil {
 		s.db.Audit(r.Context(), user, "vm."+action, host.Name, "error", err.Error())
 		writeErr(w, r, http.StatusBadGateway, err)
 		return
@@ -1388,7 +1388,7 @@ func (s *Server) handleVMDomainAction(w http.ResponseWriter, r *http.Request) {
 	}
 	// Состояние в кэше — сразу, не дожидаясь следующего опроса: кнопки в
 	// строке должны переключиться на нажатие, а не через полминуты.
-	s.hub.setVMState(host.ParentID, host.Name, map[string]string{"start": "running", "shutdown": "shut off", "destroy": "shut off"}[action])
+	s.hub.setVMState(host.ParentID, host.Name, map[string]string{"start": "running", "shutdown": "shut off", "destroy": "shut off", "reboot": "running"}[action])
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

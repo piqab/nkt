@@ -558,8 +558,23 @@ func parseOn(toks []string) (Step, error) {
 			}
 			return Step{Kind: KindVMCreate, Name: toks[2], Args: args}, nil
 		}
-		if len(toks) == 3 && oneOf(toks[1], "start", "shutdown", "destroy") && nameRe.MatchString(toks[2]) {
+		if len(toks) == 3 && oneOf(toks[1], "start", "shutdown", "destroy", "reboot", "delete") && nameRe.MatchString(toks[2]) {
 			return Step{Kind: KindVMAction, Action: toks[1], Name: toks[2]}, nil
+		}
+		if len(toks) == 4 && oneOf(toks[1], "snapshot", "revert") && nameRe.MatchString(toks[2]) && nameRe.MatchString(toks[3]) {
+			return Step{Kind: KindVMAction, Action: toks[1], Name: toks[2], Args: map[string]string{"snap": toks[3]}}, nil
+		}
+		if len(toks) >= 4 && toks[1] == "resize" && nameRe.MatchString(toks[2]) {
+			args, err := kv(toks[3:], []string{"cpu", "mem", "disk"}, nil)
+			if err != nil {
+				return Step{}, err
+			}
+			for k, v := range args {
+				if n, err := strconv.Atoi(v); err != nil || n < 1 {
+					return Step{}, msgs.Errorf("script.badNumber", k, v)
+				}
+			}
+			return Step{Kind: KindVMAction, Action: "resize", Name: toks[2], Args: args}, nil
 		}
 		return Step{}, msgs.Errorf("script.badVM")
 	case "apply":

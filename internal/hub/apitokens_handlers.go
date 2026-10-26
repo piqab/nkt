@@ -403,7 +403,7 @@ func (s *Server) validateTokenPerms(ctx context.Context, p *store.TokenPerms) er
 	l := p.Limits
 	if l.CPU < 0 || l.CPU > 4096 || l.HostCPU < 0 || l.HostCPU > 4096 || l.ServiceCPU < 0 || l.ServiceCPU > 1024 || l.K8sCPU < 0 || l.K8sCPU > 4096 ||
 		l.MemMB < 0 || l.HostMemMB < 0 || l.ServiceMemMB < 0 || l.K8sMemMB < 0 || l.DiskGB < 0 || l.K8sStorageGB < 0 || l.MinFreeGB < 0 ||
-		l.VMs < 0 || l.VMs > 1000 || l.VMCPU < 0 || l.VMCPU > 512 || l.VMMemMB < 0 || l.VMDiskGB < 0 || l.K8sPods < 0 || l.DeploysPerHour < 0 || l.DeploysPerHour > 10000 {
+		l.VMs < 0 || l.VMs > 1000 || l.VMCPU < 0 || l.VMCPU > 512 || l.VMMemMB < 0 || l.VMDiskGB < 0 || l.VMSnapshots < 0 || l.VMSnapshots > 100 || l.K8sPods < 0 || l.DeploysPerHour < 0 || l.DeploysPerHour > 10000 {
 		return bad("limits")
 	}
 	if slices.Contains(acts, store.TokenActPipelineDeploy) && (l.CPU > 0 || l.HostCPU > 0) && l.ServiceCPU == 0 {
