@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.2 — 2026-10-26
+
+- **Token machines are isolated.** A token creates a machine only on hosts within its limits (otherwise 403), a token by permission does not see other machines, and its own machines stay reachable for a token limited by hosts.
+- **A script run by a token gets the same checks as the API.** Each line needs its action; machines — limits and usage, k8s manifests — the token's namespaces and quota; a deleted or expired token stops its job.
+- **New token action “own Kubernetes cluster”** — for `k8s … create` and `destroy` in a script.
+- The token preset “Machines: up to 3” (renamed).
+
 ## v1.17.1 — 2026-10-26
 
 - **Your own plugin.** A plugin that is not in the catalog the administrator uploads: Plugins → Catalog → Upload your own plugin.

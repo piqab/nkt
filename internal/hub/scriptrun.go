@@ -139,6 +139,14 @@ func (r *ScriptRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 	if len(issues) > 0 {
 		return msgs.Errorf("hub.scriptParseFailed", issues[0].Line, issues[0].Err)
 	}
+	// Запущен токеном — в контексте он же: шаги проверяют его права, квоты
+	// и машины так же, как запросы API (а не только при запуске).
+	if ctx, err = r.s.tokenScriptContext(ctx, jc.Job.Author); err != nil {
+		return err
+	}
+	if err := r.s.scriptScopeError(ctx, sc); err != nil {
+		return err
+	}
 	// Ответы на вопросы живут в памяти; после перезапуска хаба их нет —
 	// и подставлять заглушки вместо адресов и паролей нельзя.
 	if len(sc.Asks) > 0 && values == nil {
@@ -390,6 +398,11 @@ func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *Script
 		return r.createVM(ctx, jc, p, done, h, st)
 
 	case script.KindVMAction:
+		if t, ok := tokenFromContext(ctx); ok && t.Limited() {
+			if err := r.s.tokenOwnsVM(ctx, t, strconv.FormatInt(h.ID, 10), st.Name); err != nil {
+				return err
+			}
+		}
 		var out map[string]any
 		_, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/vms/"+st.Name+"/"+st.Action, map[string]any{}, &out)
 		return err
@@ -939,6 +952,16 @@ func (r *ScriptRunner) createVM(ctx context.Context, jc *jobs.Context, p *Script
 		profileID = id
 	}
 	install := st.Args["install"] == "true" || profileID != 0
+	// Токен «по правам»: потолки машины и суммы, машина — его (как у
+	// create_vm); не создалась — учёт снимет задание создания.
+	if t, ok := tokenFromContext(ctx); ok && t.Limited() {
+		if err := spec.Validate(); err != nil {
+			return err
+		}
+		if err := r.s.tokenVMCheck(ctx, t, h, spec); err != nil {
+			return err
+		}
+	}
 	steps := 4
 	if install {
 		steps = 5

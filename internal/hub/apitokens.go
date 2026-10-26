@@ -575,7 +575,7 @@ func (m *Manager) hostGroups(ctx context.Context) map[int64]string {
 }
 
 func (s *Server) tokenHostAllowed(ctx context.Context, t store.APIToken, ref string) bool {
-	if !t.Scoped() {
+	if !t.Scoped() && !t.Limited() {
 		return true
 	}
 	id := int64(localHostID)
@@ -585,18 +585,64 @@ func (s *Server) tokenHostAllowed(ctx context.Context, t store.APIToken, ref str
 			return false
 		}
 	}
-	return t.AllowsHost(id, s.hostGroups(ctx)[id])
+	return s.scopeFilter(withToken(ctx, t))(id)
+}
+
+func withToken(ctx context.Context, t store.APIToken) context.Context {
+	return context.WithValue(ctx, tokenCtxKey{}, t)
 }
 
 // scopeFilter — фильтр хостов для списков (нет токена или он без
 // пределов — nil, показывать всё).
+//
+// Машины (дочерние хосты) токену «по правам» — только свои: чужие (других
+// токенов и администратора) он не видит и не трогает ни в списках, ни в
+// мониторинге, ни в сценариях. Свои машины доступны и токену с пределом по
+// хостам, даже если сам хост машины в его списке не значится.
 func (s *Server) scopeFilter(ctx context.Context) func(id int64) bool {
 	t, ok := tokenFromContext(ctx)
-	if !ok || !t.Scoped() {
+	if !ok || (!t.Scoped() && !t.Limited()) {
 		return nil
 	}
 	groups := s.hostGroups(ctx)
-	return func(id int64) bool { return t.AllowsHost(id, groups[id]) }
+	vms, owned := s.tokenVMHosts(ctx, t)
+	return func(id int64) bool {
+		switch {
+		case owned[id]:
+			return true
+		case t.Limited() && vms[id]:
+			return false
+		}
+		return !t.Scoped() || t.AllowsHost(id, groups[id])
+	}
+}
+
+// tokenVMHosts — все машины-хосты хаба (дочерние) и те из них, что
+// принадлежат токену (учёт token_usage: хост-родитель и имя машины).
+func (s *Server) tokenVMHosts(ctx context.Context, t store.APIToken) (vms, owned map[int64]bool) {
+	vms, owned = map[int64]bool{}, map[int64]bool{}
+	hosts, err := s.db.ListAllHosts(ctx)
+	if err != nil {
+		return vms, owned
+	}
+	mine := map[string]bool{}
+	if usage, err := s.db.ListTokenUsage(ctx, t.ID); err == nil {
+		for _, u := range usage {
+			if u.Kind == store.UsageVM {
+				mine[strconv.FormatInt(u.HostID, 10)+"/"+u.Ref] = true
+			}
+		}
+	}
+	for _, h := range hosts {
+		if h.ParentID == 0 {
+			continue
+		}
+		vms[h.ID] = true
+		if mine[strconv.FormatInt(h.ParentID, 10)+"/"+h.Name] {
+			owned[h.ID] = true
+		}
+	}
+	return vms, owned
 }
 
 // pipelineInScope — конвейер целиком в пределах токена: compose-стек, все
@@ -609,7 +655,10 @@ func (s *Server) pipelineInScope(ctx context.Context, p store.Pipeline) bool {
 	}
 	targets, ok := s.pipelineTargets(ctx, p)
 	if !ok {
-		return false
+		// Не compose (кластеры, сценарий хаба): токену с пределом по хостам
+		// — нет; без него — как раньше (доступ решает список конвейеров).
+		t, _ := tokenFromContext(ctx)
+		return !t.Scoped()
 	}
 	for _, t := range targets {
 		if !allow(t.ID) {
