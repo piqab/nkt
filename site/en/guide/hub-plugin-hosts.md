@@ -132,13 +132,28 @@ MCP: `list_hosts` shows plugin hosts too (`kind: plugin`), and
 
 The **connector** plugin — device types without code of your own: each
 type is a JSON profile. Built-in: agentless Linux, macOS, FreeBSD, OpenWrt
-(SSH), Keenetic (HTTP), a printer and a switch (SNMP v2c) — [README](https://github.com/piqab/nkt/tree/main/examples/connector).
+(SSH), Keenetic (HTTP), a printer and a switch (SNMP v2c), UPSes (SNMP —
+UPS-MIB and APC PowerNet; NUT), IP cameras and NVRs (ONVIF; Hikvision and
+Dahua NVR disks) — [README](https://github.com/piqab/nkt/tree/main/examples/connector).
+
+**OpenWrt** (since connector 1.1.0): Wi-Fi — networks and encryption,
+clients with signal strength; DHCP — leases and static leases; firewall
+zones and port forwards; packages with updates (`opkg`, on OpenWrt 24+ —
+`apk`); temperature. Findings: the wan zone accepts everything, SSH or the
+web UI open from wan, an open network, WEP, WPA1 or mixed mode, TKIP, WPS,
+port forwards, root without a password, SSH with passwords, `/overlay`
+full, a release older than 23.05. Actions: reboot, Wi-Fi, a service, a
+package upgrade (in the background), a backup on the router. **Wi-Fi,
+WireGuard and other secrets in `uci export` become `***`**: the hub's
+configuration history doesn't keep them. Versions saved before 1.1.0 still
+contain the keys — to drop them, remove the device from the hub and add it
+again (its history goes with it).
 Your own — the plugin's Profiles section (edited with a diff and history on
 the hub).
 
-![Connector profiles](/screens/en/hub-connector-profiles.png)
+![Connector profiles](/plugin-screens/connector/en/hub-connector-profiles.png)
 
-![Editing a profile](/screens/en/hub-connector-edit.png)
+![Editing a profile](/plugin-screens/connector/en/hub-connector-edit.png)
 
 A profile:
 
@@ -157,23 +172,37 @@ A profile:
 
 - **Link** (`transport`): `ssh` — the source `{"cmd": "…"}` (a command on
   the device; it can compute too — awk, sed); `http` — `{"get": "/path"}`
-  (`auth`: `basic`, `bearer`, `keenetic`); `snmp` — `{"oid": "…"}` and
-  `{"table": {"column": "OID"}}` (a walk, rows by index). Also
-  `{"const": value}` and `{"conn": "login field"}`.
+  (`auth`: `basic`, `bearer`, `keenetic`, `digest`); `snmp` — `{"oid": "…"}`
+  and `{"table": {"column": "OID"}}` (a walk, rows by index); `nut` —
+  `{"nut": "vars"}` (all UPS variables, the form's “UPS name” field);
+  `onvif` — `{"onvif": "info" | "time" | "streams" | "config"}` (the
+  password goes as a WS-Security digest) and `{"get": …}` with HTTP digest
+  for the vendor API. Also `{"const": value}`, `{"conn": "login field"}`,
+  `{"any": [source, …]}` (the first non-empty one: UPS-MIB or APC),
+  `{"fields": [[title, source], …]}` (a “parameter — value” table).
+  `"optional": true` on a source — an API the device may lack: no answer
+  leaves the field empty instead of failing the call.
 - **Parsing** (`parse`, in order): `json` (path `a.b.0`, `a[].b`), `kv`
   (`key=value` lines), `key`, `regex` (first match; named groups — an
   object), `each` (a regex per line → row objects), `lines` (skip N
   lines), `cols` (whitespace columns), `num` (number × factor), `rev`
   (X − number), `pick` (rename row fields), `items` (object → rows),
-  `filter`, `pct`, `join`, `count`, `first`, `trim`.
+  `filter` (the field is an `a.b` path), `pct`, `join`, `count`, `first`,
+  `trim`, `mask` (a regex with a `v` group — replaced with `***`), `xml`
+  (XML → an object, attributes as `@name`, a path as with `json`), `list`
+  (one value → a list), `map` (replace values by a table), `dahua` (the
+  Dahua disk CGI answer).
 - **Where:** `info` (name, os, version, model, serial, arch, firmware,
   uptime_s), `snapshot` (mem_total, cpu, interfaces, services, packages,
   ports, users, neighbors, disks — rows with the common model's fields),
   `extra` (your own tables), `metrics` (cpu_pct, mem_used, mem_total,
   disk_used, disk_size, temp_c, uptime_s, net — rows name/rx/tx),
   `findings` (`if`: `gt`, `lt`, `ge`, `le`, `eq`, `ne`, `contains`,
-  `empty`, `nonempty`; for rows — `field`), `config`, `actions` (`cmd` or
-  `post`, form fields are quoted in), `exec` (for ssh — `sh` commands).
+  `empty`, `nonempty`, `prefix`, `in`, `nin`, `word` — a whole word, like
+  `OB` in a NUT status; for rows — `field`), `config`, `actions` (`cmd`,
+  `post`, `instcmd` — a NUT command, `onvif` — `SystemReboot`; form fields
+  are quoted in), `exec` (for ssh — `sh` commands), `icon` — the type's
+  icon in the host list (`ups`, `camera`…; see below).
 
 A field that fails to parse stays empty instead of an error: one profile
 fits different versions of a device.
