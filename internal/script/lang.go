@@ -209,13 +209,15 @@ var Commands = []CommandDoc{
 		Example: "on web1 vm create app1 image ubuntu-24.04 cpu 2 mem 2048 disk 20 profile app install",
 	},
 	{
-		Kind: KindVMAction, OnHost: true, Syntax: "on ХОСТ vm start|shutdown|destroy ИМЯ",
+		Kind: KindVMAction, OnHost: true, Syntax: "on ХОСТ vm start|shutdown|destroy|reboot|delete ИМЯ · vm snapshot|revert ИМЯ СНИМОК · vm resize ИМЯ [cpu N] [mem МБ] [disk ГБ]",
 		Summary: "script.doc.vmAction",
 		Args: []ArgDoc{
 			{Name: "действие", Required: true, Desc: "script.doc.vmAction.action"},
 			{Name: "ИМЯ", Required: true, Desc: "script.doc.vmAction.name"},
+			{Name: "СНИМОК", Desc: "script.doc.vmAction.snap"},
+			{Name: "cpu / mem / disk", Desc: "script.doc.vmAction.resize"},
 		},
-		Example: "on web1 vm start app1",
+		Example: "on web1 vm snapshot app1 before-upgrade",
 	},
 	{
 		Kind: KindApplyProfile, OnHost: true, Syntax: "on ХОСТ apply profile ПРОФИЛЬ",
@@ -546,6 +548,7 @@ var englishTerms = [][2]string{
 	{"СЕРВЕР", "SERVER"},
 	{"ПАКЕТ", "PACKAGE"},
 	{"АДРЕС", "ADDR"},
+	{"СНИМОК", "SNAPSHOT"},
 	{"ОБРАЗ", "IMAGE"},
 	{"МОСТ", "BRIDGE"},
 	{"ДОМЕН", "DOMAIN"},

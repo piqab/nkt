@@ -36,7 +36,7 @@ title: Команды сценариев
 | [`on ХОСТ docker install`](#cmd-docker-install) | Ставит Docker с официального репозитория docker.com. |
 | [`on ХОСТ docker stack ПУТЬ up\|down\|start\|stop`](#cmd-docker-stack) | Поднимает, гасит, запускает или останавливает compose-стек. |
 | [`on ХОСТ vm create ИМЯ image …`](#cmd-vm-create) | Создаёт виртуальную машину на хосте из облачного образа — как окно «Новая машина». |
-| [`on ХОСТ vm start\|shutdown\|destroy ИМЯ`](#cmd-vm-action) | Запускает, выключает или принудительно гасит машину на хосте. |
+| [`on ХОСТ vm start\|shutdown\|destroy\|reboot\|delete ИМЯ · …`](#cmd-vm-action) | Запускает, выключает, гасит, перезагружает или удаляет (вместе с дисками и записью) машину на хосте; снимок и возврат к нему; vCPU, память и диск (диск только растёт; vCPU и память — после выключения и запуска). |
 | [`on ХОСТ apply profile ПРОФИЛЬ`](#cmd-apply) | Применяет профиль хаба к хосту целиком: строит план и выполняет все пункты. |
 | [`on ХОСТ file put ПУТЬ`](#cmd-file-put) | Записывает файл на хост из блока (через редактор конфигураций: с проверкой и историей, если путь ему знаком). |
 | [`on ХОСТ user add ИМЯ`](#cmd-user-add) | Заводит учётную запись на хосте с SSH-ключом и, при желании, sudo без пароля. |
@@ -294,19 +294,21 @@ end
 on web1 vm create app1 image ubuntu-24.04 cpu 2 mem 2048 disk 20 profile app install
 ```
 
-### `on ХОСТ vm start|shutdown|destroy ИМЯ` {#cmd-vm-action}
+### `on ХОСТ vm start|shutdown|destroy|reboot|delete ИМЯ · vm snapshot|revert ИМЯ СНИМОК · vm resize ИМЯ [cpu N] [mem МБ] [disk ГБ]` {#cmd-vm-action}
 
-Запускает, выключает или принудительно гасит машину на хосте.
+Запускает, выключает, гасит, перезагружает или удаляет (вместе с дисками и записью) машину на хосте; снимок и возврат к нему; vCPU, память и диск (диск только растёт; vCPU и память — после выключения и запуска). Токену — только свои машины, в его потолках.
 
 | Аргумент | Обязательный | Что это |
 |---|---|---|
-| `действие` | ✓ | start, shutdown, destroy |
+| `действие` | ✓ | start, shutdown, destroy, reboot, delete, snapshot, revert, resize |
 | `ИМЯ` | ✓ | имя машины |
+| `СНИМОК` |  | имя снимка (snapshot, revert) |
+| `cpu / mem / disk` |  | новые vCPU, память в МБ, диск в ГБ (resize; хотя бы одно) |
 
 Пример:
 
 ```
-on web1 vm start app1
+on web1 vm snapshot app1 before-upgrade
 ```
 
 ### `on ХОСТ apply profile ПРОФИЛЬ` {#cmd-apply}

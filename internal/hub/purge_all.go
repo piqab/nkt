@@ -11,6 +11,7 @@ import (
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // «Удалить nkt со всех хостов» («О системе» → «Опасная зона»): задание
@@ -175,7 +176,12 @@ func (r *HostPurgeRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
 	jc.StepKey(1, 2, "hub.hostPurgeStepClean", p.Name)
+	host, _ := r.m.db.HostByID(ctx, p.HostID)
 	res := r.m.PurgeHost(ctx, p.HostID, p.Purge)
+	// Машины больше нет — уходит и её учёт у токена.
+	if p.Purge.VM && res.OK && host.ParentID != 0 {
+		_ = r.m.db.DeleteTokenUsage(context.WithoutCancel(ctx), 0, store.UsageVM, host.ParentID, host.Name)
+	}
 	for _, st := range res.Steps {
 		jc.Logf("%s", st)
 	}

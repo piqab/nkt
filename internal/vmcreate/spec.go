@@ -130,6 +130,9 @@ type Spec struct {
 	// (vmnet.IsolatedName), сеть закрыта правилами nftables до запуска
 	// машины. Ставит хаб, не оператор.
 	Isolated bool `json:"isolated,omitempty"`
+	// UserData — свой #cloud-config владельца (CheckUserData): пакеты,
+	// файлы, команды первого запуска поверх настроек nkt.
+	UserData string `json:"user_data,omitempty"`
 }
 
 // Validate проверяет то, что уйдёт в команды и в XML.
@@ -149,6 +152,11 @@ func (s Spec) Validate() error {
 		return msgs.Errorf("vmcreate.userNameInsideMachineInvalid", s.User)
 	case s.Isolated && (s.Bridge != "" || !vmnet.IsIsolated(s.Network)):
 		return msgs.Errorf("vmcreate.isolatedNeedsNetwork")
+	}
+	if s.UserData != "" {
+		if _, err := CheckUserData(s.UserData); err != nil {
+			return err
+		}
 	}
 	for _, key := range append([]string{s.SSHKey}, s.ExtraKeys...) {
 		key = strings.TrimSpace(key)
@@ -193,6 +201,18 @@ func (s Spec) hostname() string {
 // придумывать его здесь значило бы раздавать машины с паролем, который
 // оператор не выбирал. Вход — только по ключу.
 func UserData(s Spec) string {
+	base := baseUserData(s)
+	if s.UserData == "" {
+		return base
+	}
+	// Validate уже проверил свой user-data; не сложилось — только своё nkt.
+	if merged, err := mergeUserData(base, s.UserData); err == nil {
+		return merged
+	}
+	return base
+}
+
+func baseUserData(s Spec) string {
 	var b strings.Builder
 	b.WriteString("#cloud-config\n")
 	fmt.Fprintf(&b, "hostname: %s\n", s.hostname())

@@ -403,6 +403,10 @@ func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *Script
 				return err
 			}
 		}
+		switch st.Action {
+		case "snapshot", "revert", "resize", "delete":
+			return r.vmLifecycle(ctx, jc, h, st)
+		}
 		var out map[string]any
 		_, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/vms/"+st.Name+"/"+st.Action, map[string]any{}, &out)
 		return err
@@ -921,6 +925,47 @@ func (r *ScriptRunner) applyChanges(ctx context.Context, jc *jobs.Context, h sto
 	}
 	g := &GroupApplyRunner{m: r.m}
 	return g.waitHostJob(ctx, jc, h, started.JobID)
+}
+
+// vmLifecycle — снимок, возврат, размеры и удаление машины ХОСТА по
+// имени: теми же путями и потолками, что и API хаба.
+func (r *ScriptRunner) vmLifecycle(ctx context.Context, jc *jobs.Context, h store.Host, st script.Step) error {
+	hosts, err := r.m.db.ListAllHosts(ctx)
+	if err != nil {
+		return err
+	}
+	var vm store.Host
+	for _, c := range hosts {
+		if c.ParentID == h.ID && c.Name == st.Name {
+			vm = c
+		}
+	}
+	if vm.ID == 0 {
+		return msgs.Errorf("hub.scriptVMNotListed", st.Name, h.Name)
+	}
+	switch st.Action {
+	case "snapshot":
+		if err := r.s.vmSnapshotAllowed(ctx, vm); err != nil {
+			return err
+		}
+		_, err := r.s.hostCall(ctx, jc.Job.Author, h.ID, "POST", vmPath(vm, "/snapshots"), map[string]string{"name": st.Args["snap"]}, nil)
+		return err
+	case "revert":
+		_, err := r.s.hostCall(ctx, jc.Job.Author, h.ID, "POST", vmPath(vm, "/snapshots/"+st.Args["snap"]+"/revert"), nil, nil)
+		return err
+	case "resize":
+		n := func(k string) int64 { v, _ := strconv.ParseInt(st.Args[k], 10, 64); return v }
+		out, _, err := r.s.vmResize(ctx, vm, vmResizeRequest{VCPUs: int(n("cpu")), MemoryMB: n("mem"), DiskGB: n("disk")})
+		if err == nil && out["restart_needed"] == true {
+			jc.Log("hub.scriptVMRestartNeeded", st.Name)
+		}
+		return err
+	}
+	id, err := r.s.startVMDelete(ctx, vm, jc.Job.Author)
+	if err != nil {
+		return err
+	}
+	return r.waitHubJob(ctx, jc, id)
 }
 
 // createVM создаёт машину через задание VMProvision и ждёт его; новая

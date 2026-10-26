@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.4 — 2026-10-26
+
+- **A machine's full lifecycle through the hub** — for an administrator and for a token “by permission” with the “machines” action (its own machines only, within its limits):
+  - **reboot;**
+  - **snapshots:** take, revert, delete. For a token — a new “snapshots per machine” limit: empty means no snapshots;
+  - **resources:** vCPU, memory and disk. The disk only grows; vCPU and memory apply after shutdown and start;
+  - **reinstall** from an image: a new disk and first-boot settings, with the same name, network and size;
+  - **full deletion:** disks, the host-list record and the token's usage.
+- **Own user-data** at creation and reinstall: a `#cloud-config` with packages, files and commands (up to 64 KB). nkt sets the account, keys and login — those keys are not allowed in own user-data.
+- **Where:** the API `/hub/hosts/{id}/vm/…`, the MCP tools `vm_snapshot`, `vm_resize`, `vm_reinstall`, `vm_delete`, and the script commands `vm reboot|delete|snapshot|revert|resize`.
+- **Fixed:** a token can no longer create or reinstall a machine from a file on the host's disk (`host:…`) — other machines' disks live there too.
+
 ## v1.17.3 — 2026-10-26
 
 - **A token's machines get their own network.** The hub creates a machine of a token “by permission” in that token's NAT network on the host (`nkt-t<number>`, one network per token); the token cannot set a network or a bridge.

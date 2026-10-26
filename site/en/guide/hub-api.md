@@ -126,6 +126,17 @@ by this token. A token's machines are isolated:
 - its own machines stay visible and reachable for a token limited by
   hosts, even when the machine itself is not in the token's host list.
 
+**What else a token can do with its machine** (the “machines” action):
+reboot; snapshots — take, revert, delete (up to the “snapshots per
+machine” limit; empty — no snapshots); vCPU, memory and disk within the
+token's limits (the disk only grows, vCPU and memory apply after shutdown
+and start); reinstall from a catalog image (disk and data anew, name,
+network and size kept); own `user_data` — a `#cloud-config` with
+packages, files and commands (up to 64 KB; nkt sets the account, keys and
+login); delete the machine entirely — with its disks, record and usage. An
+image from the host's disk directory (`host:…`) is not allowed for a
+token: other machines' disks live there too.
+
 **Own k8s cluster** — `k8s CLUSTER create` and `destroy` in a script —
 only with the “own Kubernetes cluster” action.
 
@@ -244,6 +255,13 @@ to the hub through the tunnel. Conditions:
 | `POST /api/hub/pipelines` | admin | create a pipeline (`{"name":"…","content":"…"}`): `env:` values go to the pipeline's `.env`, `generate:` — the hub creates them; by permission — the “create pipelines” action |
 | `PUT /api/hub/pipelines/{id}` | admin | replace the description (`{"content":"…","note":"…"}`): a new version, `diff` in the answer; a `.env` value already set — `409 env_conflict`, to replace — `"replace_env":true` |
 | `POST /api/hub/pipelines/{id}/remove` | admin | remove a compose pipeline with its stack as a job (`{"all":true,"volumes":false,"images":false,"cert":false}`) → `job_id` |
+| `POST /api/hub/vm/provision` | admin | a new machine (`{"host_id":1,"spec":{"name":"app1","image_id":"ubuntu-24.04","vcpus":2,"memory_mb":2048,"disk_gb":20,"user":"deploy","ssh_key":"ssh-ed25519 …","user_data":"#cloud-config\n…"}}`) → `job_id`; by permission — “machines”, within limits, in the token's network |
+| `POST /api/hub/hosts/{id}/vm/{action}` | admin | `start`, `shutdown`, `destroy`, `reboot`; `{id}` is the machine's own record |
+| `GET`, `POST /api/hub/hosts/{id}/vm/snapshots` | admin | machine snapshots: list; take (`{"name":"before"}`) — a token up to its snapshot limit |
+| `POST …/vm/snapshots/{snap}/revert`, `DELETE …/vm/snapshots/{snap}` | admin | revert to a snapshot, delete a snapshot |
+| `POST /api/hub/hosts/{id}/vm/resize` | admin | `{"vcpus":4,"memory_mb":4096,"disk_gb":40}` (0 — keep; the disk only grows) → `restart_needed` |
+| `POST /api/hub/hosts/{id}/vm/reinstall` | admin | reinstall from an image (`{"image_id":"…","ssh_key":"…","user_data":"…","install_nkt":false}`) → `job_id` |
+| `DELETE /api/hub/hosts/{id}/vm` | admin | delete the machine entirely: domain, disks, record, usage → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | admin | ban or unban (`{"action":"ban","ips":[…],"host_ids":[…]}`) |
 | `POST /api/hosts/{id}/vulnerabilities/scan` | admin | vulnerability scan |
 | `POST/PUT/DELETE /api/hosts/{id}/<section>/…` | admin | host actions: services, containers, package updates and so on, except what is closed above and **file uploads** (image archives, machine images, file browser files, backups — they have routes of their own, closed to tokens) |

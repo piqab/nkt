@@ -31,6 +31,8 @@ var enAPICatalog = map[string]string{
 	"auth.tokenScriptAction":    "line %d: the token needs the %s action",
 	"auth.tokenGone":            "the token %s is gone (deleted or expired) — the job is stopped",
 	"auth.tokenVMNetwork":       "the hub picks a token machine's network (the token's own network): network and bridge cannot be set",
+	"auth.tokenSnapshots":       "machine %s: at most %d snapshots (the token's limit)",
+	"auth.tokenVMHostImage":     "a token cannot use an image from the host's disk directory (host:…) — only from the image catalog",
 	"auth.tokenScriptCluster":   "line %d: cluster “%s” is not entirely on the token's hosts",
 	"auth.tokenScriptPipeline":  "line %d: pipeline “%s” is not entirely on the token's hosts",
 	"auth.tokenHostDenied":      "The host is outside the API token's scope",

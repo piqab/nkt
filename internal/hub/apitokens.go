@@ -420,10 +420,18 @@ var tokenHubRoutes = map[string]string{
 	"GET /hub/k8s/manifests/{id}":   store.TokenActK8sApply,
 	"POST /hub/k8s/manifests/diff":  store.TokenActK8sApply,
 	"POST /hub/k8s/manifests/apply": store.TokenActK8sApply,
-	// Машины (VPS) на хостах: создать, включить, выключить — токену «по
-	// правам» с потолками; свои машины (учёт токена).
-	"POST /hub/vm/provision":           store.TokenActVMManage,
-	"POST /hub/hosts/{id}/vm/{action}": store.TokenActVMManage,
+	// Машины на хостах: создать, включить, выключить, снимки, ресурсы,
+	// переустановка, удаление — токену «по правам» с потолками; только
+	// свои машины (учёт токена).
+	"POST /hub/vm/provision":                          store.TokenActVMManage,
+	"POST /hub/hosts/{id}/vm/{action}":                store.TokenActVMManage,
+	"GET /hub/hosts/{id}/vm/snapshots":                store.TokenActVMManage,
+	"POST /hub/hosts/{id}/vm/snapshots":               store.TokenActVMManage,
+	"POST /hub/hosts/{id}/vm/snapshots/{snap}/revert": store.TokenActVMManage,
+	"DELETE /hub/hosts/{id}/vm/snapshots/{snap}":      store.TokenActVMManage,
+	"POST /hub/hosts/{id}/vm/resize":                  store.TokenActVMManage,
+	"POST /hub/hosts/{id}/vm/reinstall":               store.TokenActVMManage,
+	"DELETE /hub/hosts/{id}/vm":                       store.TokenActVMManage,
 }
 
 // tokenHostAction — запись в разделы хоста через прокси: какое действие

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -278,10 +279,23 @@ func tokenAuthorContext(ctx context.Context, db *store.DB, author string) (conte
 	return ctx, msgs.Errorf("auth.tokenGone", name)
 }
 
+// tokenVMImage — образ для машины токена: из каталога или свой образ
+// хаба, но не файл из каталога дисков хоста («host:…»): там лежат и диски
+// чужих машин.
+func tokenVMImage(spec vmcreate.Spec) error {
+	if strings.HasPrefix(spec.ImageID, vmcreate.HostPrefix) {
+		return msgs.Errorf("auth.tokenVMHostImage")
+	}
+	return nil
+}
+
 // tokenVMIsolate — машина токена «по правам» живёт в сети своего токена
 // (vmnet.IsolatedName): хост закрывает её правилами nftables. Свою сеть
 // или мост токен указать не может.
 func tokenVMIsolate(t store.APIToken, spec *vmcreate.Spec) error {
+	if err := tokenVMImage(*spec); err != nil {
+		return err
+	}
 	own := vmnet.IsolatedName(t.ID)
 	if spec.Bridge != "" || (spec.Network != "" && spec.Network != own) {
 		return msgs.Errorf("auth.tokenVMNetwork")

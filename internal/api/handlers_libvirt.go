@@ -83,3 +83,72 @@ func (s *Server) handleVMCreateDisk(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// handleVMSnapshots — снимки машины.
+func (s *Server) handleVMSnapshots(w http.ResponseWriter, r *http.Request) {
+	list, err := s.libvirt.Snapshots(r.Context(), chi.URLParam(r, "name"))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if list == nil {
+		list = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"snapshots": list})
+}
+
+// handleVMSnapshotCreate делает снимок ({"name": "…"}).
+func (s *Server) handleVMSnapshotCreate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.libvirt.CreateSnapshot(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "name"), req.Name); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleVMSnapshotRevert возвращает машину к снимку.
+func (s *Server) handleVMSnapshotRevert(w http.ResponseWriter, r *http.Request) {
+	if err := s.libvirt.RevertSnapshot(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "name"), chi.URLParam(r, "snap")); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleVMSnapshotDelete удаляет снимок.
+func (s *Server) handleVMSnapshotDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.libvirt.DeleteSnapshot(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "name"), chi.URLParam(r, "snap")); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleVMResize меняет vCPU, память и диск ({"vcpus","memory_mb","disk_gb"},
+// 0 — не менять).
+func (s *Server) handleVMResize(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		VCPUs    int   `json:"vcpus"`
+		MemoryMB int64 `json:"memory_mb"`
+		DiskGB   int64 `json:"disk_gb"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	res, err := s.libvirt.Resize(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "name"), req.VCPUs, req.MemoryMB, req.DiskGB)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, res)
+}

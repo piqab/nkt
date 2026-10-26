@@ -789,7 +789,9 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 		func(ctx context.Context, tmpPath, name string) (string, error) {
 			return vmcreate.PutHostImage(ctx, api.RunTooling, tmpPath, name)
 		}))
-	m.Register(vmcreate.KindCreate, vmcreate.NewCreateRunner(images, collector, api.RunTooling))
+	createRunner := vmcreate.NewCreateRunner(images, collector, api.RunTooling)
+	m.Register(vmcreate.KindCreate, createRunner)
+	m.Register(vmcreate.KindReinstall, vmcreate.NewReinstallRunner(createRunner))
 	m.Register(k8s.KindInstall, k8s.NewInstallRunner(k8s.New(collector, privilegedRunner(cfg))))
 	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(api.RunTooling))
 	// Бэкапы: в режиме fixtures выполнять нечего — исполнитель без exec
@@ -931,6 +933,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// Создание машины на управляемом хосте с записью её в список — тоже
 	// задание хаба: одну половину делает хост, вторую он сам.
 	r.jobs.Register(hub.KindVMProvision, hub.NewVMProvisionRunner(manager))
+	r.jobs.Register(hub.KindVMReinstall, hub.NewVMReinstallRunner(manager))
 	r.jobs.Register(hub.KindClamDBPush, hub.NewClamDBPushRunner(manager))
 	r.jobs.Register(hub.KindPurgeAll, hub.NewPurgeAllRunner(manager))
 	r.jobs.Register(hub.KindHostPurge, hub.NewHostPurgeRunner(manager))
