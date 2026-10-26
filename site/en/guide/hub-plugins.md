@@ -18,7 +18,9 @@ mailboxes, aliases and DKIM, MX/SPF/DKIM records through the DNS plugin;
 [LiteLLM](/en/guide/hub-plugin-litellm) — virtual model keys with budgets
 and limits, models, spend; MikroTik — routers as
 [plugin hosts](/en/guide/hub-plugin-hosts) (devices without the nkt agent
-in the common host list).
+in the common host list); [Yandex Cloud](/en/guide/hub-plugin-yandex-cloud) —
+VMs, disks and snapshots, security groups, buckets, Cloud DNS for the hub,
+databases, balance.
 
 ## How it works
 

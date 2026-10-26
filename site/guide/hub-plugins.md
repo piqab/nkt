@@ -17,7 +17,9 @@ docker-mailserver, записи MX/SPF/DKIM через DNS-плагин;
 [LiteLLM](/guide/hub-plugin-litellm) — виртуальные ключи к моделям с
 бюджетом и лимитами, модели, расход; MikroTik — роутеры как
 [хосты плагинов](/guide/hub-plugin-hosts) (устройства без агента nkt в
-общем списке хостов).
+общем списке хостов); [Yandex Cloud](/guide/hub-plugin-yandex-cloud) —
+ВМ, диски и снимки, группы безопасности, бакеты, Cloud DNS для хаба, базы,
+баланс.
 
 ## Как это устроено
 

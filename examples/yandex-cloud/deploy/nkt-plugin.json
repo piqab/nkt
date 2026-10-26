@@ -1,0 +1,22 @@
+{
+  "name": "yc",
+  "title": {"ru": "Yandex Cloud", "en": "Yandex Cloud"},
+  "description": {
+    "ru": "Облако из хаба: ВМ (включить, выключить, перезагрузить, снимок; ВМ — и как хосты nkt), диски и снимки, группы безопасности, Object Storage, Cloud DNS (и DNS-функции хаба), PostgreSQL и MySQL, баланс; команды «yc …», MCP. Ставится на машину хаба или любой хост с интернетом; нужен openssl.",
+    "en": "The cloud from the hub: VMs (start, stop, restart, snapshot; VMs — also as nkt hosts), disks and snapshots, security groups, Object Storage, Cloud DNS (and the hub's DNS functions), PostgreSQL and MySQL, balance; “yc …” commands, MCP. Installed on the hub machine or any host with internet access; needs openssl."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9240,
+  "settings": [
+    {"env": "YC_SA_KEY_B64", "secret": true, "required": true,
+     "title": {"ru": "Ключ сервисного аккаунта (base64)", "en": "Service account key (base64)"},
+     "hint": {"ru": "yc iam key create --service-account-name nkt -o key.json; base64 -w0 key.json — одной строкой. Роли аккаунту — на нужные каталоги (viewer — смотреть, editor — управлять)", "en": "yc iam key create --service-account-name nkt -o key.json; base64 -w0 key.json — one line. Give the account roles on the folders it needs (viewer — view, editor — manage)"}},
+    {"env": "YC_FOLDERS", "required": true,
+     "title": {"ru": "Каталоги (id через запятую)", "en": "Folders (ids, comma-separated)"},
+     "hint": {"ru": "yc resource-manager folder list", "en": "yc resource-manager folder list"}},
+    {"env": "YC_BILLING_ACCOUNT",
+     "title": {"ru": "Платёжный аккаунт (id)", "en": "Billing account (id)"},
+     "hint": {"ru": "для раздела «Баланс»; пусто — без него", "en": "for the Balance section; empty — without it"}}
+  ]
+}

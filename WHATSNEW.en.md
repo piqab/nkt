@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.15.2 — 2026-10-26
+
+- A **Yandex Cloud** plugin: VMs (start, stop, restart, boot disk
+  snapshot), disks and snapshots, security groups (rules open to the whole
+  internet), Object Storage buckets (public or not, size), Cloud DNS
+  (zones, records and the hub's DNS functions — Traffic Fly, sites,
+  autonames), Managed PostgreSQL and MySQL, balance; `yc …` commands, MCP.
+- **A VM as an nkt host**: Add a device → “Yandex Cloud VM”. Findings:
+  port 22, 3389 or a database open to the whole internet, a public address
+  without security groups, no snapshot in 7 days, the VM is stopped or
+  preemptible; the VM configuration — in versions with a diff (metadata
+  values aren't stored).
+- Login — a service account key; the plugin signs the JWT itself with
+  `openssl` and exchanges it for an IAM token.
+
 ## v1.15.1 — 2026-10-26
 
 - The **connector** plugin: devices without the nkt agent **by profiles**,
