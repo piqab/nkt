@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.16.1 — 2026-10-26
+
+- A plugin can set its device type's icon (an `icon` field in the manifest). The icon is one of those the hub knows, and an unknown one becomes the generic device icon. UPS, camera and Home Assistant icons are added for the new catalog types. Further device types no longer need an nkt release just for an icon.
+
 ## v1.16.0 — 2026-10-26
 
 - **A plugin catalog.** Plugins and pipeline examples are no longer built into nkt. They live in the repository's `examples/`, and CI builds a signed catalog from them and publishes it next to the site. A new plugin or a fix to an old one reaches the hub without an nkt release.

@@ -195,6 +195,10 @@ Keenetic (HTTP), принтер и коммутатор (SNMP v2c) — [README](
 
 Поле `address` обязательно; `type: password` — секрет (хаб его не
 показывает); поле `fingerprint` хаб заполняет тем, что вернула проверка.
+`icon` (с nkt 1.16.1, необязательно) — значок типа в списке хостов:
+`mikrotik`, `openwrt`, `macos`, `windows`, `keenetic`, `yandexcloud`,
+`homeassistant`, `printer`, `switch`, `ups`, `camera`, `device` или значок
+ОС (`debian`, `freebsd`…); незнакомый хабу — общий «устройство».
 Хаб вызывает служебные операции с `args: {type, conn, …}` (`conn` — поля
 формы):
 

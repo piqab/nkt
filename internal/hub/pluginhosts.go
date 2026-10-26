@@ -714,11 +714,12 @@ func (s *Server) pluginHostState(id int64) (pluginHostStateJSON, bool) {
 var pluginHostTypeIcons = map[string]string{
 	"windows": "windows", "routeros": "mikrotik", "openwrt": "openwrt", "macos": "macos",
 	"freebsd": "freebsd", "keenetic": "keenetic", "snmp-printer": "printer", "snmp-switch": "switch",
-	"yc-vm": "yandexcloud",
+	"yc-vm": "yandexcloud", "snmp-ups": "ups", "nut-ups": "ups", "onvif-camera": "camera", "home-assistant": "homeassistant",
 }
 
-func pluginHostOS(typ string, info *plugin.HostInfo) *model.OSInfo {
-	out := &model.OSInfo{ID: pluginHostTypeIcons[typ], Source: osinfo.SourcePlugin}
+func pluginHostOS(t plugin.HostType, info *plugin.HostInfo) *model.OSInfo {
+	typ := t.ID
+	out := &model.OSInfo{ID: firstNonEmpty(t.Icon, pluginHostTypeIcons[typ]), Source: osinfo.SourcePlugin}
 	if out.ID == "" {
 		out.ID = "device"
 	}
@@ -860,7 +861,7 @@ func (s *Server) pollPluginHostNow(ctx context.Context, id int64, full bool) {
 	pluginHostStates.Unlock()
 	// Значок в списке хостов — по типу устройства (RouterOS, принтер…), в
 	// подсказке — модель и версия с самого устройства.
-	s.hub.notePluginHostPolled(ctx, id, findings, severeNow, m.UptimeS, pluginHostOS(h.PluginType, st.Info))
+	s.hub.notePluginHostPolled(ctx, id, findings, severeNow, m.UptimeS, pluginHostOS(t, st.Info))
 	if t.HasSection(plugin.SectionConfig) && (full || st.ticks == 1 || st.ticks%pluginHostConfigEvery == 0) {
 		_, _ = s.pluginHostConfigFetch(ctx, h, "")
 	}

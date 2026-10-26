@@ -197,7 +197,11 @@ manifest:
 
 The `address` field is required; `type: password` is a secret (the hub
 doesn't show it); the hub fills the `fingerprint` field with what the
-check returned. The hub calls service operations with
+check returned. `icon` (since nkt 1.16.1, optional) is the type's icon in
+the host list: `mikrotik`, `openwrt`, `macos`, `windows`, `keenetic`,
+`yandexcloud`, `homeassistant`, `printer`, `switch`, `ups`, `camera`,
+`device` or an OS icon (`debian`, `freebsd`…); one the hub doesn't know
+becomes the generic device icon. The hub calls service operations with
 `args: {type, conn, …}` (`conn` — the form fields):
 
 | Operation | Answer |

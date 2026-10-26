@@ -128,6 +128,10 @@ type HostType struct {
 	// Exec — язык команд _host_exec (routeros, powershell, sh); пусто —
 	// команд нет.
 	Exec string `json:"exec,omitempty"`
+	// Icon — значок типа в списке хостов (mikrotik, openwrt, ups, camera,
+	// homeassistant, printer, switch, device…); неизвестный хабу — общий
+	// «устройство». Пусто — хаб подбирает по ID типа.
+	Icon string `json:"icon,omitempty"`
 }
 
 // HostInfo — кратко об устройстве (_host_check, обзор).
@@ -494,6 +498,9 @@ func (m *Manifest) Validate() error {
 	}
 	types := map[string]bool{}
 	for _, ht := range m.HostTypes {
+		if ht.Icon != "" && !hostTypeRe.MatchString(ht.Icon) {
+			return fmt.Errorf("host type %q: bad icon %q", ht.ID, ht.Icon)
+		}
 		if !hostTypeRe.MatchString(ht.ID) || types[ht.ID] {
 			return fmt.Errorf("bad or repeated host type %q", ht.ID)
 		}
