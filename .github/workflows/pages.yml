@@ -71,6 +71,17 @@ jobs:
             fi
           done
           echo "failed=${failed#,}" >> "$GITHUB_OUTPUT"
+          # Примеры своих плагинов (examples/_samples) — не в каталог, а
+          # архивом рядом с сайтом («Скачать пример» в окне загрузки).
+          mkdir -p site/.vitepress/dist/samples
+          for j in examples/_samples/*/deploy/nkt-plugin.json; do
+            dir=$(dirname "$(dirname "$j")"); key=$(basename "$dir")
+            if "$RUNNER_TEMP/nkt-catalog" lint -dir "$dir" && (cd "$dir/deploy" && timeout 600 python3 -I test_plugin.py); then
+              tar czf "site/.vitepress/dist/samples/$key.tar.gz" --exclude=__pycache__ -C examples/_samples "$key"
+            else
+              echo "::warning::пример своего плагина $key не прошёл lint или тест — архив не выложен"
+            fi
+          done
       # Каталог собирается во временном каталоге и попадает в выкладку
       # только подписанным и сверенным со встроенным в nkt ключом. Ошибка
       # каталога видна в процессе (::error), но сайт всё равно выкладывается —

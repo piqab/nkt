@@ -199,19 +199,18 @@ type PluginPackage struct {
 	Content []byte `json:"-"`
 }
 
-// PluginPackages — плагины текущего каталога (по ключу).
+// PluginPackages — плагины текущего каталога и свои плагины хаба (ключ
+// «local:<имя>»), по ключу.
 func PluginPackages() []PluginPackage {
-	s := Current()
-	if s == nil {
-		return nil
-	}
-	out := make([]PluginPackage, 0, len(s.Index.Plugins))
-	for _, p := range s.Index.Plugins {
-		content, ok := s.File(p.Key, "deploy/"+p.File)
-		if !ok {
-			continue
+	out := localPackages()
+	if s := Current(); s != nil {
+		for _, p := range s.Index.Plugins {
+			content, ok := s.File(p.Key, "deploy/"+p.File)
+			if !ok {
+				continue
+			}
+			out = append(out, PluginPackage{Plugin: p, Content: content})
 		}
-		out = append(out, PluginPackage{Plugin: p, Content: content})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out

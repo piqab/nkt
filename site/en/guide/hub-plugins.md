@@ -104,6 +104,50 @@ raise `version`, otherwise the catalog build stops: hubs would never learn
 about the update. A pipeline example — `pipeline*.yaml` and
 `nkt-example.json` (the template for Examples ▾).
 
+## Your own plugin
+
+A plugin that is not in the catalog — for example, one written by the
+[guide](/en/guide/plugin-authoring) — the administrator uploads to the hub:
+About → Plugins → Catalog → **Upload your own plugin**.
+
+![Upload your own plugin](/screens/en/hub-plugin-own-upload.png)
+
+1. **An archive** of the plugin folder (`.tar.gz` or `.zip`) — like
+   `examples/<name>/` in the repository: `deploy/nkt-plugin.json`,
+   `deploy/nkt-plugin.py`, README, `screens/`. The test may stay — the hub
+   neither stores nor runs it.
+2. **The hub's check** — the same static one as the catalog's
+   `nkt-catalog lint`: the package, version = `VERSION` in the code, ru/en
+   texts, secret settings, forbidden code (`shell=True`, `os.system`,
+   `eval`, a command string). Plus the archive paths (no `..`, links or
+   absolute paths), sizes (a file up to 2 MB, all up to 10 MB), a name not
+   taken by the catalog, a version above the uploaded one. **The hub never
+   runs the plugin.**
+3. **The whole code** (a new version — a diff with the previous one). Tick
+   Code reviewed and Save: the plugin will run as a service on hosts, and
+   whoever uploaded it answers for it. The audit log keeps who, the version,
+   the SHA-256.
+4. In the hub catalog the plugin is marked **own**: Install on a host,
+   Update on the host after uploading a new version — as with catalog
+   plugins; the hub checks the manifest when connecting. Delete own removes
+   it from the hub catalog (with a confirmation if it is installed;
+   installations stay until removed from the host).
+
+Only an administrator uploads, and only in the UI (not an API token or
+MCP). Own plugins and the history of the last 10 code versions go into the
+hub export.
+
+**Step by step — `url-check`** (address checks: response code, time,
+certificate expiry, findings, the `urlcheck ADDRESS` command):
+
+1. Download the example in the upload window (`https://piqab.github.io/nkt/samples/url-check.tar.gz`)
+   or from the repository: `tar czf url-check.tar.gz -C examples/_samples url-check`.
+2. Upload your own plugin → the archive → the code → Code reviewed → Save.
+3. “URL check” (own) → Install on a host → comma-separated addresses in the
+   form → a job.
+4. The plugin's Addresses and Findings; in a script after a deploy —
+   `urlcheck https://shop.example.com/health`.
+
 ## Install on a host (no Docker)
 
 A plugin from the [catalog](#plugin-catalog) can be

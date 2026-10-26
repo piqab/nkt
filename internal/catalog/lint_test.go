@@ -17,6 +17,8 @@ func TestLintExamples(t *testing.T) {
 	_, err := exec.LookPath("python3")
 	live := err == nil
 	dirs, _ := filepath.Glob(filepath.Join(catalogtest.ExamplesDir(), "*", "deploy", "nkt-plugin.json"))
+	samples, _ := filepath.Glob(filepath.Join(catalogtest.ExamplesDir(), "_samples", "*", "deploy", "nkt-plugin.json"))
+	dirs = append(dirs, samples...)
 	if len(dirs) < 9 {
 		t.Fatalf("plugins: %v", dirs)
 	}

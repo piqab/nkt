@@ -246,7 +246,15 @@ that fails stays out, the rest are published.
 - [ ] README.md and README.en.md: what it does, what the service side needs (token rights), how to install, security.
 - [ ] Screenshots in `screens/ru/` and `screens/en/` if there is a UI.
 
-## 11. Live (optional)
+## 11. Your own plugin without the catalog
+
+A plugin not meant for the shared catalog — upload an archive of its folder
+to the hub: Plugins → Catalog → Upload your own plugin (administrators
+only). The hub checks it with the same static `lint`, shows the code and
+installs it on hosts like a catalog plugin. An example —
+[examples/_samples/url-check](https://github.com/piqab/nkt/tree/main/examples/_samples/url-check).
+
+## 12. Live (optional)
 
 Start the plugin with `NKT_PLUGIN_SECRET`, `NKT_PLUGIN_PORT`,
 `NKT_PLUGIN_LISTEN=127.0.0.1` and its settings and connect it to a test
