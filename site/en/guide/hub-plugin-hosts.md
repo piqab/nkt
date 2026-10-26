@@ -18,7 +18,10 @@ SNMP) — [below](#connector-devices-by-profiles); **Windows** — via the
 built-in OpenSSH and PowerShell, no WinRM: findings (updates, Defender,
 firewall, RDP without NLA, SMBv1, BitLocker), services, update
 installation, PowerShell commands — [README](https://github.com/piqab/nkt/tree/main/examples/windows);
-**Yandex Cloud VMs** — [the Yandex Cloud plugin](/en/guide/hub-plugin-yandex-cloud).
+**Yandex Cloud VMs** — [the Yandex Cloud plugin](/en/guide/hub-plugin-yandex-cloud);
+**Home Assistant** — as one device through the REST API: unavailable devices,
+low batteries, updates, backups, scripts and service calls —
+[README](https://github.com/piqab/nkt/tree/main/examples/home-assistant).
 
 ## Add a device
 

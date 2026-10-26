@@ -274,7 +274,7 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
 - [x] connector 1.1.0 в каталоге: OpenWrt подробнее (ключи в `uci export`
       под `***`), ИБП (`snmp-ups`, `nut-ups`), камеры (`onvif-camera`, диски
       регистраторов Hikvision/Dahua).
-- [ ] Home Assistant — отдельным плагином в каталоге.
+- [x] Home Assistant — отдельным плагином в каталоге (home-assistant 1.0.0).
 - [ ] Метрики ИБП (заряд, нагрузка, время от батареи) в «Мониторинге» — в
       протоколе пока только cpu/mem/disk/temp/net; сейчас — таблица в составе.
 

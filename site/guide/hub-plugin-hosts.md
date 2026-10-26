@@ -17,7 +17,10 @@ OpenWrt, Linux без агента, Keenetic, принтеры и коммута
 OpenSSH и PowerShell, без WinRM: находки (обновления, Defender, брандмауэр,
 RDP без NLA, SMBv1, BitLocker), службы, установка обновлений, команды
 PowerShell — [README](https://github.com/piqab/nkt/tree/main/examples/windows);
-**ВМ Yandex Cloud** — [плагин Yandex Cloud](/guide/hub-plugin-yandex-cloud).
+**ВМ Yandex Cloud** — [плагин Yandex Cloud](/guide/hub-plugin-yandex-cloud);
+**Home Assistant** — одним устройством через REST API: недоступные устройства,
+разряженные батареи, обновления, резервные копии, сценарии и вызов служб —
+[README](https://github.com/piqab/nkt/tree/main/examples/home-assistant).
 
 ## Добавить устройство
 

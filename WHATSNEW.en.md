@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.16.3 — 2026-10-26
+
+- **A Home Assistant plugin (catalog).** Home Assistant appears in Hosts as one device: an address and a long-lived token, with no add-ons on the HA side.
+  - **Inventory:** version, areas, integrations, automations, device and entity counts.
+  - **Findings:** entities unavailable for over 30 minutes, batteries below 20 %, available core, OS, add-on and firmware updates, no backup for over 7 days.
+  - **Configuration with a diff:** which entities and integrations exist, without states.
+  - **Actions:** restart, install an update, a script, an automation.
+  - **Commands** — calling an HA service, such as `light.turn_off {"entity_id": "light.hall"}`, from hub scripts and MCP too.
+
 ## v1.16.2 — 2026-10-26
 
 - **The connector plugin 1.1.0 (catalog):**

@@ -43,7 +43,7 @@ func TestBuildFromExamples(t *testing.T) {
 			t.Errorf("%s: test in catalog", p.Key)
 		}
 	}
-	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,litellm,mikrotik,technitium,windows,yandex-cloud" {
+	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,home-assistant,litellm,mikrotik,technitium,windows,yandex-cloud" {
 		t.Fatalf("plugins: %v", keys)
 	}
 	pipes := map[string]bool{}
@@ -131,11 +131,11 @@ func TestFetchSaveLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snap.Index.Plugins) != 8 || snap.Source != srv.URL+"/catalog/" {
+	if len(snap.Index.Plugins) != 9 || snap.Source != srv.URL+"/catalog/" {
 		t.Fatalf("snapshot: %d %s", len(snap.Index.Plugins), snap.Source)
 	}
 	again, err := catalog.Load(dir, keys)
-	if err != nil || len(again.Index.Plugins) != 8 || again.Source != snap.Source {
+	if err != nil || len(again.Index.Plugins) != 9 || again.Source != snap.Source {
 		t.Fatalf("load: %v", err)
 	}
 	// Плохая подпись — ошибка, копия на диске прежняя.
