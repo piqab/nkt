@@ -54,16 +54,65 @@ outside nkt). Disconnect removes the sections, commands and tools from the
 hub and revokes the plugin's token; the plugin itself and its data stay on
 the host.
 
+## Plugin catalog
+
+Plugins and pipeline examples are not built into nkt: they live in the
+repository's [`examples/`](https://github.com/piqab/nkt/tree/main/examples),
+and CI builds a **catalog** from them and publishes it next to this site —
+`https://piqab.github.io/nkt/catalog/`. A new plugin or a fix to an old one
+reaches the hub without an nkt release.
+
+About → Plugins → **Catalog**: each plugin's version, a “tests against
+fakes passed” mark, where it is already installed and whether a newer one
+exists, Guide (the plugin's README and screenshots) and Install on a host.
+
+![Plugin catalog](/screens/en/hub-plugin-catalog.png)
+
+![A plugin guide from the catalog](/screens/en/hub-plugin-catalog-readme.png)
+
+- **Signature.** The catalog is signed with an ed25519 key; the public key
+  is built into nkt. The hub checks the signature and every file's SHA-256 —
+  on download, on an archive upload and when reading its own copy from
+  disk. A mismatch — the catalog is rejected and the previous copy stays.
+  The signature can be checked without nkt too: `openssl pkeyutl -verify
+  -pubin -inkey key.pub -rawin -in index.json -sigfile index.json.sig`.
+- **Tests.** CI runs each plugin's test against fakes
+  (`deploy/test_plugin.py`); a failing plugin is left out of the catalog,
+  the rest are published.
+- **The hub's copy** lives in `DataDir/catalog`, refreshed every 6 hours
+  and with **Update the catalog** (a job). Installing and updating plugins
+  and Deployments → Examples work from the copy — without internet too.
+- **Without internet:** download `https://piqab.github.io/nkt/catalog.tar.gz`
+  on a machine with internet and upload it with **Upload an archive** — the
+  same checks apply.
+- **Compatibility.** A plugin has `min_nkt`: on an older hub Install is
+  disabled with an explanation.
+- **Your own catalog** (Catalog source, with a diff and a history): a fork
+  of the repository with its own key — `openssl genpkey -algorithm
+  ed25519`, the private key in the fork's `NKT_CATALOG_KEY` secret, the
+  public one (`openssl pkey -pubout`) in “Your own public keys”; or your own
+  server with the same layout (`index.json`, `index.json.sig`, files). Your
+  key is added to the built-in one. The source settings go into the hub
+  export.
+
+**For a plugin author:** a folder `examples/<name>/` — `deploy/nkt-plugin.json`
+(with `version`, `min_nkt`, `protocol`), `deploy/nkt-plugin.py` (`VERSION`
+as in the JSON), `deploy/test_plugin.py`, `README.md` and `README.en.md`,
+screenshots in `screens/ru/` and `screens/en/`. Changed the plugin's files —
+raise `version`, otherwise the catalog build stops: hubs would never learn
+about the update. A pipeline example — `pipeline*.yaml` and
+`nkt-example.json` (the template for Examples ▾).
+
 ## Install on a host (no Docker)
 
-A plugin from the hub's built-in catalog (Technitium DNS for now) can be
+A plugin from the [catalog](#plugin-catalog) can be
 installed as a service right on the host, without a container: About →
 Plugins → **Install on a host** → the plugin, the host and its settings
 (each plugin has its own form) → a job in the standard log window.
 
 ![Install a plugin on a host](/screens/en/hub-plugin-install.png)
 
-- The hub puts **its own version** of the plugin file into
+- The hub puts the plugin file **from the verified catalog copy** into
   `/opt/nkt-plugins/<name>/`, the settings into
   `/etc/nkt-plugins/<name>.env` (`0600`, root only, no config history), a
   `nkt-plugin-<name>.service` unit: a separate user (`DynamicUser`),

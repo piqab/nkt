@@ -53,11 +53,11 @@ The row in the host list is like any other: state, findings, address,
 | **Commands** | a command in the device's language (RouterOS, PowerShell) — with a confirmation, into the action log |
 | **Login** | change the login and password (empty keeps the current one), with Check and a diff |
 
-![Device: inventory](/screens/en/hub-device-overview.png)
+![Device: inventory](/plugin-screens/mikrotik/en/hub-device-overview.png)
 
-![Device: configuration diff](/screens/en/hub-device-config.png)
+![Device: configuration diff](/plugin-screens/mikrotik/en/hub-device-config.png)
 
-![Windows: findings](/screens/en/hub-device-windows.png)
+![Windows: findings](/plugin-screens/windows/en/hub-device-windows.png)
 
 Anyone who sees the host can view (and a read token within its hosts);
 actions, commands and the login — an admin or a by-permission token with

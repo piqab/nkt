@@ -18,7 +18,7 @@ import { SitesPanel } from '../components/SitesPanel'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TabHelp, TitleHelp } from '../components/Docs'
 import { pipelinePower } from '../components/pipelinePower'
-import { EXAMPLE_WARNING, PIPELINE_EXAMPLES, type PipelineExample } from '../pipelineExamples'
+import { EXAMPLE_WARNING, catalogExamples, type PipelineExample } from '../pipelineExamples'
 import { msg, tx, type Msg } from '../msg'
 
 interface Deployment {
@@ -863,6 +863,8 @@ function ComposeFromLink({
 }) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
+  // Примеры — из каталога хаба (examples/<пример>/nkt-example.json).
+  const examples = catalogExamples(useApi<{ examples: { key: string; title: string; ui?: PipelineExample }[] }>('/hub/catalog').data)
   const [init] = useState(() => (initialFrom ? fromDescription(initialFrom) : null))
   const [link, setLink] = useState(init?.link ?? '')
   const [picked, setPicked] = useState<string[]>(init?.hosts ?? [])
@@ -1091,19 +1093,21 @@ function ComposeFromLink({
         <Dropdown
           trigger={['click']}
           menu={{
-            items: PIPELINE_EXAMPLES.map((ex) => ({
-              key: ex.key,
-              label: (
-                <div style={{ maxWidth: 360 }}>
-                  <strong>{t(`deploy.examples.${ex.key}.title`)}</strong>
-                  <div className="small muted" style={{ whiteSpace: 'normal' }}>
-                    {t(`deploy.examples.${ex.key}.hint`)}
-                  </div>
-                </div>
-              ),
-            })),
+            items: examples.length
+              ? examples.map((ex) => ({
+                  key: ex.key,
+                  label: (
+                    <div style={{ maxWidth: 360 }}>
+                      <strong>{t(`deploy.examples.${ex.key}.title`, { defaultValue: ex.catalogTitle ?? ex.key })}</strong>
+                      <div className="small muted" style={{ whiteSpace: 'normal' }}>
+                        {t(`deploy.examples.${ex.key}.hint`, { defaultValue: '' })}
+                      </div>
+                    </div>
+                  ),
+                }))
+              : [{ key: '', disabled: true, label: <span className="small muted">{t('catalog.examplesEmpty')}</span> }],
             onClick: ({ key }) => {
-              const ex = PIPELINE_EXAMPLES.find((e) => e.key === key)
+              const ex = examples.find((e) => e.key === key)
               if (ex) example(ex)
             },
           }}

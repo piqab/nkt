@@ -8,7 +8,7 @@ title: 'Плагин: Yandex Cloud'
 Storage, Cloud DNS, управляемые PostgreSQL и MySQL, баланс. ВМ можно
 добавить и как хост nkt — с находками и действиями.
 
-![Yandex Cloud в хабе](/screens/ru/hub-plugin-yc.png)
+![Yandex Cloud в хабе](/plugin-screens/yandex-cloud/ru/hub-plugin-yc.png)
 
 | Раздел | Что |
 |---|---|

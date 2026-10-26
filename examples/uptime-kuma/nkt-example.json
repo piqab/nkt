@@ -1,0 +1,11 @@
+{
+  "key": "uptimekuma",
+  "link": "https://github.com/louislam/uptime-kuma/blob/master/compose.yaml",
+  "project": "uptime-kuma",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/uptime-kuma",
+  "site": {
+    "service": "uptime-kuma",
+    "port": 3001
+  },
+  "order": 20
+}

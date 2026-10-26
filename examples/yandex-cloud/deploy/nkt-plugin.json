@@ -1,5 +1,8 @@
 {
   "name": "yc",
+  "version": "1.0.0",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
   "title": {"ru": "Yandex Cloud", "en": "Yandex Cloud"},
   "description": {
     "ru": "Облако из хаба: ВМ (включить, выключить, перезагрузить, снимок; ВМ — и как хосты nkt), диски и снимки, группы безопасности, Object Storage, Cloud DNS (и DNS-функции хаба), PostgreSQL и MySQL, баланс; команды «yc …», MCP. Ставится на машину хаба или любой хост с интернетом; нужен openssl.",

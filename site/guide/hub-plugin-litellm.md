@@ -23,7 +23,7 @@ title: 'Плагин: LiteLLM'
 
 ## Что умеет
 
-![Ключи LiteLLM в хабе](/screens/ru/hub-plugin-litellm-keys.png)
+![Ключи LiteLLM в хабе](/plugin-screens/litellm/ru/hub-plugin-litellm-keys.png)
 
 - **Модели** — добавить (имя для клиентов, `провайдер/модель`, адрес API,
   ключ провайдера скрытым полем) и удалить. `openai/…` с адресом —
@@ -37,7 +37,7 @@ title: 'Плагин: LiteLLM'
     приложения с историей версий, в стек он придёт со следующей
     выкладкой.
 
-  ![Новый ключ — один раз](/screens/ru/hub-plugin-litellm-reveal.png)
+  ![Новый ключ — один раз](/plugin-screens/litellm/ru/hub-plugin-litellm-reveal.png)
 - **Расход** — по ключам и всего.
 - **Сценарии:** `llm keys`, `llm key block|unblock|rm ИМЯ`,
   `llm key add ИМЯ [models a,b] [budget 20] [budget-reset 30d] [rpm 60]

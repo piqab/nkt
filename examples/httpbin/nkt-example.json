@@ -1,0 +1,14 @@
+{
+  "key": "httpbin",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml",
+  "project": "httpbin",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/httpbin",
+  "site": {
+    "service": "httpbin",
+    "port": 8080
+  },
+  "images": {
+    "httpbin": "cyd01/httpbin:latest"
+  },
+  "order": 10
+}

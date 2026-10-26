@@ -957,6 +957,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindSiteRemove, hub.NewSiteRemoveRunner(server))
 	r.jobs.Register(hub.KindPipelineRemove, hub.NewPipelineRemoveRunner(server))
 	r.jobs.Register(hub.KindPluginInstall, hub.NewPluginInstallRunner(server))
+	r.jobs.Register(hub.KindCatalogRefresh, hub.NewCatalogRefreshRunner(server))
 	r.jobs.Register(hub.KindPipelinePower, hub.NewPipelinePowerRunner(server))
 	// Опрос репозиториев и registry у конвейеров выкладки.
 	server.StartPipelineWatch(ctx)
@@ -975,6 +976,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	server.StartTokenUsageReconcile(ctx)
 	server.StartDNSReconcile(ctx)
 	server.StartPluginHostPoll(ctx)
+	server.StartCatalog(ctx)
 	server.StartTelegram(ctx)
 	server.StartSlack()
 

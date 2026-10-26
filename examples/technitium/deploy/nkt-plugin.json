@@ -1,5 +1,8 @@
 {
   "name": "dns",
+  "version": "1.0.0",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
   "title": {"ru": "Technitium DNS", "en": "Technitium DNS"},
   "description": {
     "ru": "Плагин к Technitium DNS, который уже работает на хосте (нативно или в контейнере): зоны и записи из хаба, делегирование, DNSSEC, команды «dns …», инструменты MCP, записи для Traffic Fly и сайтов. Ставится службой systemd, Technitium не трогает.",

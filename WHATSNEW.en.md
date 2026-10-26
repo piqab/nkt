@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.16.0 — 2026-10-26
+
+- **A plugin catalog.** Plugins and pipeline examples are no longer built into nkt. They live in the repository's `examples/`, and CI builds a signed catalog from them and publishes it next to the site. A new plugin or a fix to an old one reaches the hub without an nkt release.
+  - About → Plugins → **Catalog**: the plugin's version, a “tests against fakes passed” mark, where it is installed and whether a newer one exists, the guide and screenshots, Install on a host.
+  - The hub checks the catalog's signature (the public key is built into nkt) and every file's SHA-256. A catalog with a bad signature is rejected, and the previous copy stays in use.
+  - The hub keeps its own copy, refreshed every 6 hours or with Update the catalog. Without internet — Upload an archive (`catalog.tar.gz` from the site).
+  - A plugin that needs a newer nkt is not installed, with an explanation.
+  - Your own catalog source (a fork or your own server) and your own public keys — in the Catalog source window with a diff and a history. These settings go into the hub export.
+- Deployments → New pipeline → Examples takes the examples from the catalog, in the same order.
+- Plugins already installed keep working. Update on the host takes the new version from the catalog.
+- Until the catalog is published on the site (the first publish follows pushing these changes), the hub says “the catalog is not loaded yet”.
+
 ## v1.15.7 — 2026-10-26
 
 - **Devices in the host list show their reachability and findings again.** The hub polled the device, but the agent host poll cleared its row from the shared cache every minute. In the list the device was left with “?” instead of the reachability icon and “no data” instead of findings.

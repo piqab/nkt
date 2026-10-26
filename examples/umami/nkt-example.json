@@ -1,0 +1,42 @@
+{
+  "key": "umami",
+  "link": "https://github.com/umami-software/umami/blob/master/docker-compose.yml",
+  "project": "umami",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/umami",
+  "site": {
+    "service": "umami",
+    "port": 3000
+  },
+  "images": {
+    "umami": "ghcr.io/umami-software/umami:3.4.0"
+  },
+  "envKeys": {
+    "umami": [
+      "APP_SECRET",
+      "TWO_FACTOR_ENCRYPTION_KEY",
+      "DATABASE_URL"
+    ],
+    "db": [
+      "POSTGRES_PASSWORD"
+    ]
+  },
+  "env": [
+    [
+      "APP_SECRET",
+      "generate:hex32"
+    ],
+    [
+      "TWO_FACTOR_ENCRYPTION_KEY",
+      "generate:hex32"
+    ],
+    [
+      "POSTGRES_PASSWORD",
+      "generate:password"
+    ],
+    [
+      "DATABASE_URL",
+      "postgresql://umami:${POSTGRES_PASSWORD}@db:5432/umami"
+    ]
+  ],
+  "order": 30
+}

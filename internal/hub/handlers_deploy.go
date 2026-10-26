@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/piqab/nkt/examples"
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/catalog"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/msgs"
@@ -69,9 +69,9 @@ func (s *Server) handlePipelines(w http.ResponseWriter, r *http.Request) {
 // handlePipelineExamples — GET /hub/pipelines/examples: описания из
 // examples/ (заготовки для агентов MCP и сценариев).
 func (s *Server) handlePipelineExamples(w http.ResponseWriter, r *http.Request) {
-	list := examples.Pipelines(string(msgs.LangFromRequest(r)))
+	list := catalog.Pipelines(string(msgs.LangFromRequest(r)))
 	if key := r.URL.Query().Get("key"); key != "" {
-		list = slices.DeleteFunc(list, func(p examples.Pipeline) bool { return p.Key != key })
+		list = slices.DeleteFunc(list, func(p catalog.Pipeline) bool { return p.Key != key })
 	} else {
 		for i := range list {
 			list[i].Content = "" // список — без текста; текст — ?key=

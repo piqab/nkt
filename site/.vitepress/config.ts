@@ -1,4 +1,20 @@
 import { defineConfig } from 'vitepress'
+import { cpSync, existsSync, readdirSync, rmSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Скриншоты плагинов живут рядом с плагинами (examples/<плагин>/screens/
+// {ru,en}/) — оттуда же их берёт каталог плагинов хаба. Сайту они нужны
+// под public/: перед сборкой копируются в public/plugin-screens/ (не в
+// git), и справка ссылается на /plugin-screens/<плагин>/<язык>/<файл>.
+const here = dirname(fileURLToPath(import.meta.url))
+const examples = join(here, '..', '..', 'examples')
+const pluginScreens = join(here, '..', 'public', 'plugin-screens')
+rmSync(pluginScreens, { recursive: true, force: true })
+for (const plugin of readdirSync(examples)) {
+  const src = join(examples, plugin, 'screens')
+  if (existsSync(src)) cpSync(src, join(pluginScreens, plugin), { recursive: true })
+}
 
 // Сайт nkt: лендинг и руководство на двух языках. Русский — корень,
 // английский — /en/; первый заход на корень перебрасывает по языку

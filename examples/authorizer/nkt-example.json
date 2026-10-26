@@ -1,0 +1,46 @@
+{
+  "key": "authorizer",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/authorizer/deploy/docker-compose.yml",
+  "project": "authorizer",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/authorizer",
+  "site": {
+    "service": "authorizer",
+    "port": 8080
+  },
+  "flyCheckPath": "/healthz",
+  "env": [
+    [
+      "AUTH_DOMAIN",
+      "{domain}"
+    ],
+    [
+      "ALLOWED_ORIGINS",
+      "https://{domain}"
+    ],
+    [
+      "CLIENT_ID",
+      "generate:hex16"
+    ],
+    [
+      "CLIENT_SECRET",
+      "generate:hex32"
+    ],
+    [
+      "ADMIN_SECRET",
+      "generate:hex32"
+    ],
+    [
+      "JWT_SECRET",
+      "generate:hex32"
+    ],
+    [
+      "ENCRYPTION_KEY",
+      "generate:hex32"
+    ],
+    [
+      "POSTGRES_PASSWORD",
+      "generate:password"
+    ]
+  ],
+  "order": 80
+}

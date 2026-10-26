@@ -1,0 +1,36 @@
+{
+  "key": "forgejo-runner",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/forgejo-runner/deploy/docker-compose.yml",
+  "project": "forgejo-runner",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/forgejo-runner",
+  "files": [
+    "examples/forgejo-runner/deploy/config.yml"
+  ],
+  "envKeys": {
+    "runner-register": [
+      "FORGEJO_URL",
+      "RUNNER_TOKEN",
+      "RUNNER_NAME",
+      "RUNNER_LABELS"
+    ]
+  },
+  "env": [
+    [
+      "FORGEJO_URL",
+      "https://git.example.com"
+    ],
+    [
+      "RUNNER_TOKEN",
+      "paste-registration-token-here"
+    ],
+    [
+      "RUNNER_NAME",
+      "build1"
+    ],
+    [
+      "RUNNER_LABELS",
+      "ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-22.04,docker:docker://docker:29.9-cli"
+    ]
+  ],
+  "order": 60
+}

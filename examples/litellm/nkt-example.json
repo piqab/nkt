@@ -1,0 +1,37 @@
+{
+  "key": "litellm",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/litellm/deploy/docker-compose.yml",
+  "project": "litellm",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/litellm",
+  "site": {
+    "service": "litellm",
+    "port": 4000,
+    "maxBody": "0"
+  },
+  "flyCheckPath": "/health/liveliness",
+  "envKeys": {
+    "litellm-db": [
+      "LITELLM_DB_PASSWORD"
+    ],
+    "litellm": [
+      "LITELLM_DB_PASSWORD",
+      "LITELLM_MASTER_KEY",
+      "LITELLM_SALT_KEY"
+    ]
+  },
+  "env": [
+    [
+      "LITELLM_DB_PASSWORD",
+      "generate:hex32"
+    ],
+    [
+      "LITELLM_MASTER_KEY",
+      "generate:hex32"
+    ],
+    [
+      "LITELLM_SALT_KEY",
+      "generate:hex32"
+    ]
+  ],
+  "order": 120
+}

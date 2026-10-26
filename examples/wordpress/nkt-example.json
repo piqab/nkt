@@ -1,0 +1,21 @@
+{
+  "key": "wordpress",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/wordpress/deploy/docker-compose.yml",
+  "project": "wordpress",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/wordpress",
+  "site": {
+    "service": "wordpress",
+    "port": 80
+  },
+  "env": [
+    [
+      "DB_PASSWORD",
+      "generate:password"
+    ],
+    [
+      "DB_ROOT_PASSWORD",
+      "generate:password"
+    ]
+  ],
+  "order": 70
+}

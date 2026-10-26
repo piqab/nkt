@@ -45,3 +45,6 @@ Thumbs.db
 
 # Кэш Python скриптов скриншотов
 __pycache__/
+
+# Скриншоты плагинов — копия из examples/*/screens при сборке сайта.
+/site/public/plugin-screens/

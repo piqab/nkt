@@ -1,5 +1,7 @@
-# Сайт nkt (site/, VitePress) — на GitHub Pages репозитория.
-# В настройках репозитория: Settings → Pages → Source: GitHub Actions.
+# Сайт nkt (site/, VitePress) и каталог плагинов (catalog/) — на GitHub
+# Pages репозитория. В настройках репозитория: Settings → Pages → Source:
+# GitHub Actions; секрет NKT_CATALOG_KEY — закрытый ключ каталога (PEM,
+# openssl genpkey -algorithm ed25519), его открытая часть встроена в nkt.
 name: pages
 
 on:
@@ -7,6 +9,9 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'examples/**'
+      - 'cmd/nkt-catalog/**'
+      - 'internal/catalog/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -40,6 +45,42 @@ jobs:
       - name: Собрать сайт
         working-directory: site
         run: npm run build
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # Каталог плагинов: тест каждого плагина на подделках — упавший в
+      # каталог не попадает (остальные выходят); версия плагина обязана
+      # вырасти, если его файлы изменились (сверка с опубликованным).
+      - name: Тесты плагинов
+        id: tests
+        run: |
+          failed=""
+          for t in examples/*/deploy/test_plugin.py; do
+            key=$(basename "$(dirname "$(dirname "$t")")")
+            if ! (cd "$(dirname "$t")" && timeout 600 python3 -I test_plugin.py); then
+              echo "::warning::тест плагина $key не прошёл — плагин не попадёт в каталог"
+              failed="$failed,$key"
+            fi
+          done
+          echo "failed=${failed#,}" >> "$GITHUB_OUTPUT"
+      - name: Каталог плагинов
+        env:
+          NKT_CATALOG_KEY: ${{ secrets.NKT_CATALOG_KEY }}
+        run: |
+          out=site/.vitepress/dist/catalog
+          curl -fsSL --retry 3 https://piqab.github.io/nkt/catalog/index.json -o /tmp/prev-index.json || rm -f /tmp/prev-index.json
+          go run ./cmd/nkt-catalog build -src examples -out "$out" -commit "$GITHUB_SHA" -tested \
+            -failed "${{ steps.tests.outputs.failed }}" -prev /tmp/prev-index.json
+          if [ -z "$NKT_CATALOG_KEY" ]; then
+            echo "::warning::нет секрета NKT_CATALOG_KEY — каталог не подписан и не выкладывается"
+            rm -rf "$out"
+            exit 0
+          fi
+          go run ./cmd/nkt-catalog sign -dir "$out"
+          # Подпись сходится со встроенным в nkt ключом — иначе хабы
+          # каталог не примут, и выкладывать его незачем.
+          go run ./cmd/nkt-catalog verify -dir "$out"
+          go run ./cmd/nkt-catalog pack -dir "$out" -out site/.vitepress/dist/catalog.tar.gz
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
