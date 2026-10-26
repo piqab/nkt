@@ -129,6 +129,15 @@ create` в сценарии), включить, выключить и удали
 удалить машину целиком — с дисками, записью и учётом. Образ с диска хоста
 (`host:…`) токену нельзя: там лежат и диски чужих машин.
 
+**Экземпляры LXD** — так же, как машины KVM: контейнер или машина LXD
+(`POST /api/hub/hosts/{id}/lxd {"name":"c1","image":"ubuntu:24.04","vm":false,
+"cpu":1,"mem_mb":1024,"disk_gb":10}` — задание), старт, стоп, перезапуск,
+снимки, vCPU и память (сразу) и диск (только больше), удаление. Токену —
+только свои: они считаются машинами (общий счёт и потолки с KVM; при
+потолках размеры обязательны), живут в сети токена `nkt-t<номер>` LXD под
+теми же правилами nftables, без привилегий и вложенности. Порты пула и
+маршруты Fly — пока для машин KVM.
+
 **Порты и имена для своей машины.**
 
 - **Пул портов** задаёт администратор у хоста: «Хосты» → строка хоста →
@@ -271,6 +280,9 @@ function sign(secret, method, uri, body = '') {
 | `POST …/vm/snapshots/{snap}/revert`, `DELETE …/vm/snapshots/{snap}` | администратор | вернуться к снимку, удалить снимок |
 | `POST /api/hub/hosts/{id}/vm/resize` | администратор | `{"vcpus":4,"memory_mb":4096,"disk_gb":40}` (0 — не менять; диск только растёт) → `restart_needed` |
 | `POST /api/hub/hosts/{id}/vm/reinstall` | администратор | переустановка из образа (`{"image_id":"…","ssh_key":"…","user_data":"…","install_nkt":false}`) → `job_id` |
+| `GET`, `POST /api/hub/hosts/{id}/lxd` | администратор | экземпляры LXD хоста (токену — свои); создать (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
+| `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | администратор | `start`, `stop`, `restart`; vCPU, память, диск; удалить |
+| `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | администратор | снимки экземпляра (токену — в потолке) |
 | `GET`, `PUT /api/hub/hosts/{id}/port-pool` | администратор | пул портов хоста (`{"from":20000,"to":20999}`; `from` 0 — выключить) |
 | `GET`, `POST /api/hub/hosts/{id}/vm/ports`, `DELETE …/vm/ports/{port}` | администратор | порты пула на машину (`{"vm_port":22,"proto":"tcp"}`) → `port`, `address`; по правам — «порты», в потолке |
 | `GET`, `POST /api/hub/own/fly`, `DELETE /api/hub/own/fly/{route}` | по правам | свои маршруты Traffic Fly (`{"name":"…","host_id":…,"port":8080}`) → `job_id` раскладки |

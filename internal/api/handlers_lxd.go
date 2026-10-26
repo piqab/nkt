@@ -7,6 +7,7 @@ import (
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/guestcred"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/vmnet"
 	"net/http"
 	"os"
 	"os/exec"
@@ -37,6 +38,9 @@ type lxdCreateRequest struct {
 	User     string `json:"user,omitempty"`
 	Password string `json:"password,omitempty"`
 	Generate bool   `json:"generate,omitempty"`
+	// Сеть, потолки и «без привилегий» (экземпляр токена, 1.17.7) —
+	// только заданием.
+	control.LXDLaunchOpts
 }
 
 func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +49,16 @@ func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request)
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	if req.Isolated && !vmnet.IsIsolated(req.Network) {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("vmcreate.isolatedNeedsNetwork"))
+		return
+	}
+	if req.LXDLaunchOpts != (control.LXDLaunchOpts{}) && !wantsJob(r) {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("lxd.optsNeedJob"))
+		return
+	}
 	if wantsJob(r) {
-		args, err := control.LXDLaunchArgs(req.Image, req.Name, req.VM)
+		args, err := control.LXDLaunchArgsOpts(req.Image, req.Name, req.VM, req.LXDLaunchOpts)
 		if err != nil {
 			writeErr(w, r, http.StatusBadRequest, err)
 			return
@@ -376,4 +388,55 @@ func (s *Server) handleLXDImageCopyWS(w http.ResponseWriter, r *http.Request) {
 		return unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, argv...)
 	}
 	s.runUpdateSession(w, r, "lxd-image-copy:"+ref, build, "lxd.imageCopy", ref, s.cfg.TerminalIdleTimeout)
+}
+
+// handleLXDTokenNetwork — POST /lxd/token-network {"name":"nkt-t5"}: сеть
+// токена в LXD (мост с NAT) и правила изоляции сетей токенов.
+func (s *Server) handleLXDTokenNetwork(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if !vmnet.IsIsolated(req.Name) {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("vmcreate.isolatedNeedsNetwork"))
+		return
+	}
+	mgr := s.vmnets()
+	if mgr == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.machineManagementUnavailable"))
+		return
+	}
+	created, err := s.lxd.EnsureNetwork(r.Context(), auth.Username(r.Context()), req.Name)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	bridges, err := mgr.ApplyIsolation(r.Context())
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"created": created, "bridges": bridges})
+}
+
+// handleLXDLimits — POST /lxd/instances/{name}/limits {"cpu","mem_mb","disk_gb"}.
+func (s *Server) handleLXDLimits(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CPU    int   `json:"cpu"`
+		MemMB  int64 `json:"mem_mb"`
+		DiskGB int64 `json:"disk_gb"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.lxd.SetLimits(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "name"), req.CPU, req.MemMB, req.DiskGB); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -75,6 +75,8 @@ admin token or a token by permission (within its limits).
 | `create_vm`, `vm_power` | admin | a machine on a host from a cloud image (without `host_id` the hub picks the host; own `user_data` — `#cloud-config`); start, shut down, force off, reboot (a token by permission — its own, within limits) |
 | `vm_snapshots`, `vm_snapshot`, `vm_snapshot_revert`, `vm_snapshot_delete` | admin | machine snapshots: list, take, revert, delete (a token — up to its snapshots-per-machine limit) |
 | `vm_ports`, `vm_port_open`, `vm_port_close` | admin | host pool ports to a machine (TCP/UDP; the machine's address is pinned); a token — the “ports” action, within its ports limit |
+| `lxd_instances`, `lxd_create`, `lxd_power`, `lxd_resize`, `lxd_delete` | admin | LXD instances (a container or an LXD machine) on a host: list, create (a job), start, stop, restart, limits, delete; a token — its own, within machine limits, in the token's network |
+| `lxd_snapshots`, `lxd_snapshot`, `lxd_snapshot_restore`, `lxd_snapshot_delete` | admin | LXD instance snapshots (a token — up to its snapshot limit) |
 | `fly_own_routes`, `fly_own_add`, `fly_own_remove` | token by permission | own Traffic Fly routes: HTTPS by name in the assigned domain to its machine |
 | `vm_resize`, `vm_reinstall`, `vm_delete` | admin | vCPU, memory and disk (the disk only grows); reinstall from an image (a job); delete the machine with its disks and record (a job) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |

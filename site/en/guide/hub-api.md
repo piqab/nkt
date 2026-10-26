@@ -137,6 +137,15 @@ login); delete the machine entirely — with its disks, record and usage. An
 image from the host's disk directory (`host:…`) is not allowed for a
 token: other machines' disks live there too.
 
+**LXD instances** — like KVM machines: a container or an LXD machine
+(`POST /api/hub/hosts/{id}/lxd {"name":"c1","image":"ubuntu:24.04","vm":false,
+"cpu":1,"mem_mb":1024,"disk_gb":10}` — a job), start, stop, restart,
+snapshots, vCPU and memory (live) and disk (grows only), deletion. A token
+gets only its own: they count as machines (a shared count and limits with
+KVM; with limits set, sizes are required), live in the token's LXD network
+`nkt-t<number>` under the same nftables rules, unprivileged and without
+nesting. Pool ports and Fly routes are for KVM machines so far.
+
 **Ports and names for an own machine.**
 
 - An administrator sets the host's **port pool**: “Hosts” → the host row →
@@ -281,6 +290,9 @@ to the hub through the tunnel. Conditions:
 | `POST …/vm/snapshots/{snap}/revert`, `DELETE …/vm/snapshots/{snap}` | admin | revert to a snapshot, delete a snapshot |
 | `POST /api/hub/hosts/{id}/vm/resize` | admin | `{"vcpus":4,"memory_mb":4096,"disk_gb":40}` (0 — keep; the disk only grows) → `restart_needed` |
 | `POST /api/hub/hosts/{id}/vm/reinstall` | admin | reinstall from an image (`{"image_id":"…","ssh_key":"…","user_data":"…","install_nkt":false}`) → `job_id` |
+| `GET`, `POST /api/hub/hosts/{id}/lxd` | admin | a host's LXD instances (a token — its own); create (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
+| `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | admin | `start`, `stop`, `restart`; vCPU, memory, disk; delete |
+| `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | admin | instance snapshots (a token — within its limit) |
 | `GET`, `PUT /api/hub/hosts/{id}/port-pool` | admin | the host's port pool (`{"from":20000,"to":20999}`; `from` 0 — off) |
 | `GET`, `POST /api/hub/hosts/{id}/vm/ports`, `DELETE …/vm/ports/{port}` | admin | pool ports to a machine (`{"vm_port":22,"proto":"tcp"}`) → `port`, `address`; by permission — “ports”, within the limit |
 | `GET`, `POST /api/hub/own/fly`, `DELETE /api/hub/own/fly/{route}` | by permission | own Traffic Fly routes (`{"name":"…","host_id":…,"port":8080}`) → the apply `job_id` |

@@ -78,6 +78,8 @@ func TestApplyIsolation(t *testing.T) {
 				return collect.CommandResult{ExitCode: 1}, nil
 			}
 			return collect.CommandResult{Stdout: "/usr/sbin/nft\n"}, nil
+		case "lxc network":
+			return collect.CommandResult{Stdout: "lxdbr0,bridge,YES,,\nnkt-t4,bridge,YES,,\nnkt-t7,macvlan,YES,,\n"}, nil
 		case "nft -f":
 			b, _ := os.ReadFile(argv[2])
 			applied = string(b)
@@ -88,10 +90,10 @@ func TestApplyIsolation(t *testing.T) {
 	}
 	m := NewManager(run, t.TempDir())
 	bridges, err := m.ApplyIsolation(context.Background())
-	if err != nil || strings.Join(bridges, ",") != "virbr3,virbr9" {
+	if err != nil || strings.Join(bridges, ",") != "nkt-t4,virbr3,virbr9" {
 		t.Fatalf("%v %v", bridges, err)
 	}
-	if !strings.Contains(applied, `"virbr3", "virbr9"`) || strings.Contains(applied, `"virbr0"`) {
+	if !strings.Contains(applied, `"nkt-t4", "virbr3", "virbr9"`) || strings.Contains(applied, `"virbr0"`) || strings.Contains(applied, "lxdbr0") {
 		t.Fatalf("rules: %s", applied)
 	}
 	nft = false

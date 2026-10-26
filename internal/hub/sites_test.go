@@ -106,6 +106,7 @@ func localFixtureHub(t *testing.T) (*Server, *store.DB, string) {
 		Firewalld: control.NewFirewalldManager(cfg, collector, db),
 		Certs:     control.NewCertManager(cfg, collector, db, services, scanner, nil),
 		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner, nil),
+		LXD:       control.NewLXDManager(collector, db),
 		Jobs:      jm, Log: slog.New(slog.DiscardHandler), Version: "test",
 	})
 	secret, _ := secretbox.GenerateKey()
