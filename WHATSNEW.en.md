@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.9 — 2026-10-26
+
+- **A token's own cluster.** With the “own Kubernetes cluster” action and a new “own clusters” limit (empty — none) a token creates k3s on its own machines.
+  - **Layout:** `single` (one machine) or `cp1` (a control plane and workers), all nodes on one host (the hub can pick it), in the token's network under the nftables rules. The nodes are token machines: the count and limits are shared.
+  - **Access:** the cluster API opens on a port of the host's pool; without a pool — refused. The kubeconfig (`cluster-admin` of the own cluster) is issued once through the API.
+  - **Deletion** removes the cluster with its machines, usage and port.
+  - **In a script,** `k8s … create` run by a token follows the same rules.
+- **MCP:** `k8s_own_clusters`, `k8s_own_cluster_create`, `k8s_own_cluster_delete`.
+- Deleting any cluster now also releases its machines from token usage.
+
 ## v1.17.8 — 2026-10-26
 
 - **An own namespace in a shared cluster for a token.** A new “own namespaces” action and an “own namespaces” limit (empty — none).

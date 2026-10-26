@@ -41,6 +41,7 @@ var enAPICatalog = map[string]string{
 	"auth.tokenFlyGateway":      "no Traffic Fly gateway for the token: set it in the token's permissions (several gateways or none)",
 	"auth.tokenFlyNotOwn":       "route %s does not belong to this token",
 	"auth.tokenNamespaces":      "at most %d own namespaces (the token's limit)",
+	"auth.tokenClusters":        "at most %d own clusters (the token's limit)",
 	"auth.tokenScriptCluster":   "line %d: cluster “%s” is not entirely on the token's hosts",
 	"auth.tokenScriptPipeline":  "line %d: pipeline “%s” is not entirely on the token's hosts",
 	"auth.tokenHostDenied":      "The host is outside the API token's scope",

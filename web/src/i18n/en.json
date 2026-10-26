@@ -4302,6 +4302,7 @@
       "vm_disk_gb": "Disk each",
       "vm_snapshots": "Snapshots per machine (empty — none)",
       "k8s_namespaces": "Own namespaces (empty — none)",
+      "k8s_clusters": "Own clusters (empty — none)",
       "ports": "Pool ports (empty — none)",
       "fly_routes": "Routes (empty — none)",
       "k8s_cpu": "CPU",

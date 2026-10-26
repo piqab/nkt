@@ -166,6 +166,25 @@ nesting. Pool ports and Fly routes are for KVM machines so far.
   the domain the record is set automatically.
 - When a machine is deleted, its ports and token routes go with it.
 
+**Own cluster** (the “own Kubernetes cluster” action, an “own clusters”
+limit; empty — none): `POST /api/hub/k8s/clusters/own
+{"name":"lab","topology":"cp1","workers":2,"image_id":"ubuntu-24.04",
+"cp_vcpus":2,"cp_memory_mb":4096,"cp_disk_gb":20,"w_vcpus":1,"w_memory_mb":2048,
+"w_disk_gb":20}` — a job.
+
+- k3s on the token's machines: `single` (one machine) or `cp1` (a control
+  plane and workers), all on one host (`host_id` 0 — the hub picks), in the
+  token's network under the nftables rules; each node is a token machine
+  (shared count and limits), the image comes from the catalog.
+- The cluster API opens on a port of the host's pool (no pool — refused);
+  the answer has `api_port` and `address`.
+- The kubeconfig (`cluster-admin` of the own cluster) —
+  `POST /api/hub/k8s/clusters/own/{id}/kubeconfig`, **once**, when ready;
+  it is not issued again.
+- `DELETE /api/hub/k8s/clusters/own/{id}` — the cluster with its machines,
+  usage and port. The same rules apply to `k8s … create` in a script run by
+  a token.
+
 **Own namespace in a shared cluster** (the “own namespaces” action):
 
 ```sh
@@ -193,7 +212,7 @@ kubectl --kubeconfig shop.kubeconfig get pods
   `dry_run` only renders and checks. `DELETE …/{cluster}/{ns}` deletes the
   namespace with everything in it.
 
-**Own k8s cluster** — `k8s CLUSTER create` and `destroy` in a script —
+**Own k8s cluster in a script** — `k8s CLUSTER create` and `destroy` in a script —
 only with the “own Kubernetes cluster” action.
 
 **A script run by a token** is checked the same way as the API: each
@@ -320,6 +339,8 @@ to the hub through the tunnel. Conditions:
 | `GET`, `POST /api/hub/hosts/{id}/lxd` | admin | a host's LXD instances (a token — its own); create (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
 | `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | admin | `start`, `stop`, `restart`; vCPU, memory, disk; delete |
 | `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | admin | instance snapshots (a token — within its limit) |
+| `GET`, `POST /api/hub/k8s/clusters/own` | by permission | own clusters; create (single or cp1 on the token's machines) → `id`, `job_id`, `api_port`, `address` |
+| `POST /api/hub/k8s/clusters/own/{id}/kubeconfig`, `DELETE /api/hub/k8s/clusters/own/{id}` | by permission | the kubeconfig once; delete the cluster with its machines → `job_id` |
 | `GET`, `POST /api/hub/k8s/own` | by permission | own namespaces; create (`{"cluster","namespace"}`) → `kubeconfig` once |
 | `POST /api/hub/k8s/own/{cluster}/{ns}/kubeconfig`, `DELETE /api/hub/k8s/own/{cluster}/{ns}` | by permission | reissue the kubeconfig; delete the namespace |
 | `GET …/{cluster}/{ns}/logs?pod=&container=&tail=`, `POST …/{cluster}/{ns}/helm` | by permission | pod log; helm via render and checks (`{"repo_url","chart","version","release","values","dry_run"}`) |

@@ -101,6 +101,8 @@ type TokenLimits struct {
 	FlyRoutes int `json:"fly_routes,omitempty"`
 	// Своих namespace в общих кластерах; 0 — нельзя.
 	K8sNamespaces int `json:"k8s_namespaces,omitempty"`
+	// Своих кластеров (k3s на машинах токена); 0 — нельзя.
+	K8sClusters int `json:"k8s_clusters,omitempty"`
 	// k8s: квота одного namespace (ResourceQuota), подов в нём.
 	K8sCPU       float64 `json:"k8s_cpu,omitempty"`
 	K8sMemMB     int64   `json:"k8s_mem_mb,omitempty"`

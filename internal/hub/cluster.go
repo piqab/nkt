@@ -989,6 +989,16 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	jc.StepKey(total, total, "hub.clusterStepDeleteRecord")
 	r.removeMesh(ctx, jc, cl)
+	// Кластер токена: учёт узлов, порт API и запись владельца.
+	var spec ClusterSpec
+	if json.Unmarshal([]byte(cl.SpecJSON), &spec) == nil && spec.HostID != 0 {
+		hostName := ""
+		if h, err := r.m.db.HostByID(ctx, spec.HostID); err == nil {
+			hostName = h.Name
+		}
+		releaseClusterToken(context.WithoutCancel(ctx), r.m.db, spec, hostName)
+	}
+	forgetOwnCluster(context.WithoutCancel(ctx), r.m.db, cl.ID)
 	if err := r.m.db.DeleteCluster(ctx, cl.ID); err != nil {
 		return err
 	}
