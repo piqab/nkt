@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.16.2 — 2026-10-26
+
+- **The connector plugin 1.1.0 (catalog):**
+  - **More OpenWrt.** Wi-Fi: networks, encryption, clients with signal strength. DHCP static leases, firewall zones, port forwards, packages with updates (`opkg`, on OpenWrt 24+ — `apk`), temperature.
+  - **OpenWrt findings:** the wan zone accepts everything; SSH or the web UI open from the internet; an open network, WEP, WPA1 or mixed mode, TKIP, WPS; port forwards; `/overlay` full; a release older than 23.05.
+  - **OpenWrt actions:** restart a service, upgrade a package in the background, back up the settings on the router.
+  - **Wi-Fi, WireGuard and other secrets in the OpenWrt configuration are now `***`.** `uci export` used to reach the hub's configuration history whole. Versions saved before the update still contain the keys — remove the device and add it again, and its history goes with it.
+  - **UPSes:** over SNMP (APC, Eaton, CyberPower network cards — UPS-MIB and APC PowerNet) and through a NUT server. Power state, charge, runtime, load, voltage, self-test. Findings: on battery, low battery, battery replacement needed, overload, failed self-test, temperature. Through NUT — a quick self-test.
+  - **IP cameras and NVRs over ONVIF:** model and firmware, RTSP streams, clock drift, Hikvision and Dahua NVR disks, reboot. The password goes as a digest, never in clear text.
+- The connector Profiles screenshots moved into the plugin's folder and show the new types.
+
 ## v1.16.1 — 2026-10-26
 
 - A plugin can set its device type's icon (an `icon` field in the manifest). The icon is one of those the hub knows, and an unknown one becomes the generic device icon. UPS, camera and Home Assistant icons are added for the new catalog types. Further device types no longer need an nkt release just for an icon.

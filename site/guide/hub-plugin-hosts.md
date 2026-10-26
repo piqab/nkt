@@ -131,12 +131,27 @@ MCP: `list_hosts` показывает и хосты плагинов (`kind: pl
 
 Плагин **connector** — типы устройств без своего кода: каждый тип —
 профиль JSON. Встроенные: Linux без агента, macOS, FreeBSD, OpenWrt (SSH),
-Keenetic (HTTP), принтер и коммутатор (SNMP v2c) — [README](https://github.com/piqab/nkt/tree/main/examples/connector).
+Keenetic (HTTP), принтер и коммутатор (SNMP v2c), ИБП (SNMP — UPS-MIB и APC
+PowerNet; NUT), IP-камеры и регистраторы (ONVIF; диски регистраторов
+Hikvision и Dahua) — [README](https://github.com/piqab/nkt/tree/main/examples/connector).
+
+**OpenWrt** (с connector 1.1.0): Wi-Fi — сети и шифрование, клиенты с
+уровнем сигнала; DHCP — выданные и закреплённые адреса; зоны firewall и
+проброс портов; пакеты с обновлениями (`opkg`, на OpenWrt 24+ — `apk`);
+температура. Находки: зона wan пускает всё, из wan открыт SSH или
+веб-интерфейс, открытая сеть, WEP, WPA1 или смешанный режим, TKIP, WPS,
+проброс портов, root без пароля, SSH по паролю, `/overlay` заполнен, ветка
+старше 23.05. Действия: перезагрузка, Wi-Fi, служба, обновление пакета (в
+фоне), резервная копия на роутер. **Ключи Wi-Fi, WireGuard и прочие
+секреты в `uci export` — под `***`**: история конфигураций хаба их не
+хранит. Версии, сохранённые до 1.1.0, ключи ещё содержат — чтобы их не
+было, удалите устройство из хаба и добавьте снова (история уйдёт вместе с
+ним).
 Свои — раздел плагина «Профили» (правка с диффом и историей в хабе).
 
-![Профили connector](/screens/ru/hub-connector-profiles.png)
+![Профили connector](/plugin-screens/connector/ru/hub-connector-profiles.png)
 
-![Правка профиля](/screens/ru/hub-connector-edit.png)
+![Правка профиля](/plugin-screens/connector/ru/hub-connector-edit.png)
 
 Профиль:
 
@@ -155,24 +170,37 @@ Keenetic (HTTP), принтер и коммутатор (SNMP v2c) — [README](
 
 - **Связь** (`transport`): `ssh` — источник `{"cmd": "…"}` (команда на
   устройстве; считать можно и в ней — awk, sed); `http` — `{"get": "/путь"}`
-  (`auth`: `basic`, `bearer`, `keenetic`); `snmp` — `{"oid": "…"}` и
-  `{"table": {"столбец": "OID"}}` (обход, строки по индексу). Ещё
-  `{"const": значение}` и `{"conn": "поле учёток"}`.
+  (`auth`: `basic`, `bearer`, `keenetic`, `digest`); `snmp` — `{"oid": "…"}` и
+  `{"table": {"столбец": "OID"}}` (обход, строки по индексу); `nut` —
+  `{"nut": "vars"}` (все переменные ИБП, поле формы «Имя ИБП»); `onvif` —
+  `{"onvif": "info" | "time" | "streams" | "config"}` (пароль — дайджестом
+  WS-Security) и `{"get": …}` с HTTP digest для API производителя. Ещё
+  `{"const": значение}`, `{"conn": "поле учёток"}`, `{"any": [источник, …]}`
+  (первое непустое: UPS-MIB или APC), `{"fields": [[название, источник], …]}`
+  (таблица «параметр — значение»). `"optional": true` у источника — API,
+  которого у устройства может не быть: не ответило — поле пустое, а не
+  ошибка вызова.
 - **Разбор** (`parse`, по порядку): `json` (путь `a.b.0`, `a[].b`), `kv`
   (`ключ=значение` построчно), `key`, `regex` (первое совпадение; именованные
   группы — объект), `each` (регулярное выражение на каждую строку →
   строки-объекты), `lines` (пропустить N строк), `cols` (столбцы по
   пробелам), `num` (число × множитель), `rev` (X − число), `pick`
-  (переименовать поля строк), `items` (объект → строки), `filter`, `pct`,
-  `join`, `count`, `first`, `trim`.
+  (переименовать поля строк), `items` (объект → строки), `filter` (поле —
+  путь `a.b`), `pct`, `join`, `count`, `first`, `trim`, `mask` (регулярное
+  выражение с группой `v` — она заменяется на `***`), `xml` (XML → объект,
+  атрибуты — `@имя`, путь как у `json`), `list` (одно значение → список),
+  `map` (замена значений по таблице), `dahua` (ответ CGI дисков Dahua).
 - **Куда:** `info` (name, os, version, model, serial, arch, firmware,
   uptime_s), `snapshot` (mem_total, cpu, interfaces, services, packages,
   ports, users, neighbors, disks — строки с полями общей модели), `extra`
   (свои таблицы), `metrics` (cpu_pct, mem_used, mem_total, disk_used,
   disk_size, temp_c, uptime_s, net — строки name/rx/tx), `findings`
   (`if`: `gt`, `lt`, `ge`, `le`, `eq`, `ne`, `contains`, `empty`,
-  `nonempty`; для строк — `field`), `config`, `actions` (`cmd` или `post`,
-  поля формы подставляются в кавычках), `exec` (у ssh — команды `sh`).
+  `nonempty`, `prefix`, `in`, `nin`, `word` — слово целиком, как `OB` в
+  статусе NUT; для строк — `field`), `config`, `actions` (`cmd`, `post`,
+  `instcmd` — команда NUT, `onvif` — `SystemReboot`; поля формы
+  подставляются в кавычках), `exec` (у ssh — команды `sh`), `icon` —
+  значок типа в списке хостов (`ups`, `camera`…; см. ниже).
 
 Неудачный разбор поля — поле пустое, а не ошибка: один профиль подходит к
 разным версиям устройства.

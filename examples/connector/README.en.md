@@ -9,10 +9,13 @@ the answers itself. Each profile is a type in Hosts → Add a device.
 | `linux-ssh` | SSH | old and locked-down Linux where nkt can't be installed |
 | `macos` | SSH | macOS: launchd services, brew, firewall, FileVault, SIP, updates |
 | `freebsd` | SSH | FreeBSD: services, pkg and `pkg audit`, `freebsd-update`, rc.conf, pf.conf |
-| `openwrt` | SSH | OpenWrt: ubus, interfaces, opkg packages, DHCP, `uci export` with a diff |
+| `openwrt` | SSH | OpenWrt: Wi-Fi (networks, encryption, clients), DHCP, firewall zones, port forwards, packages and updates (opkg, apk), findings (wan, an open network, WEP, WPA1, TKIP, WPS…), `uci export` with a diff — keys as `***` |
 | `keenetic` | HTTP (RCI) | Keenetic: interfaces, devices on the network, running-config, CLI commands |
 | `snmp-printer` | SNMP v2c | a printer: supplies (a finding below 10 %), page counter |
 | `snmp-switch` | SNMP v2c | a switch: ports, LLDP neighbors, port traffic |
+| `snmp-ups` | SNMP v2c | a UPS with a network card (UPS-MIB, APC PowerNet): power source, charge, runtime, load, voltage, self-test; findings — on battery, low battery, replace battery, overload, temperature |
+| `nut-ups` | NUT (3493) | any UPS on a NUT server: all variables, the same findings, a quick self-test |
+| `onvif-camera` | ONVIF | IP cameras and NVRs: model, firmware, RTSP streams, the clock (a finding — off by over a minute), Hikvision and Dahua NVR disks, reboot |
 
 Your own profiles — the plugin's Profiles section: New profile (based on a
 built-in one) and Edit — a window with a diff and version history on the
@@ -39,6 +42,11 @@ directory (`/var/lib/nkt-plugin-connector`).
 - Action arguments from a form — only latin letters, digits and
   `._@/:+-`, quoted into the command (`shlex.quote`).
 - SNMP — read-only (v2c); the `public` community is a finding.
+- ONVIF: the password goes as a WS-Security digest, HTTP digest for the NVR
+  API; it never travels in clear text. NUT has no encryption (like upsd
+  itself): keep the NUT server on a trusted network.
+- OpenWrt: Wi-Fi, WireGuard and other secrets in `uci export` become `***`
+  before the configuration reaches the hub.
 
 ## Testing
 

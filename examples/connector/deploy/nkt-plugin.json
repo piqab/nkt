@@ -1,12 +1,12 @@
 {
   "name": "connector",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "min_nkt": "1.16.0",
   "protocol": 1,
   "title": {"ru": "Connector (профили устройств)", "en": "Connector (device profiles)"},
   "description": {
-    "ru": "Устройства без агента nkt по профилям, без своего кода: macOS, FreeBSD, OpenWrt и Linux без агента — по SSH, Keenetic — по HTTP API, принтеры и коммутаторы — по SNMP. Свои профили — в разделе плагина «Профили». Нужен ssh-клиент на хосте плагина (openssh-client).",
-    "en": "Devices without the nkt agent by profiles, no code of your own: macOS, FreeBSD, OpenWrt and agentless Linux over SSH, Keenetic over its HTTP API, printers and switches over SNMP. Your own profiles — the plugin's Profiles section. Needs the ssh client on the plugin host (openssh-client)."
+    "ru": "Устройства без агента nkt по профилям, без своего кода: macOS, FreeBSD, OpenWrt и Linux без агента — по SSH, Keenetic — по HTTP API, принтеры и коммутаторы — по SNMP, ИБП — по SNMP и NUT, IP-камеры и регистраторы — по ONVIF. Свои профили — в разделе плагина «Профили». Нужен ssh-клиент на хосте плагина (openssh-client).",
+    "en": "Devices without the nkt agent by profiles, no code of your own: macOS, FreeBSD, OpenWrt and agentless Linux over SSH, Keenetic over its HTTP API, printers and switches over SNMP, UPSes over SNMP and NUT, IP cameras and NVRs over ONVIF. Your own profiles — the plugin's Profiles section. Needs the ssh client on the plugin host (openssh-client)."
   },
   "run": "python3",
   "file": "nkt-plugin.py",
