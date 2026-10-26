@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.7 — 2026-10-26
+
+- **LXD on a par with KVM machines — for an administrator and for a token “by permission” with the “machines” action.**
+  - **What:** a container or an LXD machine (created as a job), start, stop, restart, snapshots, vCPU and memory (applied live), disk (grows only), deletion.
+  - **For a token:** its own instances only. They count as machines — the count and limits are shared with KVM, and with limits set, sizes are required. They live in the token's LXD network under the same `nkt_isolation` nftables rules, unprivileged and without nesting regardless of the LXD profile.
+  - **Where:** the API `/hub/hosts/{id}/lxd/…` and the MCP tools `lxd_instances`, `lxd_create`, `lxd_power`, `lxd_snapshot…`, `lxd_resize`, `lxd_delete`.
+  - **Not yet:** pool ports and Fly routes for LXD instances — they remain for KVM machines.
+
 ## v1.17.6 — 2026-10-26
 
 - **The hub picks the host for a new machine.** When machine creation (API `/hub/vm/provision`, MCP `create_vm`) has no `host_id`, the hub chooses the host:

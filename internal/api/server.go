@@ -565,6 +565,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/lxd/instances/{name}/snapshots", s.handleLXDSnapshotCreate)
 				r.Post("/lxd/instances/{name}/snapshots/{snap}/restore", s.handleLXDSnapshotRestore)
 				r.Delete("/lxd/instances/{name}/snapshots/{snap}", s.handleLXDSnapshotDelete)
+				r.Post("/lxd/instances/{name}/limits", s.handleLXDLimits)
+				r.Post("/lxd/token-network", s.handleLXDTokenNetwork)
 				r.Post("/lxd/instances/{name}/{action}", s.handleLXDInstanceAction)
 				r.Delete("/lxd/instances/{name}", s.handleLXDInstanceDelete)
 				r.Post("/vms/disks", s.handleVMCreateDisk)

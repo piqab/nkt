@@ -97,13 +97,16 @@ func IsolationRules(bridges []string) string {
 	return b.String()
 }
 
-// IsolatedBridges — мосты сетей токенов на хосте.
+// IsolatedBridges — мосты сетей токенов на хосте: сети libvirt и сети
+// LXD (1.17.7; у LXD мост называется как сеть). Нет ни virsh, ни lxc —
+// ошибка; нет одного из них — берётся другой.
 func (m *Manager) IsolatedBridges(ctx context.Context) ([]string, error) {
-	all, err := m.names(ctx, "--all")
-	if err != nil {
-		return nil, err
+	all, virshErr := m.names(ctx, "--all")
+	lxd, lxdErr := m.lxdIsolated(ctx)
+	if virshErr != nil && lxdErr != nil {
+		return nil, virshErr
 	}
-	var bridges []string
+	bridges := lxd
 	for _, name := range all {
 		if !IsIsolated(name) {
 			continue
@@ -121,6 +124,26 @@ func (m *Manager) IsolatedBridges(ctx context.Context) ([]string, error) {
 	}
 	sort.Strings(bridges)
 	return bridges, nil
+}
+
+// lxdIsolated — мосты сетей токенов LXD (lxc network list, CSV: имя,
+// тип, …): только мосты с именем сети токена.
+func (m *Manager) lxdIsolated(ctx context.Context) ([]string, error) {
+	res, err := m.run(ctx, "lxc", "network", "list", "--format", "csv")
+	if err != nil {
+		return nil, err
+	}
+	if res.ExitCode != 0 {
+		return nil, fmt.Errorf("lxc network list: %s", firstMeaningful(res.Stderr, res.Stdout))
+	}
+	var out []string
+	for _, line := range strings.Split(res.Stdout, "\n") {
+		f := strings.Split(line, ",")
+		if len(f) >= 2 && IsIsolated(f[0]) && f[1] == "bridge" && bridgeRe.MatchString(f[0]) {
+			out = append(out, f[0])
+		}
+	}
+	return out, nil
 }
 
 // ApplyIsolation ставит правила для всех сетей токенов хоста. nft нет —
@@ -171,15 +194,7 @@ func KeepIsolation(ctx context.Context, m *Manager, log *slog.Logger) {
 		case <-time.After(wait):
 		}
 		wait = isolationEvery
-		all, err := m.names(ctx, "--all")
-		if err != nil {
-			continue
-		}
-		any := false
-		for _, n := range all {
-			any = any || IsIsolated(n)
-		}
-		if !any {
+		if bridges, err := m.IsolatedBridges(ctx); err != nil || len(bridges) == 0 {
 			continue
 		}
 		if _, err := m.ApplyIsolation(ctx); err != nil {

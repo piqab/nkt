@@ -432,6 +432,16 @@ var tokenHubRoutes = map[string]string{
 	"POST /hub/hosts/{id}/vm/resize":                  store.TokenActVMManage,
 	"POST /hub/hosts/{id}/vm/reinstall":               store.TokenActVMManage,
 	"DELETE /hub/hosts/{id}/vm":                       store.TokenActVMManage,
+	// Экземпляры LXD — как машины: свои, в потолках, в сети токена.
+	"GET /hub/hosts/{id}/lxd":                                  store.TokenActVMManage,
+	"POST /hub/hosts/{id}/lxd":                                 store.TokenActVMManage,
+	"POST /hub/hosts/{id}/lxd/{name}/{action}":                 store.TokenActVMManage,
+	"GET /hub/hosts/{id}/lxd/{name}/snapshots":                 store.TokenActVMManage,
+	"POST /hub/hosts/{id}/lxd/{name}/snapshots":                store.TokenActVMManage,
+	"POST /hub/hosts/{id}/lxd/{name}/snapshots/{snap}/restore": store.TokenActVMManage,
+	"DELETE /hub/hosts/{id}/lxd/{name}/snapshots/{snap}":       store.TokenActVMManage,
+	"POST /hub/hosts/{id}/lxd/{name}/resize":                   store.TokenActVMManage,
+	"DELETE /hub/hosts/{id}/lxd/{name}":                        store.TokenActVMManage,
 	// Порты из пула хоста на свои машины; свои маршруты Traffic Fly.
 	"GET /hub/hosts/{id}/vm/ports":           store.TokenActVMPorts,
 	"POST /hub/hosts/{id}/vm/ports":          store.TokenActVMPorts,
