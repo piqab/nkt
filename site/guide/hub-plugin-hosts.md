@@ -10,7 +10,10 @@ Windows-сервер, облачная ВМ: у них нет агента, за
 управляет им [плагин](/guide/hub-plugins), а хаб даёт всё остальное —
 группы, пределы токенов, оповещения, «Мониторинг», сценарии, MCP, экспорт.
 
-Первый такой плагин — **MikroTik (RouterOS 7)**: [README](https://github.com/piqab/nkt/tree/main/examples/mikrotik).
+Плагины: **MikroTik (RouterOS 7)** — [README](https://github.com/piqab/nkt/tree/main/examples/mikrotik);
+**connector** — устройства по профилям без своего кода (macOS, FreeBSD,
+OpenWrt, Linux без агента, Keenetic, принтеры и коммутаторы по SNMP) —
+[ниже](#connector-устройства-по-профилям).
 
 ## Добавить устройство
 
@@ -73,6 +76,56 @@ end
 MCP: `list_hosts` показывает и хосты плагинов (`kind: plugin`), а
 `device_snapshot`, `device_findings`, `device_config` (чтение),
 `device_action` и `device_exec` (администратор) — их разделы.
+
+## Connector: устройства по профилям
+
+Плагин **connector** — типы устройств без своего кода: каждый тип —
+профиль JSON. Встроенные: Linux без агента, macOS, FreeBSD, OpenWrt (SSH),
+Keenetic (HTTP), принтер и коммутатор (SNMP v2c) — [README](https://github.com/piqab/nkt/tree/main/examples/connector).
+Свои — раздел плагина «Профили» (правка с диффом и историей в хабе).
+
+![Профили connector](/screens/ru/hub-connector-profiles.png)
+
+![Правка профиля](/screens/ru/hub-connector-edit.png)
+
+Профиль:
+
+```json
+{"id": "my-nas", "title": {"ru": "Мой NAS", "en": "My NAS"}, "transport": "ssh",
+ "hint": "что включить на устройстве",
+ "info": {"name": {"cmd": "hostname", "parse": [{"trim": 1}]},
+          "version": {"cmd": "cat /etc/os-release", "parse": [{"kv": "="}, {"key": "VERSION_ID"}]}},
+ "snapshot": {"packages": {"cmd": "opkg list-installed", "parse": [{"each": "^(?P<name>\\S+) - (?P<version>\\S+)"}]}},
+ "metrics": {"cpu_pct": {"cmd": "top -bn1", "parse": [{"regex": "(\\d+)% idle"}, {"rev": 100}]}},
+ "findings": [{"id": "disk", "severity": "warning", "title": "Диск заполнен на {value}%",
+               "value": {"cmd": "df -P / | awk 'NR==2{print $5+0}'", "parse": [{"num": 1}]}, "if": {"gt": 90}}],
+ "config": {"cmd": "uci export"},
+ "actions": [{"op": "reboot", "title": "Перезагрузить", "cmd": "reboot", "danger": true, "disconnects": true}]}
+```
+
+- **Связь** (`transport`): `ssh` — источник `{"cmd": "…"}` (команда на
+  устройстве; считать можно и в ней — awk, sed); `http` — `{"get": "/путь"}`
+  (`auth`: `basic`, `bearer`, `keenetic`); `snmp` — `{"oid": "…"}` и
+  `{"table": {"столбец": "OID"}}` (обход, строки по индексу). Ещё
+  `{"const": значение}` и `{"conn": "поле учёток"}`.
+- **Разбор** (`parse`, по порядку): `json` (путь `a.b.0`, `a[].b`), `kv`
+  (`ключ=значение` построчно), `key`, `regex` (первое совпадение; именованные
+  группы — объект), `each` (регулярное выражение на каждую строку →
+  строки-объекты), `lines` (пропустить N строк), `cols` (столбцы по
+  пробелам), `num` (число × множитель), `rev` (X − число), `pick`
+  (переименовать поля строк), `items` (объект → строки), `filter`, `pct`,
+  `join`, `count`, `first`, `trim`.
+- **Куда:** `info` (name, os, version, model, serial, arch, firmware,
+  uptime_s), `snapshot` (mem_total, cpu, interfaces, services, packages,
+  ports, users, neighbors, disks — строки с полями общей модели), `extra`
+  (свои таблицы), `metrics` (cpu_pct, mem_used, mem_total, disk_used,
+  disk_size, temp_c, uptime_s, net — строки name/rx/tx), `findings`
+  (`if`: `gt`, `lt`, `ge`, `le`, `eq`, `ne`, `contains`, `empty`,
+  `nonempty`; для строк — `field`), `config`, `actions` (`cmd` или `post`,
+  поля формы подставляются в кавычках), `exec` (у ssh — команды `sh`).
+
+Неудачный разбор поля — поле пустое, а не ошибка: один профиль подходит к
+разным версиям устройства.
 
 ## Свой тип устройств (для авторов плагинов)
 

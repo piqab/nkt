@@ -258,8 +258,8 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
 ## Хосты плагинов (решено 2026-10-26)
 
 - [x] Протокол `provides: hosts`, хосты плагинов в хабе, MikroTik (1.15.0).
-- [ ] Плагин `connector` с профилями (ssh, http, snmp v2c): macOS, FreeBSD,
-      OpenWrt, Linux без агента, Keenetic, SNMP принтер и коммутатор.
+- [x] Плагин `connector` с профилями (ssh, http, snmp v2c): macOS, FreeBSD,
+      OpenWrt, Linux без агента, Keenetic, SNMP принтер и коммутатор (1.15.1).
 - [ ] Yandex Cloud: ВМ, диски и снимки, группы безопасности, Object
       Storage, Cloud DNS, Managed PostgreSQL/MySQL, расходы.
 - [ ] Windows: OpenSSH + PowerShell (JSON).

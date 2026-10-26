@@ -11,7 +11,10 @@ a [plugin](/en/guide/hub-plugins) reads and manages it, and the hub gives
 everything else — groups, token limits, alerts, Monitoring, scripts, MCP,
 export.
 
-The first such plugin is **MikroTik (RouterOS 7)**: [README](https://github.com/piqab/nkt/tree/main/examples/mikrotik).
+Plugins: **MikroTik (RouterOS 7)** — [README](https://github.com/piqab/nkt/tree/main/examples/mikrotik);
+**connector** — devices by profiles without code of your own (macOS,
+FreeBSD, OpenWrt, agentless Linux, Keenetic, printers and switches over
+SNMP) — [below](#connector-devices-by-profiles).
 
 ## Add a device
 
@@ -74,6 +77,56 @@ agent); an agent host can't take `run`.
 MCP: `list_hosts` shows plugin hosts too (`kind: plugin`), and
 `device_snapshot`, `device_findings`, `device_config` (read),
 `device_action` and `device_exec` (admin) — their sections.
+
+## Connector: devices by profiles
+
+The **connector** plugin — device types without code of your own: each
+type is a JSON profile. Built-in: agentless Linux, macOS, FreeBSD, OpenWrt
+(SSH), Keenetic (HTTP), a printer and a switch (SNMP v2c) — [README](https://github.com/piqab/nkt/tree/main/examples/connector).
+Your own — the plugin's Profiles section (edited with a diff and history on
+the hub).
+
+![Connector profiles](/screens/en/hub-connector-profiles.png)
+
+![Editing a profile](/screens/en/hub-connector-edit.png)
+
+A profile:
+
+```json
+{"id": "my-nas", "title": {"ru": "Мой NAS", "en": "My NAS"}, "transport": "ssh",
+ "hint": "what to turn on on the device",
+ "info": {"name": {"cmd": "hostname", "parse": [{"trim": 1}]},
+          "version": {"cmd": "cat /etc/os-release", "parse": [{"kv": "="}, {"key": "VERSION_ID"}]}},
+ "snapshot": {"packages": {"cmd": "opkg list-installed", "parse": [{"each": "^(?P<name>\\S+) - (?P<version>\\S+)"}]}},
+ "metrics": {"cpu_pct": {"cmd": "top -bn1", "parse": [{"regex": "(\\d+)% idle"}, {"rev": 100}]}},
+ "findings": [{"id": "disk", "severity": "warning", "title": "The disk is {value}% full",
+               "value": {"cmd": "df -P / | awk 'NR==2{print $5+0}'", "parse": [{"num": 1}]}, "if": {"gt": 90}}],
+ "config": {"cmd": "uci export"},
+ "actions": [{"op": "reboot", "title": "Reboot", "cmd": "reboot", "danger": true, "disconnects": true}]}
+```
+
+- **Link** (`transport`): `ssh` — the source `{"cmd": "…"}` (a command on
+  the device; it can compute too — awk, sed); `http` — `{"get": "/path"}`
+  (`auth`: `basic`, `bearer`, `keenetic`); `snmp` — `{"oid": "…"}` and
+  `{"table": {"column": "OID"}}` (a walk, rows by index). Also
+  `{"const": value}` and `{"conn": "login field"}`.
+- **Parsing** (`parse`, in order): `json` (path `a.b.0`, `a[].b`), `kv`
+  (`key=value` lines), `key`, `regex` (first match; named groups — an
+  object), `each` (a regex per line → row objects), `lines` (skip N
+  lines), `cols` (whitespace columns), `num` (number × factor), `rev`
+  (X − number), `pick` (rename row fields), `items` (object → rows),
+  `filter`, `pct`, `join`, `count`, `first`, `trim`.
+- **Where:** `info` (name, os, version, model, serial, arch, firmware,
+  uptime_s), `snapshot` (mem_total, cpu, interfaces, services, packages,
+  ports, users, neighbors, disks — rows with the common model's fields),
+  `extra` (your own tables), `metrics` (cpu_pct, mem_used, mem_total,
+  disk_used, disk_size, temp_c, uptime_s, net — rows name/rx/tx),
+  `findings` (`if`: `gt`, `lt`, `ge`, `le`, `eq`, `ne`, `contains`,
+  `empty`, `nonempty`; for rows — `field`), `config`, `actions` (`cmd` or
+  `post`, form fields are quoted in), `exec` (for ssh — `sh` commands).
+
+A field that fails to parse stays empty instead of an error: one profile
+fits different versions of a device.
 
 ## Your own device type (for plugin authors)
 

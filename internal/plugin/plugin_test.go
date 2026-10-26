@@ -107,3 +107,33 @@ func TestClientSignedCalls(t *testing.T) {
 		t.Fatal("stale timestamp accepted")
 	}
 }
+
+// Типы устройств (provides hosts): имя с дефисом, адрес обязателен, язык
+// команд — вместе с разделом exec, provides и host_types — вместе.
+func TestManifestHostTypes(t *testing.T) {
+	ok := func(ht HostType) error {
+		m := Manifest{Protocol: Protocol, Name: "conn", Provides: []string{ProvidesHosts}, HostTypes: []HostType{ht}}
+		return m.Validate()
+	}
+	base := HostType{ID: "snmp-printer", Title: "Printer", Fields: []Field{{Name: "address", Title: "A"}}, Sections: []string{SectionOverview}}
+	if err := ok(base); err != nil {
+		t.Fatal(err)
+	}
+	noAddr := base
+	noAddr.Fields = []Field{{Name: "host", Title: "H"}}
+	execNoSection := base
+	execNoSection.Exec = "sh"
+	badSection := base
+	badSection.Sections = []string{"terminal"}
+	badID := base
+	badID.ID = "Bad Id"
+	for name, ht := range map[string]HostType{"no address": noAddr, "exec without section": execNoSection, "bad section": badSection, "bad id": badID} {
+		if ok(ht) == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	m := Manifest{Protocol: Protocol, Name: "conn", Provides: []string{ProvidesHosts}}
+	if m.Validate() == nil {
+		t.Error("provides hosts without host_types accepted")
+	}
+}

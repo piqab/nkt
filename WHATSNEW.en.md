@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.15.1 — 2026-10-26
+
+- The **connector** plugin: devices without the nkt agent **by profiles**,
+  no code of your own. Built-in: **macOS**, **FreeBSD**, **OpenWrt** and
+  **agentless Linux** (over SSH), **Keenetic** (its HTTP API), a
+  **printer** and a **switch** (SNMP). Each profile is a type in Add a
+  device: inventory, metrics, findings (toner below 10 %, FileVault off,
+  vulnerable packages, a reboot needed…), configuration with a diff (`uci
+  export`, Keenetic running-config, rc.conf), actions and commands.
+- Your own profiles — the plugin's Profiles section: New profile based on
+  a built-in one and JSON editing with a diff and history. The format —
+  the “Plugin hosts” guide.
+- SSH: the host key is remembered on Check and verified; the password is
+  not on the command line. Plugin services got their own data directory
+  (`/var/lib/nkt-plugin-NAME`) — for already installed ones after Update.
+
 ## v1.15.0 — 2026-10-26
 
 - **Plugin hosts**: devices without the nkt agent in the common host
