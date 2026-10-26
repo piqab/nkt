@@ -136,6 +136,14 @@ func (m *Manager) pollOnce(ctx context.Context) {
 	}
 	wg.Wait()
 
+	// Хосты плагинов опрашивает не этот цикл, а pollPluginHosts, и свою
+	// строку кэша они ведут сами: без них здесь доступность, находки и
+	// значок устройства стирались через минуту после каждого их опроса.
+	if devices, err := m.db.ListPluginHosts(ctx); err == nil {
+		for _, h := range devices {
+			live[h.ID] = true
+		}
+	}
 	m.pruneOverview(live)
 }
 

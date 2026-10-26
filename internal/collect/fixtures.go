@@ -193,6 +193,11 @@ func (f *Fixtures) WriteFile(p string, data []byte, mode fs.FileMode) error {
 func (f *Fixtures) Writable(string) bool { return true }
 
 func (f *Fixtures) DeleteFile(p string) error {
+	// Как у Local.DeleteFile: только абсолютный путь без «..» — и до
+	// проверки resolve, что путь не выходит из снимка.
+	if !cleanAbs(p) {
+		return msgs.Errorf("collect.badWritePath", p)
+	}
 	local, err := f.resolve(p)
 	if err != nil {
 		return err

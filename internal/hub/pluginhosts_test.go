@@ -177,8 +177,12 @@ func TestPluginHosts(t *testing.T) {
 	// Опрос: доступен, находки, метрики в «Мониторинг».
 	srv.pollPluginHostNow(ctx, added.ID, true)
 	srv.pollPluginHostNow(ctx, added.ID, false)
+	// Цикл опроса агентов чистит кэш обзоров — строку устройства он
+	// оставляет (раньше стирал: ни доступности, ни значка в списке).
+	srv.hub.pollOnce(ctx)
 	rec = do("GET", "/api/hub/hosts", nil, session)
-	if b := rec.Body.String(); !strings.Contains(b, `"kind":"plugin"`) || !strings.Contains(b, `"reachable":true`) || !strings.Contains(b, `"critical":1`) {
+	if b := rec.Body.String(); !strings.Contains(b, `"kind":"plugin"`) || !strings.Contains(b, `"reachable":true`) || !strings.Contains(b, `"critical":1`) ||
+		!strings.Contains(b, `"os_info":{"id":"mikrotik"`) || !strings.Contains(b, `"source":"plugin"`) {
 		t.Fatalf("host list: %s", b)
 	}
 	if rows, _ := db.MonSeries(ctx, store.MonSeriesQuery{HostID: added.ID, Source: "host", Metric: "cpu_pct", From: time.Now().UTC().Add(-2 * time.Hour).Format("2006-01-02T15"), To: time.Now().UTC().Add(2 * time.Hour).Format("2006-01-02T15")}); len(rows) == 0 {
@@ -301,5 +305,23 @@ func TestPluginHosts(t *testing.T) {
 	expect(do("DELETE", hostPath, nil, session), 200, "delete")
 	if all, _ := db.ListAllHosts(ctx); len(all) != 0 {
 		t.Fatalf("left: %+v", all)
+	}
+}
+
+// Значок устройства — по типу; Linux без агента — по дистрибутиву с него.
+func TestPluginHostOS(t *testing.T) {
+	for _, c := range []struct {
+		typ, os, want string
+	}{
+		{"routeros", "RouterOS", "mikrotik"}, {"windows", "Microsoft Windows 11 Pro", "windows"}, {"snmp-printer", "", "printer"},
+		{"linux-ssh", "CentOS Linux", "centos"}, {"linux-ssh", "", "linux"}, {"something", "x", "device"},
+	} {
+		got := pluginHostOS(c.typ, &plugin.HostInfo{OS: c.os, Model: "M1", Version: "7.16"})
+		if got.ID != c.want || got.Source != "plugin" || !strings.HasPrefix(got.Name, "M1") {
+			t.Errorf("%s/%q → %+v, want %s", c.typ, c.os, got, c.want)
+		}
+	}
+	if got := pluginHostOS("routeros", nil); got.ID != "mikrotik" || got.Name != "" {
+		t.Errorf("no info → %+v", got)
 	}
 }

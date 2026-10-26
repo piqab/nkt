@@ -92,7 +92,9 @@ The full package list with versions is in `web/package-lock.json`.
 - **What it is:** outlines of OS brand icons (Ubuntu, Debian, Alpine,
   Fedora, Red Hat, CentOS, Rocky, AlmaLinux, openSUSE, Arch, NixOS, Linux,
   Linux Mint, FreeBSD, Gentoo, Kali, Manjaro, Pop!_OS, Raspberry Pi) — the OS
-  icon before the name of a host, machine and container.
+  icon before the name of a host, machine and container; device icons (Apple
+  for macOS, MikroTik, OpenWrt, Keenetic, Yandex Cloud) — on plugin hosts
+  (web interface only).
 - **Location:** `web/src/components/osGlyphs.ts` and
   `mobile/shared/ui/src/commonMain/kotlin/com/netknownsthat/ui/common/OsGlyphs.kt`
   — only the paths of the icons used, from the `simple-icons@16.34.0` package.
