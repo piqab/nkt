@@ -234,8 +234,11 @@ interface UsageEntry {
 interface UsageView {
   limits: TokenLimits
   usage: UsageEntry[]
-  used: { cpu: number; mem_mb: number; disk_gb: number; vms: number }
+  used: { cpu: number; mem_mb: number; disk_gb: number; vms: number; ports?: number; fly_routes?: number; k8s_namespaces?: number; k8s_clusters?: number }
 }
+
+// Счётчики, у которых пустой потолок — «нельзя» (см. LIMIT_GROUPS zero).
+const COUNTED = ['ports', 'fly_routes', 'k8s_namespaces', 'k8s_clusters'] as const
 
 /** Что токен занял: суммы против потолков и записи с «Освободить». */
 export function TokenUsagePanel({ tokenID }: { tokenID: number }) {
@@ -252,6 +255,13 @@ export function TokenUsagePanel({ tokenID }: { tokenID: number }) {
         <strong>{t('tokens.usage')}</strong> · CPU {of(v.used.cpu, v.limits.cpu)} · {t('tokens.unit.mb')} {of(v.used.mem_mb, v.limits.mem_mb)} · {t('tokens.unit.gb')}{' '}
         {of(v.used.disk_gb, v.limits.disk_gb)} · {t('tokens.limit.vms')} {of(v.used.vms, v.limits.vms)}
       </div>
+      {COUNTED.some((k) => v.used[k] || v.limits[k]) && (
+        <div className="small">
+          {COUNTED.filter((k) => v.used[k] || v.limits[k])
+            .map((k) => `${t(`tokens.limit.${k}`).replace(/\s*\(.*\)$/, '')} ${t('tokens.usedOf', { used: v.used[k] ?? 0, limit: v.limits[k] ?? 0 })}`)
+            .join(' · ')}
+        </div>
+      )}
       {error && (
         <Banner kind="error" onClose={() => setError(null)}>
           {error}

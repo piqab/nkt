@@ -387,6 +387,7 @@ var tokenHubRoutes = map[string]string{
 	"POST /hub/migrations/{id}/{action}": store.TokenActMigrate,
 	// Traffic Fly — карта общая на все хосты: только токену без предела
 	// (tokenPolicy).
+	"GET /hub/tokens/self/usage":       "",
 	"GET /hub/fly":                     "",
 	"GET /hub/fly/status":              "",
 	"GET /hub/fly/versions":            "",

@@ -450,6 +450,7 @@ var mcpTools = []mcpTool{
 		Props: map[string]map[string]any{"script_id": prop("integer", "Script id")}, Required: []string{"script_id"}, ReadOnly: true},
 	{Name: "list_migrations", Description: "Record of stack moves between hosts.", Method: "GET", Path: "/hub/migrations", ReadOnly: true},
 	{Name: "list_clusters", Description: "Kubernetes clusters and their nodes.", Method: "GET", Path: "/hub/clusters", ReadOnly: true},
+	{Name: "my_usage", Description: "The calling token's limits and what is used of them: CPU, memory, disk, machines, pool ports, own Fly routes, namespaces and clusters, with the usage rows and allowed actions.", Method: "GET", Path: "/hub/tokens/self/usage", ReadOnly: true},
 	{Name: "fly_map", Description: "Traffic Fly map: routes, targets, gateways.", Method: "GET", Path: "/hub/fly", ReadOnly: true, Fly: true},
 	{Name: "fly_status", Description: "Traffic Fly status: target health, tunnels, certificates.", Method: "GET", Path: "/hub/fly/status", ReadOnly: true, Fly: true},
 

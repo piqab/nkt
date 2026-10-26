@@ -212,6 +212,11 @@ namespace токена, квота и запреты. Команды на вес
 Traffic Fly) токену с пределами нельзя. Удалили токен или истёк срок —
 его задание останавливается на следующем шаге.
 
+**Свои лимиты** — `GET /api/hub/tokens/self/usage` (и инструмент MCP
+`my_usage`): потолки токена и «занято из» по CPU, памяти, диску, машинам,
+портам пула, своим маршрутам Fly, namespace и кластерам, записи учёта и
+разрешённые действия — тот же ответ, что окно токена у администратора.
+
 **MCP** показывает агенту только разрешённые инструменты. Примеры
 подключения — в окне токена («Примеры MCP»), с выданным секретом — сразу
 после создания.
@@ -327,6 +332,7 @@ function sign(secret, method, uri, body = '') {
 | `GET`, `POST /api/hub/hosts/{id}/lxd` | администратор | экземпляры LXD хоста (токену — свои); создать (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
 | `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | администратор | `start`, `stop`, `restart`; vCPU, память, диск; удалить |
 | `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | администратор | снимки экземпляра (токену — в потолке) |
+| `GET /api/hub/tokens/self/usage` | любой токен | свои потолки и «занято из» (суммы, машины, порты, маршруты Fly, namespace, кластеры), записи учёта, разрешённые действия |
 | `GET`, `POST /api/hub/k8s/clusters/own` | по правам | свои кластеры; создать (single или cp1 на машинах токена) → `id`, `job_id`, `api_port`, `address` |
 | `POST /api/hub/k8s/clusters/own/{id}/kubeconfig`, `DELETE /api/hub/k8s/clusters/own/{id}` | по правам | kubeconfig один раз; удалить кластер с машинами → `job_id` |
 | `GET`, `POST /api/hub/k8s/own` | по правам | свои namespace; завести (`{"cluster","namespace"}`) → `kubeconfig` один раз |

@@ -223,6 +223,12 @@ Hub-wide commands (`host`, `group`, Traffic Fly) are not allowed for a
 limited token. If the token is deleted or expires, its job stops at the
 next step.
 
+**Own limits** — `GET /api/hub/tokens/self/usage` (and the MCP tool
+`my_usage`): the token's limits and usage of CPU, memory, disk, machines,
+pool ports, own Fly routes, namespaces and clusters, the usage rows and the
+allowed actions — the same answer the administrator sees in the token
+window.
+
 **MCP** shows the agent only the allowed tools. Connection examples are
 in the token window (“MCP examples”), with the issued secret — right
 after creation.
@@ -339,6 +345,7 @@ to the hub through the tunnel. Conditions:
 | `GET`, `POST /api/hub/hosts/{id}/lxd` | admin | a host's LXD instances (a token — its own); create (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
 | `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | admin | `start`, `stop`, `restart`; vCPU, memory, disk; delete |
 | `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | admin | instance snapshots (a token — within its limit) |
+| `GET /api/hub/tokens/self/usage` | any token | its own limits and usage (totals, machines, ports, Fly routes, namespaces, clusters), usage rows, allowed actions |
 | `GET`, `POST /api/hub/k8s/clusters/own` | by permission | own clusters; create (single or cp1 on the token's machines) → `id`, `job_id`, `api_port`, `address` |
 | `POST /api/hub/k8s/clusters/own/{id}/kubeconfig`, `DELETE /api/hub/k8s/clusters/own/{id}` | by permission | the kubeconfig once; delete the cluster with its machines → `job_id` |
 | `GET`, `POST /api/hub/k8s/own` | by permission | own namespaces; create (`{"cluster","namespace"}`) → `kubeconfig` once |
