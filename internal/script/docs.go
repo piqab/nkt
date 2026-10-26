@@ -73,7 +73,7 @@ var docGroup = map[Kind]string{
 	KindSystem: "host", KindCert: "host", KindGitClone: "host", KindK8sCreate: "host", KindK8sDestroy: "host",
 	KindPipeline: "deploy", KindDeploy: "deploy", KindMigrate: "deploy",
 	KindK8sIngress: "cluster", KindK8sApply: "cluster", KindK8sWait: "cluster", KindFlyRoute: "cluster", KindFlyApply: "cluster",
-	KindPlugin: "plugins",
+	KindPlugin: "plugins", KindRun: "plugins",
 }
 
 func anchor(k Kind) string { return "cmd-" + strings.ReplaceAll(string(k), ".", "-") }

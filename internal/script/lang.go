@@ -58,6 +58,9 @@ const (
 	KindFlyRoute     Kind = "fly.route"
 	KindFlyApply     Kind = "fly.apply"
 	KindPlugin       Kind = "plugin"
+	// KindRun — команда на хосте плагина (MikroTik, Windows…) на языке
+	// его типа: «on ХОСТ run "КОМАНДА"» или блок до «end».
+	KindRun Kind = "run"
 )
 
 // ArgDoc — один аргумент команды в справке.
@@ -383,7 +386,18 @@ var Commands = []CommandDoc{
 		},
 		Example: "dns zone add example.com\ndns set app.example.com A 203.0.113.10 ttl 300\nplugin dns dns rm old.example.com",
 	},
+	{
+		Kind: KindRun, OnHost: true, Block: true, Syntax: "on ХОСТ run \"КОМАНДА\" | on ХОСТ run … end",
+		Summary: "script.doc.run",
+		Args: []ArgDoc{
+			{Name: "КОМАНДА", Desc: "script.doc.run.command"},
+		},
+		Example: "on router1 run \"/ip dns cache flush\"\non router1 run\n/ip firewall address-list add list=blocked address=198.51.100.7\n/ip firewall address-list print where list=blocked\nend",
+	},
 }
+
+// DocFor — команда справки по виду шага (nil — нет такой).
+func DocFor(k Kind) *CommandDoc { return docByKind(k) }
 
 // docByKind — команда справки по виду шага.
 func docByKind(k Kind) *CommandDoc {
@@ -487,6 +501,7 @@ on web2 packages remove telnet
 // английском получает те же строки через Localize; ключевые слова языка
 // и одинаковы в обоих вариантах.
 var englishTerms = [][2]string{
+	{"КОМАНДА", "COMMAND"},
 	{"compose-файл построчно", "compose file line by line"},
 	{"описание конвейера построчно", "pipeline description line by line"},
 	{"Forgejo за Traffic Fly: выкладка и перенос на другой хост", "Forgejo behind Traffic Fly: deploy and move to another host"},

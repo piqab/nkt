@@ -1,0 +1,12 @@
+{
+  "name": "mikrotik",
+  "title": {"ru": "MikroTik (RouterOS 7)", "en": "MikroTik (RouterOS 7)"},
+  "description": {
+    "ru": "Роутеры и коммутаторы MikroTik как хосты nkt: «Хосты» → «Добавить» → тип «MikroTik RouterOS». Состав, метрики, находки, конфигурация «/export» с диффом, действия, команды RouterOS в сценариях. Учётки роутеров хранит хаб. Ставится на машину хаба или любой хост, откуда видны роутеры.",
+    "en": "MikroTik routers and switches as nkt hosts: Hosts → Add → the “MikroTik RouterOS” type. Inventory, metrics, findings, the “/export” configuration with a diff, actions, RouterOS commands in scripts. The hub keeps the routers' logins. Installed on the hub machine or any host the routers are reachable from."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9220,
+  "settings": []
+}

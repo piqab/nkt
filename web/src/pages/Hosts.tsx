@@ -44,6 +44,7 @@ import { InstallAllModal } from '../components/InstallAllModal'
 import i18n from '../i18n'
 import { NAME_MARK, NamedTitle, OsIcon } from '../components/OsIcon'
 import { rememberHubHosts } from '../osRegistry'
+import { PluginHostAddModal, PluginHostPanel } from '../components/PluginHosts'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -478,6 +479,9 @@ export default function Hosts({
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
   const [creatingHost, setCreatingHost] = useState(false)
+  // Хосты плагинов (MikroTik, Windows…): добавление и панель устройства.
+  const [addingDevice, setAddingDevice] = useState(false)
+  const [deviceOpen, setDeviceOpen] = useState<HubHost | null>(null)
   const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string; id?: number } | null>(null)
   // Установке нужен пароль sudo: хаб ответил 409 с пользователем и командой.
   const [sudoAsk, setSudoAsk] = useState<{ id: number; name: string; user: string; command: string; error: string } | null>(null)
@@ -948,7 +952,7 @@ export default function Hosts({
    * has nothing to stop/start yet and is silently skipped rather than
    * counted as a failure. */
   async function bulkSetServiceRunning(running: boolean) {
-    const targets = (hosts ?? []).filter((h) => h.status !== 'new' && h.status !== 'installing')
+    const targets = (hosts ?? []).filter((h) => h.status !== 'new' && h.status !== 'installing' && h.kind !== 'plugin')
     if (targets.length === 0) return
     if (!(await confirmAction(t(running ? 'hosts.confirmBulkStart' : 'hosts.confirmBulkStop', { count: targets.length })))) {
       return
@@ -1098,6 +1102,14 @@ export default function Hosts({
       return (
         <div className="row row-nowrap host-actions">
           <RowAction action="open" label={t('hosts.open')} onClick={() => onSelect({ id: h.id, name: h.name })} />
+        </div>
+      )
+    }
+    // Хост плагина: свои разделы (через плагин), агента nkt у него нет.
+    if (h.kind === 'plugin') {
+      return (
+        <div className="row row-nowrap host-actions">
+          <RowAction action="open" label={t('hosts.open')} onClick={() => setDeviceOpen(h)} />
         </div>
       )
     }
@@ -1366,7 +1378,9 @@ export default function Hosts({
       // «Снять NOPASSWD» — здесь, рядом с галочкой, а не среди общих
       // действий: кнопка относится ровно к тому, что показывает колонка.
       render: (_, h) =>
-        h.ssh_user === 'root' || h.id === LOCAL_HOST_ID ? (
+        h.kind === 'plugin' ? (
+          <Tag>{h.plugin}</Tag>
+        ) : h.ssh_user === 'root' || h.id === LOCAL_HOST_ID ? (
           <span className="small muted">—</span>
         ) : (
           <span className="row row-nowrap" style={{ gap: '0.15rem', alignItems: 'center' }}>
@@ -1387,7 +1401,7 @@ export default function Hosts({
       title: t('hosts.colChannel'),
       key: 'channel',
       render: (_, h) =>
-        h.id === LOCAL_HOST_ID ? (
+        h.id === LOCAL_HOST_ID || h.kind === 'plugin' ? (
           <span className="small muted">—</span>
         ) : (
           <span className="row row-nowrap" style={{ gap: 0 }}>
@@ -1403,6 +1417,10 @@ export default function Hosts({
       render: (_, h) =>
         h.id === LOCAL_HOST_ID ? (
           <span className="small muted">—</span>
+        ) : h.kind === 'plugin' ? (
+          <span className="mono small selectable">
+            <Sensitive>{h.addr}</Sensitive>
+          </span>
         ) : isAddrUnknown(h) ? (
           // Машина ещё не получила адрес: показывать «0.0.0.0» значило бы
           // выдавать заглушку за настоящий адрес.
@@ -1651,6 +1669,14 @@ export default function Hosts({
                   ),
                 },
                 {
+                  key: 'device',
+                  node: (
+                    <Button size="small" onClick={() => setAddingDevice(true)}>
+                      {t('devices.addBtn')}
+                    </Button>
+                  ),
+                },
+                {
                   key: 'update',
                   active: outdatedCount > 0,
                   node: (
@@ -1878,6 +1904,24 @@ export default function Hosts({
 
       {showClusters && <ClustersCard onOpenJob={(id) => void openHubJob(id)} onChanged={() => reload()} />}
 
+      {addingDevice && (
+        <PluginHostAddModal
+          groups={groups.data?.groups ?? []}
+          onClose={() => setAddingDevice(false)}
+          onAdded={() => {
+            setAddingDevice(false)
+            reload()
+          }}
+        />
+      )}
+      {deviceOpen && (
+        <PluginHostPanel
+          host={deviceOpen}
+          admin={!!meInfo.data?.is_admin && meInfo.data?.allow_mutations !== false}
+          onClose={() => setDeviceOpen(null)}
+          onChanged={reload}
+        />
+      )}
       {creatingHost && (
         <Modal title={t('hosts.addHostTitle')} onClose={() => setCreatingHost(false)} width={860}>
           <HostForm

@@ -66,10 +66,184 @@ const (
 	OpDNSSync = "_dns_sync"
 	// OpDNSZones — provides dns: зоны плагина {zones: [имя…]}.
 	OpDNSZones = "_dns_zones"
+
+	// Хосты плагина (provides hosts): устройства, которые плагин знает, как
+	// читать и чем управлять (MikroTik, Windows, облачные ВМ…). В каждом
+	// вызове — args {type, conn}: тип устройства из HostTypes и поля
+	// подключения из формы «Добавить хост» (учётки хранит хаб,
+	// зашифрованными, и передаёт их в вызове).
+
+	// OpHostCheck — «Проверить» при добавлении: result HostInfo или ошибка.
+	OpHostCheck = "_host_check"
+	// OpHostSnapshot — состав устройства: result HostSnapshot.
+	OpHostSnapshot = "_host_snapshot"
+	// OpHostMetrics — метрики сейчас: result HostMetrics (хаб опрашивает
+	// по расписанию — графики и оповещения «Мониторинга»).
+	OpHostMetrics = "_host_metrics"
+	// OpHostFindings — находки: result {findings: [HostFinding…]}.
+	OpHostFindings = "_host_findings"
+	// OpHostAction — действие типа {action, args, dry_run}: text.
+	OpHostAction = "_host_action"
+	// OpHostConfig — конфигурация текстом: result {text} (хаб хранит
+	// версии и показывает дифф).
+	OpHostConfig = "_host_config"
+	// OpHostExec — команда на языке типа {command, check, dry_run}: text;
+	// check — только разобрать (кнопка «Проверить» сценария).
+	OpHostExec = "_host_exec"
 )
 
 // Provides — что плагин умеет для самого хаба.
-const ProvidesDNS = "dns"
+const (
+	ProvidesDNS   = "dns"
+	ProvidesHosts = "hosts"
+)
+
+// Разделы хоста плагина (HostType.Sections).
+const (
+	SectionOverview = "overview"
+	SectionMetrics  = "metrics"
+	SectionFindings = "findings"
+	SectionConfig   = "config"
+	SectionActions  = "actions"
+	SectionExec     = "exec"
+)
+
+// HostType — тип устройства плагина (provides hosts).
+type HostType struct {
+	// ID — тип в плагине (routeros); у хоста хранится вместе с именем
+	// плагина.
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// Hint — что нужно на устройстве (включить REST, OpenSSH…).
+	Hint string `json:"hint,omitempty"`
+	// Fields — форма «Добавить хост»: адрес, логин, пароль (password —
+	// секрет: хаб его не показывает), порт…
+	Fields []Field `json:"fields"`
+	// Sections — какие разделы есть у хоста этого типа (Section*).
+	Sections []string `json:"sections"`
+	// Actions — действия на странице хоста: Op — имя действия для
+	// _host_action (не операция манифеста), Fields, Confirm, Danger — как
+	// у кнопок разделов.
+	Actions []Action `json:"actions,omitempty"`
+	// Exec — язык команд _host_exec (routeros, powershell, sh); пусто —
+	// команд нет.
+	Exec string `json:"exec,omitempty"`
+}
+
+// HostInfo — кратко об устройстве (_host_check, обзор).
+type HostInfo struct {
+	Name     string `json:"name,omitempty"`
+	OS       string `json:"os,omitempty"`
+	Version  string `json:"version,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Serial   string `json:"serial,omitempty"`
+	Arch     string `json:"arch,omitempty"`
+	UptimeS  int64  `json:"uptime_s,omitempty"`
+	Address  string `json:"address,omitempty"`
+	Firmware string `json:"firmware,omitempty"`
+	// Fingerprint — отпечаток сертификата или ключа устройства: хаб
+	// запоминает его при добавлении и показывает (проверяет плагин).
+	Fingerprint string `json:"fingerprint,omitempty"`
+}
+
+// HostSnapshot — состав устройства в общей модели.
+type HostSnapshot struct {
+	Info       HostInfo        `json:"info"`
+	CPU        *HostCPU        `json:"cpu,omitempty"`
+	MemTotal   int64           `json:"mem_total,omitempty"`
+	Disks      []HostDisk      `json:"disks,omitempty"`
+	Interfaces []HostInterface `json:"interfaces,omitempty"`
+	Services   []HostService   `json:"services,omitempty"`
+	Packages   []HostPackage   `json:"packages,omitempty"`
+	Ports      []HostPort      `json:"ports,omitempty"`
+	Users      []HostUser      `json:"users,omitempty"`
+	// Neighbors — соседи по сети (LLDP, MNDP, CDP): связи на карте.
+	Neighbors []HostNeighbor `json:"neighbors,omitempty"`
+	// Extra — то, чего нет в общей модели: таблицы раздела «Состав».
+	Extra []View `json:"extra,omitempty"`
+}
+
+type HostCPU struct {
+	Model string `json:"model,omitempty"`
+	Cores int    `json:"cores,omitempty"`
+}
+
+type HostDisk struct {
+	Name  string `json:"name"`
+	Size  int64  `json:"size,omitempty"`
+	Used  int64  `json:"used,omitempty"`
+	Mount string `json:"mount,omitempty"`
+}
+
+type HostInterface struct {
+	Name     string   `json:"name"`
+	Type     string   `json:"type,omitempty"`
+	MAC      string   `json:"mac,omitempty"`
+	Addrs    []string `json:"addrs,omitempty"`
+	Up       bool     `json:"up"`
+	Disabled bool     `json:"disabled,omitempty"`
+	Comment  string   `json:"comment,omitempty"`
+}
+
+type HostService struct {
+	Name    string `json:"name"`
+	State   string `json:"state,omitempty"` // running | stopped | …
+	Enabled bool   `json:"enabled"`
+	Detail  string `json:"detail,omitempty"`
+}
+
+type HostPackage struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+}
+
+type HostPort struct {
+	Proto   string `json:"proto"`
+	Port    int    `json:"port"`
+	Service string `json:"service,omitempty"`
+	Allowed string `json:"allowed,omitempty"` // откуда разрешено (пусто — отовсюду)
+}
+
+type HostUser struct {
+	Name  string `json:"name"`
+	Group string `json:"group,omitempty"`
+}
+
+type HostNeighbor struct {
+	Name      string `json:"name,omitempty"`
+	Address   string `json:"address,omitempty"`
+	MAC       string `json:"mac,omitempty"`
+	Interface string `json:"interface,omitempty"`
+	Platform  string `json:"platform,omitempty"`
+}
+
+// HostMetrics — метрики устройства сейчас (что известно).
+type HostMetrics struct {
+	CPUPct   *float64 `json:"cpu_pct,omitempty"`
+	MemUsed  *int64   `json:"mem_used,omitempty"`
+	MemTotal *int64   `json:"mem_total,omitempty"`
+	DiskUsed *int64   `json:"disk_used,omitempty"`
+	DiskSize *int64   `json:"disk_size,omitempty"`
+	TempC    *float64 `json:"temp_c,omitempty"`
+	UptimeS  int64    `json:"uptime_s,omitempty"`
+	// Net — байты интерфейсов с начала работы (хаб считает скорость по
+	// разнице опросов).
+	Net map[string]HostNetCounters `json:"net,omitempty"`
+}
+
+type HostNetCounters struct {
+	RX int64 `json:"rx"`
+	TX int64 `json:"tx"`
+}
+
+// HostFinding — находка устройства.
+type HostFinding struct {
+	ID       string `json:"id"`
+	Severity string `json:"severity"` // critical | warning | info
+	Title    string `json:"title"`
+	Detail   string `json:"detail,omitempty"`
+	Fix      string `json:"fix,omitempty"`
+}
 
 // Manifest — описание плагина.
 type Manifest struct {
@@ -90,6 +264,9 @@ type Manifest struct {
 	// Provides — что плагин делает для хаба: «dns» — записи для маршрутов
 	// Traffic Fly, сайтов и имён хостов (_dns_sync, _dns_zones).
 	Provides []string `json:"provides,omitempty"`
+	// HostTypes — типы устройств (provides hosts): форма добавления,
+	// разделы, действия, язык команд.
+	HostTypes []HostType `json:"host_types,omitempty"`
 	// HubActions — права, которые плагин просит у хаба: действия токена
 	// «по правам» (pipeline.deploy, fly.manage…). Хаб выпускает плагину
 	// такой токен при подключении, если администратор согласился.
@@ -306,12 +483,64 @@ func (m *Manifest) Validate() error {
 		words[c.Word] = true
 	}
 	for _, p := range m.Provides {
-		if p != ProvidesDNS {
+		if p != ProvidesDNS && p != ProvidesHosts {
 			return fmt.Errorf("unknown provides %q", p)
+		}
+	}
+	if m.Has(ProvidesHosts) != (len(m.HostTypes) > 0) {
+		return fmt.Errorf("provides hosts and host_types go together")
+	}
+	types := map[string]bool{}
+	for _, ht := range m.HostTypes {
+		if !opRe.MatchString(ht.ID) || types[ht.ID] {
+			return fmt.Errorf("bad or repeated host type %q", ht.ID)
+		}
+		types[ht.ID] = true
+		if strings.TrimSpace(ht.Title) == "" {
+			return fmt.Errorf("host type %q: no title", ht.ID)
+		}
+		fields := map[string]bool{}
+		for _, f := range ht.Fields {
+			if !opRe.MatchString(f.Name) || fields[f.Name] {
+				return fmt.Errorf("host type %q: bad or repeated field %q", ht.ID, f.Name)
+			}
+			fields[f.Name] = true
+		}
+		if !fields["address"] {
+			return fmt.Errorf("host type %q: no address field", ht.ID)
+		}
+		for _, s := range ht.Sections {
+			if !slices.Contains(hostSections, s) {
+				return fmt.Errorf("host type %q: unknown section %q", ht.ID, s)
+			}
+		}
+		if (ht.Exec != "") != slices.Contains(ht.Sections, SectionExec) {
+			return fmt.Errorf("host type %q: exec and the exec section go together", ht.ID)
+		}
+		acts := map[string]bool{}
+		for _, a := range ht.Actions {
+			if !opRe.MatchString(a.Op) || acts[a.Op] {
+				return fmt.Errorf("host type %q: bad or repeated action %q", ht.ID, a.Op)
+			}
+			acts[a.Op] = true
 		}
 	}
 	return nil
 }
+
+var hostSections = []string{SectionOverview, SectionMetrics, SectionFindings, SectionConfig, SectionActions, SectionExec}
+
+// HostType — тип устройства по ID.
+func (m *Manifest) HostType(id string) (HostType, bool) {
+	i := slices.IndexFunc(m.HostTypes, func(t HostType) bool { return t.ID == id })
+	if i < 0 {
+		return HostType{}, false
+	}
+	return m.HostTypes[i], true
+}
+
+// HasSection — у типа есть раздел.
+func (t HostType) HasSection(s string) bool { return slices.Contains(t.Sections, s) }
 
 // Op — операция по имени.
 func (m *Manifest) Op(name string) (Op, bool) {

@@ -69,6 +69,7 @@ Every command of the hub script language — the same ones “Check”, the “R
 | Command | What it does |
 |---|---|
 | [`plugin NAME WORD args…`](#cmd-plugin) | A command of a connected plugin (“About” → “Plugins”): the plugin's command word and its arguments. |
+| [`on HOST run "COMMAND"`](#cmd-run) | A command on a plugin host (MikroTik, Windows and other devices added through a plugin) in its type's language: a RouterOS script, PowerShell. |
 
 ## Commands
 
@@ -626,6 +627,24 @@ Example:
 dns zone add example.com
 dns set app.example.com A 203.0.113.10 ttl 300
 plugin dns dns rm old.example.com
+```
+
+### `on HOST run "COMMAND" | on HOST run … end` {#cmd-run}
+
+A command on a plugin host (MikroTik, Windows and other devices added through a plugin) in its type's language: a RouterOS script, PowerShell. One line in quotes — or a block up to “end” (several lines). The plugin runs it: “Check” asks it, in a dry run it only says what it would run. A host with the nkt agent or a type without commands — a “Check” error.
+
+| Argument | Required | What it is |
+|---|---|---|
+| `COMMAND` |  | the command in quotes; without it — the lines up to “end” |
+
+Example:
+
+```
+on router1 run "/ip dns cache flush"
+on router1 run
+/ip firewall address-list add list=blocked address=198.51.100.7
+/ip firewall address-list print where list=blocked
+end
 ```
 
 ## Ready-made scripts

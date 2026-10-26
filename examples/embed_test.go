@@ -36,16 +36,20 @@ func TestPluginPackages(t *testing.T) {
 	for _, p := range list {
 		keys = append(keys, p.Key)
 	}
-	if strings.Join(keys, ",") != "cloudflare,docker-mailserver,litellm,technitium" || list[3].Run != "python3" || len(list[3].Content) < 1000 {
+	if strings.Join(keys, ",") != "cloudflare,docker-mailserver,litellm,mikrotik,technitium" || list[4].Run != "python3" || len(list[4].Content) < 1000 {
 		t.Fatalf("packages: %v", keys)
 	}
-	if !list[1].Docker || list[0].Docker || list[2].Docker || list[3].Docker {
+	if !list[1].Docker || list[0].Docker || list[2].Docker || list[3].Docker || list[4].Docker {
 		t.Fatal("docker flags")
 	}
 	if list[2].Port != 9210 || len(list[2].Settings) != 2 || !list[2].Settings[0].Secret {
 		t.Fatalf("litellm: %+v", list[2].Settings)
 	}
-	list = list[3:]
+	// MikroTik: учётки роутеров — у хаба (в хостах), своих настроек нет.
+	if list[3].Port != 9220 || len(list[3].Settings) != 0 {
+		t.Fatalf("mikrotik: %+v", list[3])
+	}
+	list = list[4:]
 	secret := false
 	for _, s := range list[0].Settings {
 		if s.Env == "DNS_API_TOKEN" && s.Secret && s.Required {
@@ -93,6 +97,19 @@ func TestLiteLLMPluginPython(t *testing.T) {
 		t.Skip("no python3")
 	}
 	out, err := exec.Command(py, "-I", "litellm/deploy/test_plugin.py").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+// Плагин MikroTik — против поддельного REST RouterOS 7 по HTTPS: отпечаток
+// сертификата, находки, конфигурация, действия, команды.
+func TestMikroTikPluginPython(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	out, err := exec.Command(py, "-I", "mikrotik/deploy/test_plugin.py").CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}

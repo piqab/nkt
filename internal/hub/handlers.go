@@ -616,7 +616,8 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 
 // hostRows — строки списка хостов с последним опросом (API, бот).
 func (s *Server) hostRows(ctx context.Context) ([]hostWithOverview, error) {
-	hosts, err := s.db.ListHosts(ctx)
+	// Хосты плагинов — в общем списке (с типом и плагином в строке).
+	hosts, err := s.db.ListAllHosts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1712,6 +1713,11 @@ func (s *Server) proxyHost(w http.ResponseWriter, r *http.Request) {
 	// proxyLocal's identical comment above. The raw {id} path segment
 	// (not id re-formatted from the parsed int64) so this can't mismatch
 	// on some hypothetical non-canonical numeric spelling.
+	if h, err := s.db.HostByID(r.Context(), id); err == nil && h.IsPlugin() {
+		// У хоста плагина нет агента nkt — его разделы на /hub/plugin-hosts.
+		writeErr(w, r, http.StatusNotFound, msgs.Errorf("plugin.hostNoAgent", h.Name))
+		return
+	}
 	rest := strings.TrimPrefix(r.URL.Path, "/api/hosts/"+chi.URLParam(r, "id")+"/")
 
 	r2 := r.Clone(r.Context())

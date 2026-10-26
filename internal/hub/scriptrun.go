@@ -210,7 +210,7 @@ func (r *ScriptRunner) hostByName(ctx context.Context, done *scriptRunResume, na
 	if id, ok := done.HostIDs[name]; ok {
 		return r.m.db.HostByID(ctx, id)
 	}
-	hosts, err := r.m.db.ListHosts(ctx)
+	hosts, err := r.m.db.ListAllHosts(ctx)
 	if err != nil {
 		return store.Host{}, err
 	}
@@ -320,6 +320,9 @@ func (r *ScriptRunner) step(ctx context.Context, jc *jobs.Context, p *ScriptRunP
 
 // hostStep — один шаг на одном хосте.
 func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *ScriptRunParams, done *scriptRunResume, h store.Host, st script.Step) error {
+	if st.Kind == script.KindRun || h.IsPlugin() {
+		return r.runOnHost(ctx, jc, h, st, false)
+	}
 	switch st.Kind {
 	case script.KindPackages:
 		if st.Action == "remove" {
@@ -707,6 +710,13 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 		h, err := r.hostByName(ctx, done, name)
 		if err != nil {
 			return err
+		}
+		// Хост плагина и «run»: сухой прогон делает плагин.
+		if st.Kind == script.KindRun || h.IsPlugin() {
+			if err := r.runOnHost(ctx, jc, h, st, true); err != nil {
+				return err
+			}
+			continue
 		}
 		content, err := r.miniContent(p.Name, st)
 		if err != nil {
@@ -1200,4 +1210,33 @@ func (r *ScriptRunner) registryHint(ctx context.Context, h store.Host, project, 
 		}
 	}
 	return msgs.Errorf("hub.scriptStackUnauthorized", err, h.Name, path)
+}
+
+// runOnHost — «on ХОСТ run …» на хосте плагина: команда на языке его типа
+// (выполняет плагин; dry — он только отвечает, что выполнил бы). Хосту с
+// агентом nkt «run» нельзя, хосту плагина — ничего, кроме «run».
+func (r *ScriptRunner) runOnHost(ctx context.Context, jc *jobs.Context, h store.Host, st script.Step, dry bool) error {
+	if !h.IsPlugin() {
+		return msgs.Errorf("script.runNotPluginHost", h.Name)
+	}
+	if st.Kind != script.KindRun {
+		return msgs.Errorf("script.runOnlyRun", h.Name)
+	}
+	cmd := st.Args["command"]
+	if cmd == "" {
+		cmd = st.Block
+	}
+	text, err := r.s.pluginHostExec(ctx, h, cmd, false, dry)
+	if !dry {
+		r.m.db.Audit(ctx, jc.Job.Author, "plugin.hostExec", h.Name, auditOutcome(err), map[string]any{"command": cmd, "job_id": jc.Job.ID})
+	}
+	if err != nil {
+		return err
+	}
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		if strings.TrimSpace(line) != "" {
+			jc.Logf("      %s: %s", h.Name, line)
+		}
+	}
+	return nil
 }

@@ -76,6 +76,8 @@ MCP работает с [API-токеном](/guide/hub-api#токены), а н
 | `migrate_preview`, `migrate_stack`, `migration_action` | администратор | план переноса, перенос, откат / удаление старой копии |
 | `fly_apply`, `fly_ops` | администратор, без предела | применить карту, точечные правки целей |
 | `manifest_diff`, `manifest_apply` | администратор | манифест в кластеры |
+| `device_snapshot`, `device_findings`, `device_config` | чтение | [хост плагина](/guide/hub-plugin-hosts) (MikroTik, Windows…): состав, находки, версии конфигурации (`fresh` — прочитать с устройства) |
+| `device_action`, `device_exec` | администратор | действие типа хоста плагина (перезагрузка, обновление…) и команда на его языке (RouterOS, PowerShell); `dry_run` — только сказать, что было бы |
 | `service_action`, `container_action` | администратор | start / stop / restart служб и контейнеров |
 | `fail2ban_ban` | администратор | бан / разбан адресов на хостах |
 

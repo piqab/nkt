@@ -345,6 +345,13 @@ func (m *Manager) dialerFor(ctx context.Context, hostID int64) (dial dialFunc, c
 // dialerForClient — то же и само пуловое соединение (nil у туннеля):
 // Proxy отмечает по нему идущие запросы (markBusy).
 func (m *Manager) dialerForClient(ctx context.Context, hostID int64) (dial dialFunc, channel string, onFail func(), client *ssh.Client, err error) {
+	// У хоста плагина нет агента nkt и SSH к нему хаб не ходит (учётки —
+	// у плагина): всё, что дошло сюда по ошибке, — понятный отказ.
+	if hostID > 0 {
+		if h, herr := m.db.HostByID(ctx, hostID); herr == nil && h.IsPlugin() {
+			return nil, "", nil, nil, msgs.Errorf("plugin.hostNoAgent", h.Name)
+		}
+	}
 	client, sshErr := m.clientFor(ctx, hostID)
 	if sshErr == nil {
 		return client.Dial, channelSSH, func() { m.failClient(hostID, client) }, client, nil

@@ -502,15 +502,29 @@ func reencryptClusterSecrets(oldKey, newKey []byte, c store.ClusterExport) (stor
 // could never come up, and every fallback dial silently had nothing to
 // fall back to.
 func reencryptHostSecrets(oldKey, newKey []byte, h store.HostExport) (store.HostExport, error) {
-	secret, err := secretbox.Decrypt(oldKey, h.SecretEnc)
-	if err != nil {
-		return store.HostExport{}, msgs.Errorf("hub.decryptingSSHSecretBuiltKey", err)
+	// У хоста плагина секрета SSH нет — его учётки в ConnEnc (ниже).
+	if len(h.SecretEnc) > 0 || h.Kind != store.HostKindPlugin {
+		secret, err := secretbox.Decrypt(oldKey, h.SecretEnc)
+		if err != nil {
+			return store.HostExport{}, msgs.Errorf("hub.decryptingSSHSecretBuiltKey", err)
+		}
+		secretEnc, err := secretbox.Encrypt(newKey, secret)
+		if err != nil {
+			return store.HostExport{}, msgs.Errorf("hub.reEncryptingSSHSecret", err)
+		}
+		h.SecretEnc = secretEnc
 	}
-	secretEnc, err := secretbox.Encrypt(newKey, secret)
-	if err != nil {
-		return store.HostExport{}, msgs.Errorf("hub.reEncryptingSSHSecret", err)
+	if len(h.ConnEnc) > 0 {
+		conn, err := secretbox.Decrypt(oldKey, h.ConnEnc)
+		if err != nil {
+			return store.HostExport{}, msgs.Errorf("hub.decryptingPluginConn", err)
+		}
+		connEnc, err := secretbox.Encrypt(newKey, conn)
+		if err != nil {
+			return store.HostExport{}, msgs.Errorf("hub.reEncryptingPluginConn", err)
+		}
+		h.ConnEnc = connEnc
 	}
-	h.SecretEnc = secretEnc
 
 	if len(h.AdminPasswordEnc) > 0 {
 		pw, err := secretbox.Decrypt(oldKey, h.AdminPasswordEnc)

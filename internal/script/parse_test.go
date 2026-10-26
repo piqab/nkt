@@ -266,3 +266,17 @@ func TestBlockExpandsOnlyScriptVars(t *testing.T) {
 		t.Errorf("блок:\n%s", b)
 	}
 }
+
+// «on ХОСТ run»: команда в кавычках или блок до «end».
+func TestParseRun(t *testing.T) {
+	sc, issues := Parse("on r1 run \"/ip dns cache flush\"\non r1 r2 run\n/system identity print\n:put 1\nend\non r1 run a b\n", nil)
+	if len(issues) != 1 || issues[0].Line != 6 {
+		t.Fatalf("issues: %+v", issues)
+	}
+	if len(sc.Steps) != 2 || sc.Steps[0].Kind != KindRun || sc.Steps[0].Args["command"] != "/ip dns cache flush" {
+		t.Fatalf("steps: %+v", sc.Steps)
+	}
+	if st := sc.Steps[1]; st.Block != "/system identity print\n:put 1\n" || len(st.Hosts) != 2 {
+		t.Fatalf("block step: %+v", st)
+	}
+}

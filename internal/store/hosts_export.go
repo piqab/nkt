@@ -99,6 +99,12 @@ type HostExport struct {
 	APIPort int    `json:"api_port,omitempty"`
 	Cluster string `json:"cluster,omitempty"`
 	K8sRole string `json:"k8s_role,omitempty"`
+	// Хост плагина (с 1.15.0): плагин, тип устройства и поля подключения
+	// (зашифрованы, как секреты хостов; перешифровываются при импорте).
+	Kind       string `json:"kind,omitempty"`
+	Plugin     string `json:"plugin,omitempty"`
+	PluginType string `json:"plugin_type,omitempty"`
+	ConnEnc    []byte `json:"conn_enc,omitempty"`
 }
 
 // ClusterExport — кластер Kubernetes: запись с зашифрованными kubeconfig
@@ -244,7 +250,7 @@ func hostToExport(h Host) HostExport {
 		TerminalEnabled: h.TerminalEnabled, AptViaHub: h.AptViaHub, TunnelEnabled: h.TunnelEnabled, TunnelTokenEnc: h.TunnelTokenEnc,
 		ErrorMsg: h.RawError(), CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
 		Group: h.Group, Via: h.Via, BinaryVia: h.BinaryVia, K8sRole: h.K8sRole, SSHHostKey: h.SSHHostKey,
-		APIPort: h.APIPort,
+		APIPort: h.APIPort, Kind: h.Kind, Plugin: h.Plugin, PluginType: h.PluginType, ConnEnc: h.ConnEnc,
 	}
 }
 
@@ -287,7 +293,7 @@ var ExportedSettingPrefixes = []string{"plugin.settings."}
 // ExportHosts returns every managed host in the shape GET /hub/export sends
 // to the browser as a downloadable file.
 func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
-	hosts, err := d.ListHosts(ctx)
+	hosts, err := d.ListAllHosts(ctx)
 	if err != nil {
 		return HubExport{}, err
 	}
@@ -552,7 +558,7 @@ func (d *DB) ImportPlan(ctx context.Context, export HubExport) ([]PlanSection, e
 		}
 		return l
 	}
-	hosts, err := d.ListHosts(ctx)
+	hosts, err := d.ListAllHosts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1048,19 +1054,22 @@ func (d *DB) importOneHost(ctx context.Context, h HostExport) (int64, error) {
 		return 0, msgs.Errorf("store.invalidAdminName", h.AdminUser)
 	}
 	sudo := importedSudoStatus(h.SudoStatus)
+	if h.SecretEnc == nil {
+		h.SecretEnc = []byte{} // хост плагина: секрета SSH нет, столбец NOT NULL
+	}
 	res, err := d.ExecContext(ctx,
 		`INSERT INTO hosts(
 			name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 			arch, status, nkt_version, admin_user, admin_password_enc,
 			sudo_status, sudo_mode, terminal_enabled, tunnel_enabled, tunnel_token_enc,
 			error_msg, created_at, last_seen_at, group_name, apt_via_hub,
-			via, binary_via, ssh_host_key, api_port
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			via, binary_via, ssh_host_key, api_port, kind, plugin, plugin_type, conn_enc
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		h.Name, h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
 		legacySudoStatus(sudo), sudo, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
 		h.ErrorMsg, h.CreatedAt, h.LastSeenAt, h.Group, h.AptViaHub,
-		h.Via, h.BinaryVia, h.SSHHostKey, h.APIPort)
+		h.Via, h.BinaryVia, h.SSHHostKey, h.APIPort, importedKind(h.Kind), h.Plugin, h.PluginType, h.ConnEnc)
 	if err != nil {
 		return 0, err
 	}
@@ -1087,20 +1096,31 @@ func (d *DB) replaceHost(ctx context.Context, id int64, h HostExport) error {
 		return msgs.Errorf("store.invalidAdminName", h.AdminUser)
 	}
 	sudo := importedSudoStatus(h.SudoStatus)
+	if h.SecretEnc == nil {
+		h.SecretEnc = []byte{}
+	}
 	_, err := d.ExecContext(ctx,
 		`UPDATE hosts SET
 			addr = ?, ssh_port = ?, ssh_user = ?, ssh_auth_kind = ?, secret_enc = ?,
 			arch = ?, status = ?, nkt_version = ?, admin_user = ?, admin_password_enc = ?,
 			sudo_status = ?, sudo_mode = ?, terminal_enabled = ?, tunnel_enabled = ?, tunnel_token_enc = ?,
 			error_msg = ?, group_name = ?, apt_via_hub = ?, via = ?, binary_via = ?,
-			ssh_host_key = ?, api_port = ?
+			ssh_host_key = ?, api_port = ?, kind = ?, plugin = ?, plugin_type = ?, conn_enc = ?
 		WHERE id = ?`,
 		h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
 		legacySudoStatus(sudo), sudo, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
 		h.ErrorMsg, h.Group, h.AptViaHub, h.Via, h.BinaryVia,
-		h.SSHHostKey, h.APIPort, id)
+		h.SSHHostKey, h.APIPort, importedKind(h.Kind), h.Plugin, h.PluginType, h.ConnEnc, id)
 	return err
+}
+
+// importedKind — вид хоста из файла: хост плагина или обычный.
+func importedKind(k string) string {
+	if k == HostKindPlugin {
+		return k
+	}
+	return ""
 }
 
 // DecodeHubExport parses an uploaded export file, rejecting one from an

@@ -77,7 +77,7 @@ func (s *Server) handleHostsMap(w http.ResponseWriter, r *http.Request) {
 		if allow != nil && !allow(h.ID) {
 			continue
 		}
-		if h.Status != "online" {
+		if h.Status != "online" || h.IsPlugin() {
 			continue
 		}
 		wg.Add(1)

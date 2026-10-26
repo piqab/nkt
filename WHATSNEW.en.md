@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.15.0 — 2026-10-26
+
+- **Plugin hosts**: devices without the nkt agent in the common host
+  list. Hosts → Add a device → type → address, login, password → Check.
+  The hub keeps the logins encrypted; the password is never shown nor
+  logged; the device certificate fingerprint is remembered and verified.
+- The device panel: **inventory**, **metrics** (every minute — into
+  Monitoring), **findings** with a fix hint (critical ones — into alerts),
+  **configuration with a diff** — the hub reads it hourly, so whatever
+  changed on the device is visible; **actions** and **commands** in the
+  device's language — with a confirmation and a dry run.
+- The first plugin — **MikroTik (RouterOS 7)**: interfaces, service
+  ports, neighbors, routes, firewall, DHCP; findings — updates, telnet and
+  services open to all, `admin`, no input drop; reboot, update, firmware,
+  backup; `/export` with versions.
+- Scripts: `on HOST run "COMMAND"` (or a block up to `end`) — Check and
+  the dry run are done by the plugin. MCP: `device_snapshot`,
+  `device_findings`, `device_config`, `device_action`, `device_exec`.
+- The hub export carries plugin hosts with their logins (re-encrypted
+  with the new hub's key).
+
 ## v1.14.9 — 2026-10-26
 
 - The **LiteLLM** example: `cert: auto` on the site and a commented

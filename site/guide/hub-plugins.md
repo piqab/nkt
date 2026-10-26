@@ -15,7 +15,9 @@ title: Плагины
 Cloudflare; [почта](/guide/hub-plugin-mail) — ящики, алиасы и DKIM
 docker-mailserver, записи MX/SPF/DKIM через DNS-плагин;
 [LiteLLM](/guide/hub-plugin-litellm) — виртуальные ключи к моделям с
-бюджетом и лимитами, модели, расход.
+бюджетом и лимитами, модели, расход; MikroTik — роутеры как
+[хосты плагинов](/guide/hub-plugin-hosts) (устройства без агента nkt в
+общем списке хостов).
 
 ## Как это устроено
 

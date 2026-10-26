@@ -16,7 +16,9 @@ your domains on your own name servers, delegation, DNSSEC;
 Cloudflare; [mail](/en/guide/hub-plugin-mail) — docker-mailserver
 mailboxes, aliases and DKIM, MX/SPF/DKIM records through the DNS plugin;
 [LiteLLM](/en/guide/hub-plugin-litellm) — virtual model keys with budgets
-and limits, models, spend.
+and limits, models, spend; MikroTik — routers as
+[plugin hosts](/en/guide/hub-plugin-hosts) (devices without the nkt agent
+in the common host list).
 
 ## How it works
 

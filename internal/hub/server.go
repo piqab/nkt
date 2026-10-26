@@ -318,6 +318,16 @@ func (s *Server) Handler() http.Handler {
 				// администратору или токену с plugin.<имя> (pluginOpAllowed).
 				r.Get("/hub/plugins", s.handlePlugins)
 				r.Get("/hub/plugins/{name}/agents", s.handlePluginAgents)
+				// Хосты плагинов: смотреть — всем; действия и команды —
+				// администратору или токену «плагин ИМЯ» (проверка внутри).
+				r.Get("/hub/plugin-hosts/types", s.handlePluginHostTypes)
+				r.Get("/hub/plugin-hosts/{id}", s.handlePluginHost)
+				r.Get("/hub/plugin-hosts/{id}/snapshot", s.handlePluginHostSnapshot)
+				r.Get("/hub/plugin-hosts/{id}/findings", s.handlePluginHostFindings)
+				r.Get("/hub/plugin-hosts/{id}/metrics", s.handlePluginHostMetrics)
+				r.Get("/hub/plugin-hosts/{id}/config", s.handlePluginHostConfig)
+				r.Post("/hub/plugin-hosts/{id}/action", s.handlePluginHostAction)
+				r.Post("/hub/plugin-hosts/{id}/exec", s.handlePluginHostExec)
 				r.Get("/hub/dns", s.handleDNSState)
 				r.Post("/hub/plugins/{name}/call", s.handlePluginCall)
 				r.Post("/hub/plugins/{name}/dns", s.handlePluginDNS)
@@ -459,6 +469,10 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/plugins/catalog", s.handlePluginCatalog)
 					r.Post("/hub/plugins/install", s.handlePluginInstall)
 					r.Post("/hub/plugins/native/update-all", s.handlePluginUpdateAll)
+					r.Post("/hub/plugin-hosts/check", s.handlePluginHostCheck)
+					r.Post("/hub/plugin-hosts", s.handlePluginHostAdd)
+					r.Put("/hub/plugin-hosts/{id}/conn", s.handlePluginHostConn)
+					r.Delete("/hub/plugin-hosts/{id}", s.handlePluginHostDelete)
 					r.Post("/hub/plugins/{name}/native/{action}", s.handlePluginNativeAction)
 					r.Get("/hub/plugins/{name}/settings", s.handlePluginSettings)
 					r.Post("/hub/plugins/{name}/settings", s.handlePluginSettingsSave)

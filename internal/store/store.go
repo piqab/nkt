@@ -662,6 +662,12 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"sites", "max_body", `ALTER TABLE sites ADD COLUMN max_body TEXT NOT NULL DEFAULT ''`},
 	// Откуда сценарий: «ai» — черновик ассистента или разбора находки.
 	{"scripts", "origin", `ALTER TABLE scripts ADD COLUMN origin TEXT NOT NULL DEFAULT ''`},
+	// Хосты плагинов (MikroTik, Windows…): kind = 'plugin', какой плагин и
+	// тип устройства, поля подключения зашифрованным JSON.
+	{"hosts", "kind", `ALTER TABLE hosts ADD COLUMN kind TEXT NOT NULL DEFAULT ''`},
+	{"hosts", "plugin", `ALTER TABLE hosts ADD COLUMN plugin TEXT NOT NULL DEFAULT ''`},
+	{"hosts", "plugin_type", `ALTER TABLE hosts ADD COLUMN plugin_type TEXT NOT NULL DEFAULT ''`},
+	{"hosts", "conn_enc", `ALTER TABLE hosts ADD COLUMN conn_enc BLOB`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

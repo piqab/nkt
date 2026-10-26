@@ -255,6 +255,18 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
 - [ ] **Proxmox** — машины Proxmox в карте и списке хостов nkt и действия
       (включить, выключить, снимок) по API-токену Proxmox.
 
+## Хосты плагинов (решено 2026-10-26)
+
+- [x] Протокол `provides: hosts`, хосты плагинов в хабе, MikroTik (1.15.0).
+- [ ] Плагин `connector` с профилями (ssh, http, snmp v2c): macOS, FreeBSD,
+      OpenWrt, Linux без агента, Keenetic, SNMP принтер и коммутатор.
+- [ ] Yandex Cloud: ВМ, диски и снимки, группы безопасности, Object
+      Storage, Cloud DNS, Managed PostgreSQL/MySQL, расходы.
+- [ ] Windows: OpenSSH + PowerShell (JSON).
+- [ ] Потом: обратное подключение (плагин подключается к хабу) вместе с
+      Android-приложением в режиме «устройство»; 1С, AWS, Google.
+      ADB и iOS — не делаем.
+
 ## Размещение плагинов (решено 2026-10-25)
 
 Где: А — на хосте самой службы (Technitium, docker-mailserver, Garage,

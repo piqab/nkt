@@ -208,7 +208,7 @@ func (s *Server) refsNowCtx(ctx context.Context) script.Refs {
 			}
 		}
 	}
-	if hosts, err := s.db.ListHosts(ctx); err == nil {
+	if hosts, err := s.db.ListAllHosts(ctx); err == nil {
 		for _, h := range hosts {
 			refs.Hosts[h.Name] = true
 		}
