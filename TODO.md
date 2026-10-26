@@ -260,8 +260,10 @@ Headscale. Тяжёлые (Nextcloud, Authentik, Matrix) — не делаем.
 - [x] Протокол `provides: hosts`, хосты плагинов в хабе, MikroTik (1.15.0).
 - [x] Плагин `connector` с профилями (ssh, http, snmp v2c): macOS, FreeBSD,
       OpenWrt, Linux без агента, Keenetic, SNMP принтер и коммутатор (1.15.1).
-- [ ] Yandex Cloud: ВМ, диски и снимки, группы безопасности, Object
-      Storage, Cloud DNS, Managed PostgreSQL/MySQL, расходы.
+- [x] Yandex Cloud: ВМ, диски и снимки, группы безопасности, Object
+      Storage, Cloud DNS, Managed PostgreSQL/MySQL, баланс (1.15.2).
+- [ ] Yandex Cloud: расходы по сервисам (через выгрузку детализации в
+      бакет — у API счетов нет разбивки), метрики ВМ из Monitoring.
 - [ ] Windows: OpenSSH + PowerShell (JSON).
 - [ ] Потом: обратное подключение (плагин подключается к хабу) вместе с
       Android-приложением в режиме «устройство»; 1С, AWS, Google.

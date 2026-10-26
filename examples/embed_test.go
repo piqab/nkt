@@ -36,7 +36,7 @@ func TestPluginPackages(t *testing.T) {
 	for _, p := range list {
 		keys = append(keys, p.Key)
 	}
-	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,litellm,mikrotik,technitium" || list[5].Run != "python3" || len(list[5].Content) < 1000 {
+	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,litellm,mikrotik,technitium,yandex-cloud" || list[5].Run != "python3" || len(list[5].Content) < 1000 {
 		t.Fatalf("packages: %v", keys)
 	}
 	for i, p := range list {
@@ -52,7 +52,10 @@ func TestPluginPackages(t *testing.T) {
 	if list[4].Port != 9220 || len(list[4].Settings) != 0 || list[1].Port != 9230 || len(list[1].Settings) != 0 {
 		t.Fatalf("mikrotik / connector: %+v %+v", list[4], list[1])
 	}
-	list = list[5:]
+	if yc := list[6]; yc.Port != 9240 || len(yc.Settings) != 3 || !yc.Settings[0].Secret || !yc.Settings[1].Required {
+		t.Fatalf("yandex-cloud: %+v", yc.Settings)
+	}
+	list = list[5:6]
 	secret := false
 	for _, s := range list[0].Settings {
 		if s.Env == "DNS_API_TOKEN" && s.Secret && s.Required {
@@ -126,6 +129,19 @@ func TestConnectorPluginPython(t *testing.T) {
 		t.Skip("no python3")
 	}
 	out, err := exec.Command(py, "-I", "connector/deploy/test_plugin.py").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+// Плагин Yandex Cloud — против поддельного API: подпись JWT (PS256)
+// проверяет настоящий openssl, ВМ и как хосты, DNS для хаба.
+func TestYandexCloudPluginPython(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	out, err := exec.Command(py, "-I", "yandex-cloud/deploy/test_plugin.py").CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
