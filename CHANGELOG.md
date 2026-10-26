@@ -967,3 +967,4 @@
 - `12c44c98` LXD наравне с машинами: сеть токена в LXD под nkt_isolation, потолки, снимки, удаление, MCP lxd_*; 1.17.7
 - `7314d3e8` Свой namespace в общем кластере: PSA restricted, квота, NetworkPolicy, учётная запись и kubeconfig, логи, helm через проверки; 1.17.8
 - `1daa2a42` Свой кластер токена: k3s на его машинах, single или cp1, API через порт пула, kubeconfig один раз; 1.17.9
+- `b0d7656e` Свои лимиты для клиента: /hub/tokens/self/usage и MCP my_usage; 1.17.10
