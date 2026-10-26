@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.15.5 — 2026-10-26
+
+- **A hub plugin installs and uninstalls on a host where the agent runs as a service.** “Install on a host” used to fail with “mkdir /opt/nkt-plugins/…: read-only file system”, and removal with “rm: … Read-only file system”: the nkt service sandbox closes `/opt`. The plugin directory is now created and removed outside the sandbox, the way files already were written. If the removal still fails, the message names the directory and says that the service and settings are already gone.
+- **Windows and connector plugins:** the user name goes to `ssh` as a separate argument. A name with a space works, and a name or address starting with “-” is rejected and cannot become an `ssh` option. The port in the address is checked.
+- **Windows:** a hint on the User field — the local name from `whoami`. For a Microsoft account it is also the local name, not the email, with the account password, not the PIN.
+- **Plugin hosts guide:** a Windows section — signing in with a Microsoft account and with a key (`administrators_authorized_keys` and `icacls`), the firewall on a “Public” network, and where to install the plugin when Windows is a virtual machine. For macvtap that is the hub or another host on the network, not the KVM host: it cannot reach its own VM.
+
 ## v1.15.4 — 2026-10-26
 
 - The secret scan (gitleaks) no longer flags a private key in the `connector` plugin test. The key was never real — just an OpenSSH header with no body — but the string matched the pattern. The test now builds the PEM label from parts, and the fingerprint of the already pushed commit is listed in `.gitleaksignore`.

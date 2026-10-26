@@ -30,9 +30,16 @@ Start-Service sshd
 Set-Service sshd -StartupType Automatic
 ```
 
-Пользователь — администратор (часть находок и все действия требуют прав).
-Вход по паролю или ключу: для администраторов Windows ключи лежат в
-`C:\ProgramData\ssh\administrators_authorized_keys`.
+Пользователь — администратор (часть находок и все действия требуют прав):
+локальное имя из `whoami`; для учётной записи Microsoft — тоже локальное
+имя, не почта, и пароль учётной записи, не PIN. Вход по паролю или ключу:
+для администраторов ключи лежат в
+`C:\ProgramData\ssh\administrators_authorized_keys` (права — `icacls`,
+только Администраторы и SYSTEM). Сеть «Общедоступная» — правило SSH для
+всех профилей: `Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -Enabled
+True -Profile Any`. Подробно, и куда ставить плагин, если Windows — ВМ
+(macvtap: хост KVM свою ВМ не видит) — в справке
+[«Хосты плагинов»](https://piqab.github.io/nkt/guide/hub-plugin-hosts).
 
 ## Поставить
 

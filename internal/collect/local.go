@@ -342,6 +342,11 @@ func (l *Local) DeleteFile(p string) error {
 const privilegedRemoveScript = `if [ -d "$1" ] && [ ! -L "$1" ]; then rmdir -- "$1"; else rm -f -- "$1"; fi`
 
 func (l *Local) removeUnrestricted(p string) error {
+	return l.runUnrestricted(privilegedRemoveScript, p)
+}
+
+// runUnrestricted — короткий сценарий sh вне песочницы ($1 — путь).
+func (l *Local) runUnrestricted(script, p string) error {
 	if l.escape == nil {
 		return errNoEscape
 	}
@@ -351,7 +356,7 @@ func (l *Local) removeUnrestricted(p string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	res, err := l.escape(ctx, nil, "sh", "-c", privilegedRemoveScript, "sh", p)
+	res, err := l.escape(ctx, nil, "sh", "-c", script, "sh", p)
 	if err != nil {
 		return msgs.Errorf("collect.writingOutsideSandbox", err)
 	}
@@ -365,8 +370,49 @@ func (l *Local) removeUnrestricted(p string) error {
 	return nil
 }
 
+// Mkdir — как у WriteFile: каталог под ProtectSystem=strict (скажем,
+// /opt/nkt-plugins/<имя> для плагина хаба) изнутри юнита не создать, и
+// тогда он создаётся вне песочницы.
 func (l *Local) Mkdir(p string) error {
-	return os.MkdirAll(p, 0o755)
+	err := os.MkdirAll(p, 0o755)
+	if err == nil || !sandboxRefused(err) || !cleanAbs(p) {
+		return err
+	}
+	if escErr := l.runUnrestricted(`mkdir -p -m 0755 -- "$1"`, p); escErr == nil {
+		return nil
+	} else if !errors.Is(escErr, errNoEscape) {
+		return escErr
+	}
+	return err
+}
+
+// RemoveAll удаляет каталог со всем содержимым (файлы плагина хаба). Путь —
+// абсолютный, без «..» и не выше второго уровня: «/» или «/opt» этой
+// функцией не удалить ни при каких аргументах. Закрытый песочницей каталог
+// удаляется вне её.
+func (l *Local) RemoveAll(p string) error {
+	if !cleanAbs(p) || strings.Count(p, "/") < 2 {
+		return msgs.Errorf("collect.badWritePath", p)
+	}
+	err := os.RemoveAll(p)
+	if err == nil || !sandboxRefused(err) {
+		return err
+	}
+	if escErr := l.runUnrestricted(`rm -rf -- "$1"`, p); escErr == nil {
+		return nil
+	} else if !errors.Is(escErr, errNoEscape) {
+		return escErr
+	}
+	return err
+}
+
+func cleanAbs(p string) bool {
+	return filepath.IsAbs(p) && !strings.Contains(p, "..") && filepath.Clean(p) == p
+}
+
+// sandboxRefused — отказ, который выход из песочницы может обойти.
+func sandboxRefused(err error) bool {
+	return errors.Is(err, syscall.EROFS) || errors.Is(err, fs.ErrPermission)
 }
 
 // cEnv — окружение для команд, вывод которых разбирается.

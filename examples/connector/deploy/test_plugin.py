@@ -51,7 +51,7 @@ for needle, out in json.load(open(os.environ["FAKE_SSH_MAP"])):
 sys.exit(0)
 '''
 
-FAKE_KEYSCAN = "#!/bin/sh\necho \"$5 ssh-ed25519 " + HOSTKEY + "\"\n"
+FAKE_KEYSCAN = "#!/bin/sh\necho \"$6 ssh-ed25519 " + HOSTKEY + "\"\n"
 
 SSH_MAP = [
     ["### $f", "### /etc/hostname\nweb-old\n"],
@@ -261,6 +261,11 @@ class PluginTest(unittest.TestCase):
         with open(self.ssh_log) as f:
             logs = [json.loads(l) for l in f]
         self.assertFalse(any(SSH_PASS in " ".join(x["argv"]) for x in logs))  # пароль — не в аргументах
+        # Имя — отдельным -l, адрес — после «--»: ни то, ни другое не станет параметром ssh.
+        self.assertEqual(logs[0]["argv"][-5:-1], ["-l", "admin", "--", "10.0.0.5"])
+        self.assertIn("bad user", self.call("_host_check", "linux-ssh", self.linux(user="-oProxyCommand=touch /tmp/x"))["error"])
+        self.assertIn("bad address", self.call("_host_check", "linux-ssh", self.linux(address="-oProxyCommand"))["error"])
+        self.assertIn("bad address", self.call("_host_check", "linux-ssh", self.linux(address="10.0.0.5:ssh"))["error"])
         self.assertTrue(any(x["askpass"] for x in logs))
 
     def test_3_linux_snapshot_metrics_findings(self):
