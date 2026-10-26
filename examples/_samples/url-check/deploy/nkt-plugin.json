@@ -1,0 +1,21 @@
+{
+  "name": "url-check",
+  "version": "1.0.0",
+  "min_nkt": "1.17.1",
+  "protocol": 1,
+  "title": {"ru": "Проверка адресов", "en": "URL check"},
+  "description": {
+    "ru": "Пример своего плагина: адреса сайтов и сервисов из настроек — код ответа, время, срок сертификата; находки (не отвечает, 5xx, медленно, сертификат истекает), команда «urlcheck АДРЕС», MCP. Загружается в хаб как свой («Плагины» → «Каталог» → «Загрузить свой плагин»).",
+    "en": "An example of your own plugin: site and service addresses from the settings — response code, time, certificate expiry; findings (not answering, 5xx, slow, certificate expiring), the “urlcheck ADDRESS” command, MCP. Uploaded to the hub as your own (Plugins → Catalog → Upload your own plugin)."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9298,
+  "settings": [
+    {"env": "URL_CHECK_TARGETS", "title": {"ru": "Адреса", "en": "Addresses"}, "required": true,
+     "hint": {"ru": "через запятую: https://shop.example.com/health, http://10.0.0.5:8080/", "en": "comma-separated: https://shop.example.com/health, http://10.0.0.5:8080/"}},
+    {"env": "URL_CHECK_SLOW_MS", "title": {"ru": "Порог «медленно», мс", "en": "Slow threshold, ms"}, "default": "2000"},
+    {"env": "URL_CHECK_CA_FILE", "title": {"ru": "Свой УЦ (файл PEM на хосте плагина)", "en": "Own CA (a PEM file on the plugin host)"},
+     "hint": {"ru": "для внутренних сайтов с сертификатом своего УЦ; пусто — системные", "en": "for internal sites with your own CA's certificate; empty — the system ones"}}
+  ]
+}

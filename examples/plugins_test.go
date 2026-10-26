@@ -145,3 +145,15 @@ func TestTemplatePluginPython(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+// Пример своего плагина url-check (examples/_samples) — тоже рабочий.
+func TestURLCheckSamplePython(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	out, err := exec.Command(py, "-I", "_samples/url-check/deploy/test_plugin.py").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}

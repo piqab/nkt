@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Input, Select, Tag } from 'antd'
+import { Button, Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, fetchHubJob, useApi } from '../api'
 import type { Job } from '../types'
 import { Banner, DiffView, Modal, formatRelative } from './ui'
 import { unifiedDiff } from './textDiff'
+import { confirmAction } from './confirm'
 
 /** Ответ /hub/catalog. */
 interface CatalogData {
@@ -33,7 +34,12 @@ interface CatalogPlugin {
   screens: string[]
   tests?: string
   installed: { name: string; host: string; outdated?: boolean }[]
+  /** Свой плагин, загруженный в хаб (не из каталога). */
+  local?: boolean
 }
+
+/** Готовый архив примера своего плагина (examples/_samples/url-check). */
+const SAMPLE_URL = 'https://piqab.github.io/nkt/samples/url-check.tar.gz'
 
 const fileURL = (key: string, rel: string) => apiURL(`/hub/catalog/files/${key}/${rel}`)
 
@@ -59,6 +65,7 @@ export function CatalogModal({
   const cat = useApi<CatalogData>('/hub/catalog')
   const [readme, setReadme] = useState<CatalogPlugin | null>(null)
   const [source, setSource] = useState(false)
+  const [own, setOwn] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -72,6 +79,24 @@ export function CatalogModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
+  }
+
+  // Свой плагин — убрать из каталога хаба; стоит на хостах — ещё один
+  // вопрос со списком (установки остаются до удаления с хоста).
+  async function removeOwn(p: CatalogPlugin) {
+    if (!(await confirmAction(t('catalog.ownDeleteConfirm', { name: p.name })))) return
+    try {
+      await api(`/hub/plugins/local/${encodeURIComponent(p.name)}`, { method: 'DELETE' })
+    } catch (err) {
+      const body = (err as { payload?: { installed?: string[] } }).payload
+      if (!body?.installed) {
+        setError(err instanceof Error ? err.message : String(err))
+        return
+      }
+      if (!(await confirmAction(t('catalog.ownDeleteInstalled', { list: body.installed.join(', ') })))) return
+      await api(`/hub/plugins/local/${encodeURIComponent(p.name)}?force=1`, { method: 'DELETE' })
+    }
+    cat.reload()
   }
 
   async function upload(file: File) {
@@ -130,6 +155,9 @@ export function CatalogModal({
                 <Button size="small" onClick={() => setSource(true)}>
                   {t('catalog.source')}
                 </Button>
+                <Button size="small" onClick={() => setOwn(true)}>
+                  {t('catalog.ownUpload')}
+                </Button>
               </>
             )}
           </div>
@@ -147,6 +175,7 @@ export function CatalogModal({
             <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <strong>{p.title}</strong>
               <Tag>{p.version}</Tag>
+              {p.local && <Tag color="purple">{t('catalog.own')}</Tag>}
               {p.tests === 'passed' && <Tag color="success">{t('catalog.testsPassed')}</Tag>}
               {!p.compatible && <Tag color="warning">{t('catalog.needsNKT', { version: p.min_nkt })}</Tag>}
               {p.docker && <Tag color="warning">{t('catalog.docker')}</Tag>}
@@ -169,11 +198,25 @@ export function CatalogModal({
                   {t('plugins.install')}
                 </Button>
               )}
+              {admin && p.local && (
+                <Button size="small" danger onClick={() => void removeOwn(p)}>
+                  {t('catalog.ownDelete')}
+                </Button>
+              )}
             </div>
           </div>
         ))}
       </div>
       {readme && <ReadmeModal plugin={readme} onClose={() => setReadme(null)} />}
+      {own && (
+        <OwnUploadModal
+          onClose={() => setOwn(false)}
+          onSaved={() => {
+            setOwn(false)
+            cat.reload()
+          }}
+        />
+      )}
       {source && (
         <SourceModal
           onClose={() => setSource(false)}
@@ -312,6 +355,147 @@ function SourceModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           </Button>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+interface OwnCheck {
+  name: string
+  version: string
+  title: string
+  description: string
+  port: number
+  docker?: boolean
+  settings: { env: string; title: string; secret?: boolean; required?: boolean }[]
+  code: string
+  sha256: string
+  problems: string[]
+  skipped?: string[]
+  ticket?: string
+  prev_version?: string
+  prev_code?: string
+}
+
+/** «Загрузить свой плагин»: архив папки плагина → проверка хабом (на хабе
+ * плагин не запускается) → код целиком или дифф с прежней версией →
+ * «Код просмотрен» → сохранить. Ставится потом как плагин каталога. */
+function OwnUploadModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const { t, i18n } = useTranslation()
+  const [chk, setChk] = useState<OwnCheck | null>(null)
+  const [reviewed, setReviewed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const input = useRef<HTMLInputElement>(null)
+
+  async function check(file: File) {
+    setBusy(true)
+    setError(null)
+    setChk(null)
+    setReviewed(false)
+    try {
+      const res = await fetch(apiURL('/hub/plugins/local/check'), { method: 'POST', credentials: 'same-origin', headers: { 'X-NKT-Lang': i18n.language }, body: file })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error || res.statusText)
+      setChk(body as OwnCheck)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function save() {
+    if (!chk?.ticket) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api('/hub/plugins/local/save', { method: 'POST', body: { ticket: chk.ticket, reviewed: true } })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setChk(null) // жетон одноразовый — архив выбрать заново
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const diff = chk?.prev_code !== undefined ? unifiedDiff(chk.prev_code ?? '', chk.code, chk.prev_version ?? '', chk.version) : ''
+  return (
+    <Modal title={t('catalog.ownTitle')} onClose={onClose} width={960} maskClosable={false}>
+      <div className="col small" style={{ gap: '0.6rem' }}>
+        <span className="muted">{t('catalog.ownHint')}</span>
+        <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button type={chk ? 'default' : 'primary'} loading={busy && !chk} onClick={() => input.current?.click()}>
+            {t('catalog.ownChoose')}
+          </Button>
+          <a href={SAMPLE_URL} target="_blank" rel="noopener noreferrer">
+            {t('catalog.ownSample')}
+          </a>
+          <input
+            ref={input}
+            type="file"
+            accept=".tar.gz,.tgz,.zip,application/gzip,application/zip"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (f) void check(f)
+            }}
+          />
+        </div>
+        {error && <Banner kind="error">{error}</Banner>}
+        {chk && (
+          <>
+            <div className="row" style={{ gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong>{chk.title}</strong>
+              <Tag>{chk.name}</Tag>
+              <Tag>{chk.prev_version ? `${chk.prev_version} → ${chk.version}` : chk.version}</Tag>
+              <span className="muted">
+                {t('catalog.ownPort', { port: chk.port })} · SHA-256 {chk.sha256.slice(0, 12)}…
+              </span>
+              {chk.docker && <Tag color="warning">{t('catalog.docker')}</Tag>}
+            </div>
+            <span className="muted">{chk.description}</span>
+            {chk.settings.length > 0 && (
+              <span>
+                {t('catalog.ownSettings')}:{' '}
+                {chk.settings.map((f) => `${f.env}${f.secret ? ` (${t('catalog.ownSecret')})` : ''}`).join(', ')}
+              </span>
+            )}
+            {(chk.skipped?.length ?? 0) > 0 && <span className="muted">{t('catalog.ownSkipped', { list: chk.skipped!.join(', ') })}</span>}
+            {chk.problems.length > 0 ? (
+              <Banner kind="error">
+                <div className="col" style={{ gap: '0.2rem' }}>
+                  <strong>{t('catalog.ownProblems')}</strong>
+                  {chk.problems.map((p) => (
+                    <span key={p}>{p}</span>
+                  ))}
+                </div>
+              </Banner>
+            ) : (
+              <Banner kind="success">{t('catalog.ownChecked')}</Banner>
+            )}
+            <span>{diff ? t('catalog.ownDiff', { prev: chk.prev_version }) : t('catalog.ownCode')}</span>
+            {diff ? (
+              <DiffView text={diff} />
+            ) : (
+              <pre style={{ fontFamily: 'var(--mono)', fontSize: '0.8rem', maxHeight: '28rem', overflow: 'auto', margin: 0, padding: '0.6rem', background: 'var(--wash)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                {chk.code}
+              </pre>
+            )}
+            {chk.ticket && (
+              <div className="row" style={{ gap: '0.75rem', alignItems: 'center' }}>
+                <Checkbox checked={reviewed} onChange={(e) => setReviewed(e.target.checked)}>
+                  {t('catalog.ownReviewed')}
+                </Checkbox>
+                <Button type="primary" disabled={!reviewed} loading={busy} onClick={() => void save()}>
+                  {t('plugins.settingsSave')}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </Modal>
   )

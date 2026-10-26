@@ -92,6 +92,7 @@ func (s *Server) catalogKeys(ctx context.Context) []ed25519.PublicKey {
 
 // StartCatalog читает копию каталога и обновляет её по расписанию.
 func (s *Server) StartCatalog(ctx context.Context) {
+	s.loadLocalPlugins(ctx)
 	if snap, err := catalog.Load(s.catalogDir(), s.catalogKeys(ctx)); err == nil {
 		catalog.SetCurrent(snap)
 	} else if !os.IsNotExist(err) {
@@ -179,6 +180,8 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		Screens     []string    `json:"screens"`
 		Tests       string      `json:"tests,omitempty"`
 		Installed   []installed `json:"installed"`
+		// Local — свой плагин, загруженный в хаб (не из каталога).
+		Local bool `json:"local,omitempty"`
 	}
 	type example struct {
 		Key   string          `json:"key"`
@@ -194,25 +197,28 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	catalogState.Unlock()
 	plugins, examples := []plug{}, []example{}
+	have := s.plugins(ctx)
+	add := func(p catalog.Plugin, local bool) {
+		item := plug{Key: p.Key, Name: p.Name, Version: p.Version, MinNKT: p.MinNKT, Compatible: s.compatibleNKT(p.MinNKT),
+			Title: catalog.Pick(p.Title, lang), Description: catalog.Pick(p.Description, lang), Docker: p.Docker,
+			Readme: catalog.Pick(p.Readme, lang) != "", Screens: p.Screens[lang], Tests: p.Tests, Installed: []installed{}, Local: local}
+		if item.Screens == nil {
+			item.Screens = p.Screens["ru"]
+		}
+		if item.Screens == nil {
+			item.Screens = []string{}
+		}
+		for _, c := range have {
+			if c.Native == p.Key {
+				item.Installed = append(item.Installed, installed{Name: c.Name, Host: c.Host, Outdated: nativeOutdated(c)})
+			}
+		}
+		plugins = append(plugins, item)
+	}
 	if snap := catalog.Current(); snap != nil {
 		out["source"], out["fetched_at"], out["commit"], out["generated"] = snap.Source, snap.FetchedAt, snap.Index.Commit, snap.Index.Generated
-		have := s.plugins(ctx)
 		for _, p := range snap.Index.Plugins {
-			item := plug{Key: p.Key, Name: p.Name, Version: p.Version, MinNKT: p.MinNKT, Compatible: s.compatibleNKT(p.MinNKT),
-				Title: catalog.Pick(p.Title, lang), Description: catalog.Pick(p.Description, lang), Docker: p.Docker,
-				Readme: catalog.Pick(p.Readme, lang) != "", Screens: p.Screens[lang], Tests: p.Tests, Installed: []installed{}}
-			if item.Screens == nil {
-				item.Screens = p.Screens["ru"]
-			}
-			if item.Screens == nil {
-				item.Screens = []string{}
-			}
-			for _, c := range have {
-				if c.Native == p.Key {
-					item.Installed = append(item.Installed, installed{Name: c.Name, Host: c.Host, Outdated: nativeOutdated(c)})
-				}
-			}
-			plugins = append(plugins, item)
+			add(p, false)
 		}
 		list := append([]catalog.Example(nil), snap.Index.Examples...)
 		sort.SliceStable(list, func(i, j int) bool { return exampleOrder(list[i]) < exampleOrder(list[j]) })
@@ -221,6 +227,15 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 				examples = append(examples, example{Key: e.Key, Title: catalog.Pick(e.Title, lang), UI: e.UI})
 			}
 		}
+	}
+	locals := catalog.Local()
+	names := make([]string, 0, len(locals))
+	for n := range locals {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		add(locals[n].Plugin, true)
 	}
 	out["plugins"], out["examples"] = plugins, examples
 	writeJSON(w, http.StatusOK, out)
@@ -247,6 +262,9 @@ func (s *Server) handleCatalogFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b, ok := catalog.Current().File(key, rel)
+	if !ok {
+		b, ok = catalog.LocalFile(key, rel)
+	}
 	if !ok {
 		http.NotFound(w, r)
 		return

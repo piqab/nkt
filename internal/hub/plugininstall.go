@@ -115,12 +115,13 @@ func (s *Server) handlePluginCatalog(w http.ResponseWriter, r *http.Request) {
 		Version     string  `json:"version"`
 		MinNKT      string  `json:"min_nkt,omitempty"`
 		Compatible  bool    `json:"compatible"`
+		Local       bool    `json:"local,omitempty"`
 		Settings    []field `json:"settings"`
 	}
 	out := []pkg{}
 	for _, p := range catalog.PluginPackages() {
 		item := pkg{Key: p.Key, Name: p.Name, Title: pick(p.Title, lang), Description: pick(p.Description, lang), Run: p.Run, Port: p.Port, Docker: p.Docker,
-			Version: p.Version, MinNKT: p.MinNKT, Compatible: s.compatibleNKT(p.MinNKT), Settings: []field{}}
+			Version: p.Version, MinNKT: p.MinNKT, Compatible: s.compatibleNKT(p.MinNKT), Local: strings.HasPrefix(p.Key, catalog.LocalPrefix), Settings: []field{}}
 		for _, f := range p.Settings {
 			item.Settings = append(item.Settings, field{Env: f.Env, Title: pick(f.Title, lang), Hint: pick(f.Hint, lang), Default: f.Default, Secret: f.Secret, Required: f.Required})
 		}

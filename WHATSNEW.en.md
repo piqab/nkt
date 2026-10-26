@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.1 — 2026-10-26
+
+- **Your own plugin.** A plugin that is not in the catalog the administrator uploads: Plugins → Catalog → Upload your own plugin.
+  - **What to upload:** an archive of the plugin folder (`.tar.gz` or `.zip`).
+  - **What the hub checks:** paths and sizes in the archive; the same static `lint` as the catalog; a name not taken by the catalog; a version above the uploaded one. The hub never runs the plugin.
+  - **Before saving** the window shows the whole code (a new version — a diff with the previous one); saving needs Code reviewed ticked. The audit entry carries the SHA-256.
+  - **After that** the plugin, marked “own”, is installed and updated on hosts like catalog plugins. A 10-version code history is kept, and the plugins go into the hub export.
+- **The `url-check` example of your own plugin** — address checks: response code, time, certificate expiry, findings, the `urlcheck ADDRESS` script command. The archive is the Download the example link in the upload window. Written by the guide for agents; the guide section walks through it.
+
 ## v1.17.0 — 2026-10-26
 
 - **A guide for AI agents on writing a plugin** — `examples/AGENTS.en.md` in the repository and the “Writing a plugin” page on the site (ru/en): when a connector profile is enough and when a plugin is needed; the folder; the protocol and manifest; secrets; required security rules; the test against a fake; a checklist before committing.

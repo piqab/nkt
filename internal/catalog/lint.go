@@ -30,6 +30,22 @@ import (
 // отметкой — 401, неизвестная операция — отказ, а не обрыв. dir —
 // examples/<key>. Возвращает найденное (пусто — всё хорошо).
 func Lint(dir string, runtime bool) []string {
+	return LintWith(dir, LintOptions{Runtime: runtime})
+}
+
+// LintOptions — что проверять.
+type LintOptions struct {
+	// Runtime — запустить плагин и проверить живые ответы (только CI и
+	// разработчик: на хабе чужой код не запускается).
+	Runtime bool
+	// Upload — свой плагин, загруженный в хаб: тест и README не
+	// обязательны (их нет в архиве — плагин всё равно проверяется хабом
+	// при подключении после установки).
+	Upload bool
+}
+
+// LintWith — Lint с параметрами.
+func LintWith(dir string, opt LintOptions) []string {
 	var out []string
 	bad := func(format string, a ...any) { out = append(out, fmt.Sprintf(format, a...)) }
 	read := func(rel string) []byte {
@@ -41,9 +57,11 @@ func Lint(dir string, runtime bool) []string {
 		return b
 	}
 	raw := read("deploy/nkt-plugin.json")
-	read("deploy/test_plugin.py")
-	read("README.md")
-	read("README.en.md")
+	if !opt.Upload {
+		read("deploy/test_plugin.py")
+		read("README.md")
+		read("README.en.md")
+	}
 	if raw == nil {
 		return out
 	}
@@ -111,7 +129,7 @@ func Lint(dir string, runtime bool) []string {
 			bad("%s: %s", p.File, r.why)
 		}
 	}
-	if runtime && len(out) == 0 {
+	if opt.Runtime && len(out) == 0 {
 		out = append(out, lintLive(dir, p)...)
 	}
 	return out
