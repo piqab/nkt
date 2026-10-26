@@ -1,0 +1,20 @@
+{
+  "name": "forgejo",
+  "version": "1.0.0",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
+  "title": {"ru": "Forgejo", "en": "Forgejo"},
+  "description": {
+    "ru": "Forgejo (и Gitea) из хаба: сводка с находками (упавшие запуски Actions, зеркала без синхронизации, много администраторов), репозитории (создать, в архив, синхронизировать зеркало, удалить), запуски Actions, вебхуки (например, вебхук выкладки конвейера nkt), пользователи, токен регистрации раннера — один раз окну или сразу в .env конвейера; команды «forgejo …», инструменты MCP. Ставится на хост Forgejo, машину хаба или любой хост, откуда виден Forgejo.",
+    "en": "Forgejo (and Gitea) from the hub: a summary with findings (failed Actions runs, mirrors not synced, many admins), repositories (create, archive, sync a mirror, delete), Actions runs, webhooks (e.g. an nkt pipeline deploy webhook), users, a runner registration token — once to the window or straight into a pipeline .env; “forgejo …” commands, MCP tools. Installed on the Forgejo host, the hub machine or any host Forgejo is reachable from."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9270,
+  "settings": [
+    {"env": "FORGEJO_URL", "title": {"ru": "Адрес Forgejo", "en": "Forgejo address"}, "default": "http://127.0.0.1:3000",
+     "hint": {"ru": "откуда плагин видит Forgejo; на хосте Forgejo из примера — http://127.0.0.1:3000", "en": "where the plugin reaches Forgejo; on the example's Forgejo host — http://127.0.0.1:3000"}},
+    {"env": "FORGEJO_TOKEN", "title": {"ru": "Токен администратора", "en": "Administrator token"}, "secret": true, "required": true,
+     "hint": {"ru": "«Настройки» → «Приложения» → «Сгенерировать токен»: права admin, repository, user, organization (чтение и запись)", "en": "Settings → Applications → Generate token: admin, repository, user, organization (read and write)"}}
+  ]
+}

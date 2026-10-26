@@ -1,0 +1,20 @@
+{
+  "name": "example",
+  "version": "1.0.0",
+  "min_nkt": "1.16.0",
+  "protocol": 1,
+  "title": {"ru": "Заготовка плагина", "en": "Plugin template"},
+  "description": {
+    "ru": "Пример плагина к REST API: список, добавление, удаление, сводка, команда сценария, MCP. Заготовка для своего плагина — в каталог не входит.",
+    "en": "An example plugin for a REST API: list, add, delete, summary, a script command, MCP. A template for your own plugin — not part of the catalog."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9299,
+  "settings": [
+    {"env": "EXAMPLE_URL", "title": {"ru": "Адрес API", "en": "API address"}, "default": "http://127.0.0.1:8080",
+     "hint": {"ru": "откуда плагин видит сервис", "en": "where the plugin reaches the service"}},
+    {"env": "EXAMPLE_TOKEN", "title": {"ru": "Токен API", "en": "API token"}, "secret": true, "required": true,
+     "hint": {"ru": "хранится только в файле настроек службы (0600)", "en": "kept only in the service settings file (0600)"}}
+  ]
+}

@@ -351,6 +351,11 @@ DKIM): `{"title": "…", "dns": {"owner": "domain:example.com", "records":
 
 ## Свой плагин: самое короткое
 
+Полное руководство — [Как написать плагин](/guide/plugin-authoring) (оно же
+`examples/AGENTS.md` для агентов в репозитории), рабочая заготовка с тестом —
+[examples/_template](https://github.com/piqab/nkt/tree/main/examples/_template),
+проверка — `go run ./cmd/nkt-catalog lint -dir examples/<имя>`.
+
 Python без зависимостей, один раздел и одна команда:
 
 ```python

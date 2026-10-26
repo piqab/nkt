@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.0 — 2026-10-26
+
+- **A guide for AI agents on writing a plugin** — `examples/AGENTS.en.md` in the repository and the “Writing a plugin” page on the site (ru/en): when a connector profile is enough and when a plugin is needed; the folder; the protocol and manifest; secrets; required security rules; the test against a fake; a checklist before committing.
+- **The `examples/_template` template** — a working plugin with a test: copy the folder and swap the API for yours.
+- **`nkt-catalog lint`** checks a plugin before the catalog:
+  - the folder and `nkt-plugin.json`, matching versions;
+  - dangerous code: `shell=True`, `os.system`, `eval`, a command string;
+  - the live plugin without settings: the manifest in both languages with the same check the hub runs when connecting; requests without a signature or with an old timestamp get 401; an unknown op is refused; the secret never reaches the log.
+
+  CI takes only plugins that pass both `lint` and their test into the catalog. Every plugin used to get the “tests passed” mark, Technitium included, which had no test; now it has one.
+- **A Forgejo plugin** (and Gitea, catalog), written by the guide from the template:
+  - a summary with findings: failed Actions runs, unsynced mirrors, many admins;
+  - repositories: create, archive, sync a mirror, delete;
+  - Actions runs and webhooks, including a pipeline deploy webhook;
+  - users;
+  - a runner registration token — once to the window or straight into a pipeline `.env`;
+  - `forgejo …` commands and MCP tools.
+
 ## v1.16.6 — 2026-10-26
 
 - Plugin guides and screenshots from the catalog are served more strictly. The README goes as plain text, an image only as a real PNG. The response forbids the browser to run anything, even when opened directly (gosec #349).

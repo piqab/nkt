@@ -43,3 +43,38 @@ record points at the gateway. Such a stack is easy to move between hosts:
 the routes switch to the new host by themselves and DNS stays the same — see
 the step-by-step guide
 ["Moving a stack with Traffic Fly"](https://piqab.github.io/nkt/en/guide/migrate-with-fly).
+
+## Hub plugin
+
+The `forgejo` plugin manages Forgejo (and Gitea — the same API) right from
+the hub. Written by the [guide for agents](../AGENTS.en.md) from the
+[template](../_template).
+
+- **Summary and findings:** version, repository, user and administrator
+  counts; a failed last Actions run, a mirror not synced for over 7 days,
+  more than three administrators.
+- **Repositories:** create (your own or in an organization), archive, sync
+  a mirror, delete — with a confirmation; a repository's Actions runs and
+  webhooks.
+- **Webhooks:** add one — for example, an nkt pipeline deploy webhook
+  (Deployments → pipeline → Webhook), delete.
+- **Users:** administrators, last login, blocked.
+- **A runner registration token** — for the whole instance or one
+  repository: once to the hub window, to an agent or a script — only
+  straight into a pipeline `.env` (for example, the `forgejo-runner`
+  pipeline's).
+- **Scripts:** `forgejo repos`, `forgejo mirror-sync OWNER/REPO`,
+  `forgejo archive OWNER/REPO`, `forgejo hook add OWNER/REPO URL`,
+  `forgejo runner-token [OWNER/REPO] to-pipeline PIPELINE env NAME`.
+  **MCP:** `forgejo_*`.
+
+**Install:** About → Plugins → Catalog → Forgejo → Install on a host (the
+Forgejo host — then the address is `http://127.0.0.1:3000`). The token: in
+Forgejo as an administrator → Settings → Applications → Generate token,
+with `admin`, `repository`, `user`, `organization` (read and write). The
+token lives only in the service settings file (`0600`), never in the log
+or answers.
+
+The Forgejo API exposes neither users' 2FA state nor the open
+registration setting — the plugin has no such findings. Tested against a
+fake API (`python3 -I deploy/test_plugin.py`), not a live Forgejo.
