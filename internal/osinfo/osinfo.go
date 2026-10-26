@@ -20,6 +20,7 @@ const (
 	SourceLibosinfo = "libosinfo"  // метка <libosinfo:os id=…> в XML домена
 	SourceImage     = "image"      // ключи образа (LXD image.os) или ОС образа контейнера
 	SourceGuess     = "guess"      // догадка: Hyper-V-флаги в конфигурации машины
+	SourcePlugin    = "plugin"     // хост плагина: тип устройства и ответ плагина
 )
 
 // aliases — разные написания одной ОС → ID значка.

@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.15.7 — 2026-10-26
+
+- **Devices in the host list show their reachability and findings again.** The hub polled the device, but the agent host poll cleared its row from the shared cache every minute. In the list the device was left with “?” instead of the reachability icon and “no data” instead of findings.
+- **A device icon by its type:** MikroTik, OpenWrt, macOS, Keenetic, Windows, Yandex Cloud, printer, switch. Linux without an agent gets its distribution's icon. The tooltip shows the model and version from the device itself. The icon used to be picked by a word from the device's answer (such as “RouterOS”), was not found, and a penguin was drawn instead.
+- Removing a file in snapshot (fixtures) mode checks the path the same way as on a real host: only an absolute path without “..” (CodeQL #348).
+
 ## v1.15.6 — 2026-10-26
 
 - **The Windows and connector plugins connect over SSH where they used to fail with “No user exists for uid …”.** The plugin service runs as a systemd dynamic user, and without the `systemd` NSS module (the `libnss-systemd` package) `ssh` cannot find its own user. In that case the hub now creates a permanent system user `nktp-<name>` for the plugin — no login, no home — and removes it together with the plugin. An installed plugin switches to it on “Update on the host”.

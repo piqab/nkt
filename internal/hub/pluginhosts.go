@@ -19,6 +19,7 @@ import (
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/osinfo"
 	"github.com/piqab/nkt/internal/plugin"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
@@ -708,6 +709,31 @@ func (s *Server) pluginHostState(id int64) (pluginHostStateJSON, bool) {
 	return st, ok
 }
 
+// pluginHostTypeIcons — значок (model.OSInfo.ID) по типу устройства;
+// прочие типы — общий значок «устройство».
+var pluginHostTypeIcons = map[string]string{
+	"windows": "windows", "routeros": "mikrotik", "openwrt": "openwrt", "macos": "macos",
+	"freebsd": "freebsd", "keenetic": "keenetic", "snmp-printer": "printer", "snmp-switch": "switch",
+	"yc-vm": "yandexcloud",
+}
+
+func pluginHostOS(typ string, info *plugin.HostInfo) *model.OSInfo {
+	out := &model.OSInfo{ID: pluginHostTypeIcons[typ], Source: osinfo.SourcePlugin}
+	if out.ID == "" {
+		out.ID = "device"
+	}
+	if info != nil {
+		// Linux без агента — значок дистрибутива по имени ОС с устройства.
+		if typ == "linux-ssh" {
+			if id := osinfo.NormalizeID(strings.Fields(info.OS + " linux")[0]); id != "" {
+				out.ID, out.Like = id, "linux"
+			}
+		}
+		out.Name = strings.Join(strings.Fields(strings.Join([]string{info.Model, info.OS, info.Version}, " ")), " ")
+	}
+	return out
+}
+
 // pluginHostPollEvery — метрики каждый опрос, находки — каждый десятый,
 // конфигурация — раз в час.
 const (
@@ -832,11 +858,9 @@ func (s *Server) pollPluginHostNow(ctx context.Context, id int64, full bool) {
 	pluginHostStates.Lock()
 	pluginHostStates.m[id] = st
 	pluginHostStates.Unlock()
-	var osInfo *model.OSInfo
-	if st.Info != nil && st.Info.OS != "" {
-		osInfo = &model.OSInfo{ID: strings.ToLower(strings.ReplaceAll(st.Info.OS, " ", "")), Name: strings.TrimSpace(st.Info.OS + " " + st.Info.Version)}
-	}
-	s.hub.notePluginHostPolled(ctx, id, findings, severeNow, m.UptimeS, osInfo)
+	// Значок в списке хостов — по типу устройства (RouterOS, принтер…), в
+	// подсказке — модель и версия с самого устройства.
+	s.hub.notePluginHostPolled(ctx, id, findings, severeNow, m.UptimeS, pluginHostOS(h.PluginType, st.Info))
 	if t.HasSection(plugin.SectionConfig) && (full || st.ticks == 1 || st.ticks%pluginHostConfigEvery == 0) {
 		_, _ = s.pluginHostConfigFetch(ctx, h, "")
 	}
