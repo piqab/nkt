@@ -7,7 +7,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -240,5 +242,33 @@ func TestSignatureOpenSSL(t *testing.T) {
 	}
 	if len(catalog.DefaultKeys()) != 1 {
 		t.Fatal("built-in key")
+	}
+}
+
+// Ключ в секрете CI вставляют по-разному: целиком, в одну строку, с CRLF,
+// только тело base64. Чужой тип — понятная ошибка без содержимого ключа.
+func TestParsePrivateKeyForms(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	der, _ := x509.MarshalPKCS8PrivateKey(priv)
+	full := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	body := strings.TrimSpace(strings.SplitN(strings.SplitN(full, "-----\n", 2)[1], "-----END", 2)[0])
+	for name, text := range map[string]string{
+		"pem": full, "crlf": strings.ReplaceAll(full, "\n", "\r\n"), "one line": strings.ReplaceAll(full, "\n", " "),
+		"body": body, "indented": "  " + strings.ReplaceAll(full, "\n", "\n  "),
+	} {
+		k, err := catalog.ParsePrivateKey([]byte(text))
+		if err != nil || !k.Equal(priv) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	pubDER, _ := x509.MarshalPKIXPublicKey(priv.Public())
+	pub := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubDER}))
+	for text, want := range map[string]string{pub: "public key", "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----": "OpenSSH",
+		"-----BEGIN ENCRYPTED PRIVATE KEY-----\nAAAA\n-----END ENCRYPTED PRIVATE KEY-----": "password", "not a key at all!": "not base64", "": "empty"} {
+		if _, err := catalog.ParsePrivateKey([]byte(text)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v", want, err)
+		} else if strings.Contains(err.Error(), "AAAA") {
+			t.Errorf("key material in error: %v", err)
+		}
 	}
 }

@@ -63,24 +63,36 @@ jobs:
             fi
           done
           echo "failed=${failed#,}" >> "$GITHUB_OUTPUT"
+      # Каталог собирается во временном каталоге и попадает в выкладку
+      # только подписанным и сверенным со встроенным в nkt ключом. Ошибка
+      # каталога видна в процессе (::error), но сайт всё равно выкладывается —
+      # хабы при этом остаются на прежней копии каталога.
       - name: Каталог плагинов
+        continue-on-error: true
         env:
           NKT_CATALOG_KEY: ${{ secrets.NKT_CATALOG_KEY }}
         run: |
-          out=site/.vitepress/dist/catalog
-          curl -fsSL --retry 3 https://piqab.github.io/nkt/catalog/index.json -o /tmp/prev-index.json || rm -f /tmp/prev-index.json
-          go run ./cmd/nkt-catalog build -src examples -out "$out" -commit "$GITHUB_SHA" -tested \
-            -failed "${{ steps.tests.outputs.failed }}" -prev /tmp/prev-index.json
+          work=$(mktemp -d)
+          curl -fsSL --retry 3 https://piqab.github.io/nkt/catalog/index.json -o "$work/prev-index.json" \
+            || { echo "опубликованного каталога ещё нет — сверка версий пропущена"; rm -f "$work/prev-index.json"; }
+          go run ./cmd/nkt-catalog build -src examples -out "$work/catalog" -commit "$GITHUB_SHA" -tested \
+            -failed "${{ steps.tests.outputs.failed }}" -prev "$work/prev-index.json"
           if [ -z "$NKT_CATALOG_KEY" ]; then
             echo "::warning::нет секрета NKT_CATALOG_KEY — каталог не подписан и не выкладывается"
-            rm -rf "$out"
             exit 0
           fi
-          go run ./cmd/nkt-catalog sign -dir "$out"
+          if ! go run ./cmd/nkt-catalog sign -dir "$work/catalog"; then
+            echo "::error::секрет NKT_CATALOG_KEY не читается как закрытый ключ ed25519 — вставьте файл из openssl genpkey целиком; каталог не выложен"
+            exit 1
+          fi
           # Подпись сходится со встроенным в nkt ключом — иначе хабы
           # каталог не примут, и выкладывать его незачем.
-          go run ./cmd/nkt-catalog verify -dir "$out"
-          go run ./cmd/nkt-catalog pack -dir "$out" -out site/.vitepress/dist/catalog.tar.gz
+          if ! go run ./cmd/nkt-catalog verify -dir "$work/catalog"; then
+            echo "::error::подпись не сходится с ключом, встроенным в nkt (internal/catalog/sign.go) — в секрете другой ключ; каталог не выложен"
+            exit 1
+          fi
+          go run ./cmd/nkt-catalog pack -dir "$work/catalog" -out site/.vitepress/dist/catalog.tar.gz
+          mv "$work/catalog" site/.vitepress/dist/catalog
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

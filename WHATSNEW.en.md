@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.16.4 — 2026-10-26
+
+- The plugin catalog build reads the private key from the CI secret even when it was pasted as a single line or without the `BEGIN`/`END` lines. If the secret holds the wrong key, the error now names the cause: the public key instead of the private one, a password-protected key, an OpenSSH key. The key's contents never reach the message.
+- A catalog error no longer stops the site publish: the site goes out, and the catalog only when signed and checked against the key built into nkt.
+
 ## v1.16.3 — 2026-10-26
 
 - **A Home Assistant plugin (catalog).** Home Assistant appears in Hosts as one device: an address and a long-lived token, with no add-ons on the HA side.

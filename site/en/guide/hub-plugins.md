@@ -89,7 +89,8 @@ exists, Guide (the plugin's README and screenshots) and Install on a host.
   disabled with an explanation.
 - **Your own catalog** (Catalog source, with a diff and a history): a fork
   of the repository with its own key — `openssl genpkey -algorithm
-  ed25519`, the private key in the fork's `NKT_CATALOG_KEY` secret, the
+  ed25519`, the private key in the fork's `NKT_CATALOG_KEY` secret (the whole file
+  with its `BEGIN`/`END` lines; one glued into a single line works too), the
   public one (`openssl pkey -pubout`) in “Your own public keys”; or your own
   server with the same layout (`index.json`, `index.json.sig`, files). Your
   key is added to the built-in one. The source settings go into the hub
