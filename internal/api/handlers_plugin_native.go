@@ -63,6 +63,9 @@ Wants=network-online.target
 ExecStart=%[2]s %[3]s/%[1]s/%[4]s
 EnvironmentFile=%[5]s/%[1]s.env
 DynamicUser=yes
+# Свой каталог данных (профили connector и т. п.): systemd создаёт его и
+# передаёт путь в STATE_DIRECTORY; остальная система — только для чтения.
+StateDirectory=nkt-plugin-%[1]s
 %[6]sNoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

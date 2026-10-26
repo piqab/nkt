@@ -36,20 +36,23 @@ func TestPluginPackages(t *testing.T) {
 	for _, p := range list {
 		keys = append(keys, p.Key)
 	}
-	if strings.Join(keys, ",") != "cloudflare,docker-mailserver,litellm,mikrotik,technitium" || list[4].Run != "python3" || len(list[4].Content) < 1000 {
+	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,litellm,mikrotik,technitium" || list[5].Run != "python3" || len(list[5].Content) < 1000 {
 		t.Fatalf("packages: %v", keys)
 	}
-	if !list[1].Docker || list[0].Docker || list[2].Docker || list[3].Docker || list[4].Docker {
-		t.Fatal("docker flags")
+	for i, p := range list {
+		if p.Docker != (p.Key == "docker-mailserver") {
+			t.Fatalf("docker flag of %s (%d)", p.Key, i)
+		}
 	}
-	if list[2].Port != 9210 || len(list[2].Settings) != 2 || !list[2].Settings[0].Secret {
-		t.Fatalf("litellm: %+v", list[2].Settings)
+	if list[3].Port != 9210 || len(list[3].Settings) != 2 || !list[3].Settings[0].Secret {
+		t.Fatalf("litellm: %+v", list[3].Settings)
 	}
-	// MikroTik: учётки роутеров — у хаба (в хостах), своих настроек нет.
-	if list[3].Port != 9220 || len(list[3].Settings) != 0 {
-		t.Fatalf("mikrotik: %+v", list[3])
+	// MikroTik и connector: учётки устройств — у хаба (в хостах), своих
+	// настроек нет.
+	if list[4].Port != 9220 || len(list[4].Settings) != 0 || list[1].Port != 9230 || len(list[1].Settings) != 0 {
+		t.Fatalf("mikrotik / connector: %+v %+v", list[4], list[1])
 	}
-	list = list[4:]
+	list = list[5:]
 	secret := false
 	for _, s := range list[0].Settings {
 		if s.Env == "DNS_API_TOKEN" && s.Secret && s.Required {
@@ -110,6 +113,19 @@ func TestMikroTikPluginPython(t *testing.T) {
 		t.Skip("no python3")
 	}
 	out, err := exec.Command(py, "-I", "mikrotik/deploy/test_plugin.py").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+// Плагин connector — против поддельных ssh, Keenetic и SNMP-агента:
+// профили, ключ хоста, пароль не в аргументах.
+func TestConnectorPluginPython(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	out, err := exec.Command(py, "-I", "connector/deploy/test_plugin.py").CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}

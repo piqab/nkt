@@ -438,6 +438,8 @@ var (
 	nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
 	opRe   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`)
 	wordRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,23}$`)
+	// hostTypeRe — тип устройства (snmp-printer, linux-ssh).
+	hostTypeRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,47}$`)
 )
 
 // ValidName — имя плагина (и его экземпляра в хабе).
@@ -492,7 +494,7 @@ func (m *Manifest) Validate() error {
 	}
 	types := map[string]bool{}
 	for _, ht := range m.HostTypes {
-		if !opRe.MatchString(ht.ID) || types[ht.ID] {
+		if !hostTypeRe.MatchString(ht.ID) || types[ht.ID] {
 			return fmt.Errorf("bad or repeated host type %q", ht.ID)
 		}
 		types[ht.ID] = true
