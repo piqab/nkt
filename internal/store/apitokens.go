@@ -40,11 +40,16 @@ const (
 	// TokenActK8sCluster — свой кластер Kubernetes (создать, удалить) — в
 	// сценариях и MCP; без него «k8s create» токену недоступен.
 	TokenActK8sCluster = "k8s.cluster"
+	// TokenActVMPorts — порты хоста из пула на свои машины (проброс).
+	TokenActVMPorts = "vm.ports"
+	// TokenActFlyOwn — свои маршруты Traffic Fly: имена в выданном домене
+	// (FlyDomain), цели — свои машины. Карту целиком не правит.
+	TokenActFlyOwn = "fly.own"
 )
 
 // TokenActions — все действия по порядку (окно токена, проверка).
 var TokenActions = []string{TokenActPipelineDeploy, TokenActPipelinePower, TokenActPipelineCreate, TokenActScriptRun, TokenActK8sApply, TokenActVMManage,
-	TokenActContainer, TokenActService, TokenActFly, TokenActMigrate, TokenActFail2ban, TokenActVulnScan, TokenActK8sCluster}
+	TokenActContainer, TokenActService, TokenActFly, TokenActMigrate, TokenActFail2ban, TokenActVulnScan, TokenActK8sCluster, TokenActVMPorts, TokenActFlyOwn}
 
 // TokenPerms — права и потолки токена «по правам».
 type TokenPerms struct {
@@ -56,7 +61,11 @@ type TokenPerms struct {
 	Clusters  []string `json:"clusters,omitempty"`
 	// Namespaces — namespace k8s, куда токену можно (обязательно для
 	// k8s.apply).
-	Namespaces []string    `json:"namespaces,omitempty"`
+	Namespaces []string `json:"namespaces,omitempty"`
+	// FlyDomain — домен для своих маршрутов Traffic Fly (сам домен и имена
+	// под ним); FlyGateway — шлюз (edge) этих маршрутов, 0 — единственный.
+	FlyDomain  string      `json:"fly_domain,omitempty"`
+	FlyGateway int64       `json:"fly_gateway,omitempty"`
 	Limits     TokenLimits `json:"limits"`
 }
 
@@ -83,6 +92,10 @@ type TokenLimits struct {
 	// Снимков на одну машину. В отличие от потолков выше 0 — «нельзя»:
 	// снимки занимают диск хоста мимо потолка диска машины.
 	VMSnapshots int `json:"vm_snapshots,omitempty"`
+	// Портов хоста из пула (на все машины) и своих маршрутов Traffic
+	// Fly; 0 — нельзя.
+	Ports     int `json:"ports,omitempty"`
+	FlyRoutes int `json:"fly_routes,omitempty"`
 	// k8s: квота одного namespace (ResourceQuota), подов в нём.
 	K8sCPU       float64 `json:"k8s_cpu,omitempty"`
 	K8sMemMB     int64   `json:"k8s_mem_mb,omitempty"`

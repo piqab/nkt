@@ -38,6 +38,7 @@ func TestIsolationRules(t *testing.T) {
 		`iifname "virbr5" oifname "virbr5" accept`,
 		"iifname @isolated meta nfproto ipv6 drop",
 		"iifname @isolated ip daddr @private4 ct state new,invalid,untracked drop",
+		"oifname @isolated ct status dnat accept",
 		"oifname @isolated ct state new,invalid,untracked drop",
 	} {
 		if !strings.Contains(rules, want) {
@@ -107,7 +108,7 @@ func TestIsolationTraffic(t *testing.T) {
 		t.Skip("NKT_NETNS=1")
 	}
 	rules := filepath.Join(t.TempDir(), "r.nft")
-	_ = os.WriteFile(rules, []byte(IsolationRules([]string{"virbr5"})), 0o644)
+	_ = os.WriteFile(rules, []byte(IsolationRules([]string{"virbr5", "virbr6"})), 0o644)
 	out, err := exec.Command("timeout", "60", "unshare", "-rn", "--mount", "bash", "testdata/netns_check.sh", rules).CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
@@ -123,7 +124,7 @@ func TestIsolationTraffic(t *testing.T) {
 			t.Errorf("%s", line)
 		}
 	}
-	if lines != 9 {
+	if lines != 12 {
 		t.Fatalf("checks: %d\n%s", lines, out)
 	}
 }

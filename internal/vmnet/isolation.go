@@ -59,8 +59,8 @@ var privateRanges = []string{
 //     проходят;
 //   - наружу — да, в частные сети — нет, IPv6 — нет (в сети токена его
 //     нет, и обходить им правила незачем);
-//   - в сеть токена снаружи новые соединения не открываются (пробросы
-//     портов — отдельными правилами, когда появятся).
+//   - в сеть токена снаружи новые соединения не открываются, кроме
+//     перенаправленных хостом (DNAT: порты из пула, Traffic Fly).
 func IsolationRules(bridges []string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "table inet %s {}\ndelete table inet %s\n", IsolationTable, IsolationTable)
@@ -88,6 +88,10 @@ func IsolationRules(bridges []string) string {
 	}
 	b.WriteString("\t\tiifname @isolated meta nfproto ipv6 drop\n")
 	b.WriteString("\t\tiifname @isolated ip daddr @private4 ct state new,invalid,untracked drop\n")
+	// Внутрь — только то, что хост сам перенаправил (DNAT): порты из пула
+	// и Traffic Fly. Из сети токена к чужой машине через порт хоста не
+	// пройти — это отрезано правилом выше.
+	b.WriteString("\t\toifname @isolated ct status dnat accept\n")
 	b.WriteString("\t\toifname @isolated ct state new,invalid,untracked drop\n")
 	b.WriteString("\t}\n}\n")
 	return b.String()

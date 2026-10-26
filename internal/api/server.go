@@ -572,6 +572,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vms/{name}/snapshots/{snap}/revert", s.handleVMSnapshotRevert)
 				r.Delete("/vms/{name}/snapshots/{snap}", s.handleVMSnapshotDelete)
 				r.Post("/vms/{name}/resize", s.handleVMResize)
+				r.Post("/vms/{name}/fixed-address", s.handleVMFixAddress)
 				r.Post("/vms/{name}/{action}", s.handleVMAction)
 				r.Delete("/vms/{name}", s.handleVMDelete)
 

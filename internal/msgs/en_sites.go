@@ -354,6 +354,8 @@ var enSitesCatalog = map[string]string{
 	"fly.opUnknown":                   "bad operation: %s",
 	"fly.opsTitle":                    "Traffic Fly: changes from the map (%d)",
 	"fly.opDone":                      "Operation %s: route %s, %s",
+	"fly.ownAddedNote":                "route %s of token %s",
+	"fly.ownRemovedNote":              "a token route removed",
 	"fly.routeNotFound":               "route %s not found (or no targets given)",
 	"fly.switchTitle":                 "Traffic Fly: switch targets of route %s",
 	"fly.dryWillCreate":               "Traffic Fly: route %s will be created on gateway %s; targets: containers of service %s, port %d",

@@ -60,3 +60,13 @@ func TestLibvirtResizeAndSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Пробросы: UDP — своим протоколом, TCP — по умолчанию.
+func TestPortForwardScriptProto(t *testing.T) {
+	s := Script([]PortForward{{Name: "vm-app1", IP: "192.168.130.10", Rules: []PortRule{{HostPort: 20000, VMPort: 22}, {HostPort: 20001, VMPort: 53, Proto: "udp"}}}})
+	for _, want := range []string{"-p tcp --dport 20000 -j DNAT --to-destination 192.168.130.10:22", "-p udp --dport 20001 -j DNAT --to-destination 192.168.130.10:53", "-p udp -d 192.168.130.10 --dport 53 -j ACCEPT"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("no %q:\n%s", want, s)
+		}
+	}
+}

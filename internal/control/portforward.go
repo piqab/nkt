@@ -37,10 +37,19 @@ type PortForward struct {
 	Rules []PortRule `json:"rules,omitempty"`
 }
 
-// PortRule — порт хоста → порт машины.
+// PortRule — порт хоста → порт машины; Proto — tcp (пусто) или udp.
 type PortRule struct {
-	HostPort int `json:"host_port"`
-	VMPort   int `json:"vm_port"`
+	HostPort int    `json:"host_port"`
+	VMPort   int    `json:"vm_port"`
+	Proto    string `json:"proto,omitempty"`
+}
+
+// proto — протокол правила: tcp по умолчанию.
+func (r PortRule) proto() string {
+	if r.Proto == "udp" {
+		return "udp"
+	}
+	return "tcp"
 }
 
 // rules — все правила в одном виде.
@@ -101,7 +110,7 @@ func (m *PortForwardManager) Set(ctx context.Context, pf PortForward) error {
 		return msgs.Errorf("control.portForwardNoPorts")
 	}
 	for _, r := range rules {
-		if r.HostPort < 1 || r.HostPort > 65535 || r.VMPort < 1 || r.VMPort > 65535 {
+		if r.HostPort < 1 || r.HostPort > 65535 || r.VMPort < 1 || r.VMPort > 65535 || r.Proto != "" && r.Proto != "tcp" && r.Proto != "udp" {
 			return msgs.Errorf("control.portForwardBadPort", r.HostPort)
 		}
 	}
@@ -180,8 +189,8 @@ func Script(list []PortForward) string {
 	b.WriteString("sysctl -qw net.ipv4.ip_forward=1\n")
 	for _, pf := range list {
 		for _, r := range pf.rules() {
-			fmt.Fprintf(&b, "# %s\niptables -t nat -A NKT-PF -p tcp --dport %d -j DNAT --to-destination %s:%d\n", pf.Name, r.HostPort, pf.IP, r.VMPort)
-			fmt.Fprintf(&b, "iptables -A NKT-PF -p tcp -d %s --dport %d -j ACCEPT\n", pf.IP, r.VMPort)
+			fmt.Fprintf(&b, "# %s\niptables -t nat -A NKT-PF -p %s --dport %d -j DNAT --to-destination %s:%d\n", pf.Name, r.proto(), r.HostPort, pf.IP, r.VMPort)
+			fmt.Fprintf(&b, "iptables -A NKT-PF -p %s -d %s --dport %d -j ACCEPT\n", r.proto(), pf.IP, r.VMPort)
 		}
 	}
 	return b.String()

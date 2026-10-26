@@ -137,6 +137,26 @@ login); delete the machine entirely — with its disks, record and usage. An
 image from the host's disk directory (`host:…`) is not allowed for a
 token: other machines' disks live there too.
 
+**Ports and names for an own machine.**
+
+- An administrator sets the host's **port pool**: “Hosts” → the host row →
+  “Port pool” (no pool by default; 1024–65535, up to 10,000 ports, clear
+  of the Traffic Fly service ports 40000–41999).
+- With the “ports” action a token takes a free pool port to its machine
+  (`POST /api/hub/hosts/{id}/vm/ports {"vm_port":22,"proto":"tcp"}`, TCP or
+  UDP) — within its “pool ports” limit (empty — none). The machine's
+  address is pinned with a DHCP reservation, the rule is DNAT on the host;
+  other tokens' networks cannot reach the machine through that port.
+- With the “own Traffic Fly routes” action a token publishes its machine by
+  name: HTTPS with a certificate on the gateway (`POST /api/hub/own/fly
+  {"name":"app.client.example.com","host_id":…,"port":8080}`). The name is
+  only the token's assigned domain or a name under it, a taken name is
+  refused; the gateway is the one set in the permissions or the only one;
+  a “routes” limit (empty — none). The token neither sees nor edits the
+  whole Fly map and can remove only its own route. With a DNS plugin for
+  the domain the record is set automatically.
+- When a machine is deleted, its ports and token routes go with it.
+
 **Own k8s cluster** — `k8s CLUSTER create` and `destroy` in a script —
 only with the “own Kubernetes cluster” action.
 
@@ -261,6 +281,9 @@ to the hub through the tunnel. Conditions:
 | `POST …/vm/snapshots/{snap}/revert`, `DELETE …/vm/snapshots/{snap}` | admin | revert to a snapshot, delete a snapshot |
 | `POST /api/hub/hosts/{id}/vm/resize` | admin | `{"vcpus":4,"memory_mb":4096,"disk_gb":40}` (0 — keep; the disk only grows) → `restart_needed` |
 | `POST /api/hub/hosts/{id}/vm/reinstall` | admin | reinstall from an image (`{"image_id":"…","ssh_key":"…","user_data":"…","install_nkt":false}`) → `job_id` |
+| `GET`, `PUT /api/hub/hosts/{id}/port-pool` | admin | the host's port pool (`{"from":20000,"to":20999}`; `from` 0 — off) |
+| `GET`, `POST /api/hub/hosts/{id}/vm/ports`, `DELETE …/vm/ports/{port}` | admin | pool ports to a machine (`{"vm_port":22,"proto":"tcp"}`) → `port`, `address`; by permission — “ports”, within the limit |
+| `GET`, `POST /api/hub/own/fly`, `DELETE /api/hub/own/fly/{route}` | by permission | own Traffic Fly routes (`{"name":"…","host_id":…,"port":8080}`) → the apply `job_id` |
 | `DELETE /api/hub/hosts/{id}/vm` | admin | delete the machine entirely: domain, disks, record, usage → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | admin | ban or unban (`{"action":"ban","ips":[…],"host_ids":[…]}`) |
 | `POST /api/hosts/{id}/vulnerabilities/scan` | admin | vulnerability scan |

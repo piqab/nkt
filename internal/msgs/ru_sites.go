@@ -354,6 +354,8 @@ var ruSitesCatalog = map[string]string{
 	"fly.opUnknown":                   "неверная операция: %s",
 	"fly.opsTitle":                    "Traffic Fly: изменения с карты (%d)",
 	"fly.opDone":                      "Операция %s: маршрут %s, %s",
+	"fly.ownAddedNote":                "маршрут %s токена %s",
+	"fly.ownRemovedNote":              "маршрут токена убран",
 	"fly.routeNotFound":               "маршрута %s нет (или не заданы цели)",
 	"fly.switchTitle":                 "Traffic Fly: переключить цели маршрута %s",
 	"fly.dryWillCreate":               "Traffic Fly: маршрут %s будет создан на шлюзе %s — цели: контейнеры сервиса %s, порт %d",

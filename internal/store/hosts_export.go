@@ -288,6 +288,8 @@ var ExportedSettingKeys = []string{
 	"plugins.local",
 	// Пороги разбора «Мониторинга» (прогнозы и оповещения).
 	"mon.settings",
+	// Пулы портов хостов и выданные порты машин (по именам).
+	"vm.portpool", "vm.ports",
 }
 
 // ExportedSettingPrefixes — ключи kv по началу имени (по ключу на объект):

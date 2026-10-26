@@ -27,6 +27,15 @@ import (
 func (s *Server) tokenObjectAllowed(r *http.Request, t store.APIToken, pattern string) error {
 	ctx := r.Context()
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	// Всё, что с машиной (питание, снимки, размеры, порты, удаление), —
+	// только со своей.
+	if strings.HasPrefix(pattern, "/hub/hosts/{id}/vm") {
+		h, err := s.db.HostByID(ctx, id)
+		if err != nil || h.ParentID == 0 {
+			return tokenDeny(http.StatusNotFound, "err.notFound")
+		}
+		return s.tokenOwnsVM(ctx, t, strconv.FormatInt(h.ParentID, 10), h.Name)
+	}
 	switch pattern {
 	case "/hub/pipelines/{id}/deploy", "/hub/pipelines/{id}/rollback", "/hub/pipelines/{id}/start", "/hub/pipelines/{id}/stop":
 		p, err := s.db.PipelineByID(ctx, id)
@@ -51,12 +60,6 @@ func (s *Server) tokenObjectAllowed(r *http.Request, t store.APIToken, pattern s
 		if len(t.Perms.Scripts) > 0 && !slices.Contains(t.Perms.Scripts, sc.Name) {
 			return tokenDeny(http.StatusForbidden, "auth.tokenObjectDenied", sc.Name)
 		}
-	case "/hub/hosts/{id}/vm/{action}":
-		h, err := s.db.HostByID(ctx, id)
-		if err != nil || h.ParentID == 0 {
-			return tokenDeny(http.StatusNotFound, "err.notFound")
-		}
-		return s.tokenOwnsVM(ctx, t, strconv.FormatInt(h.ParentID, 10), h.Name)
 	}
 	return nil
 }

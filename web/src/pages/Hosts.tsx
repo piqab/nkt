@@ -18,6 +18,7 @@ import {
   DisconnectOutlined,
   ThunderboltFilled,
   CloudDownloadOutlined,
+  ApiOutlined,
   ClusterOutlined,
   PauseCircleOutlined,
   SafetyOutlined,
@@ -45,6 +46,7 @@ import i18n from '../i18n'
 import { NAME_MARK, NamedTitle, OsIcon } from '../components/OsIcon'
 import { rememberHubHosts } from '../osRegistry'
 import { PluginHostAddModal, PluginHostPanel } from '../components/PluginHosts'
+import { PortPoolModal } from '../components/PortPool'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -555,6 +557,7 @@ export default function Hosts({
   // собственной машины: раскатывать по группе можно любой из них.
   const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles', 120_000)
   const [provisionOn, setProvisionOn] = useState<HubHost | null>(null)
+  const [portPoolOn, setPortPoolOn] = useState<HubHost | null>(null)
   const [clusterOn, setClusterOn] = useState<HubHost | null>(null)
   // Раскрытые списки машин — по идентификатору хоста. По умолчанию
   // свёрнуто: у хоста с десятком машин список иначе оттеснил бы сами
@@ -1218,6 +1221,7 @@ export default function Hosts({
           <span className="vm-action">
             <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
             {showClusters && <RowAction icon={<ClusterOutlined />} label={t('clusters.new')} disabled={busy} onClick={() => setClusterOn(h)} />}
+            <RowAction icon={<ApiOutlined />} label={t('portPool.button')} disabled={busy} onClick={() => setPortPoolOn(h)} />
           </span>
         )}
       </div>
@@ -1511,6 +1515,7 @@ export default function Hosts({
       {updateAllDialog && (
         <UpdateAllModal plan={updatePlan} onClose={() => setUpdateAllDialog(false)} onStart={(retry) => void updateAllOutdated(retry)} />
       )}
+      {portPoolOn && <PortPoolModal hostRef={portPoolOn.id === LOCAL_HOST_ID ? 'local' : String(portPoolOn.id)} hostName={portPoolOn.name} onClose={() => setPortPoolOn(null)} />}
       {provisionOn && (
         <ProvisionVMModal
           host={provisionOn}
