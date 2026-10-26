@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.16.5 — 2026-10-26
+
+- The Catalog window: while there is no catalog copy yet, a download error no longer says “the previous copy is in use”. HTTP 404 gets an explanation: the catalog is not published on the site yet, and an archive can be uploaded without internet.
+- The CI catalog build says in the error annotation which key it found in the secret instead of the needed one — without the key's contents.
+
 ## v1.16.4 — 2026-10-26
 
 - The plugin catalog build reads the private key from the CI secret even when it was pasted as a single line or without the `BEGIN`/`END` lines. If the secret holds the wrong key, the error now names the cause: the public key instead of the private one, a password-protected key, an OpenSSH key. The key's contents never reach the message.

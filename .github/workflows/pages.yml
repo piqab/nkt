@@ -81,8 +81,10 @@ jobs:
             echo "::warning::нет секрета NKT_CATALOG_KEY — каталог не подписан и не выкладывается"
             exit 0
           fi
-          if ! go run ./cmd/nkt-catalog sign -dir "$work/catalog"; then
-            echo "::error::секрет NKT_CATALOG_KEY не читается как закрытый ключ ed25519 — вставьте файл из openssl genpkey целиком; каталог не выложен"
+          # Причина — в пометке: сообщения nkt-catalog называют тип ключа, но
+          # не его содержимое (internal/catalog TestParsePrivateKeyForms).
+          if ! why=$(go run ./cmd/nkt-catalog sign -dir "$work/catalog" 2>&1); then
+            echo "::error::секрет NKT_CATALOG_KEY не читается как закрытый ключ ed25519 ($(echo "$why" | grep '^nkt-catalog:' | head -1)) — каталог не выложен"
             exit 1
           fi
           # Подпись сходится со встроенным в nkt ключом — иначе хабы

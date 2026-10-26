@@ -134,7 +134,12 @@ export function CatalogModal({
             )}
           </div>
         )}
-        {d?.error && <Banner kind="warn">{t('catalog.lastError', { error: d.error, time: d.last_attempt ? formatRelative(d.last_attempt) : '' })}</Banner>}
+        {d?.error && (
+          // Копии ещё нет — «работает прежняя» было бы неправдой.
+          <Banner kind={d.source ? 'warn' : 'error'}>
+            {t(d.source ? 'catalog.lastError' : 'catalog.firstError', { error: d.error, time: d.last_attempt ? formatRelative(d.last_attempt) : '' })}
+          </Banner>
+        )}
         {error && <Banner kind="error">{error}</Banner>}
         {d && d.plugins.length === 0 && d.source && <span className="muted">{t('catalog.empty')}</span>}
         {(d?.plugins ?? []).map((p) => (
