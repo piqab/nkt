@@ -96,8 +96,10 @@ func TestCatalogEndpoints(t *testing.T) {
 	if rec := do("GET", "/api/hub/catalog/files/yandex-cloud/"+yc, nil, cookie); rec.Code != 200 || rec.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("screen: %d %s", rec.Code, rec.Header())
 	}
-	if rec := do("GET", "/api/hub/catalog/files/windows/README.md", nil, cookie); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Windows") {
-		t.Fatalf("readme: %d", rec.Code)
+	if rec := do("GET", "/api/hub/catalog/files/windows/README.md", nil, cookie); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Windows") ||
+		rec.Header().Get("Content-Type") != "text/plain; charset=utf-8" || !strings.Contains(rec.Header().Get("Content-Security-Policy"), "sandbox") ||
+		rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("readme: %d %v", rec.Code, rec.Header())
 	}
 	for _, p := range []string{"windows/deploy/nkt-plugin.py", "windows/../../etc/passwd", "nope/README.md"} {
 		if rec := do("GET", "/api/hub/catalog/files/"+p, nil, cookie); rec.Code != 404 {

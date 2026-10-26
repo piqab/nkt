@@ -1,10 +1,10 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
-	"mime"
 	"net/http"
 	"os"
 	"path"
@@ -251,13 +251,23 @@ func (s *Server) handleCatalogFile(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	ct := mime.TypeByExtension(ext)
-	if ext == ".md" {
-		ct = "text/markdown; charset=utf-8"
+	// Тип — только по расширению из белого списка и с проверкой содержимого:
+	// README — простым текстом (интерфейс показывает его без разметки),
+	// картинка — только настоящая PNG. nosniff и CSP sandbox: даже открытый
+	// напрямую ответ браузер не исполнит как страницу.
+	ct := "text/plain; charset=utf-8"
+	if ext == ".png" {
+		if !bytes.HasPrefix(b, []byte("\x89PNG\r\n\x1a\n")) {
+			http.NotFound(w, r)
+			return
+		}
+		ct = "image/png"
 	}
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	w.Header().Set("Cache-Control", "private, max-age=300")
+	// #nosec G705 -- файл из копии каталога, проверенной подписью ed25519 и SHA-256 (internal/catalog); отдаётся как text/plain или проверенная image/png с nosniff и CSP sandbox — не как HTML.
 	_, _ = w.Write(b)
 }
 

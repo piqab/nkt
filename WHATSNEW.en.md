@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.16.6 — 2026-10-26
+
+- Plugin guides and screenshots from the catalog are served more strictly. The README goes as plain text, an image only as a real PNG. The response forbids the browser to run anything, even when opened directly (gosec #349).
+
 ## v1.16.5 — 2026-10-26
 
 - The Catalog window: while there is no catalog copy yet, a download error no longer says “the previous copy is in use”. HTTP 404 gets an explanation: the catalog is not published on the site yet, and an archive can be uploaded without internet.
