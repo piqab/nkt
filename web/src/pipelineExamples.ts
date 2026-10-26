@@ -212,6 +212,8 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     readme: `${NKT}/tree/main/examples/litellm`,
     // API наружу: длинные контексты и файлы — без предела размера.
     site: { service: 'litellm', port: 4000, maxBody: '0' },
+    // Вариант через Traffic Fly — закомментирован (вместо site:).
+    flyCheckPath: '/health/liveliness',
     envKeys: { 'litellm-db': ['LITELLM_DB_PASSWORD'], litellm: ['LITELLM_DB_PASSWORD', 'LITELLM_MASTER_KEY', 'LITELLM_SALT_KEY'] },
     env: [
       ['LITELLM_DB_PASSWORD', 'generate:hex32'],

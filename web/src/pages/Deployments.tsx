@@ -1027,6 +1027,7 @@ function ComposeFromLink({
           `  #     kind: https\n` +
           `  #     names: [${domain}]\n` +
           `  #     tls: gateway\n` +
+          `  #     dns: plugin   # ${t('deploy.flyDnsComment')}\n` +
           `  #     service: ${site.service}\n` +
           `  #     target_port: ${site.port}\n` +
           `  #     check: http\n` +

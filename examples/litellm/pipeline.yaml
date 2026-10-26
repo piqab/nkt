@@ -29,3 +29,21 @@ compose:
     service: litellm
     port: 4000
     max_body: "0"
+    cert: auto      # выпустить сертификат Let's Encrypt (по умолчанию — только готовый)
+    # dns: auto     # A-запись имени через DNS-плагин хаба (Technitium, Cloudflare)
+  # Вариант — API через Traffic Fly: сертификат на шлюзе, A-запись имени — на
+  # адрес шлюза через DNS-плагин хаба. Раскомментируйте fly: и уберите site:
+  # целиком — оба сразу не нужны (два входа и два сертификата на одно имя).
+  # Шлюз пересылает потоковые ответы (stream: true) сразу; обычный ответ
+  # должен начаться за 5 минут — долгие генерации просите с потоком.
+  # fly:
+  #   - route: litellm
+  #     gateway: fly-vps            # имя шлюза; один шлюз — можно не писать
+  #     kind: https
+  #     names: [llm.example.com]
+  #     tls: gateway
+  #     dns: plugin                 # A-запись на шлюз через DNS-плагин хаба
+  #     service: litellm            # сервис compose
+  #     target_port: 4000           # порт в контейнере
+  #     check: http
+  #     check_path: /health/liveliness

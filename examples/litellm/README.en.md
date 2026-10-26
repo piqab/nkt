@@ -32,7 +32,17 @@ models. To turn it on — `LITELLM_DISABLE_ADMIN_UI: "False"` in the
 pipeline's `env` (log in with the master key).
 
 The hub's proxy waits up to 5 minutes for an answer; streaming answers
-(`stream: true`) go through at once, unbuffered.
+(`stream: true`) go through at once, unbuffered. `stream: true` is set by
+the client in the request — the server can't turn streaming on for it;
+ask for long generations as a stream.
+
+**Through Traffic Fly.** `pipeline.yaml` has a commented `fly:` block:
+the API goes out through a gateway (the gateway issues the certificate),
+and the hub's DNS plugin sets the name's A record to the gateway's
+address (`dns: plugin`). Uncomment it **instead of** `site:`, not
+alongside. Ports 80 and 443 on the host itself aren't needed then. The
+gateway waits up to 5 minutes for an ordinary answer to start; streaming
+ones go through at once.
 
 ## Hub plugin
 

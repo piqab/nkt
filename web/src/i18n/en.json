@@ -3772,6 +3772,7 @@
     "secretCAFile": "From a file…",
     "secretCAClear": "remove the CA",
     "secretCAHint": "The hub uses the CA when checking images; on deployment the host puts it into its engine's certs.d (/etc/docker/certs.d/<registry>/ca.crt or /etc/containers/certs.d) — system-wide trust is not changed.",
+    "flyDnsComment": "the name's A record to the gateway — through the hub's DNS plugin",
     "fromLinkFlyComment": "variant instead of site: — enter through a Traffic Fly gateway: uncomment fly: (then site: is not needed)",
     "envConflictTitle": "Replace values in secrets?",
     "envConflictText": "The variables {{keys}} are already set in the pipeline .env to other values. Replace them with the values from the description's env block? A database password changed this way will no longer match an existing database.",
