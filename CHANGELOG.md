@@ -968,3 +968,4 @@
 - `7314d3e8` Свой namespace в общем кластере: PSA restricted, квота, NetworkPolicy, учётная запись и kubeconfig, логи, helm через проверки; 1.17.8
 - `1daa2a42` Свой кластер токена: k3s на его машинах, single или cp1, API через порт пула, kubeconfig один раз; 1.17.9
 - `b0d7656e` Свои лимиты для клиента: /hub/tokens/self/usage и MCP my_usage; 1.17.10
+- `0eb7c53b` CodeQL и gosec: границы размеров машины до преобразований, размер файла в zip, #nosec для имён секрета; 1.17.11
