@@ -37,6 +37,18 @@ func (s *Server) handleVMPreflight(w http.ResponseWriter, r *http.Request) {
 			out["images_free_bytes"] = n
 		}
 	}
+	// Свободная память сейчас — для автовыбора хоста машины (1.17.6).
+	if raw, err := c.ReadFile("/proc/meminfo"); err == nil {
+		for _, line := range strings.Split(string(raw), "\n") {
+			if rest, ok := strings.CutPrefix(line, "MemAvailable:"); ok {
+				if f := strings.Fields(rest); len(f) > 0 {
+					if kb, err := strconv.ParseInt(f[0], 10, 64); err == nil {
+						out["mem_available_bytes"] = kb * 1024
+					}
+				}
+			}
+		}
+	}
 	if snap, err := s.scanner.LatestOrScan(ctx); err == nil {
 		out["mem_total_bytes"] = snap.Capacity.MemTotalBytes
 		out["cpu_cores"] = snap.Capacity.CPUCores

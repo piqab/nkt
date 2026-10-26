@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.6 — 2026-10-26
+
+- **The hub picks the host for a new machine.** When machine creation (API `/hub/vm/provision`, MCP `create_vm`) has no `host_id`, the hub chooses the host:
+  - **which fit:** online hosts with KVM and a running libvirtd that have enough free memory and disk space with a margin. For a token — also within its scope and per-host limits;
+  - **which is chosen:** of those, the host with the most free memory;
+  - **if none fits** — a refusal with the reason for each host.
+- The host's machine-readiness check (`/api/vm/preflight`) now also reports free memory.
+
 ## v1.17.5 — 2026-10-26
 
 - **Host ports to machines.** An administrator sets a host's port pool: “Hosts” → “Port pool”. There is no pool by default.

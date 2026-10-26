@@ -121,6 +121,15 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
+	// Хост не указан — хаб выбирает сам (место, KVM, пределы токена).
+	if req.HostID == 0 {
+		picked, err := s.pickVMHost(r.Context(), req.Spec)
+		if err != nil {
+			writeErr(w, r, http.StatusConflict, err)
+			return
+		}
+		req.HostID = picked.ID
+	}
 	host, err := s.db.HostByID(r.Context(), req.HostID)
 	if err != nil {
 		fail(w, r, err)
