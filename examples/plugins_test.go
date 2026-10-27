@@ -123,6 +123,28 @@ func TestTechnitiumPluginPython(t *testing.T) {
 }
 
 // Плагин Forgejo — против поддельного API Forgejo.
+func TestRgstrLiteSamplePython(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	out, err := exec.Command(py, "-I", "_samples/rgstr-lite/deploy/test_plugin.py").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
+func TestRgstrPluginPython(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	out, err := exec.Command(py, "-I", "rgstr/deploy/test_plugin.py").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}
+
 func TestForgejoPluginPython(t *testing.T) {
 	py, err := exec.LookPath("python3")
 	if err != nil {

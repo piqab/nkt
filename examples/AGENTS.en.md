@@ -149,6 +149,11 @@ package port).
   `to-pipeline P env K`), the answer `{"store": {"pipeline", "env",
   "value"}}`; the hub checks rights and writes it itself. The value never
   goes back to the agent.
+- **A registry login and token** (a registry robot) — `env: "@registry"`
+  plus `"registry"` (the address) and `"user"` in `store`: the hub writes
+  the key into the pipeline's Registries. Example — `examples/rgstr`, the
+  tutorial one — `examples/_samples/rgstr-lite` (the article “Writing a
+  plugin step by step”).
 - The hub's audit log masks arguments named `pass`, `secret`, `token`,
   `key` as `***` — but don't rely on it: don't take secrets as arguments
   without need.

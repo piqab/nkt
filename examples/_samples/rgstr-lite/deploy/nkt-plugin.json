@@ -1,0 +1,21 @@
+{
+  "name": "rgstr-lite",
+  "version": "1.0.0",
+  "min_nkt": "1.17.15",
+  "protocol": 1,
+  "title": {"ru": "rgstr (учебный)", "en": "rgstr (tutorial)"},
+  "description": {
+    "ru": "Учебный плагин к реестру образов rgstr из статьи «Пишем плагин по шагам»: сводка с находками, репозитории и теги (удалить тег), сборка мусора, робот — секрет окну или в конвейер (.env или ключом registry); команда «rgstr-lite …». Полный плагин — rgstr в каталоге.",
+    "en": "A tutorial plugin for the rgstr image registry from the “Writing a plugin step by step” article: a summary with findings, repositories and tags (delete a tag), garbage collection, a robot — the secret to the window or into a pipeline (.env or as the registry key); the “rgstr-lite …” command. The full plugin is rgstr in the catalog."
+  },
+  "run": "python3",
+  "file": "nkt-plugin.py",
+  "port": 9281,
+  "settings": [
+    {"env": "RGSTR_URL", "title": {"ru": "Адрес rgstr", "en": "rgstr address"}, "default": "http://127.0.0.1:5000"},
+    {"env": "RGSTR_USER", "title": {"ru": "Администратор rgstr", "en": "rgstr administrator"}, "default": "admin"},
+    {"env": "RGSTR_PASSWORD", "title": {"ru": "Пароль администратора", "en": "Administrator password"}, "secret": true},
+    {"env": "RGSTR_PUBLIC", "title": {"ru": "Адрес реестра для docker", "en": "Registry address for docker"},
+     "hint": {"ru": "registry.example.com; пусто — из адреса rgstr", "en": "registry.example.com; empty — from the rgstr address"}}
+  ]
+}

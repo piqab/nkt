@@ -77,6 +77,15 @@ into the cache and brings up the libvirt network right away.
   (`fly own … cluster … namespace …`, MCP `fly_own_add`); without it no
   route to a client namespace can be made. The window shows a diff, empty
   turns it off.
+- **Client resources** — operator resources (CRDs) clients may create in
+  their namespaces: one per line, `resource.group`
+  (`registries.registry.rgstr.io`). The hub applies the ClusterRole
+  `nkt-client-crds` with the `aggregate-to-edit` and `aggregate-to-admin`
+  labels, so the `edit` role of a client namespace gets full rights on
+  them. Kubernetes, RBAC, admission, networking and Cilium groups are not
+  given; what the operator creates for a client resource passes the same
+  admission policies. The window shows a diff; the list goes into the
+  export. Example — [rgstr and rgstroperator](/en/guide/hub-plugin-rgstr).
 - **Helm to clusters** — one release into the chosen clusters (or the
   clusters of a host group) by a hub job, in turn, with a per-cluster
   outcome.

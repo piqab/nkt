@@ -217,7 +217,13 @@ outside clients. What holds them:
     allowed) port 25;
   - quota and LimitRange from the token's limits; the client's account has
     the `edit` role only in its namespace; the kubeconfig is issued once,
-    through the API (not MCP), and a reissue disables the old one.
+    through the API (not MCP), and a reissue disables the old one;
+  - operator resources (CRDs) — only those the administrator ticked in
+    “Client resources” (aggregated into `edit`; Kubernetes, RBAC,
+    admission, networking and Cilium groups — never). What the operator
+    creates for a client resource passes the same admission policies; the
+    hub checks an rgstroperator `Registry` up front (Service — ClusterIP,
+    ingress — within the token's domain).
   The hub checks the same rules itself for the token's manifests, helm and
   scripts — an early, clear refusal.
 - **Own cluster** — k3s with Cilium on the token's machines in its

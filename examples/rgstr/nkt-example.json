@@ -1,0 +1,30 @@
+{
+  "key": "rgstr",
+  "link": "https://github.com/piqab/nkt/blob/main/examples/rgstr/deploy/docker-compose.yml",
+  "project": "rgstr",
+  "readme": "https://github.com/piqab/nkt/tree/main/examples/rgstr",
+  "site": {
+    "service": "rgstr",
+    "port": 5000,
+    "maxBody": "0"
+  },
+  "env": [
+    [
+      "RGSTR_DOMAIN",
+      "{domain}"
+    ],
+    [
+      "RGSTR_AUTH_SECRET",
+      "generate:hex32"
+    ],
+    [
+      "RGSTR_ADMIN_USER",
+      "admin"
+    ],
+    [
+      "RGSTR_ADMIN_PASSWORD",
+      "generate:password"
+    ]
+  ],
+  "order": 55
+}

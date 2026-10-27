@@ -2,9 +2,11 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/piqab/nkt/internal/auth"
@@ -49,7 +51,7 @@ func scriptStoreTarget(argv []string) (pipeline, env string) {
 // .env этого конвейера: администратор; токен — с правом править
 // конвейеры, и конвейер — в его пределах (свой или в списке).
 func (s *Server) pluginStoreCheck(ctx context.Context, author, pipeline, env string) (store.Pipeline, error) {
-	if !pluginStoreEnvRe.MatchString(env) {
+	if !pluginStoreEnvRe.MatchString(env) && env != plugin.StoreRegistry {
 		return store.Pipeline{}, msgs.Errorf("plugin.storeBadEnv", env)
 	}
 	list, err := s.db.ListPipelines(ctx)
@@ -96,6 +98,9 @@ func (s *Server) pluginStoreApply(ctx context.Context, author string, plName str
 		return "", msgs.Errorf("plugin.storeMismatch", plName)
 	}
 	v := strings.TrimSpace(st.Value)
+	if env == plugin.StoreRegistry {
+		return s.pluginStoreRegistry(ctx, author, plName, p, st)
+	}
 	if v == "" || strings.ContainsAny(v, "\r\n\"'\\$`") {
 		return "", msgs.Errorf("plugin.storeBadValue", env)
 	}
@@ -113,4 +118,35 @@ func (s *Server) pluginStoreApply(ctx context.Context, author string, plName str
 	}
 	s.db.Audit(ctx, author, "plugin.store", plName, "ok", map[string]any{"pipeline": p.Name, "env": env})
 	return msgs.Tc(ctx, "plugin.stored", env, p.Name), nil
+}
+
+// pluginStoreRegistry — ключ registry конвейера от плагина (робот rgstr):
+// ключ с тем же адресом заменяется, CA прежнего ключа остаётся.
+func (s *Server) pluginStoreRegistry(ctx context.Context, author, plName string, p store.Pipeline, st *plugin.Store) (string, error) {
+	host := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(st.Registry), "https://"), "http://"), "/"))
+	user, token := strings.TrimSpace(st.User), strings.TrimSpace(st.Value)
+	if !registryHostRe.MatchString(host) || user == "" || strings.ContainsAny(user, ": \t\r\n") || token == "" || strings.ContainsAny(token, "\r\n") {
+		return "", msgs.Errorf("plugin.storeBadValue", plugin.StoreRegistry)
+	}
+	out := []registryKey{}
+	ca := ""
+	for _, k := range s.pipelineRegistries(p) {
+		if k.Host == host {
+			ca = k.CA
+			continue
+		}
+		out = append(out, k)
+	}
+	out = append(out, registryKey{Host: host, User: user, Token: token, CA: ca})
+	sort.Slice(out, func(i, j int) bool { return out[i].Host < out[j].Host })
+	raw, _ := json.Marshal(out)
+	enc, err := secretbox.Encrypt(s.hub.key, raw)
+	if err != nil {
+		return "", err
+	}
+	if err := s.db.SetPipelineRegistries(ctx, p.ID, enc); err != nil {
+		return "", err
+	}
+	s.db.Audit(ctx, author, "plugin.store", plName, "ok", map[string]any{"pipeline": p.Name, "registry": host, "user": user})
+	return msgs.Tc(ctx, "plugin.storedRegistry", host, user, p.Name), nil
 }

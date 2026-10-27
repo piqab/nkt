@@ -292,6 +292,8 @@ var ExportedSettingKeys = []string{
 	"vm.portpool", "vm.ports",
 	// Ingress кластеров для маршрутов Fly клиентов (по именам).
 	"k8s.clientingress",
+	// Ресурсы операторов, разрешённые клиентам (по именам кластеров).
+	"k8s.clientcrds",
 	// Полоса и диск машин токенов по умолчанию.
 	"vm.limits.defaults",
 }

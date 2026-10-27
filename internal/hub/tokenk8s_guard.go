@@ -320,6 +320,21 @@ func tokenK8sDocCheck(doc map[string]any, kind, name, domain string) error {
 				}
 			}
 		}
+	case "Registry":
+		// rgstroperator: Service и Ingress реестра создаёт оператор — те же
+		// правила, что у своих (кластер всё равно не пустит, но поздно и
+		// молча для клиента).
+		if av, _ := doc["apiVersion"].(string); !strings.HasPrefix(av, "registry.rgstr.io/") {
+			break
+		}
+		if tp, _ := spec["serviceType"].(string); tp != "" && tp != "ClusterIP" {
+			return msgs.Errorf("hub.tokenK8sServiceType", name, tp)
+		}
+		if ing, _ := spec["ingress"].(map[string]any); ing != nil && ing["enabled"] == true {
+			if h, _ := ing["host"].(string); !inDomain(h, domain) {
+				return msgs.Errorf("hub.tokenK8sIngressHost", name, h, domain)
+			}
+		}
 	case "HTTPRoute", "GRPCRoute":
 		hosts := strs(spec["hostnames"])
 		if len(hosts) == 0 || slices.ContainsFunc(hosts, func(h string) bool { return !inDomain(h, domain) }) {

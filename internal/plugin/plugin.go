@@ -354,7 +354,15 @@ type Store struct {
 	Pipeline string `json:"pipeline"`
 	Env      string `json:"env"`
 	Value    string `json:"value"`
+	// Env = StoreRegistry (1.17.15): не в .env, а ключом registry
+	// конвейера («Секреты» → «Реестры») — адрес Registry, логин User,
+	// токен Value.
+	Registry string `json:"registry,omitempty"`
+	User     string `json:"user,omitempty"`
 }
+
+// StoreRegistry — env у Store и у аргумента env: ключ registry конвейера.
+const StoreRegistry = "@registry"
 
 // View — что показать в разделе: таблица, текст или несколько видов
 // подряд.

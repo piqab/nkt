@@ -1,0 +1,27 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# rgstr — реестр образов из examples/ репозитория nkt.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/rgstr/deploy/docker-compose.yml
+  project: rgstr
+  hosts: [web1]
+  wait_timeout: 3m
+  # .env стека прямо здесь: значения уйдут в секреты конвейера, generate: —
+  # создаст хаб. Временный пароль администратора — «Секреты» → «.env» →
+  # история → «Показать»; сменить при первом входе в https://<домен>/ui.
+  env:
+    RGSTR_DOMAIN: registry.example.com
+    RGSTR_AUTH_SECRET: generate:hex32
+    RGSTR_ADMIN_USER: admin
+    RGSTR_ADMIN_PASSWORD: generate:password
+  # docker push — слои по сотням мегабайт: max_body "0" — без предела и без
+  # буферизации запроса у прокси.
+  site:
+    domains: [registry.example.com]
+    service: rgstr
+    port: 5000
+    max_body: "0"

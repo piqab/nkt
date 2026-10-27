@@ -383,6 +383,7 @@ to the hub through the tunnel. Conditions:
 | `GET`, `PUT /api/hub/hosts/{id}/port-pool` | admin | the host's port pool (`{"from":20000,"to":20999}`; `from` 0 — off) |
 | `GET`, `POST /api/hub/hosts/{id}/vm/ports`, `DELETE …/vm/ports/{port}` | admin | pool ports to a machine (`{"vm_port":22,"proto":"tcp"}`) → `port`, `address`; by permission — “ports”, within the limit |
 | `GET`, `POST /api/hub/own/fly`, `DELETE /api/hub/own/fly/{route}` | by permission | own Traffic Fly routes (`{"name":"…","host_id":…,"port":8080}`) → the apply `job_id` |
+| `GET`, `PUT /api/hub/clusters/{id}/client-crds` | admin | operator resources for client namespaces (`{"resources":["registries.registry.rgstr.io"]}`): the ClusterRole `nkt-client-crds` aggregated into `edit` |
 | `DELETE /api/hub/hosts/{id}/vm` | admin | delete the machine entirely: domain, disks, record, usage → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | admin | ban or unban (`{"action":"ban","ips":[…],"host_ids":[…]}`) |
 | `POST /api/hosts/{id}/vulnerabilities/scan` | admin | vulnerability scan |
