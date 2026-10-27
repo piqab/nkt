@@ -72,6 +72,11 @@ into the cache and brings up the libvirt network right away.
 
 - **Kubernetes findings across clusters** — a summary from every control
   plane.
+- **Client ingress** — a cluster node and the HTTP port of the ingress
+  controller where Traffic Fly sends token routes to their namespaces
+  (`fly own … cluster … namespace …`, MCP `fly_own_add`); without it no
+  route to a client namespace can be made. The window shows a diff, empty
+  turns it off.
 - **Helm to clusters** — one release into the chosen clusters (or the
   clusters of a host group) by a hub job, in turn, with a per-cluster
   outcome.

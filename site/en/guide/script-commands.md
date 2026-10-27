@@ -63,6 +63,7 @@ Every command of the hub script language — the same ones “Check”, the “R
 | [`k8s CLUSTER wait deployment NAME`](#cmd-k8s-wait) | Waits until all replicas of a deployment are ready. |
 | [`fly route ID KIND`](#cmd-fly-route) | Creates or updates a Traffic Fly route and applies it — like a pipeline's fly: block: a new one is saved and applied, an existing one changes targets smoothly (new ones added and checked, old ones drained). |
 | [`fly apply`](#cmd-fly-apply) | Applies the Traffic Fly map — like “Apply”; in a dry run — the apply dry run. |
+| [`fly own NAME machine MACHINE port …`](#cmd-fly-own) | A token's own Traffic Fly route: HTTPS with a certificate on the gateway by a name in the token's domain — to its own machine or to the shared cluster's ingress for its own namespace. |
 
 **Plugins**
 
@@ -612,6 +613,22 @@ Example:
 
 ```
 fly apply
+```
+
+### `fly own NAME machine MACHINE port PORT | fly own NAME cluster CLUSTER namespace NS` {#cmd-fly-own}
+
+A token's own Traffic Fly route: HTTPS with a certificate on the gateway by a name in the token's domain — to its own machine or to the shared cluster's ingress for its own namespace. Only in a script run by a token with the “own Traffic Fly routes” action.
+
+| Argument | Required | What it is |
+|---|---|---|
+| `NAME` | ✓ | the name — the token's domain or a name under it |
+| `machine / port` |  | an own machine (its host-list name) and its HTTP port |
+| `cluster / namespace` |  | the cluster and an own namespace (the administrator sets the cluster's ingress) |
+
+Example:
+
+```
+fly own shop.client.example.com cluster shared namespace shop
 ```
 
 ### `plugin NAME WORD args… | WORD args…` {#cmd-plugin}

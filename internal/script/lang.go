@@ -57,6 +57,7 @@ const (
 	KindK8sWait      Kind = "k8s.wait"
 	KindFlyRoute     Kind = "fly.route"
 	KindFlyApply     Kind = "fly.apply"
+	KindFlyOwn       Kind = "fly.own"
 	KindPlugin       Kind = "plugin"
 	// KindRun — команда на хосте плагина (MikroTik, Windows…) на языке
 	// его типа: «on ХОСТ run "КОМАНДА"» или блок до «end».
@@ -380,6 +381,16 @@ var Commands = []CommandDoc{
 		Example: "fly apply",
 	},
 	{
+		Kind: KindFlyOwn, Syntax: "fly own ИМЯ machine МАШИНА port ПОРТ | fly own ИМЯ cluster КЛАСТЕР namespace NS",
+		Summary: "script.doc.flyOwn",
+		Args: []ArgDoc{
+			{Name: "ИМЯ", Required: true, Desc: "script.doc.flyOwn.name"},
+			{Name: "machine / port", Desc: "script.doc.flyOwn.machine"},
+			{Name: "cluster / namespace", Desc: "script.doc.flyOwn.cluster"},
+		},
+		Example: "fly own shop.client.example.com cluster shared namespace shop",
+	},
+	{
 		Kind: KindPlugin, Syntax: "plugin ИМЯ СЛОВО аргументы… | СЛОВО аргументы…",
 		Summary: "script.doc.plugin",
 		Args: []ArgDoc{
@@ -549,6 +560,7 @@ var englishTerms = [][2]string{
 	{"ПАКЕТ", "PACKAGE"},
 	{"АДРЕС", "ADDR"},
 	{"СНИМОК", "SNAPSHOT"},
+	{"МАШИНА", "MACHINE"},
 	{"ОБРАЗ", "IMAGE"},
 	{"МОСТ", "BRIDGE"},
 	{"ДОМЕН", "DOMAIN"},

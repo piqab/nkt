@@ -290,6 +290,8 @@ var ExportedSettingKeys = []string{
 	"mon.settings",
 	// Пулы портов хостов и выданные порты машин (по именам).
 	"vm.portpool", "vm.ports",
+	// Ingress кластеров для маршрутов Fly клиентов (по именам).
+	"k8s.clientingress",
 }
 
 // ExportedSettingPrefixes — ключи kv по началу имени (по ключу на объект):

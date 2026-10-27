@@ -80,7 +80,7 @@ admin token or a token by permission (within its limits).
 | `k8s_own_namespaces`, `k8s_own_logs`, `k8s_own_helm`, `k8s_own_namespace_delete` | token by permission | own namespaces in shared clusters: list, pod logs, helm (render, token checks, apply), delete; creating a namespace and getting its kubeconfig — API only |
 | `k8s_own_clusters`, `k8s_own_cluster_create`, `k8s_own_cluster_delete` | token by permission | an own k3s cluster on the token's machines (single or cp1, one host, the token's network, the API on a pool port); the kubeconfig — API only, once |
 | `my_usage` | any token | its own limits and usage: CPU, memory, disk, machines, ports, Fly routes, namespaces, clusters; usage rows and allowed actions |
-| `fly_own_routes`, `fly_own_add`, `fly_own_remove` | token by permission | own Traffic Fly routes: HTTPS by name in the assigned domain to its machine |
+| `fly_own_routes`, `fly_own_add`, `fly_own_remove` | token by permission | own Traffic Fly routes: HTTPS by name in the assigned domain to its machine or to a shared cluster's ingress for its own namespace |
 | `vm_resize`, `vm_reinstall`, `vm_delete` | admin | vCPU, memory and disk (the disk only grows); reinstall from an image (a job); delete the machine with its disks and record (a job) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | admin | move plan, move, rollback / removing the old copy |
 | `fly_apply`, `fly_ops` | admin, no limit | apply the map, point edits of targets |

@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.13 — 2026-10-27
+
+- **Traffic Fly for a client namespace.** An administrator sets a cluster's “Client ingress” once: a node and the HTTP port of the ingress controller.
+  - A token publishes its namespace by a name in its domain: an HTTPS route with a certificate on the gateway goes to that ingress, and the client's Ingress with the same name sends it to the service. The admission policies refuse an Ingress with someone else's name.
+  - **Where:** the API `/hub/own/fly` (`cluster` and `namespace` instead of a machine), MCP `fly_own_add` and a new script command `fly own NAME cluster CLUSTER namespace NS`.
+  - **For a machine:** `fly own NAME machine MACHINE port PORT` — a route to an own machine.
+
 ## v1.17.12 — 2026-10-27
 
 - **A client namespace is protected in the cluster itself**, not only by hub checks: the client works with its own kubeconfig directly.

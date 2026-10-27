@@ -72,7 +72,7 @@ var docGroup = map[Kind]string{
 	KindVMCreate: "host", KindVMAction: "host", KindApplyProfile: "host", KindFilePut: "host", KindUserAdd: "host",
 	KindSystem: "host", KindCert: "host", KindGitClone: "host", KindK8sCreate: "host", KindK8sDestroy: "host",
 	KindPipeline: "deploy", KindDeploy: "deploy", KindMigrate: "deploy",
-	KindK8sIngress: "cluster", KindK8sApply: "cluster", KindK8sWait: "cluster", KindFlyRoute: "cluster", KindFlyApply: "cluster",
+	KindK8sIngress: "cluster", KindK8sApply: "cluster", KindK8sWait: "cluster", KindFlyRoute: "cluster", KindFlyApply: "cluster", KindFlyOwn: "cluster",
 	KindPlugin: "plugins", KindRun: "plugins",
 }
 

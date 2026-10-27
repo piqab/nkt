@@ -285,6 +285,8 @@ func (r *ScriptRunner) step(ctx context.Context, jc *jobs.Context, p *ScriptRunP
 		return r.flyRoute(ctx, jc, done, st, false)
 	case script.KindFlyApply:
 		return r.flyApply(ctx, jc, false)
+	case script.KindFlyOwn:
+		return r.flyOwn(ctx, jc, st, false)
 	case script.KindPlugin:
 		return r.s.pluginStep(ctx, jc, st, false)
 
@@ -644,6 +646,8 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 		return r.flyRoute(ctx, jc, done, st, true)
 	case script.KindFlyApply:
 		return r.flyApply(ctx, jc, true)
+	case script.KindFlyOwn:
+		return r.flyOwn(ctx, jc, st, true)
 	case script.KindPlugin:
 		return r.s.pluginStep(ctx, jc, st, true)
 	case script.KindGroup, script.KindInstall, script.KindWait, script.KindVMCreate, script.KindVMAction,
@@ -967,6 +971,40 @@ func (r *ScriptRunner) vmLifecycle(ctx context.Context, jc *jobs.Context, h stor
 		return err
 	}
 	return r.waitHubJob(ctx, jc, id)
+}
+
+// flyOwn — свой маршрут Fly токена (только в сценарии от токена).
+func (r *ScriptRunner) flyOwn(ctx context.Context, jc *jobs.Context, st script.Step, dry bool) error {
+	t, ok := tokenFromContext(ctx)
+	if !ok || t.Role != store.TokenRoleCustom {
+		return msgs.Errorf("auth.tokenOnly")
+	}
+	req := OwnFlyRequest{Name: st.Name, Cluster: st.Args["cluster"], Namespace: st.Args["namespace"]}
+	if m := st.Args["machine"]; m != "" {
+		hosts, err := r.m.db.ListAllHosts(ctx)
+		if err != nil {
+			return err
+		}
+		for _, h := range hosts {
+			if h.Name == m && h.ParentID != 0 {
+				req.HostID = h.ID
+			}
+		}
+		if req.HostID == 0 {
+			return msgs.Errorf("hub.scriptVMNotListed", m, "—")
+		}
+		req.Port, _ = strconv.Atoi(st.Args["port"])
+	}
+	if dry {
+		jc.Log("hub.scriptDryWould", st.Text)
+		return nil
+	}
+	route, jobID, _, err := r.s.ownFlyAdd(ctx, t, req)
+	if err != nil {
+		return err
+	}
+	jc.Log("hub.scriptFlyOwn", route.Name, route.ID)
+	return r.waitHubJob(ctx, jc, jobID)
 }
 
 // createVM создаёт машину через задание VMProvision и ждёт его; новая
