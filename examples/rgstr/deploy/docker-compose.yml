@@ -6,7 +6,7 @@
 # сменить его при первом входе в /ui, потом — пароль плагину rgstr.
 services:
   rgstr:
-    image: ghcr.io/piqab/rgstr:1.7.0
+    image: ghcr.io/piqab/rgstr:1.10.1
     restart: unless-stopped
     environment:
       RGSTR_STORAGE: /data
@@ -19,6 +19,24 @@ services:
       # Удалять — только администратору (без списка могут все пользователи).
       RGSTR_ADMINS: ${RGSTR_ADMIN_USER}
       RGSTR_GC_INTERVAL: 1h
+      # Сканирование уязвимостей (Trivy есть в образе): при push и раз в
+      # сутки; база Trivy (~70 МБ) качается из интернета (mirror.gcr.io,
+      # запасной — ghcr.io) при первом скане и лежит в томе. Скан берёт несколько сотен МБ памяти — false выключает.
+      RGSTR_SCAN_ENABLED: ${RGSTR_SCAN_ENABLED:-true}
+      # Проекты-кеши других реестров: dockerhub=https://registry-1.docker.io,ghcr=https://ghcr.io
+      # (docker pull <домен>/dockerhub/library/nginx). Логин Docker Hub —
+      # выше лимиты pull; пароль — токен доступа, в «Секреты» → «.env».
+      RGSTR_PROXIES: ${RGSTR_PROXIES:-}
+      RGSTR_PROXY_DOCKERHUB_USERNAME: ${RGSTR_PROXY_DOCKERHUB_USERNAME:-}
+      RGSTR_PROXY_DOCKERHUB_PASSWORD: ${RGSTR_PROXY_DOCKERHUB_PASSWORD:-}
+      # Бэкапы по расписанию в S3 (s3://бакет/префикс); пусто — выключены.
+      RGSTR_BACKUP_TARGET: ${RGSTR_BACKUP_TARGET:-}
+      RGSTR_BACKUP_SCHEDULE: ${RGSTR_BACKUP_SCHEDULE:-0 3 * * *}
+      RGSTR_BACKUP_KEEP: ${RGSTR_BACKUP_KEEP:-7}
+      RGSTR_BACKUP_S3_ENDPOINT: ${RGSTR_BACKUP_S3_ENDPOINT:-}
+      RGSTR_BACKUP_S3_REGION: ${RGSTR_BACKUP_S3_REGION:-}
+      RGSTR_BACKUP_S3_ACCESS_KEY: ${RGSTR_BACKUP_S3_ACCESS_KEY:-}
+      RGSTR_BACKUP_S3_SECRET_KEY: ${RGSTR_BACKUP_S3_SECRET_KEY:-}
     volumes:
       - rgstr-data:/data
     # Наружу — только через сайт (HTTPS); порт — на 127.0.0.1 хоста, где его

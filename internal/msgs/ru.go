@@ -2034,6 +2034,7 @@ var ruCatalog = map[string]string{
 	"hub.ownClusterNotOwn":                                "кластер %d — не этого токена",
 	"hub.ownClusterIssued":                                "kubeconfig кластера %s уже выдан — повторно не выдаётся; при потере — пересоздайте кластер",
 	"hub.ownClusterNotReady":                              "кластер %s ещё не готов — kubeconfig будет после окончания создания",
+	"hub.tokenK8sRegistryLonghorn":                        "Registry %s: backup.method Longhorn нельзя — оператор создаёт RecurringJob вне namespace клиента; копии — методом S3 (их делает сам rgstr) или VolumeSnapshot",
 	"hub.tokenK8sServiceType":                             "Service %s: тип %s нельзя — в namespace клиента только ClusterIP (наружу — Ingress в своём домене или маршрут Traffic Fly)",
 	"hub.tokenK8sExternalIPs":                             "Service %s: externalIPs нельзя — так перехватывают чужие адреса",
 	"hub.tokenK8sIngressHost":                             "%s: имя %q — не в домене токена %q (без домена Ingress и маршруты нельзя)",

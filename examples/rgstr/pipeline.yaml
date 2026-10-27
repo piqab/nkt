@@ -18,6 +18,10 @@ compose:
     RGSTR_AUTH_SECRET: generate:hex32
     RGSTR_ADMIN_USER: admin
     RGSTR_ADMIN_PASSWORD: generate:password
+    # Необязательно (по умолчанию — в deploy/docker-compose.yml):
+    # RGSTR_SCAN_ENABLED: "false"                     # скан уязвимостей включён
+    # RGSTR_PROXIES: dockerhub=https://registry-1.docker.io
+    # RGSTR_BACKUP_TARGET: s3://backups/rgstr         # и RGSTR_BACKUP_S3_*
   # docker push — слои по сотням мегабайт: max_body "0" — без предела и без
   # буферизации запроса у прокси.
   site:

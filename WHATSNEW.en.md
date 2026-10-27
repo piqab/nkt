@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.17 — 2026-10-27
+
+- **The rgstr plugin 1.1 — for rgstr 1.10.**
+  - Image vulnerabilities: the worst severity on repositories and tags, a tag's Trivy scan report (critical first), “Scan”, blocking pulls of vulnerable images in a project.
+  - Cache projects of Docker Hub and other registries — when creating a project, in the window and with `rgstr project NAME proxy URL`.
+  - A “Backups” section: target, schedule, last success, error, archives, “Back up now”.
+  - New findings: scanning off or failing, critical vulnerabilities, backups off, failed or late, a cache reaching its upstream over HTTP. The summary shows LDAP and OIDC.
+  - Commands `rgstr scan`, `rgstr backup run`, MCP tools `rgstr_vulns`, `rgstr_scan_run`, `rgstr_backups`, `rgstr_backup_run`, `rgstr_project_block`. With older rgstr the plugin works, just without the new sections.
+- **The rgstr example** — image 1.10.1, vulnerability scanning on, a Docker Hub cache and S3 backups through pipeline `env` variables.
+- **The “rgstr and rgstroperator in nkt” article** is updated for rgstr 1.10.1 and operator 0.5.1: scanning, cache and backups on a host; operator backups (S3, Longhorn from cluster add-ons, VolumeSnapshot), an rgstr cluster on PostgreSQL and S3, LDAP/OIDC sign-in; what to keep in mind in a client namespace.
+- **Security:** the hub refuses a token's `Registry` with `backup.method: Longhorn` — the operator would create a `RecurringJob` outside the client namespace.
+
 ## v1.17.16 — 2026-10-27
 
 - **Longhorn in clusters.** Block volumes replicated across nodes — a checkbox when creating a cluster, like Cilium.

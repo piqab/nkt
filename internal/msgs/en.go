@@ -2035,6 +2035,7 @@ var enCatalog = map[string]string{
 	"hub.ownClusterNotOwn":                                "cluster %d does not belong to this token",
 	"hub.ownClusterIssued":                                "the kubeconfig of cluster %s was already issued — it is not issued again; if lost, re-create the cluster",
 	"hub.ownClusterNotReady":                              "cluster %s is not ready yet — the kubeconfig comes when creation finishes",
+	"hub.tokenK8sRegistryLonghorn":                        "Registry %s: backup.method Longhorn is not allowed — the operator creates a RecurringJob outside the client namespace; back up with the S3 method (rgstr does it itself) or VolumeSnapshot",
 	"hub.tokenK8sServiceType":                             "Service %s: type %s is not allowed — only ClusterIP in a client namespace (expose through an Ingress in your domain or a Traffic Fly route)",
 	"hub.tokenK8sExternalIPs":                             "Service %s: externalIPs are not allowed — they hijack other addresses",
 	"hub.tokenK8sIngressHost":                             "%s: name %q is not in the token's domain %q (without a domain, Ingress and routes are not allowed)",

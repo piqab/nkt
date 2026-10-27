@@ -32,9 +32,14 @@ func TestClientCRDsAndRegistry(t *testing.T) {
 	if _, err := tokenK8sNamespaces(ok, []string{"shop"}, "c.example.com"); err != nil {
 		t.Fatal(err)
 	}
+	s3 := "apiVersion: registry.rgstr.io/v1alpha1\nkind: Registry\nmetadata: {name: r, namespace: shop}\nspec: {backup: {enabled: true, method: S3, s3: {bucket: b, secretRef: {name: s}}}, scan: {enabled: true}, proxies: [{name: dockerhub, url: 'https://registry-1.docker.io'}]}"
+	if _, err := tokenK8sNamespaces(s3, []string{"shop"}, "c.example.com"); err != nil {
+		t.Fatal(err)
+	}
 	for _, bad := range []string{
 		"apiVersion: registry.rgstr.io/v1alpha1\nkind: Registry\nmetadata: {name: r, namespace: shop}\nspec: {serviceType: LoadBalancer}",
 		"apiVersion: registry.rgstr.io/v1alpha1\nkind: Registry\nmetadata: {name: r, namespace: shop}\nspec: {ingress: {enabled: true, host: registry.evil.com}}",
+		"apiVersion: registry.rgstr.io/v1alpha1\nkind: Registry\nmetadata: {name: r, namespace: shop}\nspec: {backup: {enabled: true, method: Longhorn, longhorn: {namespace: kube-system}}}",
 	} {
 		if _, err := tokenK8sNamespaces(bad, []string{"shop"}, "c.example.com"); err == nil {
 			t.Errorf("accepted:\n%s", bad)
