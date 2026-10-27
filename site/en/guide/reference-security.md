@@ -220,7 +220,7 @@ outside clients. What holds them:
     through the API (not MCP), and a reissue disables the old one;
   - operator resources (CRDs) — only those the administrator ticked in
     “Client resources” (aggregated into `edit`; Kubernetes, RBAC,
-    admission, networking and Cilium groups — never). What the operator
+    admission, networking, Cilium and Longhorn groups — never). What the operator
     creates for a client resource passes the same admission policies; the
     hub checks an rgstroperator `Registry` up front (Service — ClusterIP,
     ingress — within the token's domain).

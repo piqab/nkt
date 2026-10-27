@@ -1243,6 +1243,10 @@ func clusterSpecFromArgs(h store.Host, st script.Step) (ClusterSpec, error) {
 		spec.KubeProxyReplacement = st.Args["no-kube-proxy"] == "true"
 	}
 	spec.K8sVersion = st.Args["version"]
+	if a := st.Args["addon"]; a != "" {
+		name, ver, _ := strings.Cut(a, "=")
+		spec.Addons = []ClusterAddon{{Name: name, Version: ver}}
+	}
 	if spec.Expose {
 		spec.ExposeAPI, spec.ExposeHTTP, spec.ExposeHTTPS = atoi("api", 6443), atoi("http", 80), atoi("https", 443)
 	}

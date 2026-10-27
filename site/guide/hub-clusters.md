@@ -29,8 +29,8 @@ Traffic Fly, — [Кластер: от нуля до первого пода](/g
 **kubeadm**), **версия Kubernetes** (актуальная stable по умолчанию и три
 предыдущие ветки), топология — одна машина / 1 control plane + N worker /
 3 control plane + N worker, размеры машин, образ, сеть, **проброс
-портов** с хоста (API 6443 и порты приложений) и **Cilium** по галочке
-(с заменой kube-proxy). Внутри узла порт API всегда 6443; порт в
+портов** с хоста (API 6443 и порты приложений), **Cilium** по галочке
+(с заменой kube-proxy) и тома **Longhorn** с выбором версии (ниже). Внутри узла порт API всегда 6443; порт в
 «пробросить наружу» относится к хосту.
 
 ## Раздел «Кластеры»: несколько хостов
@@ -77,7 +77,7 @@ WireGuard, ping между хостами, доступность ссылок �
   (`registries.registry.rgstr.io`). Хаб применяет ClusterRole
   `nkt-client-crds` с метками `aggregate-to-edit` и `aggregate-to-admin` —
   роль `edit` namespace клиента получает на них все права. Группы
-  Kubernetes, прав, допуска, сети и Cilium не отдаются; что оператор
+  Kubernetes, прав, допуска, сети, Cilium и Longhorn не отдаются; что оператор
   создаёт по ресурсу клиента, проходит те же политики допуска. Окно — с
   диффом, список едет в экспорт. Пример —
   [rgstr и rgstroperator](/guide/hub-plugin-rgstr).
@@ -133,6 +133,38 @@ hub:<файл>`, `endpoint АДРЕС` ([Сценарии](/guide/hub-scripts)).
   (последняя стабильная, с проверкой суммы) и `cilium install`; «заменить
   kube-proxy» — `--disable-kube-proxy` у k3s,
   `--skip-phases=addon/kube-proxy` у kubeadm.
+- **Longhorn** (галочка «Longhorn» и версия чарта; в сценарии — `addon
+  longhorn[=1.12.1]`, в API и MCP — `"addons":[{"name":"longhorn",
+  "version":"1.12.1"}]`) — блочные тома с репликами по узлам. Ставится
+  последним шагом, когда все узлы `Ready`:
+  - на каждом узле — `open-iscsi`, `nfs-common` (тома ReadWriteMany),
+    модуль `iscsi_tcp`, служба `iscsid`; если работает `multipathd`, в
+    журнале — предупреждение (его `multipath.conf` nkt не трогает);
+  - на первом control plane — чарт `longhorn/longhorn` из
+    `https://charts.longhorn.io` в `longhorn-system` (helm ставится сам,
+    если его нет), ожидание `longhorn-manager`;
+  - реплик томов — по узлу, не больше трёх (у одиночного кластера —
+    одна);
+  - Longhorn — StorageClass **по умолчанию**: у прежнего (`local-path` в
+    k3s) метка снимается, а k3s перестаёт вести его манифестом
+    (`local-storage.yaml.skip`), иначе вернул бы метку при перезапуске.
+
+  **Версия:** пусто — версия nkt по умолчанию (сейчас 1.12.1); список —
+  последние патчи четырёх последних веток из `index.yaml` репозитория
+  (кэш час, `GET /api/hub/k8s-addon-versions?addon=longhorn`), версии, не
+  подходящие к Kubernetes кластера (`kubeVersion` чарта), выбрать нельзя.
+  Сухой прогон проверяет версию по репозиторию и предупреждает, если диск
+  узлов меньше 20 ГБ — реплики лежат в `/var/lib/longhorn` на нём же.
+  Добавленные потом worker'ы готовятся тем же шагом. Группа `longhorn.io`
+  клиентам не отдаётся («Ресурсы для клиентов») — они пользуются
+  Longhorn только через PVC.
+- **Дополнения у готового кластера** — кнопка «Дополнения»: какая версия
+  Longhorn стоит (по `helm` на control plane), установка или обновление
+  заданием (`POST /api/hub/clusters/{id}/addons {"name":"longhorn",
+  "version":"1.12.1"}`, MCP `cluster_addons`, `cluster_addon_install`).
+  Обновление — только вперёд и не дальше следующей минорной ветки за раз
+  (1.11 → 1.12), как требует Longhorn; прежние values сохраняются
+  (`--reuse-values`).
 - **Пробросить наружу** — DNAT с портов хоста (`6443`, `80`, `443`, любой
   можно заменить или обнулить) на control plane: свои цепочки `NKT-PF`,
   юнит `nkt-portforward.service` восстанавливает их при загрузке.

@@ -419,7 +419,7 @@ on web1 cert renew example.org
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]` {#cmd-k8s-create}
+### `on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]` {#cmd-k8s-create}
 
 Создаёт кластер Kubernetes на виртуалках хоста — как «новый кластер» в списке хостов: машины из облачного образа с nkt, control plane, присоединение узлов, ожидание Ready, проброс и kubeconfig (скачивается на хабе в карточке кластера).
 
@@ -434,6 +434,7 @@ on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 | `cni` |  | cilium — Cilium вместо flannel (ставится после control plane); flannel — как у варианта по умолчанию |
 | `no-kube-proxy` |  | с cilium: заменить kube-proxy на Cilium (eBPF) |
 | `version` |  | минорная версия Kubernetes: у kubeadm — ветка pkgs.k8s.io, у k3s — канал v1.36; по умолчанию — актуальная stable |
+| `addon` |  | дополнение поверх готового кластера: longhorn (блочные тома с репликами по узлам, StorageClass по умолчанию) — версия чарта через «=», без неё — версия nkt по умолчанию |
 | `expose` |  | пробросить порты 6443, 80, 443 хоста в control plane |
 | `api / http / https` |  | порты хоста при expose: api (6443), http (80), https (443); 0 — не пробрасывать |
 

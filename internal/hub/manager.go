@@ -275,6 +275,9 @@ type Manager struct {
 	k8sStableMu sync.Mutex
 	k8sStable   string
 	k8sStableAt time.Time
+	// addonIdx — версии чартов дополнений из index.yaml (см. addonIndexAll).
+	addonIdxMu sync.Mutex
+	addonIdx   map[string]addonIndex
 
 	// jobs — задания хаба (установка хоста — одно из них, см.
 	// hostinstall.go); задаётся SetJobs после создания менеджера.

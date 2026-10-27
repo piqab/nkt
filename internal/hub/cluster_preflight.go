@@ -107,6 +107,10 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 	if spec.CNI == "cilium" {
 		jc.Log("hub.preflightPlanCilium", map[bool]string{true: "kube-proxy replacement", false: "kube-proxy"}[spec.KubeProxyReplacement])
 	}
+	for _, a := range spec.Addons {
+		jc.Log("hub.preflightPlanAddon", a.Name, a.Version, addonReplicas(len(nodes)))
+	}
+	r.addonPreflight(ctx, spec, add)
 
 	// Имя свободно.
 	if list, err := r.m.db.ListClusters(ctx); err == nil {
@@ -302,6 +306,10 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 		}
 		if spec.CNI == "cilium" {
 			urls = append(urls, "https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz.sha256sum")
+		}
+		if len(spec.Addons) > 0 {
+			// Чарт Longhorn берёт helm на control plane — тот же интернет хоста.
+			urls = append(urls, k8s.LonghornRepoURL+"/index.yaml")
 		}
 		var toDownload []string
 		for id := range images {

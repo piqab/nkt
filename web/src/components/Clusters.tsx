@@ -11,6 +11,7 @@ import { Banner, Card, DiffView, ErrorNote, Modal, formatBytesShort, formatRelat
 import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { K8sUpgradeModal } from './K8sUpgrade'
+import { ClusterAddonsModal, LonghornField, addonsBody, type LonghornChoice } from './ClusterAddons'
 import { confirmAction } from './confirm'
 import { tx, type Msg } from '../msg'
 
@@ -70,6 +71,7 @@ export function NewClusterModal({
   const [ports, setPorts] = useState<{ api: number | null; http: number | null; https: number | null }>({ api: 6443, http: 80, https: 443 })
   const [cilium, setCilium] = useState(true)
   const [kpr, setKPR] = useState(false)
+  const [longhorn, setLonghorn] = useState<LonghornChoice>({ on: false, version: '' })
   const [imageID, setImageID] = useState('')
   const [network, setNetwork] = useState('')
   const [cp, setCP] = useState({ vcpus: 2, mem: 4096, disk: 30 })
@@ -107,6 +109,7 @@ export function NewClusterModal({
           w_vcpus: w.vcpus,
           w_memory_mb: w.mem,
           w_disk_gb: w.disk,
+          addons: addonsBody(longhorn),
   })
 
   async function start(dry: boolean) {
@@ -230,6 +233,7 @@ export function NewClusterModal({
             {t('clusters.kpr')} <span className="small muted">{t('clusters.kprHint')}</span>
           </span>
         </label>
+        <LonghornField value={longhorn} onChange={setLonghorn} k8s={k8sVersion || versions.data?.stable || ''} />
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
           <Checkbox checked={expose} onChange={(e) => setExpose(e.target.checked)} />
           <span>
@@ -274,6 +278,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   const [upgrade, setUpgrade] = useState<Cluster | null>(null)
   const [ingressOf, setIngressOf] = useState<Cluster | null>(null)
   const [crdsOf, setCrdsOf] = useState<Cluster | null>(null)
+  const [addonsOf, setAddonsOf] = useState<Cluster | null>(null)
   const clusters = list.data ?? []
   const anyBusy = clusters.some((c) => c.status === 'creating' || c.status === 'deleting')
   if (anyBusy && pollMs !== 4_000) setPollMs(4_000)
@@ -309,6 +314,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
     <Card title={t('clusters.title')} subtitle={t('clusters.subtitle', { count: clusters.length })}>
       {ingressOf && <ClientIngressModal cluster={ingressOf} onClose={() => setIngressOf(null)} />}
       {crdsOf && <ClientCRDsModal cluster={crdsOf} onClose={() => setCrdsOf(null)} />}
+      {addonsOf && <ClusterAddonsModal cluster={addonsOf} onClose={() => setAddonsOf(null)} onOpenJob={onOpenJob} />}
       {upgrade && (
         <K8sUpgradeModal
           title={t('k8s.upgrade.clusterTitle', { name: upgrade.name })}
@@ -378,6 +384,13 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                 <Button size="small" onClick={() => setUpgrade(c)}>
                   {t('k8s.upgrade.button')}
                 </Button>
+              )}
+              {c.status === 'ready' && c.nodes.length > 0 && (
+                <Tooltip title={t('clusters.addonsHint')}>
+                  <Button size="small" onClick={() => setAddonsOf(c)}>
+                    {t('clusters.addons')}
+                  </Button>
+                </Tooltip>
               )}
               {c.status === 'ready' && c.nodes.length > 0 && (
                 <Tooltip title={t('clusters.clientCRDsHint')}>

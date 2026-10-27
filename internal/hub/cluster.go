@@ -77,6 +77,17 @@ type ClusterSpec struct {
 	WVCPUs     int `json:"w_vcpus"`
 	WMemoryMB  int `json:"w_memory_mb"`
 	WDiskGB    int `json:"w_disk_gb"`
+	// Addons — дополнения поверх готового кластера (Longhorn): ставятся
+	// последним шагом создания и кнопкой «Дополнения» у кластера.
+	Addons []ClusterAddon `json:"addons,omitempty"`
+}
+
+// ClusterAddon — дополнение и версия его чарта (пусто — версия nkt по
+// умолчанию; при создании записывается выбранная, чтобы продолжение и
+// новые узлы шли той же).
+type ClusterAddon struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
 }
 
 // Placement — строка размещения: на хосте — N машин с ролью или сам хост.
@@ -171,6 +182,9 @@ func (s *ClusterSpec) Validate() error {
 	}
 	if s.CNI != "" && s.CNI != "cilium" {
 		return msgs.Errorf("k8s.badCNI", s.CNI)
+	}
+	if err := validateAddons(s.Addons); err != nil {
+		return err
 	}
 	if s.CNI != "cilium" {
 		s.KubeProxyReplacement = false
@@ -440,6 +454,8 @@ type clusterResume struct {
 	// Installed — узлы, на которых роль уже стоит.
 	Installed map[string]bool `json:"installed"`
 	Exposed   bool            `json:"exposed"`
+	// Addons — пройденные шаги дополнений: «имя:prepare:узел», «имя:install».
+	Addons map[string]bool `json:"addons,omitempty"`
 }
 
 // ClusterRunner — создание и пополнение кластера.
@@ -555,6 +571,9 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	}
 	total := len(nodes) + 4
 	if spec.NetworkMode == NetworkWireGuard {
+		total++
+	}
+	if len(spec.Addons) > 0 {
 		total++
 	}
 	step := 0
@@ -763,6 +782,23 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	}
 	if p.AddWorkers > 0 {
 		_ = r.m.db.SetClusterWorkers(ctx, cl.ID, cl.Workers+p.AddWorkers)
+	}
+
+	// 5. Дополнения: подготовить узлы этого запуска (при пополнении —
+	// только новые worker'ы: чарт уже стоит, его DaemonSet придёт на них
+	// сам) и поставить чарт на cp1.
+	if len(spec.Addons) > 0 {
+		step++
+		jc.StepKey(step, total, "hub.clusterStepAddons")
+		var prepare []store.Host
+		for _, nd := range nodes {
+			if h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name]); err == nil {
+				prepare = append(prepare, h)
+			}
+		}
+		if err := r.m.applyAddons(ctx, jc, spec, cp1, prepare, len(done.Hosts), p.AddWorkers == 0, done); err != nil {
+			return err
+		}
 	}
 	jc.Log("hub.clusterDone", spec.Name, serverAddr)
 	return nil

@@ -80,4 +80,10 @@ func TestClusterSpecFromScriptPlacement(t *testing.T) {
 	if err != nil || len(spec.Placements) != 0 || spec.Workers != 2 || spec.Topology != TopologyCP1 {
 		t.Errorf("legacy: %+v %v", spec, err)
 	}
+	// Дополнение: версия из сценария; без неё — версия по умолчанию после Validate.
+	sc, _ = script.Parse(`on hv1 k8s create lab nodes 1+2 addon longhorn=1.11.3`, nil)
+	spec, err = r.clusterSpecFromStep(ctx, done, h, sc.Steps[0])
+	if err != nil || len(spec.Addons) != 1 || spec.Addons[0] != (ClusterAddon{Name: "longhorn", Version: "1.11.3"}) {
+		t.Errorf("addon: %+v %v", spec.Addons, err)
+	}
 }

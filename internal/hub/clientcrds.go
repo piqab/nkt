@@ -32,6 +32,8 @@ var clientCRDDenyGroups = []string{
 	"rbac.authorization.k8s.io", "admissionregistration.k8s.io", "apiextensions.k8s.io", "apiregistration.k8s.io",
 	"networking.k8s.io", "policy", "cilium.io", "certificates.k8s.io", "authentication.k8s.io", "authorization.k8s.io",
 	"storage.k8s.io", "node.k8s.io", "scheduling.k8s.io", "gateway.networking.k8s.io", "coordination.k8s.io",
+	// Longhorn: тома, узлы, резервные копии — общие для всего кластера.
+	"longhorn.io",
 }
 
 func (s *Server) clientCRDs(ctx context.Context) map[string][]string {
