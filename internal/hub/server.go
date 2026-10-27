@@ -302,6 +302,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/clusters", s.handleClusterList)
 				r.Get("/hub/cluster-images", s.handleClusterImages)
 				r.Get("/hub/k8s-versions", s.handleK8sVersions)
+				r.Get("/hub/k8s-addon-versions", s.handleAddonVersions)
 				r.Get("/hub/cluster-presets", s.handleClusterPresets)
 				r.Get("/hub/clusters/{id}/nodes", s.handleClusterNodes)
 
@@ -573,6 +574,8 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/clusters/{id}/client-ingress", s.handleClientIngress)
 					r.Get("/hub/clusters/{id}/client-crds", s.handleClientCRDs)
 					r.Put("/hub/clusters/{id}/client-crds", s.handleClientCRDs)
+					r.Get("/hub/clusters/{id}/addons", s.handleClusterAddons)
+					r.Post("/hub/clusters/{id}/addons", s.handleClusterAddons)
 					r.Put("/hub/clusters/{id}/client-ingress", s.handleClientIngress)
 					r.Get("/hub/vm/limit-defaults", s.handleVMLimitDefaults)
 					r.Put("/hub/vm/limit-defaults", s.handleVMLimitDefaults)

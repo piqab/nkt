@@ -92,6 +92,9 @@ var onCommands = map[string]bool{
 }
 
 var k8sNodesRe = regexp.MustCompile(`^(single|[13]\+\d{1,2})$`)
+// k8sAddonRe — дополнение кластера и, через «=», версия его чарта.
+var k8sAddonRe = regexp.MustCompile(`^longhorn(=[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})?$`)
+
 var k8sVersionRe = regexp.MustCompile(`^\d+\.\d+$`)
 
 // paramPlaceholder — чем подставляется параметр без значения при
@@ -650,7 +653,7 @@ func parseOn(toks []string) (Step, error) {
 			}
 			return Step{Kind: KindK8sDestroy, Name: toks[2]}, nil
 		case "create":
-			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "api", "http", "https", "cni", "version"}, []string{"expose", "no-kube-proxy"})
+			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "api", "http", "https", "cni", "version", "addon"}, []string{"expose", "no-kube-proxy"})
 			if err != nil {
 				return Step{}, err
 			}
@@ -685,6 +688,9 @@ func parseOn(toks []string) (Step, error) {
 			}
 			if v := args["version"]; v != "" && !k8sVersionRe.MatchString(v) {
 				return Step{}, msgs.Errorf("script.badK8sVersion", v)
+			}
+			if a := args["addon"]; a != "" && !k8sAddonRe.MatchString(a) {
+				return Step{}, msgs.Errorf("script.badK8sAddon", a)
 			}
 			return Step{Kind: KindK8sCreate, Name: toks[2], Args: args}, nil
 		}

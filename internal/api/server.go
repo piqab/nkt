@@ -463,6 +463,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/k8s/upgrade/node", s.handleK8sUpgradeNode)
 				r.Post("/k8s/helm/install", s.handleHelmInstall)
 				r.Post("/k8s/cilium/ingress", s.handleK8sCiliumIngress)
+				r.Post("/k8s/addon", s.handleK8sAddon)
 				r.Post("/k8s/helm/upgrade", s.handleHelmUpgrade)
 				r.Post("/k8s/helm/rollback", s.handleHelmRollback)
 				r.Post("/k8s/helm/uninstall", s.handleHelmUninstall)

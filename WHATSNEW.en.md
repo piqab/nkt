@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.16 — 2026-10-27
+
+- **Longhorn in clusters.** Block volumes replicated across nodes — a checkbox when creating a cluster, like Cilium.
+  - The chart version can be chosen: the latest patches of recent branches from the Longhorn repository; versions that do not fit the cluster's Kubernetes cannot be picked. Without a choice — the nkt default (1.12.1).
+  - The hub prepares every node itself (open-iscsi, nfs-common, iscsid), installs the chart and makes Longhorn the default StorageClass; replicas — one per node, at most three. Workers added later are prepared automatically.
+  - In a script — `k8s create … addon longhorn[=VERSION]`, in the API and MCP — the `addons` field; own token clusters can use it too.
+- **The “Add-ons” button of a ready cluster.** Shows which Longhorn version is installed, installs it on a running cluster or upgrades it — as a job. Upgrades go forward only and no further than the next minor branch, as Longhorn requires.
+
 ## v1.17.15 — 2026-10-27
 
 - **Your own rgstr image registry.** A new pipeline example “rgstr — image registry” and the catalog plugin `rgstr`.

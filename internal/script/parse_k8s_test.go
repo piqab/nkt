@@ -120,3 +120,18 @@ func TestK8sFirstPodExample(t *testing.T) {
 		t.Error("examples/scripts/k8s-first-pod.nkt разошёлся с K8sFirstPodExample")
 	}
 }
+
+func TestK8sCreateAddon(t *testing.T) {
+	sc, issues := Parse("on hv1 k8s create lab nodes 1+2 addon longhorn=1.12.1\non hv1 k8s create lab2 addon longhorn", nil)
+	if len(issues) > 0 {
+		t.Fatalf("%v", issues[0].Err)
+	}
+	if sc.Steps[0].Args["addon"] != "longhorn=1.12.1" || sc.Steps[1].Args["addon"] != "longhorn" {
+		t.Fatalf("%+v", sc.Steps)
+	}
+	for _, bad := range []string{"addon rook", "addon longhorn=latest", "addon longhorn=1.12"} {
+		if _, issues := Parse("on hv1 k8s create lab "+bad, nil); len(issues) == 0 {
+			t.Errorf("%s accepted", bad)
+		}
+	}
+}

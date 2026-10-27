@@ -66,6 +66,7 @@ admin token or a token by permission (within its limits).
 | `job_status`, `job_log` | read | a hub job and its log |
 | `list_scripts`, `get_script` | read | saved scripts |
 | `list_migrations`, `list_clusters` | read | stack moves, clusters |
+| `cluster_addons`, `cluster_addon_install` | admin | cluster add-ons (Longhorn): the installed version; install or upgrade as a job |
 | `fly_map`, `fly_status` | read, no limit | Traffic Fly map and state |
 | `check_script` | admin | “Check” for a script text, changes nothing |
 | `run_script` | admin | run a script (`dry_run`; `dry_first` — a dry run, then the run if it passes; `values` — answers to its questions) |

@@ -369,6 +369,8 @@ function sign(secret, method, uri, body = '') {
 | `GET`, `PUT /api/hub/hosts/{id}/port-pool` | администратор | пул портов хоста (`{"from":20000,"to":20999}`; `from` 0 — выключить) |
 | `GET`, `POST /api/hub/hosts/{id}/vm/ports`, `DELETE …/vm/ports/{port}` | администратор | порты пула на машину (`{"vm_port":22,"proto":"tcp"}`) → `port`, `address`; по правам — «порты», в потолке |
 | `GET`, `POST /api/hub/own/fly`, `DELETE /api/hub/own/fly/{route}` | по правам | свои маршруты Traffic Fly (`{"name":"…","host_id":…,"port":8080}`) → `job_id` раскладки |
+| `GET /api/hub/k8s-addon-versions?addon=longhorn` | чтение | версии чарта дополнения (`default`, `versions[]` с `kube_version`) — из `index.yaml`, кэш час |
+| `GET`, `POST /api/hub/clusters/{id}/addons` | администратор | дополнения кластера: что стоит (`installed`) и что в описании; `{"name":"longhorn","version":"1.12.1"}` — поставить или обновить заданием → `job_id` |
 | `GET`, `PUT /api/hub/clusters/{id}/client-crds` | администратор | ресурсы операторов для namespace клиентов (`{"resources":["registries.registry.rgstr.io"]}`): ClusterRole `nkt-client-crds` с агрегацией в `edit` |
 | `DELETE /api/hub/hosts/{id}/vm` | администратор | удалить машину целиком: домен, диски, запись, учёт → `job_id` |
 | `POST /api/hub/fail2ban/fleet` | администратор | бан или разбан (`{"action":"ban","ips":[…],"host_ids":[…]}`) |

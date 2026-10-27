@@ -31,7 +31,8 @@ pod](/en/guide/k8s-first-pod).
 and the three previous branches), the topology — one machine / 1 control
 plane + N workers / 3 control planes + N workers, machine sizes, image,
 network, **port publishing** from the host (API 6443 and application
-ports) and **Cilium** by a checkbox (with kube-proxy replacement). Inside
+ports), **Cilium** by a checkbox (with kube-proxy replacement) and
+**Longhorn** volumes with a chart version (below). Inside
 a node the API port is always 6443; the port in “publish outside” belongs
 to the host.
 
@@ -82,7 +83,7 @@ into the cache and brings up the libvirt network right away.
   (`registries.registry.rgstr.io`). The hub applies the ClusterRole
   `nkt-client-crds` with the `aggregate-to-edit` and `aggregate-to-admin`
   labels, so the `edit` role of a client namespace gets full rights on
-  them. Kubernetes, RBAC, admission, networking and Cilium groups are not
+  them. Kubernetes, RBAC, admission, networking, Cilium and Longhorn groups are not
   given; what the operator creates for a client resource passes the same
   admission policies. The window shows a diff; the list goes into the
   export. Example — [rgstr and rgstroperator](/en/guide/hub-plugin-rgstr).
@@ -142,6 +143,40 @@ hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
   stable, checksum-verified) is installed and `cilium install` runs;
   "replace kube-proxy" — `--disable-kube-proxy` for k3s,
   `--skip-phases=addon/kube-proxy` for kubeadm.
+- **Longhorn** (the "Longhorn" checkbox and a chart version; in a script —
+  `addon longhorn[=1.12.1]`, in the API and MCP —
+  `"addons":[{"name":"longhorn","version":"1.12.1"}]`) — block volumes
+  replicated across nodes. Installed as the last step, once every node is
+  `Ready`:
+  - on every node — `open-iscsi`, `nfs-common` (ReadWriteMany volumes), the
+    `iscsi_tcp` module, the `iscsid` service; if `multipathd` runs, the log
+    warns (nkt does not touch its `multipath.conf`);
+  - on the first control plane — the `longhorn/longhorn` chart from
+    `https://charts.longhorn.io` into `longhorn-system` (helm is installed
+    if missing), then waiting for `longhorn-manager`;
+  - volume replicas — one per node, at most three (one on a single-node
+    cluster);
+  - Longhorn becomes the **default** StorageClass: the previous one
+    (`local-path` on k3s) loses the flag, and k3s stops managing it from its
+    manifest (`local-storage.yaml.skip`) — otherwise a restart would bring
+    the flag back.
+
+  **Version:** empty — the nkt default (now 1.12.1); the list is the latest
+  patches of the last four branches from the repository `index.yaml`
+  (cached for an hour, `GET /api/hub/k8s-addon-versions?addon=longhorn`);
+  versions that do not fit the cluster's Kubernetes (the chart's
+  `kubeVersion`) cannot be chosen. The dry run checks the version against
+  the repository and warns when node disks are under 20 GB — replicas live
+  in `/var/lib/longhorn` on the same disk. Workers added later are
+  prepared by the same step. The `longhorn.io` group is never given to
+  clients ("Client resources") — they use Longhorn only through PVCs.
+- **Add-ons of a ready cluster** — the "Add-ons" button: which Longhorn
+  version is installed (by `helm` on the control plane), install or upgrade
+  as a job (`POST /api/hub/clusters/{id}/addons {"name":"longhorn",
+  "version":"1.12.1"}`, MCP `cluster_addons`, `cluster_addon_install`).
+  Upgrades go forward only and no further than the next minor branch at a
+  time (1.11 → 1.12), as Longhorn requires; the previous values are kept
+  (`--reuse-values`).
 - **Expose** — DNAT from host ports (`6443`, `80`, `443`, any can be
   changed or cleared) to the control plane: its own `NKT-PF` chains, the
   `nkt-portforward.service` unit restores them on boot. The kubeconfig

@@ -419,7 +419,7 @@ Example:
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
+### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
 
 Creates a Kubernetes cluster on the host's virtual machines — like “new cluster” in the host list: machines from a cloud image with nkt, control plane, joining nodes, waiting for Ready, port forward and kubeconfig (downloadable on the hub in the cluster card).
 
@@ -434,6 +434,7 @@ Creates a Kubernetes cluster on the host's virtual machines — like “new clus
 | `cni` |  | cilium — Cilium instead of flannel (installed after the control plane); flannel — the flavor default |
 | `no-kube-proxy` |  | with cilium: replace kube-proxy with Cilium (eBPF) |
 | `version` |  | the Kubernetes minor version: the pkgs.k8s.io branch for kubeadm, the v1.36 channel for k3s; default — the current stable |
+| `addon` |  | an add-on on top of the ready cluster: longhorn (block volumes replicated across nodes, the default StorageClass) — the chart version after “=”, without it the nkt default version |
 | `expose` |  | forward host ports 6443, 80, 443 to the control plane |
 | `api / http / https` |  | host ports with expose: api (6443), http (80), https (443); 0 — do not forward |
 
