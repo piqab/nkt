@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"github.com/piqab/nkt/internal/vmnet"
 	"net/http"
 	"net/netip"
 	"regexp"
@@ -201,6 +202,7 @@ func (s *Server) handleTokenUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	mailBefore := t.Perms.AllowMail
 	t.Name, t.Role, t.Hosts, t.Groups, t.IPs, t.ViaEdge, t.Perms = req.Name, req.Role, req.Hosts, req.Groups, req.IPs, req.ViaEdge, req.Perms
 	if !req.KeepExpiry {
 		t.ExpiresAt = expiryFromDays(req.ExpiresDays)
@@ -211,7 +213,28 @@ func (s *Server) handleTokenUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("hub.tokenNameTaken", req.Name))
 		return
 	}
+	// Почта: правила сети токена на хостах его машин — сразу.
+	if t.Perms.AllowMail != mailBefore {
+		go s.tokenMailPush(context.WithoutCancel(ctx), t)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// tokenMailPush — разрешение почты сети токена на всех хостах, где у него
+// машины или экземпляры LXD.
+func (s *Server) tokenMailPush(ctx context.Context, t store.APIToken) {
+	usage, _ := s.db.ListTokenUsage(ctx, t.ID)
+	seen := map[int64]bool{}
+	user := s.firstAdmin(ctx)
+	for _, u := range usage {
+		if u.Kind != store.UsageVM || seen[u.HostID] {
+			continue
+		}
+		seen[u.HostID] = true
+		_, err := s.hostCall(ctx, user, u.HostID, "POST", "/api/vm/isolation-mail",
+			map[string]any{"network": vmnet.IsolatedName(t.ID), "allow": t.Perms.AllowMail}, nil)
+		s.db.Audit(ctx, user, "token.mail", t.Name, auditOutcome(err), map[string]any{"host_id": u.HostID, "allow": t.Perms.AllowMail})
+	}
 }
 
 // handleTokenRotate — POST /hub/tokens/{id}/rotate: новый ключ и секрет,
@@ -417,7 +440,7 @@ func (s *Server) validateTokenPerms(ctx context.Context, p *store.TokenPerms) er
 	l := p.Limits
 	if l.CPU < 0 || l.CPU > 4096 || l.HostCPU < 0 || l.HostCPU > 4096 || l.ServiceCPU < 0 || l.ServiceCPU > 1024 || l.K8sCPU < 0 || l.K8sCPU > 4096 ||
 		l.MemMB < 0 || l.HostMemMB < 0 || l.ServiceMemMB < 0 || l.K8sMemMB < 0 || l.DiskGB < 0 || l.K8sStorageGB < 0 || l.MinFreeGB < 0 ||
-		l.VMs < 0 || l.VMs > 1000 || l.VMCPU < 0 || l.VMCPU > 512 || l.VMMemMB < 0 || l.VMDiskGB < 0 || l.VMSnapshots < 0 || l.VMSnapshots > 100 || l.Ports < 0 || l.Ports > 1000 || l.FlyRoutes < 0 || l.FlyRoutes > 1000 || l.K8sNamespaces < 0 || l.K8sNamespaces > 1000 || l.K8sClusters < 0 || l.K8sClusters > 100 || l.K8sPods < 0 || l.DeploysPerHour < 0 || l.DeploysPerHour > 10000 {
+		l.VMs < 0 || l.VMs > 1000 || l.VMCPU < 0 || l.VMCPU > 512 || l.VMMemMB < 0 || l.VMDiskGB < 0 || l.VMSnapshots < 0 || l.VMSnapshots > 100 || l.VMNetMbit < 0 || l.VMNetMbit > 100000 || l.VMIOPS < 0 || l.VMIOPS > 1000000 || l.VMDiskMBps < 0 || l.VMDiskMBps > 100000 || l.Ports < 0 || l.Ports > 1000 || l.FlyRoutes < 0 || l.FlyRoutes > 1000 || l.K8sNamespaces < 0 || l.K8sNamespaces > 1000 || l.K8sClusters < 0 || l.K8sClusters > 100 || l.K8sPods < 0 || l.DeploysPerHour < 0 || l.DeploysPerHour > 10000 {
 		return bad("limits")
 	}
 	if slices.Contains(acts, store.TokenActPipelineDeploy) && (l.CPU > 0 || l.HostCPU > 0) && l.ServiceCPU == 0 {

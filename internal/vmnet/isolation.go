@@ -2,10 +2,12 @@ package vmnet
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -61,7 +63,7 @@ var privateRanges = []string{
 //     нет, и обходить им правила незачем);
 //   - в сеть токена снаружи новые соединения не открываются, кроме
 //     перенаправленных хостом (DNAT: порты из пула, Traffic Fly).
-func IsolationRules(bridges []string) string {
+func IsolationRules(bridges []string, mail ...string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "table inet %s {}\ndelete table inet %s\n", IsolationTable, IsolationTable)
 	if len(bridges) == 0 {
@@ -74,6 +76,16 @@ func IsolationRules(bridges []string) string {
 	fmt.Fprintf(&b, "table inet %s {\n", IsolationTable)
 	fmt.Fprintf(&b, "\tset private4 {\n\t\ttype ipv4_addr\n\t\tflags interval\n\t\telements = { %s }\n\t}\n", strings.Join(privateRanges, ", "))
 	fmt.Fprintf(&b, "\tset isolated {\n\t\ttype ifname\n\t\telements = { %s }\n\t}\n", strings.Join(quoted, ", "))
+	// Мосты, которым разрешена почта (порт 25); пустое множество — никому.
+	b.WriteString("\tset mail_ok {\n\t\ttype ifname\n")
+	if len(mail) > 0 {
+		qm := make([]string, len(mail))
+		for i, br := range mail {
+			qm[i] = strconv.Quote(br)
+		}
+		fmt.Fprintf(&b, "\t\telements = { %s }\n", strings.Join(qm, ", "))
+	}
+	b.WriteString("\t}\n")
 	b.WriteString("\tchain input {\n\t\ttype filter hook input priority filter - 10; policy accept;\n")
 	b.WriteString("\t\tiifname @isolated ct state established,related accept\n")
 	b.WriteString("\t\tiifname @isolated udp dport { 53, 67 } accept\n")
@@ -88,6 +100,9 @@ func IsolationRules(bridges []string) string {
 	}
 	b.WriteString("\t\tiifname @isolated meta nfproto ipv6 drop\n")
 	b.WriteString("\t\tiifname @isolated ip daddr @private4 ct state new,invalid,untracked drop\n")
+	// Почта наружу — только сетям с разрешением: рассылки шли бы с адреса
+	// хоста.
+	b.WriteString("\t\tiifname @isolated iifname != @mail_ok tcp dport 25 ct state new drop\n")
 	// Внутрь — только то, что хост сам перенаправил (DNAT): порты из пула
 	// и Traffic Fly. Из сети токена к чужой машине через порт хоста не
 	// пройти — это отрезано правилом выше.
@@ -101,12 +116,29 @@ func IsolationRules(bridges []string) string {
 // LXD (1.17.7; у LXD мост называется как сеть). Нет ни virsh, ни lxc —
 // ошибка; нет одного из них — берётся другой.
 func (m *Manager) IsolatedBridges(ctx context.Context) ([]string, error) {
+	nets, err := m.isolatedNets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var bridges []string
+	for _, br := range nets {
+		bridges = append(bridges, br)
+	}
+	sort.Strings(bridges)
+	return bridges, nil
+}
+
+// isolatedNets — сети токенов хоста: имя сети → мост.
+func (m *Manager) isolatedNets(ctx context.Context) (map[string]string, error) {
 	all, virshErr := m.names(ctx, "--all")
 	lxd, lxdErr := m.lxdIsolated(ctx)
 	if virshErr != nil && lxdErr != nil {
 		return nil, virshErr
 	}
-	bridges := lxd
+	nets := map[string]string{}
+	for _, br := range lxd {
+		nets[br] = br
+	}
 	for _, name := range all {
 		if !IsIsolated(name) {
 			continue
@@ -120,10 +152,47 @@ func (m *Manager) IsolatedBridges(ctx context.Context) ([]string, error) {
 		if !bridgeRe.MatchString(n.Bridge) {
 			return nil, msgs.Errorf("vmnet.isolationNetworkUnreadable", name)
 		}
-		bridges = append(bridges, n.Bridge)
+		nets[name] = n.Bridge
 	}
-	sort.Strings(bridges)
-	return bridges, nil
+	return nets, nil
+}
+
+// mailFile — сети токенов, которым разрешена почта (порт 25).
+func (m *Manager) mailFile() string { return filepath.Join(m.tmpDir, "nkt-isolation-mail.json") }
+
+func (m *Manager) mailAllowed() []string {
+	var list []string
+	if raw, err := os.ReadFile(m.mailFile()); err == nil {
+		_ = json.Unmarshal(raw, &list)
+	}
+	return list
+}
+
+// SetMailAllowed разрешает или закрывает исходящий порт 25 сети токена и
+// ставит правила заново.
+func (m *Manager) SetMailAllowed(ctx context.Context, network string, allow bool) error {
+	if !IsIsolated(network) {
+		return msgs.Errorf("vmnet.notTokenNetwork", network)
+	}
+	list := m.mailAllowed()
+	i := slices.Index(list, network)
+	switch {
+	case allow && i < 0:
+		list = append(list, network)
+	case !allow && i >= 0:
+		list = slices.Delete(list, i, i+1)
+	default:
+		return nil
+	}
+	if err := os.MkdirAll(m.tmpDir, 0o755); err != nil {
+		return err
+	}
+	raw, _ := json.Marshal(list)
+	if err := os.WriteFile(m.mailFile(), raw, 0o600); err != nil {
+		return err
+	}
+	_, err := m.ApplyIsolation(ctx)
+	return err
 }
 
 // lxdIsolated — мосты сетей токенов LXD (lxc network list, CSV: имя,
@@ -152,10 +221,20 @@ func (m *Manager) ApplyIsolation(ctx context.Context) ([]string, error) {
 	if m.run == nil {
 		return nil, msgs.Errorf("vmnet.networkManagementUnavailableMode")
 	}
-	bridges, err := m.IsolatedBridges(ctx)
+	nets, err := m.isolatedNets(ctx)
 	if err != nil {
 		return nil, err
 	}
+	var bridges, mail []string
+	allowed := m.mailAllowed()
+	for name, br := range nets {
+		bridges = append(bridges, br)
+		if slices.Contains(allowed, name) {
+			mail = append(mail, br)
+		}
+	}
+	sort.Strings(bridges)
+	sort.Strings(mail)
 	if res, err := m.run(ctx, "sh", "-c", "command -v nft"); err != nil || res.ExitCode != 0 {
 		return nil, msgs.Errorf("vmnet.isolationNoNft")
 	}
@@ -163,7 +242,7 @@ func (m *Manager) ApplyIsolation(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	path := filepath.Join(m.tmpDir, "nkt-isolation.nft")
-	if err := os.WriteFile(path, []byte(IsolationRules(bridges)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(IsolationRules(bridges, mail...)), 0o644); err != nil {
 		return nil, err
 	}
 	defer os.Remove(path)

@@ -952,8 +952,15 @@ func (r *ScriptRunner) vmLifecycle(ctx context.Context, jc *jobs.Context, h stor
 		if err := r.s.vmSnapshotAllowed(ctx, vm); err != nil {
 			return err
 		}
-		_, err := r.s.hostCall(ctx, jc.Job.Author, h.ID, "POST", vmPath(vm, "/snapshots"), map[string]string{"name": st.Args["snap"]}, nil)
-		return err
+		commit, err := r.s.snapshotReserve(ctx, h.ID, vm.Name, st.Args["snap"])
+		if err != nil {
+			return err
+		}
+		if _, err := r.s.hostCall(ctx, jc.Job.Author, h.ID, "POST", vmPath(vm, "/snapshots"), map[string]string{"name": st.Args["snap"]}, nil); err != nil {
+			return err
+		}
+		commit()
+		return nil
 	case "revert":
 		_, err := r.s.hostCall(ctx, jc.Job.Author, h.ID, "POST", vmPath(vm, "/snapshots/"+st.Args["snap"]+"/revert"), nil, nil)
 		return err

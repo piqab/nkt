@@ -46,6 +46,7 @@ func (s *Server) reconcileTokenUsage(ctx context.Context) {
 	projects := map[int64]map[string]bool{}
 	vms := map[int64]map[string]bool{}
 	reach := map[int64]bool{}
+	lxdKnown := map[int64]bool{}
 	for _, u := range usage {
 		if u.Kind == store.UsageK8sNS {
 			continue
@@ -76,12 +77,33 @@ func (s *Server) reconcileTokenUsage(ctx context.Context) {
 				} else {
 					vms[u.HostID] = nil
 				}
+				// Экземпляры LXD — «lxd/имя» (1.17.7): их нет в списке
+				// libvirt, сверяются со своим списком.
+				var ls struct {
+					Instances []struct {
+						Name string `json:"name"`
+					} `json:"instances"`
+				}
+				if _, err := s.hostCall(ctx, user, u.HostID, "GET", "/api/lxd/instances", nil, &ls); err == nil && vms[u.HostID] != nil {
+					for _, in := range ls.Instances {
+						vms[u.HostID][lxdRef(in.Name)] = true
+					}
+					lxdKnown[u.HostID] = true
+				}
 			}
 		}
 		if !reach[u.HostID] {
 			continue
 		}
-		gone := (u.Kind == store.UsageCompose && !projects[u.HostID][u.Ref]) || (u.Kind == store.UsageVM && vms[u.HostID] != nil && !vms[u.HostID][u.Ref])
+		// Машина или экземпляр (снимок — по своей машине); LXD — только
+		// если список LXD получен.
+		machine := u.Ref
+		if u.Kind == store.UsageSnapshot {
+			machine = u.Ref[:max(strings.LastIndex(u.Ref, "/"), 0)]
+		}
+		known := vms[u.HostID] != nil && (!strings.HasPrefix(machine, "lxd/") || lxdKnown[u.HostID])
+		gone := (u.Kind == store.UsageCompose && !projects[u.HostID][u.Ref]) ||
+			((u.Kind == store.UsageVM || u.Kind == store.UsageSnapshot) && known && !vms[u.HostID][machine])
 		if gone {
 			_ = s.db.DeleteTokenUsage(ctx, u.TokenID, u.Kind, u.HostID, u.Ref)
 		}

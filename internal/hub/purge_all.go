@@ -181,6 +181,7 @@ func (r *HostPurgeRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// Машины больше нет — уходит и её учёт у токена.
 	if p.Purge.VM && res.OK && host.ParentID != 0 {
 		_ = r.m.db.DeleteTokenUsage(context.WithoutCancel(ctx), 0, store.UsageVM, host.ParentID, host.Name)
+		_ = r.m.db.DeleteTokenUsagePrefix(context.WithoutCancel(ctx), store.UsageSnapshot, host.ParentID, host.Name+"/")
 	}
 	for _, st := range res.Steps {
 		jc.Logf("%s", st)

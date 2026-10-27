@@ -225,6 +225,10 @@ outside clients. What holds them:
   goes through a host pool port, the kubeconfig (`cluster-admin` of the
   own cluster) is issued once.
 
+**Bandwidth and disk.** Token machines have network (Mbit/s), IOPS and
+disk MB/s limits (the token's own or the hub's defaults); snapshots reserve
+the machine's disk in the token's disk limit.
+
 **Limits.** Bandwidth and IO in Kubernetes are not limited (they cannot be
 imposed without an admission mechanism, and the client works directly).
 Everything a machine does on the internet comes from the host's address —

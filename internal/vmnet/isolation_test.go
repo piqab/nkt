@@ -96,6 +96,20 @@ func TestApplyIsolation(t *testing.T) {
 	if !strings.Contains(applied, `"nkt-t4", "virbr3", "virbr9"`) || strings.Contains(applied, `"virbr0"`) || strings.Contains(applied, "lxdbr0") {
 		t.Fatalf("rules: %s", applied)
 	}
+	// Почта: разрешение по имени сети — мост в mail_ok; снятие — пусто.
+	if err := m.SetMailAllowed(context.Background(), "nkt-t9", true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(applied, "set mail_ok {\n\t\ttype ifname\n\t\telements = { \"virbr9\" }") {
+		t.Fatalf("mail: %s", applied)
+	}
+	_ = m.SetMailAllowed(context.Background(), "nkt-t9", false)
+	if strings.Contains(applied, `"virbr9" }`+"\n\t}\n\tchain") || strings.Contains(applied, "elements = { \"virbr9\" }") {
+		t.Fatalf("mail not removed: %s", applied)
+	}
+	if err := m.SetMailAllowed(context.Background(), "default", true); err == nil {
+		t.Fatal("mail for a non-token network")
+	}
 	nft = false
 	if _, err := m.ApplyIsolation(context.Background()); err == nil {
 		t.Fatal("applied without nft")
@@ -110,7 +124,7 @@ func TestIsolationTraffic(t *testing.T) {
 		t.Skip("NKT_NETNS=1")
 	}
 	rules := filepath.Join(t.TempDir(), "r.nft")
-	_ = os.WriteFile(rules, []byte(IsolationRules([]string{"virbr5", "virbr6"})), 0o644)
+	_ = os.WriteFile(rules, []byte(IsolationRules([]string{"virbr5", "virbr6"}, "virbr6")), 0o644)
 	out, err := exec.Command("timeout", "60", "unshare", "-rn", "--mount", "bash", "testdata/netns_check.sh", rules).CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
@@ -126,7 +140,7 @@ func TestIsolationTraffic(t *testing.T) {
 			t.Errorf("%s", line)
 		}
 	}
-	if lines != 12 {
+	if lines != 15 {
 		t.Fatalf("checks: %d\n%s", lines, out)
 	}
 }

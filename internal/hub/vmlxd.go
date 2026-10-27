@@ -187,6 +187,7 @@ func (r *LXDCreateRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 			}
 		}
 	}()
+	var tok *store.APIToken
 	// Задание токена — его сеть, что бы ни лежало в параметрах.
 	if _, ok := cutTokenAuthor(jc.Job.Author); ok {
 		tctx, err := tokenAuthorContext(ctx, s.db, jc.Job.Author)
@@ -195,6 +196,9 @@ func (r *LXDCreateRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 		}
 		if t, _ := tokenFromContext(tctx); t.Limited() {
 			p.Network, p.Isolated = vmnet.IsolatedName(t.ID), true
+			d := vmLimitDefaults(ctx, s.db)
+			p.NetMbit, p.DiskMBps = effLimit(t.Perms.Limits.VMNetMbit, d.NetMbit), effLimit(t.Perms.Limits.VMDiskMBps, d.DiskMBps)
+			tok = &t
 		}
 	}
 	user := jc.Job.Author
@@ -207,9 +211,15 @@ func (r *LXDCreateRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 			return err
 		}
 		jc.Log("vmcreate.isolationApplied", p.Network, joinOr(out.Bridges, "—"))
+		if tok != nil && tok.Perms.AllowMail {
+			if _, err := s.hostCall(ctx, user, p.HostID, "POST", "/api/vm/isolation-mail", map[string]any{"network": p.Network, "allow": true}, nil); err != nil {
+				jc.Log("hub.vmMailWarn", err)
+			}
+		}
 	}
 	jc.StepKey(2, 2, "hub.lxdStepLaunch")
-	body := map[string]any{"name": p.Name, "image": p.Image, "vm": p.VM, "network": p.Network, "cpu": p.CPU, "mem_mb": p.MemMB, "disk_gb": p.DiskGB, "isolated": p.Isolated}
+	body := map[string]any{"name": p.Name, "image": p.Image, "vm": p.VM, "network": p.Network, "cpu": p.CPU, "mem_mb": p.MemMB, "disk_gb": p.DiskGB, "isolated": p.Isolated,
+		"net_mbit": p.NetMbit, "disk_mbps": p.DiskMBps}
 	var started struct {
 		JobID int64 `json:"job_id"`
 	}
@@ -309,7 +319,14 @@ func (s *Server) handleLXDSnapshotsHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.lxdCall(w, r, h, "POST", lxdInstancePath(name, "/snapshots"), map[string]any{"name": req.Name}, "lxd.snapshot", name)
+	commit, err := s.snapshotReserve(r.Context(), h.ID, lxdRef(name), req.Name)
+	if err != nil {
+		writeErr(w, r, http.StatusForbidden, err)
+		return
+	}
+	if s.lxdCall(w, r, h, "POST", lxdInstancePath(name, "/snapshots"), map[string]any{"name": req.Name}, "lxd.snapshot", name) {
+		commit()
+	}
 }
 
 // handleLXDSnapshotRestoreHub и handleLXDSnapshotDeleteHub — снимок.
@@ -326,7 +343,10 @@ func (s *Server) handleLXDSnapshotDeleteHub(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	s.lxdCall(w, r, h, "DELETE", lxdInstancePath(name, "/snapshots/"+url.PathEscape(chi.URLParam(r, "snap"))), nil, "lxd.snapshot-delete", name)
+	snap := chi.URLParam(r, "snap")
+	if s.lxdCall(w, r, h, "DELETE", lxdInstancePath(name, "/snapshots/"+url.PathEscape(snap)), nil, "lxd.snapshot-delete", name) {
+		_ = s.db.DeleteTokenUsage(r.Context(), 0, store.UsageSnapshot, h.ID, lxdRef(name)+"/"+snap)
+	}
 }
 
 // handleLXDResize — POST /hub/hosts/{id}/lxd/{name}/resize {"cpu","mem_mb",
@@ -397,6 +417,7 @@ func (s *Server) handleLXDDeleteHub(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.lxdCall(w, r, h, "DELETE", lxdInstancePath(name, "?force=true"), nil, "lxd.delete", name) {
 		_ = s.db.DeleteTokenUsage(context.WithoutCancel(r.Context()), 0, store.UsageVM, h.ID, lxdRef(name))
+		_ = s.db.DeleteTokenUsagePrefix(context.WithoutCancel(r.Context()), store.UsageSnapshot, h.ID, lxdRef(name)+"/")
 	}
 }
 
