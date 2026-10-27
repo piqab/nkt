@@ -38,14 +38,14 @@ func TestBuildFromExamples(t *testing.T) {
 	keys := []string{}
 	for _, p := range catalog.PluginPackages() {
 		keys = append(keys, p.Key)
-		if p.Version == "" || p.MinNKT != "1.16.0" || p.Tests != "passed" || len(p.Content) < 1000 || p.Readme["ru"] != "README.md" || p.Readme["en"] != "README.en.md" {
+		if p.Version == "" || !strings.HasPrefix(p.MinNKT, "1.1") || p.Tests != "passed" || len(p.Content) < 1000 || p.Readme["ru"] != "README.md" || p.Readme["en"] != "README.en.md" {
 			t.Errorf("%s: %+v", p.Key, p.Plugin)
 		}
 		if _, ok := p.Files["deploy/test_plugin.py"]; ok {
 			t.Errorf("%s: test in catalog", p.Key)
 		}
 	}
-	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,forgejo,home-assistant,litellm,mikrotik,technitium,windows,yandex-cloud" {
+	if strings.Join(keys, ",") != "cloudflare,connector,docker-mailserver,forgejo,home-assistant,litellm,mikrotik,rgstr,technitium,windows,yandex-cloud" {
 		t.Fatalf("plugins: %v", keys)
 	}
 	pipes := map[string]bool{}
@@ -69,7 +69,7 @@ func TestBuildFromExamples(t *testing.T) {
 			ui++
 		}
 	}
-	if ui != 15 {
+	if ui != 16 {
 		t.Errorf("examples with UI: %d", ui)
 	}
 }
@@ -133,11 +133,11 @@ func TestFetchSaveLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snap.Index.Plugins) != 10 || snap.Source != srv.URL+"/catalog/" {
+	if len(snap.Index.Plugins) != 11 || snap.Source != srv.URL+"/catalog/" {
 		t.Fatalf("snapshot: %d %s", len(snap.Index.Plugins), snap.Source)
 	}
 	again, err := catalog.Load(dir, keys)
-	if err != nil || len(again.Index.Plugins) != 10 || again.Source != snap.Source {
+	if err != nil || len(again.Index.Plugins) != 11 || again.Source != snap.Source {
 		t.Fatalf("load: %v", err)
 	}
 	// Плохая подпись — ошибка, копия на диске прежняя.

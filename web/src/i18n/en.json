@@ -2700,6 +2700,10 @@
     "clientIngressAbout": "A cluster node and the HTTP port of the ingress controller (Cilium or another). A token route (HTTPS with a certificate on the gateway, a name in its domain) goes here, and the client's Ingress with the same name sends the traffic to its service. Without this setting no route to a client namespace can be made.",
     "clientIngressNode": "node",
     "clientIngressOff": "not set",
+    "clientCRDs": "Client resources",
+    "clientCRDsHint": "Operator resources (CRDs) clients may create in their namespaces",
+    "clientCRDsTitle": "Client resources — {{name}}",
+    "clientCRDsAbout": "One per line, as in kubectl: “resource.group”, e.g. registries.registry.rgstr.io (the rgstroperator Registry). The edit role of a client namespace gets full rights on them. Kubernetes, RBAC, admission, networking and Cilium groups are not given. What the operator creates for a client resource (Service, Ingress, pods) passes the same namespace admission policies.",
     "delete": "delete cluster",
     "confirmDelete": "Delete cluster “{{name}}” — all its machines ({{count}}) with disks will be removed from the host?",
     "colNode": "Node",
@@ -3621,6 +3625,10 @@
       "forgejo": {
         "title": "Forgejo + PostgreSQL",
         "hint": "A git server without the install wizard: the administrator from .env (a one-shot service), the web through the site, SSH on 2222 open to the outside."
+      },
+      "rgstr": {
+        "title": "rgstr — image registry",
+        "hint": "Your own OCI/Docker image registry: login on, the administrator's temporary password from .env (change at first login), a site with no size limit (max_body: \"0\"); the rgstr hub plugin — robots as the pipeline's registry key, policies, garbage collection (README)"
       },
       "forgejo-runner": {
         "title": "Forgejo Actions runner (Docker-in-Docker)",
@@ -5324,6 +5332,7 @@
     "ownHint": "An archive of the plugin folder (.tar.gz or .zip) — like examples/<name>/ in the repository: deploy/nkt-plugin.json, deploy/nkt-plugin.py, README, screenshots. The hub checks the archive and the package (like the catalog lint), but never runs the plugin on the hub: read the code — it will run as a service on hosts. How to write one — “Writing a plugin” in the guide.",
     "ownChoose": "Choose an archive",
     "ownSample": "Download the example (url-check)",
+    "ownSampleLite": "Tutorial sample (rgstr-lite)",
     "ownPort": "port {{port}}",
     "ownSettings": "Settings",
     "ownSecret": "secret",

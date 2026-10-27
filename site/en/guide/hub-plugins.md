@@ -148,6 +148,13 @@ certificate expiry, findings, the `urlcheck ADDRESS` command):
 4. The plugin's Addresses and Findings; in a script after a deploy —
    `urlcheck https://shop.example.com/health`.
 
+**A bigger example — `rgstr-lite`** (a tutorial plugin for the rgstr image
+registry: a summary with findings, a table with a hidden section, a delete
+with confirmation and dry run, a secret to the window or into a pipeline,
+a script command) — `https://piqab.github.io/nkt/samples/rgstr-lite.tar.gz`.
+The article [Writing a plugin step by step](/en/guide/plugin-step-by-step)
+walks through it.
+
 ## Install on a host (no Docker)
 
 A plugin from the [catalog](#plugin-catalog) can be
@@ -373,6 +380,13 @@ with Check and Apply; rights are those of a data-changing operation.
   `to-pipeline PIPELINE env NAME` (a script command). The hub checks the
   rights (an admin or a token with “pipeline.create” within its limits)
   **before** calling the plugin.
+- `"env": "@registry"` instead of a variable name — the value becomes the
+  **pipeline's registry key** (“Secrets” → “Registries”): the plugin adds
+  `"registry"` (the address, `registry.example.com`) and `"user"` (the
+  login) to `store`. A key with the same address is replaced (its CA is
+  kept), and the pipeline pulls images with it. This is how the `rgstr`
+  plugin puts a registry robot into a pipeline —
+  [rgstr and rgstroperator](/en/guide/hub-plugin-rgstr).
 - The values reach neither the action log nor the job log.
 
 **Service operations** (not in `ops`, the hub calls them itself):

@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.15 — 2026-10-27
+
+- **Your own rgstr image registry.** A new pipeline example “rgstr — image registry” and the catalog plugin `rgstr`.
+  - A summary with findings: login off, no TLS, a temporary password, low disk, garbage collection off or failed, no retention policy, open metrics, a robot pushing to every repository.
+  - Repositories and tags, projects with quotas, robots, retention policies (edited as text with a diff), garbage collection, webhooks, the audit log; `rgstr …` commands and MCP tools.
+- **A registry robot straight in as the pipeline's registry key.** A plugin can now put a secret not only into `.env` but into the pipeline's “Secrets” → “Registries”: the variable field `@registry`. Nobody sees the secret; the pipeline pulls images with this key.
+- **Operator resources for clients.** A cluster has “Client resources”: which CRDs clients may create in their namespaces (for example, the rgstroperator `Registry`). The rights are added to the `edit` role; Kubernetes, RBAC, networking and Cilium groups are never given. What the operator creates for a client passes the same admission policies.
+- **Two new help articles.**
+  - “rgstr and rgstroperator in nkt” — a registry on a host, the operator in a cluster, a client's registry in their own namespace, published through Traffic Fly; script, API and MCP examples.
+  - “Writing a plugin step by step” — a walkthrough of the tutorial plugin `rgstr-lite`, which you can download and upload to your hub.
+
 ## v1.17.14 — 2026-10-27
 
 - **Mail from token machines is closed by default.** Outbound port 25 from token networks is closed: spam would leave from the host's address. The “allow mail” checkbox in the token's permissions opens it at once on all hosts of its machines and LXD instances. Checked on live traffic.

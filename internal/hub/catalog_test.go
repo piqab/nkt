@@ -78,7 +78,7 @@ func TestCatalogEndpoints(t *testing.T) {
 			UI  json.RawMessage `json:"ui"`
 		} `json:"examples"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list.Plugins) != 10 || list.URL != DefaultCatalogURL || len(list.Examples) != 15 || list.Examples[0].Key != "httpbin" {
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list.Plugins) != 11 || list.URL != DefaultCatalogURL || len(list.Examples) != 16 || list.Examples[0].Key != "httpbin" {
 		t.Fatalf("catalog: %v %s", err, rec.Body)
 	}
 	var yc string

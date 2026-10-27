@@ -1,0 +1,36 @@
+# WARNING: пример использует сторонний репозиторий и образы — их безопасность и стабильность работы не гарантируются.
+# WARNING: this example uses a third-party repository and images — their security and stability are not guaranteed.
+# rgstr — реестр образов OCI/Docker (github.com/piqab/rgstr) для выкладки
+# через хаб nkt: секреты и адрес — из .env конвейера, версия закреплена.
+# Вход включён; первый администратор — с временным паролем из .env:
+# сменить его при первом входе в /ui, потом — пароль плагину rgstr.
+services:
+  rgstr:
+    image: ghcr.io/piqab/rgstr:1.7.0
+    restart: unless-stopped
+    environment:
+      RGSTR_STORAGE: /data
+      RGSTR_AUTH_ENABLED: "true"
+      RGSTR_AUTH_SECRET: ${RGSTR_AUTH_SECRET}
+      # Адрес выдачи токенов docker login — тот, что видят клиенты.
+      RGSTR_AUTH_REALM: https://${RGSTR_DOMAIN}/v2/auth
+      RGSTR_ADMIN_USER: ${RGSTR_ADMIN_USER}
+      RGSTR_ADMIN_PASSWORD: ${RGSTR_ADMIN_PASSWORD}
+      # Удалять — только администратору (без списка могут все пользователи).
+      RGSTR_ADMINS: ${RGSTR_ADMIN_USER}
+      RGSTR_GC_INTERVAL: 1h
+    volumes:
+      - rgstr-data:/data
+    # Наружу — только через сайт (HTTPS); порт — на 127.0.0.1 хоста, где его
+    # видит и плагин rgstr.
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  rgstr-data:

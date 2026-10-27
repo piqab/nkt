@@ -571,6 +571,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/lxd/{name}/resize", s.handleLXDResize)
 					r.Delete("/hub/hosts/{id}/lxd/{name}", s.handleLXDDeleteHub)
 					r.Get("/hub/clusters/{id}/client-ingress", s.handleClientIngress)
+					r.Get("/hub/clusters/{id}/client-crds", s.handleClientCRDs)
+					r.Put("/hub/clusters/{id}/client-crds", s.handleClientCRDs)
 					r.Put("/hub/clusters/{id}/client-ingress", s.handleClientIngress)
 					r.Get("/hub/vm/limit-defaults", s.handleVMLimitDefaults)
 					r.Put("/hub/vm/limit-defaults", s.handleVMLimitDefaults)

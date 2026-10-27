@@ -2708,6 +2708,10 @@
     "clientIngressAbout": "Узел кластера и порт HTTP ingress-контроллера (Cilium или другого). Маршрут токена (HTTPS с сертификатом на шлюзе, имя в его домене) идёт сюда, а Ingress клиента с тем же именем направляет трафик в его сервис. Без этой настройки маршрут на namespace клиента не завести.",
     "clientIngressNode": "узел",
     "clientIngressOff": "не задан",
+    "clientCRDs": "Ресурсы для клиентов",
+    "clientCRDsHint": "Ресурсы операторов (CRD), которые клиенты могут создавать в своих namespace",
+    "clientCRDsTitle": "Ресурсы для клиентов — {{name}}",
+    "clientCRDsAbout": "По одному в строке, как в kubectl: «ресурс.группа», например registries.registry.rgstr.io (Registry оператора rgstroperator). Роль edit клиентского namespace получит на них все права. Группы Kubernetes, прав, допуска, сети и Cilium не отдаются. Что оператор создаёт по ресурсу клиента (Service, Ingress, поды), проходит те же политики допуска namespace.",
     "delete": "удалить кластер",
     "confirmDelete": "Удалить кластер «{{name}}» — все его машины ({{count}}) с дисками будут удалены с хоста?",
     "colNode": "Узел",
@@ -3629,6 +3633,10 @@
       "forgejo": {
         "title": "Forgejo + PostgreSQL",
         "hint": "Git-сервер без мастера установки: администратор из .env (разовый сервис), веб — через сайт, SSH на 2222 — наружу."
+      },
+      "rgstr": {
+        "title": "rgstr — реестр образов",
+        "hint": "Свой реестр образов OCI/Docker: вход включён, временный пароль администратора — из .env (сменить при первом входе), сайт без предела размера (max_body: \"0\"); плагин хаба rgstr — роботы ключом registry конвейера, политики, сборка мусора (README)"
       },
       "forgejo-runner": {
         "title": "Раннер Forgejo Actions (Docker-in-Docker)",
@@ -5346,6 +5354,7 @@
     "ownHint": "Архив папки плагина (.tar.gz или .zip) — как examples/<имя>/ в репозитории: deploy/nkt-plugin.json, deploy/nkt-plugin.py, README, скриншоты. Хаб проверит архив и пакет (как lint каталога), но плагин на хабе не запускается: прочтите код — он будет работать службой на хостах. Как написать — «Как написать плагин» в справке.",
     "ownChoose": "Выбрать архив",
     "ownSample": "Скачать пример (url-check)",
+    "ownSampleLite": "Учебный пример (rgstr-lite)",
     "ownPort": "порт {{port}}",
     "ownSettings": "Настройки",
     "ownSecret": "секрет",

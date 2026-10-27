@@ -38,8 +38,10 @@ interface CatalogPlugin {
   local?: boolean
 }
 
-/** Готовый архив примера своего плагина (examples/_samples/url-check). */
+/** Готовые архивы примеров своих плагинов (examples/_samples): url-check и
+ * учебный rgstr-lite из статьи «Пишем плагин по шагам». */
 const SAMPLE_URL = 'https://piqab.github.io/nkt/samples/url-check.tar.gz'
+const SAMPLE_LITE_URL = 'https://piqab.github.io/nkt/samples/rgstr-lite.tar.gz'
 
 const fileURL = (key: string, rel: string) => apiURL(`/hub/catalog/files/${key}/${rel}`)
 
@@ -431,6 +433,9 @@ function OwnUploadModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
           </Button>
           <a href={SAMPLE_URL} target="_blank" rel="noopener noreferrer">
             {t('catalog.ownSample')}
+          </a>
+          <a href={SAMPLE_LITE_URL} target="_blank" rel="noopener noreferrer">
+            {t('catalog.ownSampleLite')}
           </a>
           <input
             ref={input}

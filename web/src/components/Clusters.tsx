@@ -273,6 +273,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   const list = useApi<Cluster[]>('/hub/clusters', pollMs)
   const [upgrade, setUpgrade] = useState<Cluster | null>(null)
   const [ingressOf, setIngressOf] = useState<Cluster | null>(null)
+  const [crdsOf, setCrdsOf] = useState<Cluster | null>(null)
   const clusters = list.data ?? []
   const anyBusy = clusters.some((c) => c.status === 'creating' || c.status === 'deleting')
   if (anyBusy && pollMs !== 4_000) setPollMs(4_000)
@@ -307,6 +308,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   return (
     <Card title={t('clusters.title')} subtitle={t('clusters.subtitle', { count: clusters.length })}>
       {ingressOf && <ClientIngressModal cluster={ingressOf} onClose={() => setIngressOf(null)} />}
+      {crdsOf && <ClientCRDsModal cluster={crdsOf} onClose={() => setCrdsOf(null)} />}
       {upgrade && (
         <K8sUpgradeModal
           title={t('k8s.upgrade.clusterTitle', { name: upgrade.name })}
@@ -376,6 +378,13 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                 <Button size="small" onClick={() => setUpgrade(c)}>
                   {t('k8s.upgrade.button')}
                 </Button>
+              )}
+              {c.status === 'ready' && c.nodes.length > 0 && (
+                <Tooltip title={t('clusters.clientCRDsHint')}>
+                  <Button size="small" onClick={() => setCrdsOf(c)}>
+                    {t('clusters.clientCRDs')}
+                  </Button>
+                </Tooltip>
               )}
               {c.status === 'ready' && c.nodes.length > 0 && (
                 <Tooltip title={t('clusters.clientIngressHint')}>
@@ -472,6 +481,54 @@ function ClientIngressModal({ cluster, onClose }: { cluster: Cluster; onClose: (
               setError(null)
               try {
                 await api(`/hub/clusters/${cluster.id}/client-ingress`, { method: 'PUT', body: value.port ? value : { node: '', port: 0 } })
+                onClose()
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e))
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            {t('common.save')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Ресурсы операторов для клиентов (1.17.15): CRD, которые роль edit
+ * клиентского namespace получает через ClusterRole с aggregate-to-edit.
+ */
+function ClientCRDsModal({ cluster, onClose }: { cluster: Cluster; onClose: () => void }) {
+  const { t } = useTranslation()
+  const cur = useApi<{ resources: string[] }>(`/hub/clusters/${cluster.id}/client-crds`)
+  const [text, setText] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const before = (cur.data?.resources ?? []).join('\n')
+  const value = text ?? before
+  const list = value.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean)
+  const changed = list.join('\n') !== before
+  return (
+    <Modal title={t('clusters.clientCRDsTitle', { name: cluster.name })} onClose={onClose} width={620}>
+      <div className="col small" style={{ gap: '0.5rem' }}>
+        <span className="muted">{t('clusters.clientCRDsAbout')}</span>
+        <Input.TextArea rows={4} value={value} placeholder="registries.registry.rgstr.io" onChange={(e) => setText(e.target.value)} className="mono" />
+        {changed && <DiffView text={[...before.split('\n').filter(Boolean).map((x) => `-${x}`), ...list.map((x) => `+${x}`)].join('\n')} />}
+        {(error || cur.error) && <Banner kind="error">{error || cur.error}</Banner>}
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <Button
+            type="primary"
+            disabled={!changed}
+            loading={busy}
+            onClick={async () => {
+              setBusy(true)
+              setError(null)
+              try {
+                await api(`/hub/clusters/${cluster.id}/client-crds`, { method: 'PUT', body: { resources: list } })
                 onClose()
               } catch (e) {
                 setError(e instanceof Error ? e.message : String(e))
