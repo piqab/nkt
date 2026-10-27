@@ -335,6 +335,12 @@ func tokenK8sDocCheck(doc map[string]any, kind, name, domain string) error {
 				return msgs.Errorf("hub.tokenK8sIngressHost", name, h, domain)
 			}
 		}
+		// Копии Longhorn оператор заводит RecurringJob-ом в longhorn-system
+		// (или в namespace из backup.longhorn.namespace) — вне namespace
+		// клиента и в backup target администратора.
+		if b, _ := spec["backup"].(map[string]any); b != nil && b["enabled"] == true && b["method"] == "Longhorn" {
+			return msgs.Errorf("hub.tokenK8sRegistryLonghorn", name)
+		}
 	case "HTTPRoute", "GRPCRoute":
 		hosts := strs(spec["hostnames"])
 		if len(hosts) == 0 || slices.ContainsFunc(hosts, func(h string) bool { return !inDomain(h, domain) }) {

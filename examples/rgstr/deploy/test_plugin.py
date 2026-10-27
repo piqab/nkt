@@ -38,14 +38,21 @@ class FakeRgstr:
         self.metrics = True
         self.repos = [
             {"name": "shop/api", "pulls": 12, "tags": [
-                {"name": "1.0", "digest": "sha256:" + "a" * 64, "size": 10 << 20, "platforms": [{"os": "linux", "architecture": "amd64"}], "pushed_at": ago(3)},
+                {"name": "1.0", "digest": "sha256:" + "a" * 64, "size": 10 << 20, "platforms": [{"os": "linux", "architecture": "amd64"}], "pushed_at": ago(3),
+                 "vulns": {"status": "done", "counts": {"critical": 1, "high": 2}, "finished": ago(1)}},
                 {"name": "1.1", "digest": "sha256:" + "b" * 64, "size": 11 << 20, "platforms": [{"os": "linux", "architecture": "amd64"}], "pushed_at": ago(1), "immutable": True}]},
             {"name": "tools", "pulls": 0, "tags": [{"name": "latest", "digest": "sha256:" + "c" * 64, "size": 1 << 20, "platforms": [], "pushed_at": ago(9)}]},
         ]
         self.users = [{"name": "admin", "source": "bootstrap", "role": "admin", "actions": ["pull", "push", "delete"], "must_change": False, "managed": True},
                       {"name": "dev", "source": "admin", "role": "user", "actions": ["pull", "push"], "must_change": True, "managed": True}]
         self.robots = [{"name": "robot$ci", "permissions": [{"project": "*", "actions": ["pull", "push"]}], "expired": False, "disabled": False}]
-        self.projects = [{"name": "shop", "public": False, "members": 2, "repos": 1, "quota_bytes": 20 << 30, "used_bytes": 21 << 20}]
+        self.projects = [{"name": "shop", "description": "магазин", "public": True, "members": 2, "repos": 1, "quota_bytes": 20 << 30, "used_bytes": 21 << 20, "block_severity": ""},
+                         {"name": "mirror", "public": True, "members": 0, "repos": 0, "used_bytes": 0, "proxy": {"url": "http://mirror.lan:5000", "has_password": False}}]
+        self.scan = True
+        self.legacy = False  # rgstr до 1.8: нет /ui/api/scan и /ui/api/backup
+        self.backup = {"enabled": True, "status": {"target": "s3://backups/rgstr", "schedule": "0 3 * * *", "keep": 7, "running": False,
+                                                   "last_success": ago(3), "last_size": 30 << 20, "next": ago(-1)},
+                       "backups": [{"name": "rgstr-backup-20261024T030000Z.tar", "size": 30 << 20, "time": ago(3)}]}
         self.policies = {"retention": [], "immutable": [{"repos": "shop/**", "tags": "1.*"}], "retention_history": [], "gc_interval": "1h0m0s"}
         self.gc = {"interval": "1h0m0s", "running": False, "history": [{"start": ago(0), "bytes_freed": 5 << 20, "blobs_removed": 3}]}
         self.calls = []
@@ -76,12 +83,13 @@ class FakeRgstr:
                 n = int(self.headers.get("Content-Length") or 0)
                 raw = self.rfile.read(n) if n else b""
                 if path == "/healthz":
-                    return self.send(200, {"status": "ok", "version": "v1.7.0"})
+                    return self.send(200, {"status": "ok", "version": "v1.10.1"})
                 if path == "/metrics":
                     return self.send(200 if fake.metrics else 404, {} if fake.metrics else {"error": "not found"})
                 user = self.who()
                 if path == "/ui/api/me":
-                    return self.send(200, {"version": "v1.7.0", "auth_enabled": fake.auth_enabled, "user": user or "", "admin": bool(user) or not fake.auth_enabled})
+                    return self.send(200, {"version": "v1.10.1", "auth_enabled": fake.auth_enabled, "user": user or "", "admin": bool(user) or not fake.auth_enabled,
+                                           "ldap": True, "sso": "Keycloak"})
                 if fake.auth_enabled and not user:
                     return self.send(401, {"error": "authentication required"})
                 body = None
@@ -90,6 +98,17 @@ class FakeRgstr:
                         return self.send(400, {"error": "bad request: EOF"})
                     body = json.loads(raw)
                 fake.calls.append((method, path, body))
+                if fake.legacy and path.startswith(("/ui/api/scan", "/ui/api/backup")):
+                    return self.send(404, {"error": "not found"})
+                if method == "GET" and path == "/ui/api/scan":
+                    if not fake.scan:
+                        return self.send(200, {"enabled": False})
+                    vulns = [{"id": "CVE-2026-0002", "severity": "high", "package": "openssl", "installed": "3.0.1", "fixed": "3.0.9", "title": "TLS"},
+                             {"id": "CVE-2026-0001", "severity": "critical", "package": "zlib", "installed": "1.2", "fixed": "1.3"}]
+                    return self.send(200, {"enabled": True, "summary": {"status": "done", "counts": {"critical": 1, "high": 1}, "finished": ago(1)},
+                                           "digest": "sha256:" + "a" * 64, "report": {"vulnerabilities": vulns}, "q": q})
+                if method == "GET" and path == "/ui/api/backup":
+                    return self.send(200, fake.backup)
                 if method == "GET":
                     data = {"/ui/api/repos": {"repositories": fake.repos, "total_pulls": 12}, "/ui/api/users": {"users": fake.users, "me": "admin", "auth_enabled": True},
                             "/ui/api/robots": {"robots": fake.robots, "projects": ["shop"]}, "/ui/api/projects": {"projects": fake.projects, "can_create": True},
@@ -131,6 +150,13 @@ class FakeRgstr:
                 if path == "/ui/api/policies/immutable":
                     fake.policies["immutable"] = body["rules"]
                     return self.send(200, fake.policies)
+                if path in ("/ui/api/scan/run", "/ui/api/backup/run"):
+                    return self.send(202)
+                if path == "/ui/api/projects/update":
+                    for p in fake.projects:
+                        if p["name"] == body["name"]:
+                            p.update(description=body["description"], public=body["public"], block_severity=body.get("block_severity", p.get("block_severity")))
+                    return self.send(204)
                 if path == "/ui/api/webhooks/test":
                     return self.send(200, {"status": 200, "event": "ping"})
                 self.send(404, {"error": "not found"})
@@ -200,19 +226,52 @@ class PluginTest(unittest.TestCase):
     def test_2_summary_findings(self):
         v = self.call("summary")["view"]
         params = {r["cells"]["param"]: r["cells"]["value"] for r in v["items"][0]["rows"]}
-        self.assertEqual((params["Version"], params["Login"], params["Repositories"]), ("v1.7.0", "on", 2))
+        self.assertEqual((params["Version"], params["Login"], params["Repositories"], params["Scanning"]), ("v1.10.1", "on", 2, "on"))
+        self.assertIn("0 3 * * * UTC, keep 7", params["Backups"])
+        self.assertEqual(params["Sign-in via"], "LDAP, OIDC (Keycloak)")
         found = "\n".join(r["cells"]["value"] for r in v["items"][1]["rows"])
-        for want in ("temporary password", "Low disk space", "No retention policies", "Metrics /metrics are open", "Robot robot$ci: write access to all"):
+        for want in ("temporary password", "Low disk space", "No retention policies", "Metrics /metrics are open", "Robot robot$ci: write access to all",
+                     "Critical vulnerabilities: shop/api:1.0", "The backup is late", "Cache mirror reaches its upstream over HTTP"):
             self.assertIn(want, found)
         self.assertNotIn("answers over HTTP", found)  # 127.0.0.1 — не находка
+        self.assertNotIn("scanning is off", found)
+
+    def test_2b_summary_scan_backup_off_and_legacy(self):
+        rg = self.rg
+        rg.scan, saved = False, rg.backup
+        rg.backup = {"enabled": False}
+        try:
+            v = self.call("summary")["view"]
+            found = "\n".join(r["cells"]["value"] for r in v["items"][1]["rows"])
+            self.assertIn("Vulnerability scanning is off", found)
+            self.assertIn("Built-in backups are not configured", found)
+            self.assertEqual(self.call("backups")["view"]["type"], "text")
+            rg.backup = {"enabled": True, "status": {"schedule": "0 3 * * *", "keep": 7, "last_error": "s3: access denied", "last_error_at": ago(0)}}
+            found = "\n".join(r["cells"]["value"] for r in self.call("summary")["view"]["items"][1]["rows"])
+            self.assertIn("The last backup failed: s3: access denied", found)
+            rg.legacy = True  # старый rgstr: сводка работает, находок о бэкапах нет
+            v = self.call("summary")["view"]
+            params = {r["cells"]["param"]: r["cells"]["value"] for r in v["items"][0]["rows"]}
+            self.assertEqual(params["Scanning"], "—")
+            self.assertNotIn("backup", "\n".join(r["cells"]["value"] for r in v["items"][1]["rows"]).lower())
+        finally:
+            rg.scan, rg.backup, rg.legacy = True, saved, False
 
     def test_3_views(self):
         repos = {r["cells"]["repo"]: r for r in self.call("repos")["view"]["rows"]}
         self.assertEqual(sorted(repos), ["shop/api", "tools"])
         self.assertEqual(repos["shop/api"]["cells"]["n_tags"], 2)
+        self.assertEqual(repos["shop/api"]["cells"]["vulns"], "critical")
         tags = {r["cells"]["tag"]: r for r in self.call("tags", repo="shop/api")["view"]["rows"]}
-        self.assertEqual(tags["1.1"]["actions"], [])  # неизменяемый — без «Удалить»
-        self.assertEqual(tags["1.0"]["actions"][0]["op"], "tag_delete")
+        self.assertNotIn("tag_delete", [a.get("op") for a in tags["1.1"]["actions"]])  # неизменяемый — без «Удалить»
+        self.assertEqual([a.get("op") or a.get("open") for a in tags["1.0"]["actions"]], ["vulns", "scan_run", "tag_delete"])
+        self.assertEqual(tags["1.0"]["cells"]["vulns"], "critical 1, high 2")
+        vv = self.call("vulns", repo="shop/api", tag="1.0")["view"]
+        self.assertEqual([r["cells"]["vuln_id"] for r in vv["rows"]], ["CVE-2026-0001", "CVE-2026-0002"])  # сначала критические
+        b = self.call("backups")["view"]["items"]
+        self.assertEqual(b[1]["rows"][0]["cells"]["backup_file"], "rgstr-backup-20261024T030000Z.tar")
+        projects = {r["cells"]["project"]: r for r in self.call("projects")["view"]["rows"]}
+        self.assertEqual(projects["mirror"]["cells"]["cache"], "http://mirror.lan:5000")
         for op in ("projects", "robots", "users", "policies", "webhooks", "audit"):
             self.assertTrue(self.call(op)["ok"], op)
         doc = json.loads(self.call("policies_get")["result"]["text"])
@@ -236,6 +295,20 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(self.rg.policies["retention"][0]["keep_last"], 10)
         self.assertFalse(self.call("policies_put", text="{not json")["ok"])
         self.assertIn("answer 200", self.call("webhook_test", id="h1")["text"])
+        n = len(self.rg.calls)
+        for op, a in (("scan_run", {"repo": "shop/api", "tag": "1.0"}), ("backup_run", {}), ("project_block", {"name": "shop", "severity": "high"})):
+            self.assertIn("(dry run)", self.call(op, dry=True, **a)["text"])
+        self.assertFalse(any(m == "POST" for m, _, _ in self.rg.calls[n:]))
+        self.assertTrue(self.call("scan_run", repo="shop/api", tag="1.0")["ok"])
+        self.assertEqual(self.rg.calls[-1], ("POST", "/ui/api/scan/run", {"repo": "shop/api", "digest": "sha256:" + "a" * 64}))
+        self.assertIn("backup started", self.call("backup_run")["text"])
+        self.assertTrue(self.call("project_block", name="shop", severity="critical")["ok"])
+        self.assertEqual(self.rg.calls[-1][2], {"name": "shop", "description": "магазин", "public": True, "block_severity": "critical"})
+        self.assertTrue(self.call("project_block", name="shop", severity="none")["ok"])
+        self.assertEqual(self.rg.calls[-1][2]["block_severity"], "")
+        self.assertTrue(self.call("project_create", name="dockerhub", proxy_url="https://registry-1.docker.io/", block_severity="critical")["ok"])
+        self.assertEqual(self.rg.calls[-1][2]["proxy"], {"url": "https://registry-1.docker.io"})
+        self.assertEqual(self.rg.calls[-1][2]["block_severity"], "critical")
 
     def test_5_input_checks(self):
         for bad in ("../etc", "Shop/API", "a b", "x;rm", "-x", "shop//api"):
@@ -246,6 +319,11 @@ class PluginTest(unittest.TestCase):
             self.assertFalse(self.call("project_create", name=bad)["ok"], bad)
         self.assertFalse(self.call("project_create", name="ok", quota_gb="-1")["ok"])
         self.assertFalse(self.call("webhook_test", id="h1/../x")["ok"])
+        for bad in ("ftp://x", "https://user:pass@hub.example.com", "http://a b", "-x", "https://", "https://x?y=1", "http://x:99999"):
+            self.assertFalse(self.call("project_create", name="ok", proxy_url=bad)["ok"], bad)
+        for bad in ("severe", "x;y", "../x"):
+            self.assertFalse(self.call("project_block", name="shop", severity=bad)["ok"], bad)
+        self.assertFalse(self.call("scan_run", repo="../x", tag="1")["ok"])
 
     def test_6_robot_secret(self):
         r = self.call("robot_create", name="ci-shop", project="shop")
@@ -262,9 +340,11 @@ class PluginTest(unittest.TestCase):
 
     def test_7_commands(self):
         for argv in (["rgstr", "gc"], ["rgstr", "tags", "shop/api"], ["rgstr", "retention", "run"], ["rgstr", "project", "team-c", "quota", "10"],
-                     ["rgstr", "robot", "ci", "project", "shop", "push", "to-pipeline", "shop", "env", "@registry"]):
+                     ["rgstr", "robot", "ci", "project", "shop", "push", "to-pipeline", "shop", "env", "@registry"], ["rgstr", "scan", "shop/api", "1.0"],
+                     ["rgstr", "backup", "run"], ["rgstr", "project", "hub", "proxy", "https://registry-1.docker.io", "block", "high", "quota", "5"]):
             self.assertTrue(self.call("_check", argv=argv)["ok"], argv)
-        for argv in (["rgstr", "tags", "../x"], ["rgstr", "bogus"], ["rgstr", "robot", "ci", "project", "shop"], ["rgstr", "project", "x", "size", "1"]):
+        for argv in (["rgstr", "tags", "../x"], ["rgstr", "bogus"], ["rgstr", "robot", "ci", "project", "shop"], ["rgstr", "project", "x", "size", "1"],
+                     ["rgstr", "project", "x", "proxy", "ftp://y"], ["rgstr", "project", "x", "quota", "1", "quota", "2"], ["rgstr", "scan", "shop/api"]):
             self.assertFalse(self.call("_check", argv=argv)["ok"], argv)
         out = self.call("_command", argv=["rgstr", "robot", "ci3", "project", "*", "to-pipeline", "shop", "env", "@registry"])
         self.assertEqual(out["store"]["user"], "robot$ci3")

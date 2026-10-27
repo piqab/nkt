@@ -223,7 +223,9 @@ outside clients. What holds them:
     admission, networking, Cilium and Longhorn groups — never). What the operator
     creates for a client resource passes the same admission policies; the
     hub checks an rgstroperator `Registry` up front (Service — ClusterIP,
-    ingress — within the token's domain).
+    ingress — within the token's domain, no `Longhorn` backups: the
+    operator would create their `RecurringJob` outside the client
+    namespace).
   The hub checks the same rules itself for the token's manifests, helm and
   scripts — an early, clear refusal.
 - **Own cluster** — k3s with Cilium on the token's machines in its
