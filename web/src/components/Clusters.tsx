@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
 import type { HubHost, Job } from '../types'
 import { JobLogModal } from '../pages/Jobs'
-import { Banner, Card, ErrorNote, Modal, formatBytesShort, formatRelative } from '../components/ui'
+import { Banner, Card, DiffView, ErrorNote, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { K8sUpgradeModal } from './K8sUpgrade'
@@ -272,6 +272,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   const [pollMs, setPollMs] = useState(15_000)
   const list = useApi<Cluster[]>('/hub/clusters', pollMs)
   const [upgrade, setUpgrade] = useState<Cluster | null>(null)
+  const [ingressOf, setIngressOf] = useState<Cluster | null>(null)
   const clusters = list.data ?? []
   const anyBusy = clusters.some((c) => c.status === 'creating' || c.status === 'deleting')
   if (anyBusy && pollMs !== 4_000) setPollMs(4_000)
@@ -305,6 +306,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   if (clusters.length === 0 && !showEmpty) return null
   return (
     <Card title={t('clusters.title')} subtitle={t('clusters.subtitle', { count: clusters.length })}>
+      {ingressOf && <ClientIngressModal cluster={ingressOf} onClose={() => setIngressOf(null)} />}
       {upgrade && (
         <K8sUpgradeModal
           title={t('k8s.upgrade.clusterTitle', { name: upgrade.name })}
@@ -375,6 +377,13 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                   {t('k8s.upgrade.button')}
                 </Button>
               )}
+              {c.status === 'ready' && c.nodes.length > 0 && (
+                <Tooltip title={t('clusters.clientIngressHint')}>
+                  <Button size="small" onClick={() => setIngressOf(c)}>
+                    {t('clusters.clientIngress')}
+                  </Button>
+                </Tooltip>
+              )}
               {c.status === 'ready' && c.topology !== 'single' && (
                 <Button size="small" loading={busy === `add:${c.id}`} onClick={() => void call(`add:${c.id}`, `/hub/clusters/${c.id}/workers`, 'POST', { count: 1 })}>
                   {t('clusters.addWorker')}
@@ -416,5 +425,66 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
         ))}
       </div>
     </Card>
+  )
+}
+
+/**
+ * Ingress для клиентов (1.17.13): узел и порт, куда Traffic Fly ведёт
+ * маршруты токенов на их namespace. Без него маршрут на namespace
+ * клиента не завести.
+ */
+function ClientIngressModal({ cluster, onClose }: { cluster: Cluster; onClose: () => void }) {
+  const { t } = useTranslation()
+  const cur = useApi<{ ingress: { node: string; port: number } }>(`/hub/clusters/${cluster.id}/client-ingress`)
+  const [next, setNext] = useState<{ node: string; port: number } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const before = cur.data?.ingress ?? { node: '', port: 0 }
+  const value = next ?? before
+  const line = (v: { node: string; port: number }) => (v.port ? `${v.node}:${v.port}` : t('clusters.clientIngressOff'))
+  const changed = value.node !== before.node || value.port !== before.port
+  return (
+    <Modal title={t('clusters.clientIngressTitle', { name: cluster.name })} onClose={onClose} width={560}>
+      <div className="col small" style={{ gap: '0.5rem' }}>
+        <span className="muted">{t('clusters.clientIngressAbout')}</span>
+        <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+          <Select
+            style={{ minWidth: 200 }}
+            value={value.node || undefined}
+            placeholder={t('clusters.clientIngressNode')}
+            onChange={(v: string) => setNext({ ...value, node: v })}
+            options={cluster.nodes.map((n) => ({ value: n.name, label: n.name }))}
+          />
+          <InputNumber min={0} max={65535} value={value.port || null} placeholder="80" onChange={(v) => setNext({ ...value, port: v ?? 0 })} />
+          <Button size="small" onClick={() => setNext({ node: '', port: 0 })}>
+            {t('portPool.turnOff')}
+          </Button>
+        </div>
+        {changed && <DiffView text={`-${line(before)}\n+${line(value)}`} />}
+        {(error || cur.error) && <Banner kind="error">{error || cur.error}</Banner>}
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <Button
+            type="primary"
+            disabled={!changed}
+            loading={busy}
+            onClick={async () => {
+              setBusy(true)
+              setError(null)
+              try {
+                await api(`/hub/clusters/${cluster.id}/client-ingress`, { method: 'PUT', body: value.port ? value : { node: '', port: 0 } })
+                onClose()
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e))
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            {t('common.save')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </div>
+      </div>
+    </Modal>
   )
 }

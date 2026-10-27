@@ -29,11 +29,13 @@ func ownFlyPrefix(t store.APIToken) string { return "t" + strconv.FormatInt(t.ID
 
 // ownFlyRoute — маршрут для ответа токену.
 type ownFlyRoute struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	HostID int64  `json:"host_id"`
-	VM     string `json:"vm"`
-	Port   int    `json:"port"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	HostID    int64  `json:"host_id,omitempty"`
+	VM        string `json:"vm,omitempty"`
+	Cluster   string `json:"cluster,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Port      int    `json:"port"`
 }
 
 func (s *Server) ownFlyRoutes(ctx context.Context, t store.APIToken) []ownFlyRoute {
@@ -76,33 +78,59 @@ func (s *Server) handleOwnFlyAdd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, msgs.Tc(ctx, "auth.tokenOnly"))
 		return
 	}
-	var req struct {
-		Name   string `json:"name"`
-		HostID int64  `json:"host_id"`
-		Port   int    `json:"port"`
-	}
+	var req OwnFlyRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	route, jobID, code, err := s.ownFlyAdd(ctx, t, req)
+	if err != nil {
+		writeErr(w, r, code, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"route": route, "job_id": jobID})
+}
+
+// OwnFlyRequest — свой маршрут: имя и цель — своя машина (host_id, port)
+// или свой namespace общего кластера (cluster, namespace) — тогда трафик
+// идёт на ingress кластера, заданный администратором.
+type OwnFlyRequest struct {
+	Name      string `json:"name"`
+	HostID    int64  `json:"host_id,omitempty"`
+	Port      int    `json:"port,omitempty"`
+	Cluster   string `json:"cluster,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// ownFlyAdd — маршрут HTTPS с сертификатом на шлюзе по имени в домене
+// токена; код ответа — для HTTP.
+func (s *Server) ownFlyAdd(ctx context.Context, t store.APIToken, req OwnFlyRequest) (ownFlyRoute, int64, int, error) {
 	name := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(req.Name), "."))
 	domain := t.Perms.FlyDomain
-	if domain == "" || !flyDomainRe.MatchString(name) || name != domain && !strings.HasSuffix(name, "."+domain) {
-		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenFlyName", name, domain))
-		return
+	if domain == "" || !flyDomainRe.MatchString(name) || !inDomain(name, domain) {
+		return ownFlyRoute{}, 0, http.StatusForbidden, msgs.Errorf("auth.tokenFlyName", name, domain)
 	}
-	if req.Port < 1 || req.Port > 65535 {
-		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("fly.opBadPort", req.Port))
-		return
-	}
-	vm, err := s.db.HostByID(ctx, req.HostID)
-	if err != nil || vm.ParentID == 0 {
-		writeErr(w, r, http.StatusNotFound, msgs.Errorf("err.notFound"))
-		return
-	}
-	if err := s.tokenOwnsVM(ctx, t, strconv.FormatInt(vm.ParentID, 10), vm.Name); err != nil {
-		writeErr(w, r, http.StatusForbidden, err)
-		return
+	var target FlyTarget
+	out := ownFlyRoute{Name: name}
+	if req.Cluster != "" {
+		tg, err := s.ownFlyClusterTarget(ctx, t, req.Cluster, req.Namespace)
+		if err != nil {
+			return ownFlyRoute{}, 0, http.StatusForbidden, err
+		}
+		target, out.Cluster, out.Namespace, out.Port = tg, req.Cluster, req.Namespace, tg.Port
+	} else {
+		if req.Port < 1 || req.Port > 65535 {
+			return ownFlyRoute{}, 0, http.StatusBadRequest, msgs.Errorf("fly.opBadPort", req.Port)
+		}
+		vm, err := s.db.HostByID(ctx, req.HostID)
+		if err != nil || vm.ParentID == 0 {
+			return ownFlyRoute{}, 0, http.StatusNotFound, msgs.Errorf("err.notFound")
+		}
+		if err := s.tokenOwnsVM(ctx, t, strconv.FormatInt(vm.ParentID, 10), vm.Name); err != nil {
+			return ownFlyRoute{}, 0, http.StatusForbidden, err
+		}
+		target = FlyTarget{ID: "t1", Label: vm.Name, HostID: vm.ParentID, Kind: "vm", Ref: vm.Name, Port: req.Port}
+		out.HostID, out.VM, out.Port = vm.ID, vm.Name, req.Port
 	}
 	ownFlyMu.Lock()
 	defer ownFlyMu.Unlock()
@@ -113,18 +141,15 @@ func (s *Server) handleOwnFlyAdd(w http.ResponseWriter, r *http.Request) {
 			own++
 		}
 		if slices.Contains(rt.Names, name) {
-			writeErr(w, r, http.StatusConflict, msgs.Errorf("auth.tokenFlyTaken", name))
-			return
+			return ownFlyRoute{}, 0, http.StatusConflict, msgs.Errorf("auth.tokenFlyTaken", name)
 		}
 	}
 	if own >= t.Perms.Limits.FlyRoutes {
-		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenFlyRoutes", t.Perms.Limits.FlyRoutes))
-		return
+		return ownFlyRoute{}, 0, http.StatusForbidden, msgs.Errorf("auth.tokenFlyRoutes", t.Perms.Limits.FlyRoutes)
 	}
 	gw, err := s.ownFlyGateway(ctx, t)
 	if err != nil {
-		writeErr(w, r, http.StatusConflict, err)
-		return
+		return ownFlyRoute{}, 0, http.StatusConflict, err
 	}
 	id := ""
 	for n := 1; ; n++ {
@@ -134,21 +159,19 @@ func (s *Server) handleOwnFlyAdd(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	route := FlyRoute{ID: id, Label: name, Gateway: gw, Kind: fly.KindHTTPS, Names: []string{name}, Port: 443, TLS: true,
-		Algorithm: fly.AlgoRoundRobin, Check: fly.Check{Kind: fly.CheckTCP}, DNS: true,
-		Targets: []FlyTarget{{ID: "t1", Label: vm.Name, HostID: vm.ParentID, Kind: "vm", Ref: vm.Name, Port: req.Port}}}
+		Algorithm: fly.AlgoRoundRobin, Check: fly.Check{Kind: fly.CheckTCP}, DNS: true, Targets: []FlyTarget{target}}
 	user := auth.Username(ctx)
 	saved, err := s.flySave(ctx, FlyDoc{Gateways: d.Gateways, Routes: append(slices.Clone(d.Routes), route)}, user, msgs.Tc(ctx, "fly.ownAddedNote", name, t.Name))
-	s.db.Audit(ctx, user, "fly.own_add", name, auditOutcome(err), map[string]any{"route": id, "vm": vm.Name, "port": req.Port})
+	s.db.Audit(ctx, user, "fly.own_add", name, auditOutcome(err), map[string]any{"route": id, "target": target.Label, "port": target.Port})
 	if err != nil {
-		writeErr(w, r, http.StatusBadRequest, err)
-		return
+		return ownFlyRoute{}, 0, http.StatusBadRequest, err
 	}
 	jobID, err := s.startFlyApply(ctx, saved.Revision, user)
 	if err != nil {
-		writeErr(w, r, http.StatusInternalServerError, err)
-		return
+		return ownFlyRoute{}, 0, http.StatusInternalServerError, err
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"route": ownFlyRoute{ID: id, Name: name, HostID: vm.ID, VM: vm.Name, Port: req.Port}, "job_id": jobID})
+	out.ID = id
+	return out, jobID, http.StatusOK, nil
 }
 
 // handleOwnFlyDelete — DELETE /hub/own/fly/{route}: только свой маршрут.

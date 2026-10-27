@@ -194,6 +194,11 @@ curl -sS -X POST -H "Authorization: Bearer $NKT_TOKEN" -H 'Content-Type: applica
 kubectl --kubeconfig shop.kubeconfig get pods
 ```
 
+- Outside by name — a Traffic Fly route to the own namespace: `POST
+  /api/hub/own/fly {"name":"shop.client.example.com","cluster":"shared",
+  "namespace":"shop"}` (or `fly own … cluster … namespace …` in a script)
+  goes to the cluster's ingress set by the administrator (“Client
+  ingress”); the namespace needs an Ingress with the same name.
 - The cluster must run Cilium (it enforces network policies) and
   Kubernetes 1.30+ (admission policies); protection details —
   [Security](/en/guide/reference-security#client-machines-and-clusters).

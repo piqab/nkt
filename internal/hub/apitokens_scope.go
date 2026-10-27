@@ -87,6 +87,10 @@ func (s *Server) scriptScopeError(ctx context.Context, sc script.Script) error {
 			if err := need(st, store.TokenActK8sApply); err != nil {
 				return err
 			}
+		case script.KindFlyOwn:
+			if err := need(st, store.TokenActFlyOwn); err != nil {
+				return err
+			}
 		}
 		switch st.Kind {
 		case script.KindHost, script.KindGroup, script.KindFlyRoute, script.KindFlyApply:

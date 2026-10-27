@@ -185,6 +185,11 @@ curl -sS -X POST -H "Authorization: Bearer $NKT_TOKEN" -H 'Content-Type: applica
 kubectl --kubeconfig shop.kubeconfig get pods
 ```
 
+- Наружу по имени — маршрут Traffic Fly на свой namespace: `POST
+  /api/hub/own/fly {"name":"shop.client.example.com","cluster":"shared",
+  "namespace":"shop"}` (или `fly own … cluster … namespace …` в сценарии)
+  ведёт на ingress кластера, который задал администратор («Ingress для
+  клиентов»); в namespace нужен Ingress с тем же именем.
 - Кластер — только с Cilium (он исполняет сетевые политики) и
   Kubernetes 1.30+ (политики допуска); подробности защиты —
   [Безопасность](/guide/reference-security#машины-и-кластеры-клиентов).

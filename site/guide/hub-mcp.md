@@ -80,7 +80,7 @@ MCP работает с [API-токеном](/guide/hub-api#токены), а н
 | `k8s_own_namespaces`, `k8s_own_logs`, `k8s_own_helm`, `k8s_own_namespace_delete` | токен по правам | свои namespace в общих кластерах: список, логи пода, helm (рендер, проверки токена, применение), удалить; завести namespace и получить kubeconfig — только API |
 | `k8s_own_clusters`, `k8s_own_cluster_create`, `k8s_own_cluster_delete` | токен по правам | свой кластер k3s на машинах токена (single или cp1, один хост, сеть токена, API — порт пула); kubeconfig — только API, один раз |
 | `my_usage` | любой токен | свои потолки и «занято из»: CPU, память, диск, машины, порты, маршруты Fly, namespace, кластеры; записи учёта и разрешённые действия |
-| `fly_own_routes`, `fly_own_add`, `fly_own_remove` | токен по правам | свои маршруты Traffic Fly: HTTPS по имени в выданном домене на свою машину |
+| `fly_own_routes`, `fly_own_add`, `fly_own_remove` | токен по правам | свои маршруты Traffic Fly: HTTPS по имени в выданном домене на свою машину или на ingress общего кластера для своего namespace |
 | `vm_resize`, `vm_reinstall`, `vm_delete` | администратор | vCPU, память и диск (диск только растёт); переустановка из образа (задание); удаление машины целиком с дисками и записью (задание) |
 | `migrate_preview`, `migrate_stack`, `migration_action` | администратор | план переноса, перенос, откат / удаление старой копии |
 | `fly_apply`, `fly_ops` | администратор, без предела | применить карту, точечные правки целей |

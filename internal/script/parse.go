@@ -861,6 +861,21 @@ func parseFly(toks []string) (Step, error) {
 	if len(toks) == 2 && toks[1] == "apply" {
 		return Step{Kind: KindFlyApply}, nil
 	}
+	if len(toks) >= 2 && toks[1] == "own" {
+		if len(toks) != 7 || !nameRe.MatchString(toks[2]) {
+			return Step{}, msgs.Errorf("script.badFlyOwn")
+		}
+		switch {
+		case toks[3] == "machine" && nameRe.MatchString(toks[4]) && toks[5] == "port":
+			if n, err := strconv.Atoi(toks[6]); err != nil || n < 1 || n > 65535 {
+				return Step{}, msgs.Errorf("script.badNumber", "port", toks[6])
+			}
+			return Step{Kind: KindFlyOwn, Name: strings.ToLower(toks[2]), Args: map[string]string{"machine": toks[4], "port": toks[6]}}, nil
+		case toks[3] == "cluster" && nameRe.MatchString(toks[4]) && toks[5] == "namespace" && nameRe.MatchString(toks[6]):
+			return Step{Kind: KindFlyOwn, Name: strings.ToLower(toks[2]), Args: map[string]string{"cluster": toks[4], "namespace": toks[6]}}, nil
+		}
+		return Step{}, msgs.Errorf("script.badFlyOwn")
+	}
 	if len(toks) < 4 || toks[1] != "route" || !nameRe.MatchString(toks[2]) || !flyKinds[toks[3]] {
 		return Step{}, msgs.Errorf("script.badFlyRoute")
 	}

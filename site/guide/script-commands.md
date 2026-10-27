@@ -63,6 +63,7 @@ title: Команды сценариев
 | [`k8s КЛАСТЕР wait deployment ИМЯ`](#cmd-k8s-wait) | Ждёт, пока все реплики deployment готовы. |
 | [`fly route ИД ВИД`](#cmd-fly-route) | Создаёт или обновляет маршрут Traffic Fly и применяет его — как блок fly: конвейера: новый записывается и применяется, у существующего цели меняются плавно (новые добавляются и проверяются, прежние выводятся). |
 | [`fly apply`](#cmd-fly-apply) | Применяет карту Traffic Fly — как «Применить»; в сухом прогоне — сухой прогон применения. |
+| [`fly own ИМЯ machine МАШИНА port …`](#cmd-fly-own) | Свой маршрут Traffic Fly токена: HTTPS с сертификатом на шлюзе по имени в домене токена — на свою машину или на ingress общего кластера для своего namespace. |
 
 **Плагины**
 
@@ -612,6 +613,22 @@ fly route mc tcp port 25565 target web1 container mc-server-1 25565
 
 ```
 fly apply
+```
+
+### `fly own ИМЯ machine МАШИНА port ПОРТ | fly own ИМЯ cluster КЛАСТЕР namespace NS` {#cmd-fly-own}
+
+Свой маршрут Traffic Fly токена: HTTPS с сертификатом на шлюзе по имени в домене токена — на свою машину или на ingress общего кластера для своего namespace. Только в сценарии от токена с действием «свои маршруты Traffic Fly».
+
+| Аргумент | Обязательный | Что это |
+|---|---|---|
+| `ИМЯ` | ✓ | имя — домен токена или имя под ним |
+| `machine / port` |  | своя машина (имя в списке хостов) и её порт HTTP |
+| `cluster / namespace` |  | кластер и свой namespace (ingress кластера задаёт администратор) |
+
+Пример:
+
+```
+fly own shop.client.example.com cluster shared namespace shop
 ```
 
 ### `plugin ИМЯ СЛОВО аргументы… | СЛОВО аргументы…` {#cmd-plugin}
