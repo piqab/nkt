@@ -98,6 +98,11 @@ type TokenLimits struct {
 	// Снимков на одну машину. В отличие от потолков выше 0 — «нельзя»:
 	// снимки занимают диск хоста мимо потолка диска машины.
 	VMSnapshots int `json:"vm_snapshots,omitempty"`
+	// Полоса и диск одной машины: сеть (Мбит/с, вход и выход), IOPS и
+	// МБ/с диска. 0 — значения хаба по умолчанию (vm.limits.defaults).
+	VMNetMbit  int `json:"vm_net_mbit,omitempty"`
+	VMIOPS     int `json:"vm_iops,omitempty"`
+	VMDiskMBps int `json:"vm_disk_mbps,omitempty"`
 	// Портов хоста из пула (на все машины) и своих маршрутов Traffic
 	// Fly; 0 — нельзя.
 	Ports     int `json:"ports,omitempty"`

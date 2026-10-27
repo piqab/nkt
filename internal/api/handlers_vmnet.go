@@ -135,3 +135,28 @@ func (s *Server) handleVMNetworkAction(w http.ResponseWriter, r *http.Request) {
 	s.db.Audit(r.Context(), user, "vmnet."+action, name, "ok", nil)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// handleVMIsolationMail — POST /vm/isolation-mail {"network":"nkt-t5",
+// "allow":true}: исходящий порт 25 сети токена (1.17.14).
+func (s *Server) handleVMIsolationMail(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Network string `json:"network"`
+		Allow   bool   `json:"allow"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	mgr := s.vmnets()
+	if mgr == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.machineManagementUnavailable"))
+		return
+	}
+	err := mgr.SetMailAllowed(r.Context(), req.Network, req.Allow)
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "vm.isolation_mail", req.Network, auditResult(err), map[string]any{"allow": req.Allow})
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}

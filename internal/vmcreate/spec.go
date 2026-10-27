@@ -133,6 +133,11 @@ type Spec struct {
 	// UserData — свой #cloud-config владельца (CheckUserData): пакеты,
 	// файлы, команды первого запуска поверх настроек nkt.
 	UserData string `json:"user_data,omitempty"`
+	// NetMbit, IOPS, DiskMBps — полоса сети (вход и выход) и потолки диска
+	// (машины токенов, 1.17.14); 0 — без потолка.
+	NetMbit  int `json:"net_mbit,omitempty"`
+	IOPS     int `json:"iops,omitempty"`
+	DiskMBps int `json:"disk_mbps,omitempty"`
 }
 
 // Validate проверяет то, что уйдёт в команды и в XML.
@@ -157,6 +162,9 @@ func (s Spec) Validate() error {
 		if _, err := CheckUserData(s.UserData); err != nil {
 			return err
 		}
+	}
+	if s.NetMbit < 0 || s.NetMbit > 100000 || s.IOPS < 0 || s.IOPS > 1000000 || s.DiskMBps < 0 || s.DiskMBps > 100000 {
+		return msgs.Errorf("vmcreate.badIOLimits")
 	}
 	for _, key := range append([]string{s.SSHKey}, s.ExtraKeys...) {
 		key = strings.TrimSpace(key)
@@ -276,6 +284,23 @@ func DomainXML(s Spec, diskPath, seedPath string) string {
 		network = fmt.Sprintf("    <interface type='bridge'>\n      <source bridge='%s'/>\n      <model type='virtio'/>\n    </interface>",
 			html.EscapeString(s.Bridge))
 	}
+	// Полоса: average — КБ/с (Мбит/с × 125), в обе стороны.
+	if s.NetMbit > 0 {
+		kb := s.NetMbit * 125
+		network = strings.Replace(network, "    </interface>",
+			fmt.Sprintf("      <bandwidth>\n        <inbound average='%d'/>\n        <outbound average='%d'/>\n      </bandwidth>\n    </interface>", kb, kb), 1)
+	}
+	iotune := ""
+	if s.IOPS > 0 || s.DiskMBps > 0 {
+		iotune = "      <iotune>\n"
+		if s.IOPS > 0 {
+			iotune += fmt.Sprintf("        <total_iops_sec>%d</total_iops_sec>\n", s.IOPS)
+		}
+		if s.DiskMBps > 0 {
+			iotune += fmt.Sprintf("        <total_bytes_sec>%d</total_bytes_sec>\n", int64(s.DiskMBps)<<20)
+		}
+		iotune += "      </iotune>\n"
+	}
 	return fmt.Sprintf(`<domain type='kvm'>
   <name>%s</name>
   <memory unit='KiB'>%d</memory>
@@ -294,7 +319,7 @@ func DomainXML(s Spec, diskPath, seedPath string) string {
       <driver name='qemu' type='qcow2'/>
       <source file='%s'/>
       <target dev='vda' bus='virtio'/>
-    </disk>
+%s    </disk>
     <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
       <source file='%s'/>
@@ -311,5 +336,5 @@ func DomainXML(s Spec, diskPath, seedPath string) string {
   </devices>
 </domain>
 `, html.EscapeString(s.Name), s.MemoryMB*1024, s.VCPUs,
-		html.EscapeString(diskPath), html.EscapeString(seedPath), network)
+		html.EscapeString(diskPath), iotune, html.EscapeString(seedPath), network)
 }

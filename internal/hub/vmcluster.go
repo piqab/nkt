@@ -169,6 +169,7 @@ func releaseClusterToken(ctx context.Context, db *store.DB, spec ClusterSpec, ho
 	names := append(cps, workers...)
 	for _, n := range names {
 		_ = db.DeleteTokenUsage(ctx, 0, store.UsageVM, spec.HostID, n)
+		_ = db.DeleteTokenUsagePrefix(ctx, store.UsageSnapshot, spec.HostID, n+"/")
 	}
 	portsMu.Lock()
 	defer portsMu.Unlock()

@@ -18,6 +18,10 @@ ip link add virbr6 type bridge && ip addr add 192.168.6.1/24 dev virbr6 && ip li
 ip netns add vm2 && ip link add vm2h type veth peer name vm2g && ip link set vm2g netns vm2
 ip link set vm2h master virbr6 && ip link set vm2h up
 ip netns exec vm2 sh -c 'ip link set lo up; ip addr add 192.168.6.11/24 dev vm2g; ip link set vm2g up; ip route add default via 192.168.6.1'
+# «Интернет» — за veth wan (TEST-NET-2), слушает 80 и 25.
+ip link add wan0 type veth peer name wan1 && ip addr add 198.51.100.1/24 dev wan0 && ip link set wan0 up
+ip netns add wan && ip link set wan1 netns wan
+ip netns exec wan sh -c 'ip link set lo up; ip addr add 198.51.100.2/24 dev wan1; ip link set wan1 up; ip route add 192.168.0.0/16 via 198.51.100.1'
 ip netns add lan && ip link set lan1 netns lan
 ip netns exec lan sh -c 'ip link set lo up; ip addr add 10.9.0.2/24 dev lan1; ip link set lan1 up; ip route add default via 10.9.0.1'
 L='import socket,sys
@@ -29,6 +33,8 @@ except Exception: print("closed")'
 timeout 30 python3 -c "$L" 22 & timeout 30 python3 -c "$L" 53 &
 ip netns exec lan timeout 30 python3 -c "$L" 80 &
 ip netns exec vm timeout 30 python3 -c "$L" 8080 &
+ip netns exec wan timeout 30 python3 -c "$L" 80 &
+ip netns exec wan timeout 30 python3 -c "$L" 25 &
 sleep 0.7
 nft -f "$R"
 pr() { ip netns exec "$1" python3 -c "$P" "$2" "$3"; }
@@ -37,6 +43,9 @@ echo "vm -> host dns 192.168.5.1:53   : $(pr vm 192.168.5.1 53) want open"
 echo "vm -> host lan ip 10.9.0.1:22   : $(pr vm 10.9.0.1 22) want closed"
 echo "vm -> lan 10.9.0.2:80           : $(pr vm 10.9.0.2 80) want closed"
 echo "lan -> vm 192.168.5.10:8080     : $(pr lan 192.168.5.10 8080) want closed"
+echo "vm -> internet :80             : $(pr vm 198.51.100.2 80) want open"
+echo "vm -> internet :25 (no mail)    : $(pr vm 198.51.100.2 25) want closed"
+echo "vm2 -> internet :25 (mail ok)   : $(pr vm2 198.51.100.2 25) want open"
 echo "host -> vm 192.168.5.10:8080    : $(python3 -c "$P" 192.168.5.10 8080) want open"
 # Проброс порта хоста (DNAT, как пул портов и Traffic Fly): снаружи —
 # проходит; из сети токена через тот же порт хоста — нет.

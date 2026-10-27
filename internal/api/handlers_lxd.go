@@ -64,6 +64,14 @@ func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		cmds := []cmdjob.Command{{Argv: append([]string{hostTool("lxc")}, args...), StepKey: "lxd.stepLaunch", StepArgs: []any{req.Image}}}
+		limits, err := control.LXDLimitArgs(req.Name, req.LXDLaunchOpts)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		for _, l := range limits {
+			cmds = append(cmds, cmdjob.Command{Argv: append([]string{hostTool("lxc")}, l...), StepKey: "lxd.stepLimits", StepArgs: []any{req.Name}})
+		}
 		if req.Generate || req.Password != "" {
 			user := strings.TrimSpace(req.User)
 			if user == "" {

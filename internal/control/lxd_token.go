@@ -20,6 +20,33 @@ type LXDLaunchOpts struct {
 	// Isolated — экземпляр токена: явно без привилегий и вложенности, что
 	// бы ни было в профиле по умолчанию.
 	Isolated bool `json:"isolated,omitempty"`
+	// NetMbit и DiskMBps — полоса сети и чтение/запись диска (1.17.14);
+	// ставятся после запуска (LXDLimitArgs).
+	NetMbit  int `json:"net_mbit,omitempty"`
+	DiskMBps int `json:"disk_mbps,omitempty"`
+}
+
+// LXDLimitArgs — команды lxc после запуска: полоса сети на eth0 и потолки
+// чтения и записи корневого диска (свой root — set, из профиля —
+// override).
+func LXDLimitArgs(name string, o LXDLaunchOpts) ([][]string, error) {
+	if !lxdInstanceNameRe.MatchString(name) || o.NetMbit < 0 || o.NetMbit > 100000 || o.DiskMBps < 0 || o.DiskMBps > 100000 {
+		return nil, msgs.Errorf("control.invalidResize")
+	}
+	var out [][]string
+	if o.NetMbit > 0 {
+		v := strconv.Itoa(o.NetMbit) + "Mbit"
+		out = append(out, []string{"config", "device", "set", name, "eth0", "limits.ingress=" + v, "limits.egress=" + v})
+	}
+	if o.DiskMBps > 0 {
+		v := strconv.Itoa(o.DiskMBps) + "MB"
+		verb := "override"
+		if o.DiskGB > 0 {
+			verb = "set"
+		}
+		out = append(out, []string{"config", "device", verb, name, "root", "limits.read=" + v, "limits.write=" + v})
+	}
+	return out, nil
 }
 
 // LXDLaunchArgsOpts — LXDLaunchArgs с сетью и потолками.

@@ -15,6 +15,10 @@ const (
 	UsageCompose = "compose" // стек compose на хосте: ref — имя стека
 	UsageVM      = "vm"      // машина: host_id — хост, ref — имя машины
 	UsageK8sNS   = "k8s"     // namespace: host_id — id кластера, ref — namespace
+	// UsageSnapshot — снимок машины: host_id — хост, ref — «машина/снимок»
+	// (LXD — «lxd/экземпляр/снимок»); диск — размер диска машины (худший
+	// случай: снимок дорастает до него).
+	UsageSnapshot = "snapshot"
 )
 
 // TokenUsage — одна запись учёта.
@@ -48,6 +52,13 @@ func (d *DB) DeleteTokenUsage(ctx context.Context, tokenID int64, kind string, h
 		return err
 	}
 	_, err := d.ExecContext(ctx, `DELETE FROM token_usage WHERE token_id = ? AND kind = ? AND host_id = ? AND ref = ?`, tokenID, kind, hostID, ref)
+	return err
+}
+
+// DeleteTokenUsagePrefix убирает записи вида kind на хосте, чей ref
+// начинается с prefix (снимки удалённой машины).
+func (d *DB) DeleteTokenUsagePrefix(ctx context.Context, kind string, hostID int64, prefix string) error {
+	_, err := d.ExecContext(ctx, `DELETE FROM token_usage WHERE kind = ? AND host_id = ? AND substr(ref, 1, ?) = ?`, kind, hostID, len(prefix), prefix)
 	return err
 }
 

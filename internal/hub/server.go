@@ -572,6 +572,8 @@ func (s *Server) Handler() http.Handler {
 					r.Delete("/hub/hosts/{id}/lxd/{name}", s.handleLXDDeleteHub)
 					r.Get("/hub/clusters/{id}/client-ingress", s.handleClientIngress)
 					r.Put("/hub/clusters/{id}/client-ingress", s.handleClientIngress)
+					r.Get("/hub/vm/limit-defaults", s.handleVMLimitDefaults)
+					r.Put("/hub/vm/limit-defaults", s.handleVMLimitDefaults)
 					r.Get("/hub/k8s/clusters/own", s.handleOwnClusters)
 					r.Post("/hub/k8s/clusters/own", s.handleOwnClusterCreate)
 					r.Post("/hub/k8s/clusters/own/{id}/kubeconfig", s.handleOwnClusterKubeconfig)

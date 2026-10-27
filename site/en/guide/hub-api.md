@@ -146,6 +146,21 @@ KVM; with limits set, sizes are required), live in the token's LXD network
 `nkt-t<number>` under the same nftables rules, unprivileged and without
 nesting. Pool ports and Fly routes are for KVM machines so far.
 
+**Bandwidth, disk, mail and snapshots of a token machine.**
+
+- Network (Mbit/s, in and out), IOPS and disk MB/s per machine are token
+  limits; empty — the hub's defaults (“About” → API tokens → “Machine
+  limits by default”, initially 100 Mbit/s, 1000 IOPS, 100 MB/s). They are
+  set when the machine is created (KVM — in the domain definition, LXD — on
+  eth0 and the root disk, without IOPS); new values do not apply to
+  existing machines. `GET`/`PUT /api/hub/vm/limit-defaults` — for an
+  administrator.
+- Outbound port 25 from the token's network is closed; “allow mail” in the
+  token's permissions opens it on all hosts of its machines at once.
+- Each snapshot reserves the machine's disk size in the token's disk total
+  (a snapshot can grow that much); a snapshot over the disk limit is
+  refused, the reserve goes with the snapshot, the machine or a reinstall.
+
 **Ports and names for an own machine.**
 
 - An administrator sets the host's **port pool**: “Hosts” → the host row →
@@ -358,6 +373,7 @@ to the hub through the tunnel. Conditions:
 | `GET`, `POST /api/hub/hosts/{id}/lxd` | admin | a host's LXD instances (a token — its own); create (`{"name","image","vm","cpu","mem_mb","disk_gb"}`) → `job_id` |
 | `POST /api/hub/hosts/{id}/lxd/{name}/{action}`, `…/resize`, `DELETE /api/hub/hosts/{id}/lxd/{name}` | admin | `start`, `stop`, `restart`; vCPU, memory, disk; delete |
 | `GET`, `POST …/lxd/{name}/snapshots`, `POST …/snapshots/{snap}/restore`, `DELETE …/snapshots/{snap}` | admin | instance snapshots (a token — within its limit) |
+| `GET`, `PUT /api/hub/vm/limit-defaults` | admin | default bandwidth and disk of token machines (`{"net_mbit":100,"iops":1000,"disk_mbps":100}`) |
 | `GET /api/hub/tokens/self/usage` | any token | its own limits and usage (totals, machines, ports, Fly routes, namespaces, clusters), usage rows, allowed actions |
 | `GET`, `POST /api/hub/k8s/clusters/own` | by permission | own clusters; create (single or cp1 on the token's machines) → `id`, `job_id`, `api_port`, `address` |
 | `POST /api/hub/k8s/clusters/own/{id}/kubeconfig`, `DELETE /api/hub/k8s/clusters/own/{id}` | by permission | the kubeconfig once; delete the cluster with its machines → `job_id` |

@@ -111,6 +111,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 			}
 		}
 	}()
+	var mailToken *store.APIToken
 	// Машина токена «по правам» — только в сети токена, как бы ни
 	// запускали задание (API, MCP, сценарий, кластер токена).
 	if _, ok := cutTokenAuthor(jc.Job.Author); ok {
@@ -122,6 +123,8 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 			if err := tokenVMIsolate(t, &p.Spec); err != nil {
 				return err
 			}
+			applyTokenVMLimits(t, vmLimitDefaults(ctx, r.m.db), &p.Spec)
+			mailToken = &t
 		}
 	}
 	if err := p.Spec.Validate(); err != nil {
@@ -216,6 +219,12 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 	addr, err := r.waitVMJob(ctx, jc, host, done.RemoteJobID)
 	if err != nil {
 		return err
+	}
+	// Токену разрешена почта — порт 25 его сети открывается на хосте.
+	if p.Spec.Isolated && mailToken != nil && mailToken.Perms.AllowMail {
+		if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/vm/isolation-mail", map[string]any{"network": p.Spec.Network, "allow": true}, nil); err != nil {
+			jc.Log("hub.vmMailWarn", err)
+		}
 	}
 	if addr == "" {
 		// Задание на хосте закончилось раньше, чем машина ответила.

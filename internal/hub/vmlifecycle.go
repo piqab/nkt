@@ -82,7 +82,14 @@ func (s *Server) handleVMSnapshotCreateHub(w http.ResponseWriter, r *http.Reques
 		writeErr(w, r, http.StatusForbidden, err)
 		return
 	}
-	s.vmHostCall(w, r, vm, "POST", vmPath(vm, "/snapshots"), map[string]string{"name": req.Name}, "vm.snapshot")
+	commit, err := s.snapshotReserve(r.Context(), vm.ParentID, vm.Name, req.Name)
+	if err != nil {
+		writeErr(w, r, http.StatusForbidden, err)
+		return
+	}
+	if s.vmHostCall(w, r, vm, "POST", vmPath(vm, "/snapshots"), map[string]string{"name": req.Name}, "vm.snapshot") {
+		commit()
+	}
 }
 
 func (s *Server) handleVMSnapshotRevertHub(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +105,10 @@ func (s *Server) handleVMSnapshotDeleteHub(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	s.vmHostCall(w, r, vm, "DELETE", vmPath(vm, "/snapshots/"+url.PathEscape(chi.URLParam(r, "snap"))), nil, "vm.snapshot-delete")
+	snap := chi.URLParam(r, "snap")
+	if s.vmHostCall(w, r, vm, "DELETE", vmPath(vm, "/snapshots/"+url.PathEscape(snap)), nil, "vm.snapshot-delete") {
+		_ = s.db.DeleteTokenUsage(r.Context(), 0, store.UsageSnapshot, vm.ParentID, vm.Name+"/"+snap)
+	}
 }
 
 // vmSnapshotAllowed — снимков на машину не больше потолка токена (0 —
@@ -120,20 +130,44 @@ func (s *Server) vmSnapshotAllowed(ctx context.Context, vm store.Host) error {
 	return nil
 }
 
+// snapshotReserve — снимок в лимите диска токена: резерв — размер диска
+// машины (ref — машина в учёте: имя или «lxd/имя»); commit пишет учёт
+// после того, как снимок снят. Без токена «по правам» — без резерва.
+func (s *Server) snapshotReserve(ctx context.Context, hostID int64, machineRef, snap string) (func(), error) {
+	t, byToken := tokenFromContext(ctx)
+	if !byToken || !t.Limited() {
+		return func() {}, nil
+	}
+	var disk int64
+	usage, _ := s.db.ListTokenUsage(ctx, t.ID)
+	for _, u := range usage {
+		if u.Kind == store.UsageVM && u.HostID == hostID && u.Ref == machineRef {
+			disk = u.DiskGB
+		}
+	}
+	row := store.TokenUsage{TokenID: t.ID, Kind: store.UsageSnapshot, HostID: hostID, Ref: machineRef + "/" + snap,
+		Label: machineRef + "@" + snap, DiskGB: disk}
+	if err := s.tokenFits(ctx, t, row); err != nil {
+		return nil, err
+	}
+	return func() { _ = s.db.SetTokenUsage(context.WithoutCancel(ctx), row) }, nil
+}
+
 // vmHostCall передаёт вызов хосту машины и пишет журнал.
-func (s *Server) vmHostCall(w http.ResponseWriter, r *http.Request, vm store.Host, method, path string, body any, audit string) {
+func (s *Server) vmHostCall(w http.ResponseWriter, r *http.Request, vm store.Host, method, path string, body any, audit string) bool {
 	user := auth.Username(r.Context())
 	var out map[string]any
 	if _, err := s.hostCall(r.Context(), auth.Username(r.Context()), vm.ParentID, method, path, body, &out); err != nil {
 		s.db.Audit(r.Context(), user, audit, vm.Name, "error", err.Error())
 		writeErr(w, r, http.StatusBadGateway, err)
-		return
+		return false
 	}
 	s.db.Audit(r.Context(), user, audit, vm.Name, "ok", nil)
 	if out == nil {
 		out = map[string]any{"status": "ok"}
 	}
 	writeJSON(w, http.StatusOK, out)
+	return true
 }
 
 // vmResizeRequest — новые размеры (0 — не менять).
@@ -410,6 +444,8 @@ func (r *VMReinstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// 2. Запись: адрес, ключ машины забыт (сверится заново), nkt нет.
 	jc.StepKey(2, steps, "hub.vmStepAddress")
 	_ = m.db.SetHostSSHKey(ctx, vm.ID, "")
+	// Снимки ушли со старым диском — их резерв тоже.
+	_ = m.db.DeleteTokenUsagePrefix(ctx, store.UsageSnapshot, vm.ParentID, vm.Name+"/")
 	_ = m.db.SetHostVersion(ctx, vm.ID, "")
 	if addr != "" && addr != vm.Addr {
 		if err := m.db.UpdateHost(ctx, vm.ID, vm.Name, addr, vm.SSHPort, vm.SSHUser, vm.SSHAuthKind); err != nil {

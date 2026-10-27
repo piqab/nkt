@@ -250,3 +250,26 @@ func TestParseDomifaddrAllAndDomiflist(t *testing.T) {
 		t.Errorf("ifaces: %+v", ifs)
 	}
 }
+
+// Полоса и диск машины токена — в описании домена; без потолков — нет
+// ни bandwidth, ни iotune.
+func TestDomainXMLLimits(t *testing.T) {
+	s := Spec{Name: "app1", ImageID: "ubuntu-24.04", DiskGB: 10, MemoryMB: 1024, VCPUs: 1, User: "deploy", Network: "nkt-t5", NetMbit: 100, IOPS: 1000, DiskMBps: 50}
+	x := DomainXML(s, "/d.qcow2", "/s.iso")
+	for _, want := range []string{"<inbound average='12500'/>", "<outbound average='12500'/>", "<total_iops_sec>1000</total_iops_sec>", "<total_bytes_sec>52428800</total_bytes_sec>"} {
+		if !strings.Contains(x, want) {
+			t.Errorf("no %q:\n%s", want, x)
+		}
+	}
+	if strings.Index(x, "<iotune>") > strings.Index(x, "/s.iso") || strings.Index(x, "<bandwidth>") < strings.Index(x, "<interface") {
+		t.Errorf("limits misplaced:\n%s", x)
+	}
+	s.NetMbit, s.IOPS, s.DiskMBps = 0, 0, 0
+	if x := DomainXML(s, "/d.qcow2", "/s.iso"); strings.Contains(x, "bandwidth") || strings.Contains(x, "iotune") {
+		t.Errorf("limits without values:\n%s", x)
+	}
+	s.IOPS = -1
+	if s.Validate() == nil {
+		t.Error("negative IOPS accepted")
+	}
+}

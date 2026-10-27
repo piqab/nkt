@@ -606,6 +606,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vm/networks/{name}/{action}", s.handleVMNetworkAction)
 				r.Post("/vm/create", s.handleVMCreate)
 				r.Post("/vm/reinstall", s.handleVMReinstall)
+				r.Post("/vm/isolation-mail", s.handleVMIsolationMail)
 				r.Post("/vm/templates", s.handleVMTemplateSave)
 				r.Delete("/vm/templates/{id}", s.handleVMTemplateDelete)
 

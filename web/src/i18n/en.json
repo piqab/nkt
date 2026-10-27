@@ -4262,6 +4262,9 @@
     "flyDomainHint": " — the domain itself and names under it; a route is HTTPS with a certificate on the gateway, the target is an own machine",
     "flyGateway": "Gateway",
     "flyGatewayAuto": "the only Fly gateway",
+    "byDefault": "default",
+    "vmDefaults": "Machine limits by default",
+    "vmDefaultsHint": "Network bandwidth and disk of token machines when the token leaves these limits empty (machines and LXD instances; LXD — without IOPS). They apply to machines created after saving.",
     "allowMail": "allow mail: outbound port 25 from the token's machines and namespaces (closed by default)",
     "allInScope": "all within the token's hosts",
     "act": {
@@ -4308,6 +4311,9 @@
       "vm_mem_mb": "Memory each",
       "vm_disk_gb": "Disk each",
       "vm_snapshots": "Snapshots per machine (empty — none)",
+      "vm_net_mbit": "Network per machine",
+      "vm_iops": "IOPS per machine",
+      "vm_disk_mbps": "Disk per machine, MB/s",
       "k8s_namespaces": "Own namespaces (empty — none)",
       "k8s_clusters": "Own clusters (empty — none)",
       "ports": "Pool ports (empty — none)",
@@ -4318,10 +4324,18 @@
       "k8s_pods": "Pods",
       "deploys_per_hour": "Actions per hour"
     },
+    "vmDefault": {
+      "net_mbit": "Network, Mbit/s",
+      "iops": "IOPS",
+      "disk_mbps": "Disk, MB/s"
+    },
     "unit": {
       "cpu": "cores",
       "mb": "MB",
       "gb": "GB",
+      "mbit": "Mbit/s",
+      "iops": "IOPS",
+      "mbps": "MB/s",
       "count": "pcs"
     },
     "usage": "In use",
@@ -4330,6 +4344,7 @@
     "usageEmpty": "The token hasn't deployed or created anything yet.",
     "usageKind": {
       "compose": "stack",
+      "snapshot": "snapshot",
       "vm": "machine",
       "k8s": "namespace"
     },

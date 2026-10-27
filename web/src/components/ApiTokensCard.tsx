@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { osLabel } from './OsIcon'
-import { Button, Checkbox, Input, Select, Space, Tag, Tooltip, Typography } from 'antd'
+import { Button, Checkbox, Input, InputNumber, Select, Space, Tag, Tooltip, Typography } from 'antd'
 import { TokenPermsEditor, TokenUsagePanel, McpExamples, permsText, emptyPerms, type TokenPerms } from './TokenPerms'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -49,6 +49,7 @@ function expired(tk: ApiToken): boolean {
 /** «API-токены» в «О системе»: доступ для n8n, CI и скриптов. */
 export function ApiTokensCard({ admin }: { admin: boolean }) {
   const { t } = useTranslation()
+  const [limitsOpen, setLimitsOpen] = useState(false)
   const list = useApi<{ tokens: ApiToken[] }>(admin ? '/hub/tokens' : null)
   const hosts = useApi<HubHost[]>(admin ? '/hub/hosts' : null)
   const [edit, setEdit] = useState<ApiToken | 'new' | null>(null)
@@ -179,12 +180,16 @@ export function ApiTokensCard({ admin }: { admin: boolean }) {
       actions={
         <Space size={4}>
           <HelpButton docKey="hub:api" isHub admin label={t('tokens.help')} />
+          <Button size="small" onClick={() => setLimitsOpen(true)}>
+            {t('tokens.vmDefaults')}
+          </Button>
           <Button size="small" type="primary" onClick={() => setEdit('new')}>
             {t('tokens.create')}
           </Button>
         </Space>
       }
     >
+      {limitsOpen && <VMLimitDefaultsModal onClose={() => setLimitsOpen(false)} />}
       <ErrorNote error={list.error} />
       {error && (
         <Banner kind="error" onClose={() => setError(null)}>
@@ -418,6 +423,60 @@ function IssuedModal({ name, data, onClose }: { name: string; data: Issued; onCl
         {`curl -H "Authorization: Bearer ${data.token}" ${origin}/api/hub/hosts`}
       </pre>
       <McpExamples token={data.token} open />
+    </Modal>
+  )
+}
+
+/** Полоса и диск машин токенов по умолчанию (пустые потолки токена). */
+function VMLimitDefaultsModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
+  const cur = useApi<{ net_mbit: number; iops: number; disk_mbps: number }>('/hub/vm/limit-defaults')
+  const [next, setNext] = useState<{ net_mbit: number; iops: number; disk_mbps: number } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (!cur.data) return <Modal title={t('tokens.vmDefaults')} onClose={onClose}>{cur.error ? <Banner kind="error">{cur.error}</Banner> : <Loading />}</Modal>
+  const before = cur.data
+  const value = next ?? before
+  const keys = ['net_mbit', 'iops', 'disk_mbps'] as const
+  const changed = keys.some((k) => value[k] !== before[k])
+  const line = (v: typeof value) => keys.map((k) => `${t(`tokens.vmDefault.${k}`)} ${v[k]}`).join(', ')
+  return (
+    <Modal title={t('tokens.vmDefaults')} onClose={onClose} width={560}>
+      <div className="col small" style={{ gap: '0.5rem' }}>
+        <span className="muted">{t('tokens.vmDefaultsHint')}</span>
+        <Space wrap>
+          {keys.map((k) => (
+            <label key={k} className="small" style={{ display: 'inline-flex', flexDirection: 'column' }}>
+              {t(`tokens.vmDefault.${k}`)}
+              <InputNumber min={1} value={value[k]} onChange={(v) => setNext({ ...value, [k]: v ?? 1 })} style={{ width: 150 }} />
+            </label>
+          ))}
+        </Space>
+        {changed && <DiffView text={`-${line(before)}\n+${line(value)}`} />}
+        {error && <Banner kind="error">{error}</Banner>}
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <Button
+            type="primary"
+            disabled={!changed}
+            loading={busy}
+            onClick={async () => {
+              setBusy(true)
+              setError(null)
+              try {
+                await api('/hub/vm/limit-defaults', { method: 'PUT', body: value })
+                onClose()
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e))
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            {t('common.save')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </div>
+      </div>
     </Modal>
   )
 }

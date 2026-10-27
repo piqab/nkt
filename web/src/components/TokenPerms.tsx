@@ -26,6 +26,9 @@ export interface TokenLimits {
   vm_mem_mb?: number
   vm_disk_gb?: number
   vm_snapshots?: number
+  vm_net_mbit?: number
+  vm_iops?: number
+  vm_disk_mbps?: number
   ports?: number
   fly_routes?: number
   k8s_namespaces?: number
@@ -76,11 +79,12 @@ type T = (k: string, o?: Record<string, unknown>) => string
 
 // Поля потолков по группам: ключ, шаг, единица.
 // zero — пустое значение значит «нельзя», а не «без потолка».
-const LIMIT_GROUPS: { key: string; fields: { k: keyof TokenLimits; step: number; unit: string; zero?: boolean }[] }[] = [
+// def — пустое значение берёт потолок хаба по умолчанию.
+const LIMIT_GROUPS: { key: string; fields: { k: keyof TokenLimits; step: number; unit: string; zero?: boolean; def?: boolean }[] }[] = [
   { key: 'total', fields: [{ k: 'cpu', step: 0.5, unit: 'cpu' }, { k: 'mem_mb', step: 256, unit: 'mb' }, { k: 'disk_gb', step: 10, unit: 'gb' }] },
   { key: 'host', fields: [{ k: 'host_cpu', step: 0.5, unit: 'cpu' }, { k: 'host_mem_mb', step: 256, unit: 'mb' }] },
   { key: 'service', fields: [{ k: 'service_cpu', step: 0.25, unit: 'cpu' }, { k: 'service_mem_mb', step: 128, unit: 'mb' }, { k: 'min_free_gb', step: 5, unit: 'gb' }] },
-  { key: 'vm', fields: [{ k: 'vms', step: 1, unit: 'count' }, { k: 'vm_cpu', step: 1, unit: 'cpu' }, { k: 'vm_mem_mb', step: 512, unit: 'mb' }, { k: 'vm_disk_gb', step: 10, unit: 'gb' }, { k: 'vm_snapshots', step: 1, unit: 'count', zero: true }, { k: 'ports', step: 1, unit: 'count', zero: true }] },
+  { key: 'vm', fields: [{ k: 'vms', step: 1, unit: 'count' }, { k: 'vm_cpu', step: 1, unit: 'cpu' }, { k: 'vm_mem_mb', step: 512, unit: 'mb' }, { k: 'vm_disk_gb', step: 10, unit: 'gb' }, { k: 'vm_snapshots', step: 1, unit: 'count', zero: true }, { k: 'ports', step: 1, unit: 'count', zero: true }, { k: 'vm_net_mbit', step: 10, unit: 'mbit', def: true }, { k: 'vm_iops', step: 100, unit: 'iops', def: true }, { k: 'vm_disk_mbps', step: 10, unit: 'mbps', def: true }] },
   { key: 'k8s', fields: [{ k: 'k8s_cpu', step: 0.5, unit: 'cpu' }, { k: 'k8s_mem_mb', step: 256, unit: 'mb' }, { k: 'k8s_storage_gb', step: 5, unit: 'gb' }, { k: 'k8s_pods', step: 1, unit: 'count' }, { k: 'k8s_namespaces', step: 1, unit: 'count', zero: true }, { k: 'k8s_clusters', step: 1, unit: 'count', zero: true }] },
   { key: 'fly', fields: [{ k: 'fly_routes', step: 1, unit: 'count', zero: true }] },
   { key: 'rate', fields: [{ k: 'deploys_per_hour', step: 1, unit: 'count' }] },
@@ -219,7 +223,7 @@ export function TokenPermsEditor({ perms, onChange, onRole }: { perms: TokenPerm
             {g.fields.map((f) => (
               <label key={f.k} className="small" style={{ display: 'inline-flex', flexDirection: 'column' }}>
                 {t(`tokens.limit.${f.k}`)}
-                <InputNumber min={0} step={f.step} value={perms.limits[f.k] ?? null} placeholder={f.zero ? '0' : '∞'} onChange={(v) => setLimit(f.k, v)} style={{ width: 130 }} addonAfter={t(`tokens.unit.${f.unit}`)} />
+                <InputNumber min={0} step={f.step} value={perms.limits[f.k] ?? null} placeholder={f.zero ? '0' : f.def ? t('tokens.byDefault') : '∞'} onChange={(v) => setLimit(f.k, v)} style={{ width: 130 }} addonAfter={t(`tokens.unit.${f.unit}`)} />
               </label>
             ))}
           </Space>

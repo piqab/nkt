@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.14 — 2026-10-27
+
+- **Mail from token machines is closed by default.** Outbound port 25 from token networks is closed: spam would leave from the host's address. The “allow mail” checkbox in the token's permissions opens it at once on all hosts of its machines and LXD instances. Checked on live traffic.
+- **Bandwidth and disk of token machines.** New per-machine limits: network (Mbit/s), IOPS and disk MB/s.
+  - An empty limit takes the hub's default: “About” → API tokens → “Machine limits by default”, initially 100 Mbit/s, 1000 IOPS and 100 MB/s.
+  - How they are applied: KVM — in the domain definition, LXD — on the network and root disk (without IOPS). New values apply to machines created after saving.
+- **Snapshots in the disk limit.** Each snapshot reserves the machine's disk size in the token's disk total — it can grow that much. Over the limit — refused. The reserve goes with the snapshot, the machine or a reinstall.
+- **Fixed:** since 1.17.7 the usage reconcile removed token LXD instance rows every 10 minutes. The limits and the right to manage the own instance were lost with them. Instances are now checked against the LXD list, and snapshots by their machine.
+
 ## v1.17.13 — 2026-10-27
 
 - **Traffic Fly for a client namespace.** An administrator sets a cluster's “Client ingress” once: a node and the HTTP port of the ingress controller.
