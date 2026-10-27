@@ -4256,6 +4256,7 @@
     "flyDomainHint": " — the domain itself and names under it; a route is HTTPS with a certificate on the gateway, the target is an own machine",
     "flyGateway": "Gateway",
     "flyGatewayAuto": "the only Fly gateway",
+    "allowMail": "allow mail: outbound port 25 from the token's machines and namespaces (closed by default)",
     "allInScope": "all within the token's hosts",
     "act": {
       "pipeline.deploy": "deploy, roll back, dry run",

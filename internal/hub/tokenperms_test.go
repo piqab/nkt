@@ -162,7 +162,7 @@ func TestCustomTokenPermissions(t *testing.T) {
 // квота namespace — ResourceQuota и LimitRange по потолкам.
 func TestTokenK8sRules(t *testing.T) {
 	ok := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n  namespace: team-a\nspec:\n  template:\n    spec:\n      containers:\n        - name: web\n          image: nginx\n"
-	if nss, err := tokenK8sNamespaces(ok, []string{"team-a"}); err != nil || len(nss) != 1 || nss[0] != "team-a" {
+	if nss, err := tokenK8sNamespaces(ok, []string{"team-a"}, ""); err != nil || len(nss) != 1 || nss[0] != "team-a" {
 		t.Fatalf("ok: %v %v", nss, err)
 	}
 	for what, bad := range map[string]string{
@@ -175,7 +175,7 @@ func TestTokenK8sRules(t *testing.T) {
 		"privileged":     strings.Replace(ok, "          image: nginx\n", "          image: nginx\n          securityContext:\n            privileged: true\n", 1),
 		"foreign ns obj": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: other\n",
 	} {
-		if _, err := tokenK8sNamespaces(bad, []string{"team-a"}); err == nil {
+		if _, err := tokenK8sNamespaces(bad, []string{"team-a"}, ""); err == nil {
 			t.Errorf("%s accepted", what)
 		}
 	}
@@ -185,7 +185,7 @@ func TestTokenK8sRules(t *testing.T) {
 			t.Errorf("quota manifest lacks %s:\n%s", want, q)
 		}
 	}
-	if _, err := tokenK8sNamespaces(q, []string{"team-a"}); err == nil {
+	if _, err := tokenK8sNamespaces(q, []string{"team-a"}, ""); err == nil {
 		t.Error("token could apply its own quota")
 	}
 }

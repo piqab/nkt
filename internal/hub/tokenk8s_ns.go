@@ -79,43 +79,22 @@ func (s *Server) tokenAllowedNamespaces(ctx context.Context, t store.APIToken) [
 	return out
 }
 
-// ownNSManifest — namespace клиента: PSA restricted, сетевая политика,
-// учётная запись с ролью edit и её секрет; квота — tokenK8sQuotaManifest.
-func ownNSManifest(ns, token string, l store.TokenLimits) string {
+// ownNSManifest — namespace клиента (tenantManifest: PSA restricted,
+// квота, политики) с учётной записью с ролью edit и её секретом.
+func ownNSManifest(ns string, t store.APIToken) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, `apiVersion: v1
-kind: Namespace
-metadata:
-  name: %[1]s
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
-  annotations:
-    nkt.io/token: %[2]q
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: nkt-same-namespace
-  namespace: %[1]s
-spec:
-  podSelector: {}
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - podSelector: {}
----
+	b.WriteString(tenantManifest(ns, t))
+	fmt.Fprintf(&b, `---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: %[3]s
+  name: %[2]s
   namespace: %[1]s
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: %[3]s-edit
+  name: %[2]s-edit
   namespace: %[1]s
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -123,17 +102,11 @@ roleRef:
   name: edit
 subjects:
   - kind: ServiceAccount
-    name: %[3]s
+    name: %[2]s
     namespace: %[1]s
 ---
-`, ns, token, ownNSAccount)
+`, ns, ownNSAccount)
 	b.WriteString(ownNSSecretManifest(ns))
-	if q := tokenK8sQuotaManifest(ns, token, l); q != "" {
-		// Namespace там уже есть — без первого документа.
-		if _, rest, ok := strings.Cut(q, "\n---\n"); ok {
-			b.WriteString("---\n" + rest)
-		}
-	}
 	return b.String()
 }
 
@@ -161,6 +134,11 @@ func (s *Server) ownNSTarget(ctx context.Context, t store.APIToken, cluster stri
 		}
 		if len(t.Perms.Clusters) > 0 && !slices.Contains(t.Perms.Clusters, cl.Name) || !s.clusterInScope(ctx, cl.ID) {
 			return store.Cluster{}, 0, msgs.Errorf("hub.tokenK8sCluster", cl.Name)
+		}
+		// Сетевые политики клиента исполняет Cilium — без него namespace
+		// клиента не заводится.
+		if !clusterIsCilium(cl) {
+			return store.Cluster{}, 0, msgs.Errorf("hub.ownNSNotCilium", cl.Name)
 		}
 		hosts, err := s.db.ClusterHosts(ctx, cl.ID)
 		if err != nil || len(hosts) == 0 {
@@ -268,7 +246,13 @@ func (s *Server) handleOwnNamespaceCreate(w http.ResponseWriter, r *http.Request
 		writeErr(w, r, http.StatusForbidden, err)
 		return
 	}
-	if _, err := s.hostCall(ctx, user, hostID, "POST", "/api/k8s/apply", map[string]string{"content": ownNSManifest(ns, t.Name, l), "note": "nkt token " + t.Name}, nil); err != nil {
+	// Правила допуска — до namespace: без них (кластер старше 1.30)
+	// клиент со своим kubeconfig обошёл бы проверки хаба.
+	if _, err := s.hostCall(ctx, user, hostID, "POST", "/api/k8s/apply", map[string]string{"content": tenantAdmissionManifest, "note": "nkt tenant policies"}, nil); err != nil {
+		writeErr(w, r, http.StatusConflict, msgs.Errorf("hub.ownNSNoAdmission", cl.Name, err))
+		return
+	}
+	if _, err := s.hostCall(ctx, user, hostID, "POST", "/api/k8s/apply", map[string]string{"content": ownNSManifest(ns, t), "note": "nkt token " + t.Name}, nil); err != nil {
 		s.db.Audit(ctx, user, "k8s.own_namespace", ns+"@"+cl.Name, "error", err.Error())
 		writeErr(w, r, http.StatusBadGateway, err)
 		return
@@ -420,7 +404,7 @@ func (s *Server) handleOwnNamespaceHelm(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if _, err := tokenK8sNamespaces(content, []string{ns}); err != nil {
+	if _, err := tokenK8sNamespaces(content, []string{ns}, t.Perms.FlyDomain); err != nil {
 		writeErr(w, r, http.StatusForbidden, err)
 		return
 	}

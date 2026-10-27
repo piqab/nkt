@@ -194,6 +194,14 @@ curl -sS -X POST -H "Authorization: Bearer $NKT_TOKEN" -H 'Content-Type: applica
 kubectl --kubeconfig shop.kubeconfig get pods
 ```
 
+- The cluster must run Cilium (it enforces network policies) and
+  Kubernetes 1.30+ (admission policies); protection details —
+  [Security](/en/guide/reference-security#client-machines-and-clusters).
+- Outside access — only Ingress, HTTPRoute and GRPCRoute with names in the
+  token's domain (`fly_domain`), Service — only ClusterIP; `NodePort`,
+  `LoadBalancer`, `externalIPs`, Gateway and own network policies are
+  refused both through the hub and with the own kubeconfig. Outbound port
+  25 is closed unless “allow mail” is checked in the token's permissions.
 - The cluster comes from the token's cluster list (empty — any within its
   scope); the name is new (an existing namespace is never taken over), not
   `kube-*`, `default` or `nkt-*`; up to the “own namespaces” limit (empty —

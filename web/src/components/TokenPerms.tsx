@@ -45,6 +45,7 @@ export interface TokenPerms {
   namespaces?: string[]
   fly_domain?: string
   fly_gateway?: number
+  allow_mail?: boolean
   limits: TokenLimits
 }
 
@@ -109,6 +110,7 @@ export function permsText(p: TokenPerms, t: T): string[] {
   if (p.scripts?.length) out.push(`${t('tokens.scripts')}: ${p.scripts.join(', ')}`)
   if (p.clusters?.length) out.push(`${t('tokens.clusters')}: ${p.clusters.join(', ')}`)
   if (p.namespaces?.length) out.push(`${t('tokens.namespaces')}: ${p.namespaces.join(', ')}`)
+  if (p.allow_mail) out.push(t('tokens.allowMail'))
   if (p.fly_domain) out.push(`${t('tokens.flyDomain')}: ${p.fly_domain}${p.fly_gateway ? ` (${t('tokens.flyGateway')} ${p.fly_gateway})` : ''}`)
   for (const g of LIMIT_GROUPS) {
     for (const f of g.fields) {
@@ -202,6 +204,11 @@ export function TokenPermsEditor({ perms, onChange, onRole }: { perms: TokenPerm
             />
           </label>
         </>
+      )}
+      {(has('vm.manage') || has('k8s.namespace') || has('k8s.cluster')) && (
+        <Checkbox checked={!!perms.allow_mail} onChange={(e) => onChange({ ...perms, allow_mail: e.target.checked })}>
+          <span className="small">{t('tokens.allowMail')}</span>
+        </Checkbox>
       )}
       <div className="small">{t('tokens.limits')}</div>
       <span className="small muted">{t('tokens.limitsHint')}</span>

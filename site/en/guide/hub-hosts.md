@@ -594,6 +594,12 @@ from the host and from the hub, with a one-line diagnosis. A machine on
 **macvtap** is marked: the host can't see its own macvtap guests, such a
 machine needs a direct connection.
 
+**Port pool** (a button in the host row) — a range of host ports from
+which owners of this host's machines (an administrator or a token “by
+permission” with the “ports” action) take a port to their machine; there
+is no pool by default, the window shows a diff and how many ports are
+given out. More — [the token API](/en/guide/hub-api#token-by-permission).
+
 **Machine link**: *auto* — the hub tries the machine's SSH directly
 (1.5 s, the result is remembered for 10 minutes) and bypasses the host if
 it answers, otherwise goes through the host; *direct*; *via host*.
