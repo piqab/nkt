@@ -185,6 +185,14 @@ curl -sS -X POST -H "Authorization: Bearer $NKT_TOKEN" -H 'Content-Type: applica
 kubectl --kubeconfig shop.kubeconfig get pods
 ```
 
+- Кластер — только с Cilium (он исполняет сетевые политики) и
+  Kubernetes 1.30+ (политики допуска); подробности защиты —
+  [Безопасность](/guide/reference-security#машины-и-кластеры-клиентов).
+- Наружу — только Ingress, HTTPRoute и GRPCRoute с именами в домене
+  токена (`fly_domain`), Service — только ClusterIP; `NodePort`,
+  `LoadBalancer`, `externalIPs`, Gateway и свои сетевые политики — нельзя
+  и через хаб, и своим kubeconfig. Исходящий порт 25 закрыт, пока в правах
+  токена не отмечено «разрешить почту».
 - Кластер — из списка кластеров токена (пусто — любой в его пределах);
   имя — новое (существующий namespace не забирается), не `kube-*`,
   `default` и `nkt-*`; не больше потолка «своих namespace» (пусто —

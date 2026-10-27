@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.12 — 2026-10-27
+
+- **A client namespace is protected in the cluster itself**, not only by hub checks: the client works with its own kubeconfig directly.
+  - **Where:** only in a cluster with Cilium (it enforces network policies) and Kubernetes 1.30+. A token's own cluster now always runs Cilium.
+  - **Admission policies (ValidatingAdmissionPolicy):**
+    - Service — only ClusterIP. `externalIPs` can hijack other addresses, `NodePort` opens a port on every node, `LoadBalancer` takes addresses from the administrator's pool — all refused;
+    - Ingress, HTTPRoute and GRPCRoute — only names in the token's domain; no domain — none. Gateway — refused;
+    - the client neither sets its own network policies nor changes ours: policies add up, so its own would open what ours closed.
+  - **Egress:** cluster DNS, its own namespace and the internet — without private networks, the metadata address and port 25.
+  - **Ingress:** from its own namespace, kube-system and Cilium ingress.
+- **A token “allow mail” checkbox** — opens port 25.
+- **Hub manifest checks** — the same rules, plus `hostPort`, `capabilities.add` and `procMount`. The token's preset namespaces also get Pod Security `restricted` and the policies.
+- **The Security guide:** a new “Client machines and clusters” section. Fixed the claim that Kubernetes is entirely closed to tokens. The “Hub hosts” page now covers the port pool.
+
 ## v1.17.11 — 2026-10-26
 
 - Fixed findings of the code security checks (CodeQL, gosec): machine sizes are bounds-checked before number conversion (the API and `vm resize` in scripts), and a file size in an own plugin's zip is checked before conversion to a 64-bit number.

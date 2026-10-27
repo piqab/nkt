@@ -38,9 +38,28 @@ var tokenK8sClusterWide = map[string]bool{
 // tokenK8sUnsafeKeys — поля спецификации, дающие доступ к узлу.
 var tokenK8sUnsafeKeys = map[string]bool{"hostNetwork": true, "hostPID": true, "hostIPC": true, "privileged": true, "hostPath": true, "allowPrivilegeEscalation": true}
 
+// tokenK8sUnsafeValue — ключи, опасные своим значением: порт узла,
+// procMount не Default, добавленные capabilities.
+func tokenK8sUnsafeValue(k string, val any) bool {
+	switch k {
+	case "hostPort":
+		n, _ := val.(int)
+		f, _ := val.(float64)
+		return n != 0 || f != 0
+	case "procMount":
+		s, _ := val.(string)
+		return s != "" && s != "Default"
+	case "capabilities":
+		m, _ := val.(map[string]any)
+		add, _ := m["add"].([]any)
+		return len(add) > 0
+	}
+	return false
+}
+
 // tokenK8sNamespaces — namespace манифеста (и проверка: свои, без
 // запрещённого). Namespace-объект — только свой.
-func tokenK8sNamespaces(content string, allowed []string) ([]string, error) {
+func tokenK8sNamespaces(content string, allowed []string, domain string) ([]string, error) {
 	dec := yaml.NewDecoder(strings.NewReader(content))
 	var out []string
 	for {
@@ -77,6 +96,9 @@ func tokenK8sNamespaces(content string, allowed []string) ([]string, error) {
 		if bad := unsafeK8sKey(doc); bad != "" {
 			return nil, msgs.Errorf("hub.tokenK8sUnsafe", kind, name, bad)
 		}
+		if err := tokenK8sDocCheck(doc, kind, name, domain); err != nil {
+			return nil, err
+		}
 		if !slices.Contains(out, ns) {
 			out = append(out, ns)
 		}
@@ -94,6 +116,9 @@ func unsafeK8sKey(v any) string {
 				if b, ok := val.(bool); k == "hostPath" || (ok && b) {
 					return k
 				}
+			}
+			if tokenK8sUnsafeValue(k, val) {
+				return k
 			}
 			if bad := unsafeK8sKey(val); bad != "" {
 				return bad
@@ -168,7 +193,7 @@ func (s *Server) tokenK8sCheck(ctx context.Context, t store.APIToken, req manife
 			}
 		}
 	}
-	return tokenK8sNamespaces(req.Content, s.tokenAllowedNamespaces(ctx, t))
+	return tokenK8sNamespaces(req.Content, s.tokenAllowedNamespaces(ctx, t), t.Perms.FlyDomain)
 }
 
 // tokenK8sPrepare — квоты namespace токена в кластерах до применения:
@@ -197,7 +222,10 @@ func (s *Server) tokenK8sPrepare(ctx context.Context, lang msgs.Lang, t store.AP
 			var res struct {
 				Output string `json:"output"`
 			}
-			body := map[string]string{"content": tokenK8sQuotaManifest(ns, t.Name, l), "note": "nkt token " + t.Name}
+			// Политики допуска — если кластер их знает (1.30+); namespace —
+			// с метками клиента, квотой и сетевыми политиками.
+			_, _ = s.hub.HostAPI(ctx, hostID, "POST", "/api/k8s/apply", map[string]string{"content": tenantAdmissionManifest, "note": "nkt tenant policies"}, nil)
+			body := map[string]string{"content": tenantManifest(ns, t), "note": "nkt token " + t.Name}
 			if _, err := s.hub.HostAPI(ctx, hostID, "POST", "/api/k8s/apply", body, &res); err != nil {
 				fail = msgs.Errorf("hub.tokenK8sQuota", ns, cl.Name, err)
 				return ManifestResult{}

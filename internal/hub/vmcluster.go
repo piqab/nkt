@@ -62,7 +62,7 @@ func (s *Server) tokenClusterPrepare(ctx context.Context, t store.APIToken, spec
 	if spec.Topology != TopologySingle && spec.Topology != TopologyCP1 || len(spec.Placements) > 0 || spec.NetworkMode != "" && spec.NetworkMode != NetworkNAT {
 		return msgs.Errorf("hub.ownClusterTopology")
 	}
-	spec.Flavor, spec.NetworkMode, spec.Network = "k3s", NetworkNAT, vmnet.IsolatedName(t.ID)
+	spec.Flavor, spec.NetworkMode, spec.Network, spec.CNI = "k3s", NetworkNAT, vmnet.IsolatedName(t.ID), "cilium"
 	if spec.Topology == TopologySingle {
 		spec.Workers = 0
 	}

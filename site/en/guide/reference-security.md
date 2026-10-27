@@ -153,8 +153,10 @@ Details — [nkt-edge](/en/guide/edge#security-model).
 
 - A token opens not the whole API but a list of automation calls; hub
   management (accounts, tokens, export, updates, edge, bots), the
-  terminal, console, files, backups, configs, Kubernetes and websockets
-  are closed to it with any role.
+  terminal, console, files, backups, configs and websockets are closed to
+  it with any role; so are the host's Kubernetes sections: a token reaches
+  clusters only through its own calls (manifests into its namespaces, own
+  namespaces and clusters — below, “Client machines and clusters”).
 - The read role reads and the admin role also acts; a host and group
   scope narrows both lists and actions (a deploy only of a pipeline whose
   hosts are all in scope; a dry run only of a saved pipeline).
@@ -167,6 +169,67 @@ Details — [nkt-edge](/en/guide/edge#security-model).
   mean a pause.
 - Creating, editing, a new secret, revoking and every call go to the
   audit log as `token:<name>`.
+
+## Client machines and clusters
+
+A token “by permission” can hand machines, namespaces and clusters to
+outside clients. What holds them:
+
+- **The machine's network.** A token machine (KVM and LXD) lives in the
+  token's own NAT network `nkt-t<number>` on the host; the token does not
+  choose the network or bridge. The nftables table `nkt_isolation` is set
+  before the machine first starts and re-checked every 10 minutes: to the
+  host — only DNS, DHCP and ping; no private networks (the host's LAN,
+  libvirt, LXD and other token networks, CGNAT, the cloud metadata
+  address) and no IPv6; inbound — only replies and what the host
+  forwards itself (pool ports, Traffic Fly); outbound port 25 is closed
+  unless mail is explicitly allowed for the token. Another token's network
+  cannot reach a machine through a host port — checked on live traffic in
+  the tests (`NKT_NETNS=1`).
+- **Other machines** are invisible to the token in lists, monitoring and
+  scripts; machine actions apply only to its own (the token's usage).
+  Images come only from the catalog: a file on the host's disk (`host:…`)
+  is not allowed, other machines' disks live there too. Own user-data
+  cannot set the account, keys or login.
+- **Resources** — the token's limits: machine count, vCPU, memory, disk
+  per machine and in total, pool ports, snapshots, Fly routes, namespaces,
+  clusters; the client sees them itself (`/api/hub/tokens/self/usage`, MCP
+  `my_usage`).
+- **LXD** — a container shares the kernel with the host: weaker isolation
+  than a KVM machine. A token container is unprivileged and without
+  nesting regardless of the LXD profile; for outside clients machines
+  (KVM or an LXD `vm`) are safer.
+- **Own namespace in a shared cluster** — only in a cluster with Cilium
+  (it enforces network policies) and Kubernetes 1.30+. The client works
+  with its own kubeconfig directly, so the rules live in the cluster:
+  - Pod Security `restricted` — no privileges, no node network, ports or
+    paths, no extra capabilities;
+  - admission policies (ValidatingAdmissionPolicy) on client namespaces:
+    Service — only ClusterIP and without `externalIPs` (hijacking other
+    addresses, CVE-2020-8554), no `NodePort` and `LoadBalancer` (ports on
+    every node and addresses from the administrator's pool); Ingress and
+    HTTPRoute — only names in the token's domain, no domain — none;
+    Gateway — not allowed; the client's accounts cannot change network
+    policies;
+  - network policies: ingress — from its own namespace, kube-system and
+    Cilium ingress; egress — cluster DNS, its own namespace and the
+    internet without private networks, the metadata address and (unless
+    allowed) port 25;
+  - quota and LimitRange from the token's limits; the client's account has
+    the `edit` role only in its namespace; the kubeconfig is issued once,
+    through the API (not MCP), and a reissue disables the old one.
+  The hub checks the same rules itself for the token's manifests, helm and
+  scripts — an early, clear refusal.
+- **Own cluster** — k3s with Cilium on the token's machines in its
+  network: the kernel and nodes are not shared with other clients. The API
+  goes through a host pool port, the kubeconfig (`cluster-admin` of the
+  own cluster) is issued once.
+
+**Limits.** Bandwidth and IO in Kubernetes are not limited (they cannot be
+imposed without an admission mechanism, and the client works directly).
+Everything a machine does on the internet comes from the host's address —
+port 25 is closed, the rest is up to the host owner and the agreement with
+the client.
 
 ## Outgoing webhooks and bots
 

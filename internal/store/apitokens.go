@@ -67,9 +67,12 @@ type TokenPerms struct {
 	Namespaces []string `json:"namespaces,omitempty"`
 	// FlyDomain — домен для своих маршрутов Traffic Fly (сам домен и имена
 	// под ним); FlyGateway — шлюз (edge) этих маршрутов, 0 — единственный.
-	FlyDomain  string      `json:"fly_domain,omitempty"`
-	FlyGateway int64       `json:"fly_gateway,omitempty"`
-	Limits     TokenLimits `json:"limits"`
+	FlyDomain  string `json:"fly_domain,omitempty"`
+	FlyGateway int64  `json:"fly_gateway,omitempty"`
+	// AllowMail — исходящий порт 25 из машин и namespace токена (по
+	// умолчанию закрыт: рассылки с адреса хоста).
+	AllowMail bool        `json:"allow_mail,omitempty"`
+	Limits    TokenLimits `json:"limits"`
 }
 
 // TokenLimits — потолки ресурсов; ноль — без потолка. Суммы — по всему,
