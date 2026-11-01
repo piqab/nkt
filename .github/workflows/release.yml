@@ -91,7 +91,7 @@ jobs:
           for i in 1 2 3 4; do npm ci && break; echo "npm ci не удался, попытка $i"; sleep 20; done
           test -d node_modules/vite
       - run: cd web && npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: webui-dist
           path: internal/webui/dist
@@ -137,7 +137,7 @@ jobs:
           edge="dist/nkt-edge-linux-${{ matrix.goarch }}"
           go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=$version" -o "$edge" ./cmd/nkt-edge
           chmod +x "$edge"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nkt-linux-${{ matrix.goarch }}
           path: |
@@ -171,7 +171,7 @@ jobs:
           mkdir -p ../../dist
           npm pack --pack-destination ../../dist
           ls -l ../../dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: n8n-node
           path: dist/n8n-nodes-nkt-*.tgz
@@ -250,7 +250,7 @@ jobs:
           cp androidApp/build/outputs/apk/release/androidApp-release.apk \
             "../dist/nkt-android-${{ needs.check-version.outputs.binary_version }}.apk"
           "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs ../dist/nkt-android-*.apk | head -3
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.key.outputs.present == 'true'
         with:
           name: nkt-android
