@@ -109,7 +109,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: webui-dist
           path: internal/webui/dist
@@ -314,17 +314,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: nkt-linux-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: n8n-node
           path: dist
       # APK есть, только когда настроен ключ подписи (задание android-apk).
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: nkt-android
