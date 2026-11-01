@@ -114,7 +114,7 @@ jobs:
           fi
           go run ./cmd/nkt-catalog pack -dir "$work/catalog" -out site/.vitepress/dist/catalog.tar.gz
           mv "$work/catalog" site/.vitepress/dist/catalog
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/.vitepress/dist
