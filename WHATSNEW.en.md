@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.20 — 2026-11-04
+
+- **The change history points at commits that exist again.** The history was rewritten last autumn — trailer lines were stripped from commit messages — so every change got a different hash while `CHANGELOG.md` kept naming the old ones. Once the old branches were deleted those links went dead. 893 entries now carry the new hashes, taken from the equivalence map: same link length, edit descriptions untouched.
+
 ## v1.17.19 — 2026-11-04
 
 - **Build dependencies raised for published vulnerabilities; neither one reached hosts or the hub.**
