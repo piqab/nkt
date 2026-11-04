@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.19 — 2026-11-04
+
+- **Build dependencies raised for published vulnerabilities; neither one reached hosts or the hub.**
+  - `follow-redirects` 1.16.1 → 1.16.2: sensitive headers declared by the caller (its own API keys) were not stripped on a cross-origin redirect when the list came from another realm — created through `node:vm`, for instance. The package only appears in the dev tree of the n8n node tests: npm gets `dist` alone, with no dependencies.
+  - `vite` 6.4.4 → 6.4.5: the dev server served files blocked by `server.fs.deny` once the request added `?raw` or `?import&url&inline`. The published site is static on GitHub Pages — no dev server runs there.
+
 ## v1.17.18 — 2026-11-04
 
 - **The secret scan no longer goes red over fake keys in plugin tests.** The weekly gitleaks run found a private key in `examples/connector/deploy/test_plugin.py` again — the same fake key silenced in 1.15.4, but in another commit: suppression by fingerprint is tied to a commit and a line number, so a rewritten history mints a new one. Plugin test mocks (`test_plugin.py`) are now exempt from the scan the way `_test.go` files are — a path mask covers the whole history.
