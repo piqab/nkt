@@ -60,7 +60,7 @@ These files ship with spice-html5 in its `thirdparty/` directory:
 | github.com/nginxinc/nginx-go-crossplane | v0.4.89 | Apache-2.0 |
 | github.com/pkg/sftp | v1.13.11 | BSD-2-Clause |
 | github.com/rivo/tview | v0.42.0 | MIT |
-| golang.org/x/crypto, x/net, x/term | v0.57.0, v0.58.0, v0.46.0 | BSD-3-Clause |
+| golang.org/x/crypto, x/net, x/term | v0.58.0, v0.62.0, v0.47.0 | BSD-3-Clause |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT and Apache-2.0, NOTICE: Copyright 2011-2016 Canonical Ltd. |
 | modernc.org/sqlite | v1.59.0 | BSD-3-Clause; SQLite itself is in the public domain |
 

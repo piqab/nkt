@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.22 — 2026-11-04
+
+- **Build dependencies raised per published advisories.** `golang.org/x/net` 0.60.0 → 0.62.0, the release that closes two advisories in its `html` subpackage: an XSS through `childTextNodesAreLiteral` (CVE-2026-97045) and quadratic complexity when coalescing adjacent text nodes in `addText` and `fosterParent` (CVE-2026-78661). nkt imports only `idna` from `x/net`, but the scanner compares whole module versions and a normal tagged fix now exists, so there was somewhere to go. The rest of the family moved along: `x/crypto` 0.58.0, `x/term` 0.47.0, plus indirect `x/text`, `x/sys`, `x/sync`, `x/tools`. The version line in `THIRD_PARTY_NOTICES` had gone stale — corrected.
+
 ## v1.17.21 — 2026-11-04
 
 - **The dependency scan no longer flags an unused package.** Trivy marked `golang.org/x/crypto` vulnerable because of its `openpgp` subpackage, which nkt has neither in code nor in documentation: the scanner only looks at the module version in `go.mod`. A justified entry went into `.trivyignore` — the same way the three earlier container-manifest checks were set aside.
