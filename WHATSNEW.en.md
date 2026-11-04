@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.18 — 2026-11-04
+
+- **The secret scan no longer goes red over fake keys in plugin tests.** The weekly gitleaks run found a private key in `examples/connector/deploy/test_plugin.py` again — the same fake key silenced in 1.15.4, but in another commit: suppression by fingerprint is tied to a commit and a line number, so a rewritten history mints a new one. Plugin test mocks (`test_plugin.py`) are now exempt from the scan the way `_test.go` files are — a path mask covers the whole history.
+
 ## v1.17.17 — 2026-10-27
 
 - **The rgstr plugin 1.1 — for rgstr 1.10.**
