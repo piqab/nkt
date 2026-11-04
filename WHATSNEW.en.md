@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.21 — 2026-11-04
+
+- **The dependency scan no longer flags an unused package.** Trivy marked `golang.org/x/crypto` vulnerable because of its `openpgp` subpackage, which nkt has neither in code nor in documentation: the scanner only looks at the module version in `go.mod`. A justified entry went into `.trivyignore` — the same way the three earlier container-manifest checks were set aside.
+
 ## v1.17.20 — 2026-11-04
 
 - **The change history points at commits that exist again.** The history was rewritten last autumn — trailer lines were stripped from commit messages — so every change got a different hash while `CHANGELOG.md` kept naming the old ones. Once the old branches were deleted those links went dead. 893 entries now carry the new hashes, taken from the equivalence map: same link length, edit descriptions untouched.
