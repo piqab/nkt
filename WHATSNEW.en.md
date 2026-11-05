@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.24 — 2026-11-05
+
+- **apt through the hub now covers `https` and reaches machines.** The apt config named the auto-detect script for `http` only, while apt asks for every scheme separately (measured on apt 3.0.3): `https` mirrors — both `deb https://…` and the base behind `mirror+file`, which is what the Debian machine image ships — never reached the script and downloaded past the cache, silently, with no error.
+  - The config now has both lines; the "bypass the cache" retry clears both as well, and clears them with an empty value: `Proxy=DIRECT` does not override auto-detect — for apt the script wins.
+  - A machine the hub creates takes the "apt via hub" checkbox from the host it runs on: the reverse-forward session goes to the machine itself (through its host when there is no direct path), so the machine's virtual network stays closed to the outside. The checkbox is turned off and back on in the machine's own form.
+  - A cluster node whose outbound TCP went silent after Cilium gets enough from this: apt goes to the hub instead of the internet.
+
 ## v1.17.23 — 2026-11-05
 
 - **Longhorn packages now arrive with the machine instead of being downloaded on a ready node.** `open-iscsi` and `nfs-common` were installed as the last step, that is after Cilium had replaced kube-proxy. In a host's NAT network that is a trap: by then the node's outbound TCP can be silent while ping and DNS still answer, so `apt-get update` hung until the job timed out and the log said “operation timed out” instead of naming the cause. Those two packages are now part of cloud-init on the machine's first boot, where TCP still works; the prepare step checks them with `dpkg -s` and only reaches for apt when they are missing (a node that is a host itself, machines of older clusters) — with retries=0, eight-second timeouts and one readable line in the log.

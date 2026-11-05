@@ -207,6 +207,18 @@ func aptProxyDetectScript(port int) string { return hubsudo.AptProxyDetectScript
 
 const aptProxyConf = hubsudo.AptProxyConfText
 
+// InheritAptViaHub заводит apt через хаб на машине по её хосту: кэш на
+// хабе тот же, а проброс хаб держит до самой машины своим соединением —
+// через хост, если прямого пути до машины нет (jump.go), так что
+// виртуальную сеть наружу открывать не нужно. Флаг остаётся обычным,
+// редактируемым у машины: сняв его в её форме, хост не трогают.
+func (m *Manager) InheritAptViaHub(ctx context.Context, parent store.Host, machineID int64) error {
+	if !parent.AptViaHub || parent.ID == machineID {
+		return nil
+	}
+	return m.db.SetHostAptViaHub(ctx, machineID, true)
+}
+
 // ApplyAptProxy включает или выключает apt через хаб на хосте: кладёт или
 // убирает конфиг и запоминает флаг.
 func (m *Manager) ApplyAptProxy(ctx context.Context, hostID int64, enabled bool) error {

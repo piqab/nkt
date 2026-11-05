@@ -107,12 +107,16 @@ into the cache and brings up the libvirt network right away.
   name, picking a preset fills it again; presets are part of
   export/import.
 - **Hub cache for nodes without internet** — with “apt via hub” on for
-  the host, the same port also serves files by URL (the k3s installer and
+  the host, a cluster machine gets the same checkbox by itself (the hub
+  keeps the reverse-forward session to the machine, so the machine's
+  virtual network is not opened outward), and the same port serves files
+  by URL (the k3s installer and
   binary with airgap images, Cilium CLI, the `pkgs.k8s.io` key, machine
   images) and a **registry mirror** (docker.io, quay.io, registry.k8s.io,
   ghcr.io, gcr.io) — containerd on the nodes is configured for it
   automatically. Everything stays on the hub and leaves for the internet
-  once.
+  once; apt on a machine goes through the hub for `https` too — with only
+  the http line, `https` mirrors stayed outside the cache.
 - **kubectl** — a button on a ready cluster opens a terminal on the first
   control plane with `kubectl` ready (`KUBECONFIG`, completion, the `k`
   alias); no external API access needed.

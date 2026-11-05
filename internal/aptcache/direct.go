@@ -11,7 +11,14 @@ import (
 // отвечает 502. Тогда установка повторяется мимо кэша, напрямую.
 
 // DirectOpts — параметры apt-get мимо кэша хаба (и автоопределения прокси).
-const DirectOpts = "-o Acquire::http::Proxy-Auto-Detect= -o Acquire::http::Proxy=DIRECT -o Acquire::https::Proxy=DIRECT"
+// Гасятся обе строки, которые пишет хаб (см. hubsudo.AptProxyConfText):
+// apt спрашивает автоопределение по отдельности для каждой схемы, и
+// снятие одной оставило бы https-источники на прокси хаба даже при
+// повторе «напрямую». Proxy=DIRECT автоопределение не перебивает — на
+// apt 3.0.3 скрипт выигрывает у него, — поэтому ключи снимаются именно
+// пустым значением.
+const DirectOpts = "-o Acquire::http::Proxy-Auto-Detect= -o Acquire::https::Proxy-Auto-Detect=" +
+	" -o Acquire::http::Proxy=DIRECT -o Acquire::https::Proxy=DIRECT"
 
 var proxyFailRe = regexp.MustCompile(`127\.0\.0\.1:?\s?3142|\b50[234]\s+(Bad Gateway|Service Unavailable|Gateway Time-?out)`)
 

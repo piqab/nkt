@@ -177,6 +177,21 @@ func TestOps(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(h.Root, AptProxyDetect)); !strings.Contains(string(b), "/dev/tcp/127.0.0.1/3142") {
 		t.Fatalf("apt detect %q", b)
 	}
+	// Детект назван для обеих схем: apt спрашивает их отдельно, и без
+	// https-строки https-зеркала (deb.debian.org, зеркало из mirror+file)
+	// качают мимо кэша — молча, без ошибки.
+	conf, err := os.ReadFile(filepath.Join(h.Root, AptProxyConf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{
+		`Acquire::http::Proxy-Auto-Detect "` + AptProxyDetect + `";`,
+		`Acquire::https::Proxy-Auto-Detect "` + AptProxyDetect + `";`,
+	} {
+		if !strings.Contains(string(conf), line) {
+			t.Errorf("apt conf lacks %q:\n%s", line, conf)
+		}
+	}
 	if _, err := h.Execute(sign(Request{Op: OpAptProxy, Args: map[string]string{"enabled": "false"}})); err != nil {
 		t.Fatal(err)
 	}

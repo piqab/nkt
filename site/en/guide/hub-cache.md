@@ -19,14 +19,27 @@ hosts get no new open ports.
   forward is up.
 - The host has `/etc/apt/apt.conf.d/99nkt-hub-proxy` and
   `/usr/local/bin/nkt-apt-proxy` — the standard
-  `Acquire::http::Proxy-Auto-Detect`: the script answers with the proxy
+  `Acquire::http::Proxy-Auto-Detect` and
+  `Acquire::https::Proxy-Auto-Detect`: the script answers with the proxy
   address if the port is open and `DIRECT` if the hub isn't connected —
-  apt then works as usual. The files are put there when nkt is installed
+  apt then works as usual. Every scheme needs its own line: apt asks for
+  them separately (measured on apt 3.0.3), and with only the http line an
+  `https` mirror — `deb https://…`, or the base behind `mirror+file` —
+  never reached the script and downloaded past the cache, silently, with
+  no error. The files are put there when nkt is installed
   from the hub, and on an already installed host — right when the
   checkbox is turned on (root or passwordless sudo is needed).
+- A machine the hub creates gets the same checkbox from the host it runs
+  on: the cache is the same, and the hub keeps the reverse-forward session
+  to the machine itself (through its host when there is no direct path),
+  so the virtual network of the machine is not opened to anyone. It is
+  turned off and back on in the machine's own form; for a cluster node
+  whose outbound TCP is silent this is enough — apt goes to the hub
+  instead of the internet.
 - Only immutable content is cached — `pool/…` and `by-hash/…`; indexes
   (`dists/…`) pass through; `https` repositories are tunneled as is — the
-  proxy doesn't look inside TLS.
+  proxy doesn't look inside TLS and `.deb` files there don't settle, but
+  they do travel over the same channel.
 - The "localhost" row doesn't use the cache.
 - **The cache could not fetch a package** — say, the host installs from a
   hosting provider's internal mirror the hub cannot see, and the cache

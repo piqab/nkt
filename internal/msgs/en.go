@@ -2047,6 +2047,8 @@ var enCatalog = map[string]string{
 	"vmcreate.badIOLimits":                                "bandwidth and disk: network 1–100000 Mbit/s, IOPS 1–1000000, disk 1–100000 MB/s",
 	"lxd.stepLimits":                                      "bandwidth and disk limits %s",
 	"hub.vmMailWarn":                                      "Could not open mail in the token network: %v",
+	"hub.vmAptInherited":                                  "The machine's apt goes through the hub, as on host %s",
+	"hub.vmAptInheritWarn":                                "Could not record apt through the hub for the machine: %v",
 	"hub.clientCRDBad":                                    "resource %q: expected “resource.group” (registries.registry.rgstr.io); Kubernetes, RBAC, admission, networking and Cilium groups are not given to clients",
 	"hub.vmStepKey":                                       "key",
 	"hub.vmStepCreateOn":                                  "creation on %s",

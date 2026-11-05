@@ -2046,6 +2046,8 @@ var ruCatalog = map[string]string{
 	"vmcreate.badIOLimits":                                "полоса и диск: сеть 1–100000 Мбит/с, IOPS 1–1000000, диск 1–100000 МБ/с",
 	"lxd.stepLimits":                                      "потолки полосы и диска %s",
 	"hub.vmMailWarn":                                      "Почту в сети токена открыть не удалось: %v",
+	"hub.vmAptInherited":                                  "apt машины — через хаб, как у хоста %s",
+	"hub.vmAptInheritWarn":                                "apt через хаб машине запомнить не удалось: %v",
 	"hub.clientCRDBad":                                    "ресурс %q: нужно «ресурс.группа» (registries.registry.rgstr.io); группы Kubernetes, прав, допуска, сети и Cilium клиентам не отдаются",
 	"hub.vmStepKey":                                       "ключ",
 	"hub.vmStepCreateOn":                                  "создание на %s",

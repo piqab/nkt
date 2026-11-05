@@ -92,6 +92,7 @@ var onCommands = map[string]bool{
 }
 
 var k8sNodesRe = regexp.MustCompile(`^(single|[13]\+\d{1,2})$`)
+
 // k8sAddonRe — дополнение кластера и, через «=», версия его чарта.
 var k8sAddonRe = regexp.MustCompile(`^longhorn(=[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})?$`)
 

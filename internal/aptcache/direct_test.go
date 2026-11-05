@@ -43,4 +43,12 @@ esac
 	if got := Direct("sudo -n env X=1 apt-get install -y a"); !strings.Contains(got, "apt-get "+DirectOpts+" install") {
 		t.Fatal(got)
 	}
+	// Мимо кэша — значит снять обе строки автоопределения, которые пишет
+	// хаб (hubsudo.AptProxyConfText): apt спрашивает их по схемам
+	// отдельно.
+	for _, k := range []string{"Acquire::http::Proxy-Auto-Detect=", "Acquire::https::Proxy-Auto-Detect="} {
+		if !strings.Contains(DirectOpts, "-o "+k) {
+			t.Errorf("DirectOpts leaves %q set: %s", k, DirectOpts)
+		}
+	}
 }

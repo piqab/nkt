@@ -188,6 +188,14 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 		if err := r.m.db.SetHostParent(ctx, id, host.ID); err != nil {
 			return msgs.Errorf("hub.bindingMachineHost", err)
 		}
+		// apt через хаб наследуется от хоста, на котором машина стоит: кэш
+		// тот же, а наружный путь машине после Cilium вместо kube-proxy
+		// доступен не всегда — см. aptproxy.go.
+		if err := r.m.InheritAptViaHub(ctx, host, id); err != nil {
+			jc.Log("hub.vmAptInheritWarn", err)
+		} else if host.AptViaHub {
+			jc.Log("hub.vmAptInherited", host.Name)
+		}
 		jc.Log("hub.hostListedAsLoginKey", p.Spec.Name, host.Name)
 	} else {
 		jc.Log("hub.hostAlreadyListedResumeSkipping")

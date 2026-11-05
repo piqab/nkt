@@ -533,6 +533,12 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 			errs = append(errs, msgs.Tc(r.Context(), "hub.vmBindFailed", name, err))
 			continue
 		}
+		// Машина, введённая в список, берёт apt через хаб от хоста, как и
+		// созданная хабом (см. aptproxy.go); отказ здесь не повод считать
+		// ввод неудачным — флаг ставится в форме машины.
+		if err := s.hub.InheritAptViaHub(r.Context(), parent, newID); err != nil {
+			s.log.Warn("could not inherit apt-via-hub on machine", "machine", name, "err", err)
+		}
 		if via == store.HostViaDirect || via == store.HostViaJump {
 			_ = s.db.SetHostVia(r.Context(), newID, via)
 		}

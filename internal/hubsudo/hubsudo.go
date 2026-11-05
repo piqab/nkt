@@ -467,9 +467,18 @@ fi
 `, port, port)
 }
 
-// AptProxyConfText — конфиг apt.
+// AptProxyConfText — конфиг apt. Строки две, по одной на схему: apt
+// спрашивает автоопределение отдельно для http и для https (проверено на
+// apt 3.0.3: с одной лишь http-строкой https-источник, в том числе
+// зеркало из mirror+file, до скрипта не доходит совсем — молча качает
+// мимо кэша; общая строка Acquire::Proxy-Auto-Detect на этом apt не
+// читается ни для http, ни для https). Скрипт один на обе схемы: для
+// https apt ждёт тот же http-прокси и идёт через него CONNECT'ом, а
+// кэш на другом конце различает схемы сам — https он туннелирует,
+// pool-файлы по http кэширует.
 const AptProxyConfText = `// nkt: кэш пакетов хаба; скрипт отвечает DIRECT, когда хаб не подключён.
 Acquire::http::Proxy-Auto-Detect "` + AptProxyDetect + `";
+Acquire::https::Proxy-Auto-Detect "` + AptProxyDetect + `";
 `
 
 // clamav — база ClamAV из каталога подготовки по подписанным хэшам: файлы

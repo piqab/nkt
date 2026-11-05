@@ -144,3 +144,44 @@ func TestCacheFileStaysInsideDir(t *testing.T) {
 		t.Errorf("обычный ключ = %q", got)
 	}
 }
+
+// https-источник через кэш: apt шлёт CONNECT, кэш туннелирует сквозняком.
+// Сам тест важен не столько телом, сколько тем, что запрос вообще проходит
+// через прокси хаба — прежде конфиг apt называл детект только для http, и
+// https-зеркала (deb.debian.org, mirror+file на https-базе) миновали кэш
+// молча, без ошибки.
+func TestConnectTunnelsHTTPS(t *testing.T) {
+	var hits int
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write([]byte("deb-secure"))
+	}))
+	defer upstream.Close()
+	c, err := New(t.TempDir(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := httptest.NewServer(c)
+	defer proxy.Close()
+	pu, _ := url.Parse(proxy.URL)
+	// Сертификат тестового сервера самоподписанный: доверяем его CA, как
+	// доверяет свой ключ apt по корням машины. Туннель ничего не меняет.
+	tls := upstream.Client().Transport.(*http.Transport).TLSClientConfig
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu), TLSClientConfig: tls}}
+	for i := 1; i <= 2; i++ {
+		resp, err := client.Get(upstream.URL + "/debian/pool/main/s/s_1.deb")
+		if err != nil {
+			t.Fatalf("через CONNECT, запрос %d: %v", i, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 || string(body) != "deb-secure" {
+			t.Fatalf("запрос %d: %d %q", i, resp.StatusCode, body)
+		}
+	}
+	// Сквозняком: внутри туннеля кэш путь не видит, поэтому https-файлы
+	// не кэшируются — они просто доезжают.
+	if hits != 2 {
+		t.Errorf("туннель должен ходить наверх каждый раз, верх ответил %d раз", hits)
+	}
+}
