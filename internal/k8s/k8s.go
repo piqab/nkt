@@ -12,7 +12,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,7 +59,13 @@ type InstallSpec struct {
 	// TLSSANs — дополнительные имена/адреса в сертификате API (адрес
 	// хоста при пробросе наружу).
 	TLSSANs []string `json:"tls_sans,omitempty"`
-	// ControlPlaneEndpoint — kubeadm HA: адрес балансировщика.
+	// ControlPlaneEndpoint — kubeadm HA: адрес балансировщика control
+	// plane, «host» или «host:port» (порт по умолчанию — 6443). Пишется в
+	// --control-plane-endpoint: по нему входят узлы, по нему отдаётся
+	// kubeconfig. Отдельно в TLSSANs его не прописывают: хост endpoint'а
+	// kubeadm кладёт в сертификат API каждого control plane сам — это
+	// видно в GetAPIServerAltNames (проверено на v1.34.3 и v1.37.2), а
+	// дубль SAN сертификат не портит, но путает при разборе.
 	ControlPlaneEndpoint string `json:"control_plane_endpoint,omitempty"`
 	// NodeName — имя узла в кластере; пусто — hostname.
 	NodeName string `json:"node_name,omitempty"`
@@ -108,7 +116,87 @@ func (s InstallSpec) Validate() error {
 	if s.Version != "" && !kubeadmVersionRe.MatchString(s.Version) {
 		return msgs.Errorf("k8s.badValue", s.Version)
 	}
+	if s.ControlPlaneEndpoint != "" {
+		// У k3s нет такого флага: узлы входят по адресу конкретного
+		// server'а. Молча проигнорированное поле выглядит сделанным.
+		if s.Flavor != FlavorKubeadm {
+			return msgs.Errorf("k8s.endpointNeedsKubeadm")
+		}
+		if _, _, err := EndpointHostPort(s.ControlPlaneEndpoint); err != nil {
+			return err
+		}
+	}
+	if s.Flavor == FlavorKubeadm && s.Role == RoleServer && s.ServerURL != "" && !certKeyRe.MatchString(s.CertKey) {
+		// Дополнительный control plane разблокирует Secret kubeadm-certs
+		// ключом; kubeadm требует ровно 64 hex-символа и отказывает до
+		// входа, так что пустой ключ — ошибка формы, а не узла. Сам ключ
+		// в текст ошибки не берётся: он секрет и он попадает в журнал
+		// задания.
+		return msgs.Errorf("k8s.badCertKey")
+	}
 	return nil
+}
+
+// kubeadmAPIPort — порт API, который kubeadm подставляет, когда в адресе
+// балансировщика порта нет.
+const kubeadmAPIPort = 6443
+
+// endpointNameRe — имя хоста в адресе балансировщика: только то, что
+// kubeadm примет как DNS-имя в сертификате.
+var endpointNameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.?$`)
+
+// certKeyRe — ключ сертификатов control plane: 32 случайных байта в hex
+// (kubeadm.constants: CertificateKeySize).
+var certKeyRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// EndpointHostPort — адрес балансировщика как хост и порт: порт — 6443,
+// если его нет. Одиночный IP (в том числе IPv6 без скобок) портом не
+// считается — иначе «::1» распалось бы на хост «:» и порт «1».
+func EndpointHostPort(addr string) (string, int, error) {
+	addr = strings.ToLower(strings.TrimSpace(addr))
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Порта нет — одиночный адрес: IP или DNS-имя. IPv6 без скобок
+		// приходит сюда же (SplitHostPort требует скобок) и остаётся
+		// адресом без порта, а не хостом «:» с портом «1».
+		if net.ParseIP(addr) == nil && !endpointNameRe.MatchString(addr) {
+			return "", 0, msgs.Errorf("k8s.badEndpoint", addr)
+		}
+		return addr, kubeadmAPIPort, nil
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return "", 0, msgs.Errorf("k8s.badEndpoint", addr)
+	}
+	if net.ParseIP(host) == nil && !endpointNameRe.MatchString(host) {
+		return "", 0, msgs.Errorf("k8s.badEndpoint", addr)
+	}
+	return host, port, nil
+}
+
+// JoinServer — адрес API для присоединения узла: хост с портом, порт —
+// 6443, если его не указали. Непонятное значение отдаётся как есть — его
+// проверит Validate вызывающей стороны.
+func JoinServer(addr string) string {
+	host, port, err := EndpointHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+// apiEndpoint — адрес, по которому агенты кластера видят API: адрес
+// балансировщика, если задан, иначе — первого control plane.
+func (s InstallSpec) apiEndpoint() (string, int) {
+	if s.ControlPlaneEndpoint != "" {
+		if host, port, err := EndpointHostPort(s.ControlPlaneEndpoint); err == nil {
+			return host, port
+		}
+	}
+	if s.APIAddr == "" {
+		return "", kubeadmAPIPort
+	}
+	return s.APIAddr, kubeadmAPIPort
 }
 
 // DefaultKubeadmVersion — ветка pkgs.k8s.io, когда хаб не смог узнать
@@ -284,8 +372,14 @@ func ParseNodes(raw []byte) ([]Node, error) {
 	return nodes, nil
 }
 
-// Join — токен и адрес для присоединения новых узлов.
-func (m *Manager) Join(ctx context.Context, serverAddr string) (JoinInfo, error) {
+// Join — токен и адрес для присоединения новых узлов. serverAddr — адрес
+// API, который увидит узел: первый control plane или балансировщик.
+// controlPlane — true, когда по этому токену войдёт ещё и control plane:
+// тогда же в кластер загружаются сертификаты и отдаётся ключ к ним. Ключ
+// живёт два часа — Secret kubeadm-certs владеет короткоживущим
+// bootstrap-токеном (kubeadm/app/constants: DefaultCertTokenDuration),
+// поэтому его берут перед каждым входом, а не один раз при создании.
+func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool) (JoinInfo, error) {
 	st := m.Status(ctx)
 	if !st.Installed || st.Role != RoleServer {
 		return JoinInfo{}, msgs.Errorf("k8s.notServer")
@@ -296,7 +390,7 @@ func (m *Manager) Join(ctx context.Context, serverAddr string) (JoinInfo, error)
 		if err != nil {
 			return JoinInfo{}, msgs.Errorf("k8s.tokenRead", err)
 		}
-		return JoinInfo{Flavor: FlavorK3s, ServerURL: "https://" + serverAddr + ":6443", Token: strings.TrimSpace(string(raw))}, nil
+		return JoinInfo{Flavor: FlavorK3s, ServerURL: "https://" + JoinServer(serverAddr), Token: strings.TrimSpace(string(raw))}, nil
 	case FlavorKubeadm:
 		out, err := m.run(ctx, "kubeadm", "token", "create", "--print-join-command")
 		if err != nil {
@@ -309,18 +403,51 @@ func (m *Manager) Join(ctx context.Context, serverAddr string) (JoinInfo, error)
 		if err != nil {
 			return JoinInfo{}, err
 		}
-		info.ServerURL = serverAddr + ":6443"
-		// Сертификаты для дополнительных control plane — отдельно;
-		// живут два часа, как и токен.
-		if out, err := m.run(ctx, "kubeadm", "init", "phase", "upload-certs", "--upload-certs"); err == nil && out.ExitCode == 0 {
-			lines := strings.Fields(out.Stdout)
-			if len(lines) > 0 {
-				info.CertKey = lines[len(lines)-1]
-			}
+		info.ServerURL = JoinServer(serverAddr)
+		if !controlPlane {
+			return info, nil
 		}
+		// Ключ сертификатов даёт сам upload-certs — фаза печатает его
+		// отдельной строкой. Молчать при неудаче нельзя: узел с пустым
+		// ключом падает на «--certificate-key» уже на машине, и в журнале
+		// остаётся непонятное «invalid value», а не причина.
+		out, err = m.run(ctx, "kubeadm", "init", "phase", "upload-certs", "--upload-certs")
+		if err != nil {
+			return JoinInfo{}, err
+		}
+		if out.ExitCode != 0 {
+			// Подробность берётся из stderr: при успехе фаза печатает ключ
+			// в stdout, и «последняя строка вывода» унесла бы секрет в
+			// журнал задания.
+			detail := strings.TrimSpace(lastLine(out.Stderr))
+			if detail == "" {
+				detail = fmt.Sprintf("exit %d", out.ExitCode)
+			}
+			return JoinInfo{}, msgs.Errorf("k8s.certKeyUpload", detail)
+		}
+		key := parseCertKey(out.Stdout + "\n" + out.Stderr)
+		if key == "" {
+			return JoinInfo{}, msgs.Errorf("k8s.certKeyMissing")
+		}
+		info.CertKey = key
 		return info, nil
 	}
 	return JoinInfo{}, msgs.Errorf("k8s.notInstalled")
+}
+
+// parseCertKey — ключ сертификатов из вывода «kubeadm init phase
+// upload-certs --upload-certs»: 64 hex-символа отдельным полем. Брать
+// «последнее слово stdout» было рискованно — любое сообщение после ключа
+// (или переход вывода в stderr) дало бы ключом мусор; формат проверяется
+// целиком. Проверено на v1.34.3 и v1.37.2: фаза печатает
+// «[upload-certs] Using certificate key:\n<ключ>\n» в stdout.
+func parseCertKey(out string) string {
+	for _, f := range strings.Fields(out) {
+		if certKeyRe.MatchString(f) {
+			return f
+		}
+	}
+	return ""
 }
 
 var reJoin = regexp.MustCompile(`--token\s+(\S+)\s+--discovery-token-ca-cert-hash\s+(\S+)`)
@@ -603,8 +730,11 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 	install := "cilium install"
 	if s.KubeProxyReplacement {
 		install += " --set kubeProxyReplacement=true"
-		if s.APIAddr != "" {
-			install += " --set k8sServiceHost=" + s.APIAddr + " --set k8sServicePort=6443"
+		// Без kube-proxy агенту нужен прямой адрес API: балансировщик,
+		// если он есть, иначе первый control plane. Порт — тот же, что у
+		// endpoint'а: 7443 вместо 6443 агенту чужд.
+		if host, port := s.apiEndpoint(); host != "" {
+			install += " --set k8sServiceHost=" + host + " --set k8sServicePort=" + strconv.Itoa(port)
 		}
 	}
 	script := strings.Join([]string{
@@ -725,7 +855,16 @@ func kubeadmSteps(s InstallSpec) []Step {
 			init += " --apiserver-cert-extra-sans=" + san
 		}
 		if s.ControlPlaneEndpoint != "" {
-			init += " --control-plane-endpoint=" + s.ControlPlaneEndpoint + " --upload-certs"
+			// Порт дописывается здесь, а не оставляется kubeadm: тот же
+			// адрес узлы видят в токене входа, в kubeconfig и в
+			// k8sServiceHost у Cilium — расхождение только запутает.
+			init += " --control-plane-endpoint=" + JoinServer(s.ControlPlaneEndpoint)
+		}
+		if s.ClusterInit {
+			// Сертификаты загружаются в кластер сразу — по ним войдут
+			// остальные control plane. Ключ всё равно пересвежается перед
+			// каждым входом: он живёт два часа.
+			init += " --upload-certs"
 		}
 		if s.NodeName != "" {
 			init += " --node-name=" + s.NodeName
@@ -752,6 +891,15 @@ func kubeadmSteps(s InstallSpec) []Step {
 		"kubeadm join " + s.ServerURL + " --token " + s.Token + " --discovery-token-ca-cert-hash " + s.CAHash
 	if s.Role == RoleServer {
 		join += " --control-plane --certificate-key " + s.CertKey
+		if s.NodeIP != "" {
+			// Флаг есть только у входа control plane (проверено по
+			// cmd/kubeadm/app/cmd/join.go: --apiserver-advertise-address в
+			// списке control-plane флагов). Сервер узла должен звучать там
+			// же, где его видят остальные: без флага kubeadm берёт первый
+			// адрес, а с ним расходятся и SAN сертификата, и адрес
+			// etcd-пира.
+			join += " --apiserver-advertise-address=" + s.NodeIP
+		}
 	}
 	if s.NodeName != "" {
 		join += " --node-name=" + s.NodeName

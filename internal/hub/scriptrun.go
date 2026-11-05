@@ -1243,6 +1243,9 @@ func clusterSpecFromArgs(h store.Host, st script.Step) (ClusterSpec, error) {
 		spec.KubeProxyReplacement = st.Args["no-kube-proxy"] == "true"
 	}
 	spec.K8sVersion = st.Args["version"]
+	// endpoint — общий адрес control plane (kubeadm); проверка формы и
+	// порта по умолчанию — за Validate.
+	spec.Endpoint = st.Args["endpoint"]
 	if a := st.Args["addon"]; a != "" {
 		name, ver, _ := strings.Cut(a, "=")
 		spec.Addons = []ClusterAddon{{Name: name, Version: ver}}

@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.26 — 2026-11-05
+
+- **kubeadm now takes three control planes — through a shared address.** The hub used to refuse them outright ("k3s only"). A kubeadm cluster with three control planes is created when a shared address is given: the `endpoint` field of the cluster API, the `endpoint` parameter of the `k8s create` step — "HOST" or "HOST:PORT", port 6443 by default. Nodes join the cluster through it and the kubeconfig is issued through it, so the address in the cluster card becomes the address of the cluster rather than of one node; kubeadm puts it into the API certificate of every control plane itself.
+  - Without a shared address, three control planes are refused instead of silently building a cluster that hangs on the first node. k3s does not accept the field: there a node joins the address of a specific server.
+  - The certificate key for joining an extra control plane is taken before every join and checked as a whole (64 hex characters). Before, the hub took "the last word" of the output and stayed silent on failure — the node got an empty `--certificate-key` and failed on the machine with an unhelpful "invalid value".
+  - Cilium with kube-proxy replacement gets the API address from the endpoint, its port included.
+  - The dialogs have no such field yet: the forms still offer three control planes for k3s only. The 6443 listener on the placement hosts — the thing that will give this address a name — is the next step.
+
 ## v1.17.25 — 2026-11-05
 
 - **A retried failed job no longer dies at the Cilium step.** The install step asked whether Cilium was already up with `cilium status --brief`, but `--brief` is not a `cilium` CLI flag at all — it belongs to `cilium-dbg` inside the agent pod (measured on v0.20.2: "unknown flag: --brief", exit code 1). The command failed every time, so `cilium install` ran on every pass of the job — and where Cilium was already installed it did not "upgrade" anything, it errored: that is a `helm install` over a release name still in use ("cannot reuse a name that is still in use"). A retry therefore tripped over the working Cilium and never reached the readiness wait. The check now looks at `ds/cilium` in `kube-system`: if it exists the install is skipped, if not it runs as before, and `cilium status --wait` stays in both cases.

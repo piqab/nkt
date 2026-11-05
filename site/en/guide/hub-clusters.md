@@ -42,8 +42,40 @@ The “New cluster on several hosts” dialog is a placement table: host →
 role → **machines** (how many, sizes, image, bridge) or **the host
 itself** as a node. The image comes from the host catalogue (“will be
 downloaded” if it is not there yet) or from the hub library (below); the
-form itself reports a wrong number of control planes, three control
-planes with kubeadm and a missing bridge.
+form itself reports a wrong number of control planes, a missing shared
+control plane address for kubeadm, and a missing bridge.
+
+### The shared control plane address (kubeadm)
+
+With **kubeadm** nodes join the cluster not by the address of the first
+control plane but by a shared one — `--control-plane-endpoint`. The hub
+takes it as the `endpoint` field of the cluster API (or the `endpoint`
+parameter of the `k8s create` step) — `HOST` or `HOST:PORT`, port 6443 by
+default. What it does:
+
+- it goes into `kubeadm init --control-plane-endpoint`, and kubeadm puts
+  it into the API certificate of **every** control plane by itself —
+  adding it to the TLS SANs separately is not needed;
+- nodes join through it (`kubeadm join`) and the kubeconfig is issued
+  through it — the address in the cluster card becomes the address of
+  the cluster, not of one node;
+- with Cilium replacing kube-proxy it is also what the agent gets as
+  `k8sServiceHost`/`k8sServicePort` — the endpoint's port, not a hard
+  6443;
+- **with three control planes it is required**: without a shared address
+  the cluster API hangs on the first node, and joining the other two
+  changes nothing.
+
+The hub takes the control plane certificate key before every join
+(`kubeadm init phase upload-certs`): it lives two hours, so it is not
+stockpiled once at cluster creation. If kubeadm prints no key or prints
+something that is not one, the job fails with a clear line instead of
+sending a node an empty `--certificate-key`.
+
+**k3s** has no shared entry point: nodes join the address of a specific
+server, so the `endpoint` field is not accepted for k3s. The cluster form
+still offers three control planes for k3s only — the outward balancer for
+kubeadm arrives in the next step.
 
 **Network between hosts** — how nodes on different hosts see each other:
 

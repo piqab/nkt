@@ -78,8 +78,12 @@ func (s *Server) handleK8sInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }
 
+// handleK8sJoin — GET /k8s/join?server=<адрес API>&control_plane=1.
+// control_plane — true, когда по токenu войдёт ещё control plane: тогда
+// узел загружает в кластер сертификаты и отдаёт ключ к ним.
 func (s *Server) handleK8sJoin(w http.ResponseWriter, r *http.Request) {
-	info, err := s.k8sManager().Join(r.Context(), r.URL.Query().Get("server"))
+	q := r.URL.Query()
+	info, err := s.k8sManager().Join(r.Context(), q.Get("server"), q.Get("control_plane") == "1")
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return

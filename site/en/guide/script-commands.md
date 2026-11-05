@@ -419,7 +419,7 @@ Example:
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
+### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
 
 Creates a Kubernetes cluster on the host's virtual machines — like “new cluster” in the host list: machines from a cloud image with nkt, control plane, joining nodes, waiting for Ready, port forward and kubeconfig (downloadable on the hub in the cluster card).
 
@@ -427,13 +427,14 @@ Creates a Kubernetes cluster on the host's virtual machines — like “new clus
 |---|---|---|
 | `NAME` | ✓ | cluster name — also the group and the prefix of machine names (lowercase letters, digits, hyphen) |
 | `flavor` |  | k3s (default) or kubeadm |
-| `nodes` |  | single — one machine; 1+N — a control plane and N workers (default 1+1); 3+N — three control planes (k3s only); in quotes — placement across hosts, as in the “Clusters” section: “HOST: cp N, w N, host cp\|w, bridge BRIDGE, endpoint ADDR; HOST2: …” (cp/w N — machines with a role, host — the host itself as a node, endpoint — the host's address for WireGuard peers) |
+| `nodes` |  | single — one machine; 1+N — a control plane and N workers (default 1+1); 3+N — three control planes (kubeadm requires endpoint with them); in quotes — placement across hosts, as in the “Clusters” section: “HOST: cp N, w N, host cp\|w, bridge BRIDGE, endpoint ADDR; HOST2: …” (cp/w N — machines with a role, host — the host itself as a node, endpoint — the host's address for WireGuard peers) |
 | `image` |  | an image from the host catalog (default ubuntu-24.04) |
 | `cpu / mem / disk` |  | size of every machine: cores, memory in MB, disk in GB (2 / 4096 / 30) |
 | `network / bridge` |  | on one host — a libvirt network name; with a placement — the network mode between hosts: nat (one host), bridge (a host bridge: bridge BRIDGE for all or “bridge …” in a host's part) or wireguard (a tunnel the hub sets up itself) |
 | `cni` |  | cilium — Cilium instead of flannel (installed after the control plane); flannel — the flavor default |
 | `no-kube-proxy` |  | with cilium: replace kube-proxy with Cilium (eBPF) |
 | `version` |  | the Kubernetes minor version: the pkgs.k8s.io branch for kubeadm, the v1.36 channel for k3s; default — the current stable |
+| `endpoint` |  | the shared control plane address for kubeadm — “HOST” or “HOST:PORT” (port 6443 by default): nodes join the cluster through it, it goes into the API certificate of every node and into the kubeconfig; required with three control planes, k3s has no such address. Not to be confused with the endpoint inside a placement string — that one is the host address for WireGuard peers |
 | `addon` |  | an add-on on top of the ready cluster: longhorn (block volumes replicated across nodes, the default StorageClass) — the chart version after “=”, without it the nkt default version |
 | `expose` |  | forward host ports 6443, 80, 443 to the control plane |
 | `api / http / https` |  | host ports with expose: api (6443), http (80), https (443); 0 — do not forward |

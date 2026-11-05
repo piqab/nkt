@@ -59,8 +59,8 @@ func TestSteps(t *testing.T) {
 	if !strings.Contains(kw, "kubeadm join 10.0.0.1:6443 --token abcdef.0123456789abcdef --discovery-token-ca-cert-hash sha256:00") || strings.Contains(kw, "--control-plane") {
 		t.Errorf("kubeadm worker: %s", kw)
 	}
-	kcp := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "10.0.0.1:6443", Token: "t", CAHash: "h", CertKey: "ck"}))
-	if !strings.Contains(kcp, "--control-plane --certificate-key ck") {
+	kcp := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "10.0.0.1:6443", Token: "t", CAHash: "h", CertKey: certKey}))
+	if !strings.Contains(kcp, "--control-plane --certificate-key "+certKey) {
 		t.Errorf("kubeadm extra control plane: %s", kcp)
 	}
 }
@@ -238,5 +238,146 @@ func TestFailureLine(t *testing.T) {
 	}
 	if got := failureLine(collect.CommandResult{Stderr: "boom\n"}); got != "boom" {
 		t.Errorf("stderr last: %q", got)
+	}
+}
+
+// certKey — ключ сертификатов нужной длины (64 hex-символа); в тестах
+// фикстуры собираются вокруг него.
+const certKey = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"
+
+// Общий адрес control plane: порт по умолчанию, форма имени, IPv6 без
+// скобок — не порт.
+func TestEndpointHostPort(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		host string
+		port int
+	}{
+		{"k8s.example.com", "k8s.example.com", 6443},
+		{"K8S.Example.COM:7443", "k8s.example.com", 7443},
+		{"10.0.0.5", "10.0.0.5", 6443},
+		{"10.0.0.5:7443", "10.0.0.5", 7443},
+		{"::1", "::1", 6443},
+		{"[::1]:7443", "::1", 7443},
+		{"k8s.example.com.", "k8s.example.com.", 6443},
+	} {
+		host, port, err := EndpointHostPort(tc.in)
+		if err != nil || host != tc.host || port != tc.port {
+			t.Errorf("%q: %q %d %v", tc.in, host, port, err)
+		}
+	}
+	for _, bad := range []string{"", ":7443", "k8s.example.com:0", "k8s.example.com:70000", "k8s_example", "k8s example", "-x",
+		"10.0.0.5:6443:7443", "k8s.example..com:6443", "..example.com", "10.0.0.5:abc"} {
+		if _, _, err := EndpointHostPort(bad); err == nil {
+			t.Errorf("прошло: %q", bad)
+		}
+	}
+	for _, tc := range []struct{ in, want string }{
+		{"k8s.example.com", "k8s.example.com:6443"},
+		{"::1", "[::1]:6443"},
+		{"10.0.0.5:7443", "10.0.0.5:7443"},
+		{"не понятно", "не понятно"}, // плохое значение отдаётся как есть — проверит Validate вызывающей стороны
+	} {
+		if got := JoinServer(tc.in); got != tc.want {
+			t.Errorf("JoinServer(%q) = %q, хотели %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// Форма endpoint'а и ключа сертификатов проверяются на хосте, а не на
+// машине: пустой ключ у входа control plane — ошибка формы.
+func TestValidateEndpointAndCertKey(t *testing.T) {
+	for _, ok := range []InstallSpec{
+		{Flavor: FlavorKubeadm, Role: RoleServer, ControlPlaneEndpoint: "k8s.example.com"},
+		{Flavor: FlavorKubeadm, Role: RoleServer, ControlPlaneEndpoint: "10.0.0.5:7443"},
+		{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "k8s.example.com:6443", Token: "abcdef.0123456789abcdef", CAHash: "sha256:00", CertKey: certKey},
+		// k3s своего адреса не знает — там узел входит на конкретный server
+		{Flavor: FlavorK3s, Role: RoleServer},
+	} {
+		if err := ok.Validate(); err != nil {
+			t.Errorf("не прошло: %+v: %v", ok, err)
+		}
+	}
+	for _, bad := range []InstallSpec{
+		{Flavor: FlavorK3s, Role: RoleServer, ControlPlaneEndpoint: "k8s.example.com"},
+		{Flavor: FlavorKubeadm, Role: RoleServer, ControlPlaneEndpoint: "k8s_example"},
+		{Flavor: FlavorKubeadm, Role: RoleServer, ControlPlaneEndpoint: "k8s.example.com:0"},
+		{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "k8s.example.com:6443", Token: "t", CAHash: "h"},
+		{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "k8s.example.com:6443", Token: "t", CAHash: "h", CertKey: "deadbeef"},
+		{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "k8s.example.com:6443", Token: "t", CAHash: "h", CertKey: strings.Repeat("g", 64)},
+	} {
+		if err := bad.Validate(); err == nil {
+			t.Errorf("прошло: %+v", bad)
+		}
+	}
+	// Секрет в текст ошибки не попадает.
+	err := (InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "h:6443", Token: "t", CAHash: "h", CertKey: certKey[:60] + "XXXX"}).Validate()
+	if err == nil || strings.Contains(err.Error(), certKey[:40]) {
+		t.Errorf("ключ виден в ошибке: %v", err)
+	}
+}
+
+// Ключ берётся целиком из вывода фазы, а не «последнее слово»: шум до и
+// после него, переход вывода в stderr — ключ всё равно находится, а
+// ничего похожего на ключ — пусто, а не мусор.
+func TestParseCertKey(t *testing.T) {
+	if got := parseCertKey("[upload-certs] Storing the certificates in Secret \"kubeadm-certs\"\n[upload-certs] Using certificate key:\n" + certKey + "\n"); got != certKey {
+		t.Errorf("stdout: %q", got)
+	}
+	if got := parseCertKey("W: noise\n" + certKey + "\n"); got != certKey {
+		t.Errorf("stderr: %q", got)
+	}
+	for _, none := range []string{"", "error: unknown flag: --upload-certs", "abcd", "Secret \"kubeadm-certs\" created", "sha256:" + certKey} {
+		if got := parseCertKey(none); got != "" {
+			t.Errorf("%q: %q", none, got)
+		}
+	}
+}
+
+// kubeadm с общим адресом: endpoint в init, вход по нему, advertise-адрес
+// у дополнительного control plane, адрес API у Cilium — тот же.
+func TestStepsKubeadmHA(t *testing.T) {
+	init := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, ClusterInit: true,
+		ControlPlaneEndpoint: "k8s.example.com", NodeIP: "10.0.0.5", NodeName: "cp-1"}))
+	for _, want := range []string{"--control-plane-endpoint=k8s.example.com:6443", "--upload-certs",
+		"--apiserver-advertise-address=10.0.0.5", "--node-name=cp-1"} {
+		if !strings.Contains(init, want) {
+			t.Errorf("kubeadm init: нет %q", want)
+		}
+	}
+	// Один control plane сертификаты в кластер не грузит: ключ живёт два
+	// часа и всё равно берётся перед входом.
+	one := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, ControlPlaneEndpoint: "k8s.example.com:7443"}))
+	if !strings.Contains(one, "--control-plane-endpoint=k8s.example.com:7443") || strings.Contains(one, "--upload-certs") {
+		t.Errorf("kubeadm с одним control plane: %s", one)
+	}
+	cp := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "k8s.example.com:7443",
+		Token: "abcdef.0123456789abcdef", CAHash: "sha256:00", CertKey: certKey, NodeIP: "10.0.0.6", NodeName: "cp-2"}))
+	if !strings.Contains(cp, "kubeadm join k8s.example.com:7443 --token abcdef.0123456789abcdef --discovery-token-ca-cert-hash sha256:00 --control-plane --certificate-key "+certKey) {
+		t.Errorf("вход control plane: %s", cp)
+	}
+	if !strings.Contains(cp, "--apiserver-advertise-address=10.0.0.6") || !strings.Contains(cp, "--node-name=cp-2") {
+		t.Errorf("вход control plane без адреса узла: %s", cp)
+	}
+	w := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleAgent, ServerURL: "k8s.example.com:7443",
+		Token: "abcdef.0123456789abcdef", CAHash: "sha256:00", NodeIP: "10.0.0.7"}))
+	if !strings.Contains(w, "kubeadm join k8s.example.com:7443") || strings.Contains(w, "--control-plane") ||
+		strings.Contains(w, "--apiserver-advertise-address") {
+		t.Errorf("worker: %s", w)
+	}
+	// init без endpoint: ни адреса, ни загрузки сертификатов.
+	bare := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, NodeName: "cp-1"}))
+	if strings.Contains(bare, "--control-plane-endpoint") || strings.Contains(bare, "--upload-certs") {
+		t.Errorf("kubeadm без endpoint: %s", bare)
+	}
+	// Cilium при замене kube-proxy смотрит на API по общему адресу и его
+	// порту — 7443 вместо 6443 агенту чужд.
+	cil := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, CNI: "cilium", KubeProxyReplacement: true,
+		ControlPlaneEndpoint: "k8s.example.com:7443", APIAddr: "10.0.0.5"}))
+	if !strings.Contains(cil, "--set k8sServiceHost=k8s.example.com --set k8sServicePort=7443") {
+		t.Errorf("cilium с endpoint: %s", cil)
+	}
+	for name, s := range map[string]string{"init": init, "one": one, "join cp": cp, "join worker": w, "cilium": cil} {
+		checkBashSyntax(t, "kubeadm HA "+name, s)
 	}
 }

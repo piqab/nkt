@@ -52,6 +52,14 @@ type ClusterSpec struct {
 	ExposeAPI   int `json:"expose_api,omitempty"`
 	ExposeHTTP  int `json:"expose_http,omitempty"`
 	ExposeHTTPS int `json:"expose_https,omitempty"`
+	// Endpoint — общий адрес control plane: «host» или «host:port» (порт
+	// по умолчанию — 6443). Только для kubeadm: это его
+	// --control-plane-endpoint, по которому узлы входят и по которому
+	// отдаётся kubeconfig. При трёх control plane он обязателен: без
+	// общего адреса API кластера висит на первом узле, и вход остальных
+	// двух ничего не меняет. Имя endpoint'а kubeadm сам кладёт в
+	// сертификат API каждого control plane.
+	Endpoint string `json:"endpoint,omitempty"`
 	// CNI — «cilium» или пусто (flannel); KubeProxyReplacement — Cilium
 	// вместо kube-proxy.
 	CNI                  string `json:"cni,omitempty"`
@@ -151,6 +159,9 @@ func (s *ClusterSpec) Validate() error {
 	if s.K8sVersion != "" && !k8sMinorRe.MatchString(s.K8sVersion) {
 		return msgs.Errorf("hub.clusterBadK8sVersion", s.K8sVersion)
 	}
+	if err := s.normalizeEndpoint(); err != nil {
+		return err
+	}
 	if len(s.Placements) > 0 {
 		if err := s.validatePlacements(); err != nil {
 			return err
@@ -164,8 +175,8 @@ func (s *ClusterSpec) Validate() error {
 				return msgs.Errorf("hub.clusterNeedsWorkers")
 			}
 		case TopologyCP3:
-			if s.Flavor != k8s.FlavorK3s {
-				return msgs.Errorf("hub.clusterCP3K3sOnly")
+			if s.Flavor == k8s.FlavorKubeadm && s.Endpoint == "" {
+				return msgs.Errorf("hub.clusterEndpointNeeded")
 			}
 		default:
 			return msgs.Errorf("hub.clusterBadTopology", s.Topology)
@@ -230,6 +241,29 @@ func (s *ClusterSpec) Validate() error {
 	return nil
 }
 
+// normalizeEndpoint приводит общий адрес control plane к форме
+// «host:port». Пустое поле остаётся пустым: требовать его право
+// проверке топологии, а не этой функции. Поле имеет смысл только у
+// kubeadm — у k3s общей точки входа нет, узлы входят по адресу
+// конкретного server'а, и молча проигнорированное значение выглядело
+// бы сделанным.
+func (s *ClusterSpec) normalizeEndpoint() error {
+	s.Endpoint = strings.TrimSpace(s.Endpoint)
+	if s.Endpoint == "" {
+		return nil
+	}
+	if s.Flavor != k8s.FlavorKubeadm {
+		return msgs.Errorf("hub.clusterEndpointKubeadmOnly")
+	}
+	if _, _, err := k8s.EndpointHostPort(s.Endpoint); err != nil {
+		return err
+	}
+	// Порт дописывается сразу: им оперируют и join'ы узлов, и
+	// «--set k8sServicePort» у Cilium, и слушатель наружу.
+	s.Endpoint = k8s.JoinServer(s.Endpoint)
+	return nil
+}
+
 // validatePlacements проверяет размещение по хостам.
 func (s *ClusterSpec) validatePlacements() error {
 	cps, total := 0, 0
@@ -276,8 +310,8 @@ func (s *ClusterSpec) validatePlacements() error {
 	if cps != 1 && cps != 3 {
 		return msgs.Errorf("hub.clusterCPCount", cps)
 	}
-	if cps == 3 && s.Flavor != k8s.FlavorK3s {
-		return msgs.Errorf("hub.clusterCP3K3sOnly")
+	if cps == 3 && s.Flavor == k8s.FlavorKubeadm && s.Endpoint == "" {
+		return msgs.Errorf("hub.clusterEndpointNeeded")
 	}
 	if total < 1 {
 		return msgs.Errorf("hub.clusterNoNodes")
@@ -380,9 +414,13 @@ func (s ClusterSpec) exposeRules() []map[string]int {
 	return out
 }
 
-// APIAddr — адрес API в kubeconfig: хост с портом при пробросе, иначе
-// первый control plane.
+// APIAddr — адрес API в kubeconfig: общий endpoint, если он задан, —
+// именно он адрес кластера, и в SAN каждого control plane; иначе хост с
+// портом при пробросе, иначе первый control plane.
 func (s ClusterSpec) apiAddr(hostAddr, cpAddr string) string {
+	if s.Endpoint != "" {
+		return s.Endpoint
+	}
 	if s.Expose && hostAddr != "" {
 		return fmt.Sprintf("%s:%d", hostAddr, s.ExposeAPI)
 	}
@@ -704,6 +742,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			Flavor: spec.Flavor, Role: k8s.RoleServer, Single: len(nodes) == 1 && p.AddWorkers == 0,
 			ClusterInit: len(cps) == 3, TLSSANs: tlsSANs, NodeName: cp1Name,
 			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr, Version: spec.K8sVersion,
+			ControlPlaneEndpoint: spec.Endpoint,
 		}
 		if cp1.ParentID == 0 && cp1Addr != cp1.Addr {
 			is.NodeIP = cp1Addr
@@ -714,8 +753,22 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		done.Installed[cp1Name] = true
 		jc.SaveResume(*done)
 	}
+	// Узлы входят по общему адресу, когда он задан: у kubeadm это тот же
+	// --control-plane-endpoint, что у init, и сертификат API каждого
+	// control plane содержит его имя уже. control_plane=1 просит ключ
+	// сертификатов — он нужен, если в этом задании встанет ещё один
+	// control plane; ключ живёт два часа, поэтому берётся перед входом,
+	// а не один раз при создании.
+	joinAddr := cp1Addr
+	if spec.Endpoint != "" {
+		joinAddr = spec.Endpoint
+	}
+	joinURL := "/api/k8s/join?server=" + url.QueryEscape(joinAddr)
+	if len(cps) > 1 {
+		joinURL += "&control_plane=1"
+	}
 	var join k8s.JoinInfo
-	if _, err := r.m.HostAPI(ctx, cp1.ID, "GET", "/api/k8s/join?server="+url.QueryEscape(cp1Addr), nil, &join); err != nil {
+	if _, err := r.m.HostAPI(ctx, cp1.ID, "GET", joinURL, nil, &join); err != nil {
 		return msgs.Errorf("hub.clusterJoinInfo", err)
 	}
 	jc.Log("hub.clusterJoinReady", cp1.Name)
@@ -764,7 +817,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		jc.Log("hub.clusterExposed", cpHost.Addr, cp1.Addr, exposeSummary(spec))
 	}
 	serverAddr := spec.apiAddr(cpHost.Addr, cp1.Addr)
-	if cp1.ParentID == 0 {
+	if cp1.ParentID == 0 && spec.Endpoint == "" {
 		// Узел-хост: kubeconfig — на его обычный адрес, он в SAN.
 		serverAddr = cp1.Addr + ":6443"
 	}

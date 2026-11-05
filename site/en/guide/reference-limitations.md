@@ -72,8 +72,10 @@ simulated.
   machine with production access.
 - One replica: the registry is SQLite. No horizontal scaling and no
   failover pair — there is export/import.
-- Kubernetes clusters from the hub are experimental: no rollback, 3
-  control planes — k3s only, start with a dry run.
+- Kubernetes clusters from the hub are experimental: no rollback, start
+  with a dry run. Three control planes work for kubeadm too — with a
+  shared address (`endpoint`); a listener answering that address on the
+  placement hosts is not there yet, it is planned.
 - Scripts are experimental: no rollback, and the language deliberately
   has no arbitrary shell commands.
 - The registry mirror caches public images only.

@@ -419,7 +419,7 @@ on web1 cert renew example.org
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]` {#cmd-k8s-create}
+### `on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]` {#cmd-k8s-create}
 
 Создаёт кластер Kubernetes на виртуалках хоста — как «новый кластер» в списке хостов: машины из облачного образа с nkt, control plane, присоединение узлов, ожидание Ready, проброс и kubeconfig (скачивается на хабе в карточке кластера).
 
@@ -427,13 +427,14 @@ on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 |---|---|---|
 | `ИМЯ` | ✓ | имя кластера — оно же группа и префикс имён машин (строчные буквы, цифры, дефис) |
 | `flavor` |  | k3s (по умолчанию) или kubeadm |
-| `nodes` |  | single — одна машина; 1+N — control plane и N worker (по умолчанию 1+1); 3+N — три control plane (только k3s); в кавычках — размещение по хостам, как в разделе «Кластеры»: «ХОСТ: cp N, w N, host cp\|w, bridge МОСТ, endpoint АДРЕС; ХОСТ2: …» (cp/w N — машины с ролью, host — сам хост как узел, endpoint — адрес хоста для соседей по туннелю WireGuard) |
+| `nodes` |  | single — одна машина; 1+N — control plane и N worker (по умолчанию 1+1); 3+N — три control plane (у kubeadm с ними обязателен endpoint); в кавычках — размещение по хостам, как в разделе «Кластеры»: «ХОСТ: cp N, w N, host cp\|w, bridge МОСТ, endpoint АДРЕС; ХОСТ2: …» (cp/w N — машины с ролью, host — сам хост как узел, endpoint — адрес хоста для соседей по туннелю WireGuard) |
 | `image` |  | образ из каталога хоста (по умолчанию ubuntu-24.04) |
 | `cpu / mem / disk` |  | размеры каждой машины: ядра, память в МБ, диск в ГБ (2 / 4096 / 30) |
 | `network / bridge` |  | на одном хосте — имя сети libvirt; при размещении по хостам — режим сети между хостами: nat (один хост), bridge (мост хоста: bridge МОСТ для всех или «bridge …» в строке хоста) или wireguard (туннель, хаб настроит сам) |
 | `cni` |  | cilium — Cilium вместо flannel (ставится после control plane); flannel — как у варианта по умолчанию |
 | `no-kube-proxy` |  | с cilium: заменить kube-proxy на Cilium (eBPF) |
 | `version` |  | минорная версия Kubernetes: у kubeadm — ветка pkgs.k8s.io, у k3s — канал v1.36; по умолчанию — актуальная stable |
+| `endpoint` |  | общий адрес control plane для kubeadm — «ХОСТ» или «ХОСТ:ПОРТ» (порт по умолчанию 6443): по нему узлы входят в кластер, он попадает в сертификат API каждого узла и в kubeconfig; при трёх control plane обязателен, у k3s такого адреса нет. Не путать с endpoint внутри строки размещения — там адрес хоста для соседей по туннелю |
 | `addon` |  | дополнение поверх готового кластера: longhorn (блочные тома с репликами по узлам, StorageClass по умолчанию) — версия чарта через «=», без неё — версия nkt по умолчанию |
 | `expose` |  | пробросить порты 6443, 80, 443 хоста в control plane |
 | `api / http / https` |  | порты хоста при expose: api (6443), http (80), https (443); 0 — не пробрасывать |

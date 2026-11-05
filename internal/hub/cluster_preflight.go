@@ -101,6 +101,9 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 	if spec.NetworkMode == NetworkWireGuard {
 		jc.Log("hub.preflightPlanMesh", wgPort)
 	}
+	if spec.Endpoint != "" {
+		jc.Log("hub.preflightPlanEndpoint", spec.Endpoint)
+	}
 	if spec.Expose {
 		jc.Log("hub.preflightPlanExpose", hostByID[spec.HostID].Addr, exposeSummary(spec))
 	}
