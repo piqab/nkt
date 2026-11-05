@@ -419,7 +419,7 @@ Example:
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
+### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [gateway GATEWAY] [allow ADDR[,ADDR…]] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
 
 Creates a Kubernetes cluster on the host's virtual machines — like “new cluster” in the host list: machines from a cloud image with nkt, control plane, joining nodes, waiting for Ready, port forward and kubeconfig (downloadable on the hub in the cluster card).
 
@@ -435,6 +435,8 @@ Creates a Kubernetes cluster on the host's virtual machines — like “new clus
 | `no-kube-proxy` |  | with cilium: replace kube-proxy with Cilium (eBPF) |
 | `version` |  | the Kubernetes minor version: the pkgs.k8s.io branch for kubeadm, the v1.36 channel for k3s; default — the current stable |
 | `endpoint` |  | the shared control plane address for kubeadm — “HOST” or “HOST:PORT” (port 6443 by default): nodes join the cluster through it, it goes into the API certificate of every node and into the kubeconfig; required with three control planes, k3s has no such address. Not to be confused with the endpoint inside a placement string — that one is the host address for WireGuard peers |
+| `gateway` |  | the Traffic Fly gateway that should listen for the shared address (an edge name or address from the nkt list); empty means the only gateway on the hub. The listener is created only when the endpoint address points at the gateway — it matches it or resolves to it; a VIP or an external load balancer of somebody else's is left alone |
+| `allow` |  | who else besides the cluster nodes may reach the shared address — IPv4 addresses and networks separated by commas (203.0.113.0/24,198.51.100.7). The hub adds the external addresses of the placement hosts; with an empty list the job refuses to open the cluster API to the whole internet |
 | `addon` |  | an add-on on top of the ready cluster: longhorn (block volumes replicated across nodes, the default StorageClass) — the chart version after “=”, without it the nkt default version |
 | `expose` |  | forward host ports 6443, 80, 443 to the control plane |
 | `api / http / https` |  | host ports with expose: api (6443), http (80), https (443); 0 — do not forward |

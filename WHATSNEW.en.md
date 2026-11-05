@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.27 — 2026-11-05
+
+- **The shared control plane address got its listener and a form field.** The hub does not build a load balancer of its own — Traffic Fly is one: a route `api-<cluster name>` on a gateway whose targets are the cluster's control planes. The listener goes down **before** the first control plane — at the end of `init` kubeadm waits for the API exactly at the shared address (the `apicheck` phase), and without a live address `init` does not pass no matter how the API listens locally — and it is removed by the cluster deletion job.
+  - It is put where the address points: equal to a gateway address, or one of its A records. Your own VIP and someone else's balancer are left alone — the step logs that the address is served outside the hub and the job continues.
+  - The cluster dialogs get a “Shared control plane address” field, “Where to listen” and “Who else”; the form now offers three control planes for kubeadm too (without an address creation does not start). Over the API these are the `endpoint`, `gateway` and `allow_extra` fields; in a script — the `gateway` and `allow` parameters of the `k8s create` step.
+  - The allow list is mandatory: a gateway address is an entry to kube-apiserver and through it to the etcd of the whole cluster. The hub puts the outward addresses of the placement hosts in it plus whatever a person added; an empty list at Traffic Fly means “everyone”, so an empty list is a refusal. A host behind NAT, whose address is not visible from outside, is logged with “!” — its nodes would be locked out.
+  - The dry run shows the listener: the gateway and its address, the port and targets of the route, the allow list, and whether the port on the gateway is free.
+
 ## v1.17.26 — 2026-11-05
 
 - **kubeadm now takes three control planes — through a shared address.** The hub used to refuse them outright ("k3s only"). A kubeadm cluster with three control planes is created when a shared address is given: the `endpoint` field of the cluster API, the `endpoint` parameter of the `k8s create` step — "HOST" or "HOST:PORT", port 6443 by default. Nodes join the cluster through it and the kubeconfig is issued through it, so the address in the cluster card becomes the address of the cluster rather than of one node; kubeadm puts it into the API certificate of every control plane itself.

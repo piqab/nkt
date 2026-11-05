@@ -68,6 +68,14 @@ func (s *Server) handleClusterList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleClusterGateways — GET /hub/cluster/gateways: где хаб может поставить
+// слушателя общего адреса кластера. Форме создания нужны только шлюзы — имя,
+// адрес и связан ли шлюз; весь документ Traffic Fly с чужими маршрутами там
+// ни к чему.
+func (s *Server) handleClusterGateways(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"gateways": s.flyGateways(r.Context())})
+}
+
 func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 	var spec ClusterSpec
 	if err := decodeJSON(r, &spec); err != nil {

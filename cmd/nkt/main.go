@@ -948,7 +948,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// он запускает и другие задания хаба (создание машин).
 	r.jobs.Register(hub.KindScriptRun, server.ScriptRunner())
 	r.jobs.Register(hub.KindClusterCreate, hub.NewClusterRunner(server))
-	r.jobs.Register(hub.KindClusterDelete, hub.NewClusterDeleteRunner(manager))
+	r.jobs.Register(hub.KindClusterDelete, hub.NewClusterDeleteRunner(server))
 	r.jobs.Register(hub.KindClusterUpgrade, hub.NewClusterUpgradeRunner(manager))
 	r.jobs.Register(hub.KindHelmMulti, hub.NewHelmMultiRunner(manager))
 	r.jobs.Register(hub.KindClusterAddon, hub.NewClusterAddonRunner(manager))

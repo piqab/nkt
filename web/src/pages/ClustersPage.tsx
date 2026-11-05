@@ -12,7 +12,7 @@ import { ClustersFindingsCard, HelmMultiModal } from '../components/HubClustersM
 import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, ErrorNote, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
-import { ClustersCard } from '../components/Clusters'
+import { ClustersCard, ListenerFields, listenerBody, type ClusterGateway } from '../components/Clusters'
 import { JobLogModal } from './Jobs'
 import { TitleHelp } from '../components/Docs'
 import { msg, tx, type Msg } from '../msg'
@@ -229,6 +229,11 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [kpr, setKPR] = useState(false)
   const [longhorn, setLonghorn] = useState<LonghornChoice>({ on: false, version: '' })
   const [network, setNetwork] = useState<'nat' | 'bridge' | 'wireguard'>('bridge')
+  // Общий адрес control plane и всё, что вокруг него (см. ListenerFields).
+  const gws = useApi<{ gateways: ClusterGateway[] }>('/hub/cluster/gateways', 60_000)
+  const [endpoint, setEndpoint] = useState('')
+  const [gateway, setGateway] = useState(0)
+  const [allow, setAllow] = useState('')
   const [rows, setRows] = useState<Row[]>([newRow('control-plane'), newRow('worker')])
   const [endpoints, setEndpoints] = useState<Record<number, string>>({})
   const [info, setInfo] = useState<Record<number, HostInfo>>({})
@@ -251,9 +256,17 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     longhorn?: LonghornChoice
     network: 'nat' | 'bridge' | 'wireguard'
     rows: (Omit<Row, 'host_id'> & { host: string })[]
+    // endpoints — адреса хостов для туннеля (по хосту), endpoint — общий
+    // адрес control plane всего кластера.
     endpoints: Record<string, string>
     expose: boolean
     ports: { api: number | null; http: number | null; https: number | null }
+    // Шлюз — адресом, как хосты в строках размещения: id шлюза живёт на
+    // хабе и меняется, когда шлюз пересоздают, адрес же остаётся тем, что
+    // человек видит в списке.
+    endpoint?: string
+    gateway_addr?: string
+    allow?: string
   }
   const presets = useApi<{ presets: { id: number; name: string; form: string }[] }>('/hub/cluster-presets')
   const [presetName, setPresetName] = useState('')
@@ -271,6 +284,9 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         name, flavor, k8s_version: k8sVersion, cilium, kpr, longhorn, network, expose, ports,
         rows: rows.map(({ host_id, ...r }) => ({ ...r, host: hostNameOf(host_id) })),
         endpoints: Object.fromEntries(Object.entries(endpoints).map(([id, v]) => [hostNameOf(Number(id)), v]).filter(([h]) => h)),
+        endpoint,
+        gateway_addr: (gws.data?.gateways ?? []).find((g) => g.edge_id === gateway)?.address ?? '',
+        allow,
       }
       await api('/hub/cluster-presets', { method: 'POST', body: { name: pname, form } })
       await presets.reload()
@@ -311,8 +327,18 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
       }),
     )
     setEndpoints(Object.fromEntries(Object.entries(form.endpoints ?? {}).flatMap(([h, v]) => (byName.has(h) ? [[String(byName.get(h)), v]] : []))))
+    setEndpoint(form.endpoint ?? '')
+    setAllow(form.allow ?? '')
+    const gwAddr = form.gateway_addr ?? ''
+    const gw = (gws.data?.gateways ?? []).find((g) => g.address === gwAddr)
+    setGateway(gw?.edge_id ?? 0)
     setPresetName(p.name)
-    setPresetNote(missing.length ? t('clusters.presetHostsMissing', { hosts: [...new Set(missing)].join(', ') }) : t('clusters.presetApplied', { name: p.name }))
+    const notes: string[] = []
+    if (missing.length) notes.push(t('clusters.presetHostsMissing', { hosts: [...new Set(missing)].join(', ') }))
+    // Шлюз из набора есть, а на хабе его нет: слушатель поедет туда, куда
+    // скажет адрес, — промолчать значит обещать выбранный шлюз.
+    if (gwAddr && !gw) notes.push(t('clusters.presetGatewayMissing', { addr: gwAddr }))
+    setPresetNote(notes.length ? notes.join(' ') : t('clusters.presetApplied', { name: p.name }))
   }
 
   async function deletePreset(id: number) {
@@ -370,7 +396,9 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
 
   const problems: string[] = []
   if (cpCount !== 1 && cpCount !== 3) problems.push(t('clusters.cpCountHint', { n: cpCount }))
-  if (cpCount === 3 && flavor === 'kubeadm') problems.push(t('clusters.cp3K3sOnly'))
+  // Три control plane по kubeadm живут по общему адресу: без него вход
+  // второго и третьего узла идёт по адресу первого, и кластер висит на нём.
+  if (cpCount === 3 && flavor === 'kubeadm' && !endpoint.trim()) problems.push(t('clusters.endpointNeeded'))
   if (effectiveNetwork === 'bridge') {
     for (const r of rows) if (r.kind === 'vm' && r.host_id !== null && !r.bridge) problems.push(t('clusters.bridgeMissingRow'))
   }
@@ -407,6 +435,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         expose_http: expose ? ports.http ?? 0 : 0,
         expose_https: expose ? ports.https ?? 0 : 0,
         image_id: imageOf(rows[0]) || 'ubuntu-24.04',
+        ...listenerBody(flavor, endpoint, gateway, allow),
         ...(dry ? { prepare } : {}),
       }
       const res = await api<{ job_id: number }>(dry ? '/hub/clusters/dry-run' : '/hub/clusters', { method: 'POST', body })
@@ -492,6 +521,19 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           <span className="small muted">{network === 'wireguard' ? t('clusters.netWireGuardHint') : network === 'bridge' ? t('clusters.netBridgeHint') : t('clusters.netNATHint')}</span>
         </label>
       </div>
+
+      {flavor === 'kubeadm' && (
+        <ListenerFields
+          gateways={gws.data?.gateways ?? []}
+          cp3={cpCount === 3}
+          endpoint={endpoint}
+          setEndpoint={setEndpoint}
+          gateway={gateway}
+          setGateway={setGateway}
+          allow={allow}
+          setAllow={setAllow}
+        />
+      )}
 
       <h3 style={{ margin: '0.4rem 0' }}>{t('clusters.placement')}</h3>
       <p className="small muted" style={{ marginTop: 0 }}>{t('clusters.placementHint')}</p>

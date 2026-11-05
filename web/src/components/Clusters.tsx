@@ -47,6 +47,104 @@ export interface Cluster {
   created_at: string
 }
 
+export interface ClusterGateway {
+  edge_id: number
+  name: string
+  address: string
+  connected: boolean
+  host_id?: number
+}
+
+/**
+ * Общий адрес control plane (kubeadm): узлы входят по адресу, а не по узлу,
+ * и kubeadm в конце init проверяет API именно по нему. Если этим адресом
+ * окажется шлюз Traffic Fly, хаб поставит на нём слушатель сам — эти поля
+ * и говорят, какой адрес, где слушать и кому ещё на него можно.
+ */
+export function ListenerFields({
+  gateways,
+  cp3,
+  endpoint,
+  setEndpoint,
+  gateway,
+  setGateway,
+  allow,
+  setAllow,
+}: {
+  // Список шлюзов приносит форма: сохранённому набору нужен адрес шлюза,
+  // а не его id, и раздобыть его проще там, где набор собирается.
+  gateways: ClusterGateway[]
+  cp3: boolean
+  endpoint: string
+  setEndpoint: (v: string) => void
+  gateway: number
+  setGateway: (v: number) => void
+  allow: string
+  setAllow: (v: string) => void
+}) {
+  const { t } = useTranslation()
+  const list = gateways
+  const ep = endpoint.trim()
+  return (
+    <div className="col" style={{ gap: '0.4rem', marginBottom: '0.6rem' }}>
+      <div className="grid grid-2" style={{ gap: '0.5rem' }}>
+        <label style={{ margin: 0 }}>
+          {t('clusters.endpoint')}
+          <Input
+            className="sensitive"
+            value={endpoint}
+            onChange={(e) => setEndpoint(e.target.value)}
+            placeholder={list[0] ? `${list[0].address}:6443` : 'api.example.com'}
+          />
+          <span className="small muted">{t('clusters.endpointHint')}</span>
+          {cp3 && !ep && <span className="small" style={{ color: 'var(--series-8)' }}>{t('clusters.endpointNeeded')}</span>}
+        </label>
+        <label style={{ margin: 0 }}>
+          {t('clusters.gateway')}
+          <Select
+            value={gateway}
+            onChange={(v: number) => setGateway(v)}
+            options={[
+              { value: 0, label: t('clusters.gatewayAuto') },
+              ...list.map((g) => ({
+                value: g.edge_id,
+                label: `${g.name} — ${g.address}${g.connected ? '' : ` ${t('clusters.gatewayOffline')}`}`,
+                disabled: !g.connected,
+              })),
+            ]}
+          />
+          <span className="small muted">{list.length === 0 ? t('clusters.gatewayNone') : t('clusters.gatewayHint')}</span>
+        </label>
+      </div>
+      <label style={{ margin: 0 }}>
+        {t('clusters.allow')}
+        <Input
+          className="sensitive"
+          value={allow}
+          onChange={(e) => setAllow(e.target.value)}
+          placeholder="203.0.113.7, 198.51.100.0/24"
+        />
+        <span className="small muted">{t('clusters.allowHint')}</span>
+      </label>
+    </div>
+  )
+}
+
+/** Разбор полей слушателя: что ушло бы в кластер и что сказать человеку. */
+export function listenerBody(flavor: string, endpoint: string, gateway: number, allow: string) {
+  if (flavor !== 'kubeadm') return {}
+  const ep = endpoint.trim()
+  if (!ep) return {}
+  return {
+    endpoint: ep,
+    gateway,
+    allow_extra: allow
+      .split(',')
+      .map((a) => a.trim())
+      .filter(Boolean),
+  }
+}
+
 export function NewClusterModal({
   host,
   onClose,
@@ -60,12 +158,16 @@ export function NewClusterModal({
   const images = useApi<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(`/hosts/${host.id}/vm/images`, 10_000)
   const nets = useApi<{ networks: { name: string; active: boolean }[] }>(`/hosts/${host.id}/vm/networks`, 60_000)
   const hubImages = useApi<{ images: { name: string; size: number }[] }>('/hub/cluster-images', 60_000)
+  const gws = useApi<{ gateways: ClusterGateway[] }>('/hub/cluster/gateways', 60_000)
   const knownNets = nets.data?.networks ?? []
   const [name, setName] = useState('k8s')
   const [flavor, setFlavor] = useState<'k3s' | 'kubeadm'>('k3s')
   const [k8sVersion, setK8sVersion] = useState('')
   const versions = useApi<{ stable: string; versions: string[] }>('/hub/k8s-versions', 600_000)
   const [topology, setTopology] = useState<'single' | 'cp1' | 'cp3'>('cp1')
+  const [endpoint, setEndpoint] = useState('')
+  const [gateway, setGateway] = useState(0)
+  const [allow, setAllow] = useState('')
   const [workers, setWorkers] = useState(1)
   const [expose, setExpose] = useState(true)
   const [ports, setPorts] = useState<{ api: number | null; http: number | null; https: number | null }>({ api: 6443, http: 80, https: 443 })
@@ -87,6 +189,9 @@ export function NewClusterModal({
   // Ubuntu 24.04 — умолчание из плана; иначе первый образ каталога.
   const effectiveImage = imageID || catalog.find((i) => /ubuntu.*24/i.test(i.id + i.name))?.id || catalog[0]?.id || ''
   const machines = (topology === 'single' ? 1 : topology === 'cp3' ? 3 : 1) + (topology === 'single' ? 0 : workers)
+  // Три control plane по kubeadm без общего адреса — заведомо висячий
+  // кластер: вход второго и третьего узла идёт по адресу первого.
+  const needEndpoint = flavor === 'kubeadm' && topology === 'cp3' && !endpoint.trim()
 
   const body = () => ({
           name,
@@ -110,6 +215,7 @@ export function NewClusterModal({
           w_memory_mb: w.mem,
           w_disk_gb: w.disk,
           addons: addonsBody(longhorn),
+          ...listenerBody(flavor, endpoint, gateway, allow),
   })
 
   async function start(dry: boolean) {
@@ -160,7 +266,13 @@ export function NewClusterModal({
             value={flavor}
             onChange={(v: 'k3s' | 'kubeadm') => {
               setFlavor(v)
-              if (v === 'kubeadm' && topology === 'cp3') setTopology('cp1')
+              // Общий адрес — поле kubeadm: у k3s узлы входят по адресу
+              // конкретного server'а. Снято поле, снят и слушатель.
+              if (v === 'k3s') {
+                setEndpoint('')
+                setGateway(0)
+                setAllow('')
+              }
             }}
             options={[
               { value: 'k3s', label: t('clusters.flavorK3s') },
@@ -188,7 +300,7 @@ export function NewClusterModal({
             options={[
               { value: 'single', label: t('clusters.topoSingle') },
               { value: 'cp1', label: t('clusters.topoCP1') },
-              { value: 'cp3', label: t('clusters.topoCP3'), disabled: flavor !== 'k3s' },
+              { value: 'cp3', label: t('clusters.topoCP3') },
             ]}
           />
         </label>
@@ -216,6 +328,18 @@ export function NewClusterModal({
           />
         </label>
       </div>
+      {flavor === 'kubeadm' && (
+        <ListenerFields
+          gateways={gws.data?.gateways ?? []}
+          cp3={topology === 'cp3'}
+          endpoint={endpoint}
+          setEndpoint={setEndpoint}
+          gateway={gateway}
+          setGateway={setGateway}
+          allow={allow}
+          setAllow={setAllow}
+        />
+      )}
       <div className="col" style={{ gap: '0.6rem', marginBottom: '0.6rem' }}>
         {sizes(t('clusters.cpSizes'), cp, setCP)}
         {topology !== 'single' && sizes(t('clusters.wSizes'), w, setW)}
@@ -256,11 +380,11 @@ export function NewClusterModal({
           <span className="small">{t('clusters.dryPrepare')}</span>
         </label>
         <Tooltip title={t('clusters.dryHint')}>
-          <Button loading={busy === 'dry'} disabled={!name || !effectiveImage || busy === 'create'} onClick={() => void start(true)}>
+          <Button loading={busy === 'dry'} disabled={!name || !effectiveImage || needEndpoint || busy === 'create'} onClick={() => void start(true)}>
             {t('clusters.dryRun')}
           </Button>
         </Tooltip>
-        <Button type="primary" loading={busy === 'create'} disabled={!name || !effectiveImage || busy === 'dry'} onClick={() => void start(false)}>
+        <Button type="primary" loading={busy === 'create'} disabled={!name || !effectiveImage || needEndpoint || busy === 'dry'} onClick={() => void start(false)}>
           {t('clusters.create')}
         </Button>
       </div>

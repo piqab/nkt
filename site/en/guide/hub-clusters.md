@@ -29,7 +29,8 @@ pod](/en/guide/k8s-first-pod).
 “New cluster” next to a host with virtualization: the flavor (**k3s** or
 **kubeadm**), the **Kubernetes version** (the current stable by default
 and the three previous branches), the topology — one machine / 1 control
-plane + N workers / 3 control planes + N workers, machine sizes, image,
+plane + N workers / 3 control planes + N workers (for kubeadm — with a
+**shared control plane address**, below), machine sizes, image,
 network, **port publishing** from the host (API 6443 and application
 ports), **Cilium** by a checkbox (with kube-proxy replacement) and
 **Longhorn** volumes with a chart version (below). Inside
@@ -74,8 +75,57 @@ sending a node an empty `--certificate-key`.
 
 **k3s** has no shared entry point: nodes join the address of a specific
 server, so the `endpoint` field is not accepted for k3s. The cluster form
-still offers three control planes for k3s only — the outward balancer for
-kubeadm arrives in the next step.
+offers three control planes for both flavors now, but kubeadm without a
+shared address does not start.
+
+### The listener for the shared address
+
+The hub does not build a load balancer of its own — **Traffic Fly** is
+that: a route `api-<cluster name>` on a gateway whose targets are the
+cluster's control planes. The listener is a step of the creation job: it
+goes down **before** the first control plane (at the end of `init`
+kubeadm waits for the API exactly at the shared address — the `apicheck`
+phase) and is removed by the cluster deletion job.
+
+The listener is needed where the shared address points:
+
+- the endpoint address equals the gateway address, or its A records
+  contain it — the hub puts the listener on that gateway;
+- there are several gateways and the address points at exactly one —
+  that one is chosen;
+- the address points at no gateway (your own VIP, an external haproxy,
+  the name is not in DNS yet) — the step writes to the log that the
+  address is served outside the hub, and the job continues: someone
+  else's port on the gateway would not help the cluster.
+
+The form fields — **“Shared control plane address”**, **“Where to
+listen”** and **“Who else”** — appear for kubeadm only.
+
+![The shared control plane address in the new cluster dialog](/screens/en/hub-cluster-ha.png)
+
+“Where to listen” follows the address by default; a named
+gateway is an instruction to put the listener there even if the name does
+not point anywhere yet (the log then shows what the address does
+resolve to). Over the API these are the `gateway` (the gateway's edge id)
+and `allow_extra` fields; in a script — the `gateway GATEWAY` (name or
+address) and `allow ADDRESS[,ADDRESS…]` parameters.
+
+The route port is the endpoint's port, the targets are the control planes
+on their 6443, and the balancing is by source address (API connections
+are long-lived, moving them between nodes would achieve nothing). The
+allow list is mandatory: a gateway address is an entry to kube-apiserver
+and through it to the etcd of the whole cluster. The hub puts the
+outward addresses of the placement hosts in it plus what a person
+added; an empty list at Traffic Fly means “everyone”, so an empty list is
+a refusal, not an open port. A host behind NAT, whose address is not
+visible from outside, is logged with “!” — its nodes would be locked
+out, and that should be seen before creating.
+
+**Dry run** shows all of it as a checklist: the gateway and its address,
+the port and targets of the route, who is in the allow list, whether the
+port on the gateway is free of someone else's route, and “!” where the
+address looks somewhere else than a gateway or there is no gateway at
+all.
 
 **Network between hosts** — how nodes on different hosts see each other:
 

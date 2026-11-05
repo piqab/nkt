@@ -1176,6 +1176,24 @@ func (r *ScriptRunner) clusterSpecFromStep(ctx context.Context, done *scriptRunR
 	if err != nil {
 		return spec, err
 	}
+	// gateway — шлюз Traffic Fly по имени или адресу: поле кластера хранит
+	// edge id, а в сценарии человек пишет название, как в блоке fly.
+	if g := st.Args["gateway"]; g != "" {
+		gw, err := r.s.flyPipelineGateway(ctx, g)
+		if err != nil {
+			return spec, err
+		}
+		spec.Gateway = gw.EdgeID
+	}
+	if a := st.Args["allow"]; a != "" {
+		// Повторить аргумент сценарий не даёт, поэтому список — одним
+		// значением через запятую.
+		for _, x := range strings.Split(a, ",") {
+			if x = strings.TrimSpace(x); x != "" {
+				spec.AllowExtra = append(spec.AllowExtra, x)
+			}
+		}
+	}
 	if !script.IsPlacement(st.Args["nodes"]) {
 		return spec, spec.Validate()
 	}

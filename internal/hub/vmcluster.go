@@ -62,10 +62,12 @@ func (s *Server) tokenClusterPrepare(ctx context.Context, t store.APIToken, spec
 	if spec.Topology != TopologySingle && spec.Topology != TopologyCP1 || len(spec.Placements) > 0 || spec.NetworkMode != "" && spec.NetworkMode != NetworkNAT {
 		return msgs.Errorf("hub.ownClusterTopology")
 	}
-	// Общий адрес control plane — поле kubeadm, а токену kubeadm не
-	// полагается: убирать его здесь, а не в Validate, чтобы ошибкой
-	// было «у кластера токена только k3s», а не «endpoint не для k3s».
-	spec.Flavor, spec.NetworkMode, spec.Network, spec.CNI, spec.Endpoint = "k3s", NetworkNAT, vmnet.IsolatedName(t.ID), "cilium", ""
+	// Общий адрес control plane и всё, что вокруг него (шлюз слушателя и
+	// «кому ещё»), — поля kubeadm, а токену kubeadm не полагается: убирать
+	// их здесь, а не в Validate, чтобы ошибкой было «у кластера токена
+	// только k3s», а не «endpoint не для k3s».
+	spec.Flavor, spec.NetworkMode, spec.Network, spec.CNI = "k3s", NetworkNAT, vmnet.IsolatedName(t.ID), "cilium"
+	spec.Endpoint, spec.Gateway, spec.AllowExtra = "", 0, nil
 	if spec.Topology == TopologySingle {
 		spec.Workers = 0
 	}

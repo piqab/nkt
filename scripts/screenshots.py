@@ -99,6 +99,13 @@ SCREENS = [
     ('deploy-compose', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); [...([...document.querySelectorAll('tr')].find((r) => /httpbin/.test(r.textContent))?.querySelectorAll('button') ?? [])].find((b) => new RegExp('^' + pick({ru: 'Описание', en: 'Description'}) + '$').test(b.textContent.trim()))?.click(); await sleep(1500)"),
     ('deploy-examples', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Новый конвейер', en: 'New pipeline'}) + '$')); await sleep(1500); clickText('.ant-modal button', new RegExp('^' + pick({ru: 'Примеры', en: 'Examples'}))); await sleep(800)"),
     ('deploy-remove', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); [...([...document.querySelectorAll('tr')].find((r) => /httpbin/.test(r.textContent))?.querySelectorAll('button') ?? [])].find((b) => new RegExp('^' + pick({ru: 'Удалить', en: 'Delete'}) + '$').test(b.textContent.trim()))?.click(); await sleep(2000)"),
+    # Окно «Новый кластер Kubernetes на нескольких хостах»: вариант kubeadm —
+    # и в нём поля слушателя общего адреса («Общий адрес control plane»,
+    # «Где слушать», «Кому ещё»). На стенде нужен шлюз Traffic Fly: POST
+    # /api/hub/edges с ролью fly, иначе список шлюзов пуст и поле «Где
+    # слушать» показывает, что слушать негде. Раздел «Кластеры» — по
+    # галочке: PUT /api/hub/experimental {"clusters": true}.
+    ('hub-cluster-ha', 'hub', '/', "menu({ru: 'Кластеры', en: 'Clusters'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Новый кластер', en: 'New cluster'}) + '$')); await sleep(2500); const sel = [...document.querySelectorAll('.ant-modal .ant-select')].find((e) => /^k3s/.test(e.textContent)); sel?.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(800); clickText('.ant-select-item-option-content', /^kubeadm/); await sleep(900); const setV = (el, v) => { if (!el) return; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, v); el.dispatchEvent(new Event('input', {bubbles: true})); }; const lab = (re) => [...document.querySelectorAll('.ant-modal label')].find((l) => re.test(l.textContent))?.querySelector('input'); setV(lab(new RegExp('^' + pick({ru: 'Имя кластера', en: 'Cluster name'}))), 'demo-ha'); setV(document.querySelector('.ant-modal input.sensitive'), 'api.example.net'); setV([...document.querySelectorAll('.ant-modal input.sensitive')][1], '198.51.100.7, 203.0.113.0/28'); await sleep(600)"),
 ]
 
 # Помощники, доступные действию: клик по пункту меню/вкладке/тексту.

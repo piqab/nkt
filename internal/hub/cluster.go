@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/k8s"
 	"github.com/piqab/nkt/internal/msgs"
@@ -33,7 +34,7 @@ const (
 
 	TopologySingle = "single" // одна машина: control plane + worker
 	TopologyCP1    = "cp1"    // 1 control plane + N worker
-	TopologyCP3    = "cp3"    // 3 control plane (k3s) + N worker
+	TopologyCP3    = "cp3"    // 3 control plane + N worker
 
 	clusterReadyTimeout = 15 * time.Minute
 	clusterNodePoll     = 10 * time.Second
@@ -60,6 +61,16 @@ type ClusterSpec struct {
 	// двух ничего не меняет. Имя endpoint'а kubeadm сам кладёт в
 	// сертификат API каждого control plane.
 	Endpoint string `json:"endpoint,omitempty"`
+	// Gateway — шлюз Traffic Fly, на котором слушает этот адрес (edge id).
+	// Пусто — адрес выбирает шлюз сам: указал бы он на несколько, хаб не
+	// угадывает, а молча выбранный шлюз означал бы адрес кластера не там,
+	// где его ждут.
+	Gateway int64 `json:"gateway,omitempty"`
+	// AllowExtra — кому ещё, кроме узлов кластера, разрешён вход на адрес
+	// endpoint'а (адреса и сети IPv4). Слушатель наружу — белый список
+	// адресов клиентов: без него кластер торчал бы открытым портом всему
+	// интернету.
+	AllowExtra []string `json:"allow_extra,omitempty"`
 	// CNI — «cilium» или пусто (flannel); KubeProxyReplacement — Cilium
 	// вместо kube-proxy.
 	CNI                  string `json:"cni,omitempty"`
@@ -162,6 +173,9 @@ func (s *ClusterSpec) Validate() error {
 	if err := s.normalizeEndpoint(); err != nil {
 		return err
 	}
+	if err := s.normalizeListener(); err != nil {
+		return err
+	}
 	if len(s.Placements) > 0 {
 		if err := s.validatePlacements(); err != nil {
 			return err
@@ -261,6 +275,38 @@ func (s *ClusterSpec) normalizeEndpoint() error {
 	// Порт дописывается сразу: им оперируют и join'ы узлов, и
 	// «--set k8sServicePort» у Cilium, и слушатель наружу.
 	s.Endpoint = k8s.JoinServer(s.Endpoint)
+	return nil
+}
+
+// normalizeListener приводит поля слушателя общего адреса. Сам слушатель
+// строится заданием кластера (см. cluster_listener.go), здесь проверяется
+// форма: выбор шлюза без общего адреса означал бы, что поле заполнили, а
+// слушать нечего, и адрес из «кому ещё» — только тот, который понимает
+// белый список Traffic Fly (IPv4 и сети).
+func (s *ClusterSpec) normalizeListener() error {
+	var out []string
+	seen := map[string]bool{}
+	for _, a := range s.AllowExtra {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		if !fly.ValidAllow(a) {
+			return msgs.Errorf("hub.clusterBadAllow", a)
+		}
+		if seen[a] {
+			continue
+		}
+		seen[a] = true
+		out = append(out, a)
+	}
+	s.AllowExtra = out
+	if len(s.AllowExtra) > fly.MaxAllow {
+		return msgs.Errorf("hub.clusterTooManyAllows", len(s.AllowExtra), fly.MaxAllow)
+	}
+	if s.Endpoint == "" && (s.Gateway != 0 || len(s.AllowExtra) > 0) {
+		return msgs.Errorf("hub.clusterListenerNeedsEndpoint")
+	}
 	return nil
 }
 
@@ -451,11 +497,15 @@ func (s ClusterSpec) NodeCounts() (cps, workers int) {
 }
 
 // jobSteps — шагов в задании создания: проверки, узлы, control plane,
-// присоединение, Ready; в режиме wireguard ещё туннель.
+// присоединение, Ready; в режиме wireguard ещё туннель, при общем адресе —
+// слушатель на шлюзе Traffic Fly.
 func (s ClusterSpec) jobSteps() int {
 	cps, workers := s.NodeCounts()
 	n := cps + workers + 4
 	if s.NetworkMode == NetworkWireGuard {
+		n++
+	}
+	if s.Endpoint != "" {
 		n++
 	}
 	return n
@@ -611,6 +661,9 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	if spec.NetworkMode == NetworkWireGuard {
 		total++
 	}
+	if spec.Endpoint != "" {
+		total++
+	}
 	if len(spec.Addons) > 0 {
 		total++
 	}
@@ -702,6 +755,23 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		}
 	}
 
+	// 1.5. Слушатель общего адреса на шлюзе Traffic Fly — до первого
+	// control plane: kubeadm в конце init проверяет API именно по
+	// control-plane-endpoint (фаза apicheck), и без живого адреса init не
+	// проходит, сколько бы API ни слушал локально.
+	// Слушатель нужен — ждать ли адрес при входах; не нужен (общий адрес
+	// обслуживает кто-то другой) — узлы войдут сами, как умели и раньше.
+	listener := false
+	if spec.Endpoint != "" {
+		step++
+		jc.StepKey(step, total, "hub.clusterStepListener")
+		var err error
+		listener, err = r.clusterListenerStep(ctx, jc, cl, spec)
+		if err != nil {
+			return err
+		}
+	}
+
 	// 2. Control plane и токен.
 	step++
 	jc.StepKey(step, total, "hub.clusterStepControlPlane")
@@ -752,6 +822,13 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		}
 		done.Installed[cp1Name] = true
 		jc.SaveResume(*done)
+	}
+	// Узел входит по общему адресу, значит, адрес уже должен отвечать:
+	// первый control plane по сводке шлюза жив — можно входить. Проверка
+	// идёт с хоста назначения на его служебный порт, поэтому «не жив» —
+	// это не про API, а про путь: туннель, DNAT или белый список.
+	if listener && !r.s.flyWaitAlive(ctx, clusterListenerID(spec.Name), []string{cp1Name}) {
+		return msgs.Errorf("hub.clusterListenerDead", spec.Endpoint, clusterListenerID(spec.Name))
 	}
 	// Узлы входят по общему адресу, когда он задан: у kubeadm это тот же
 	// --control-plane-endpoint, что у init, и сертификат API каждого
@@ -1026,10 +1103,16 @@ func (r *ClusterRunner) waitNodesReady(ctx context.Context, jc *jobs.Context, cp
 	}
 }
 
-// ClusterDeleteRunner удаляет узлы (машины с дисками) и запись.
-type ClusterDeleteRunner struct{ m *Manager }
+// ClusterDeleteRunner удаляет узлы (машины с дисками), слушатель общего
+// адреса и запись.
+type ClusterDeleteRunner struct {
+	m *Manager
+	s *Server
+}
 
-func NewClusterDeleteRunner(m *Manager) *ClusterDeleteRunner { return &ClusterDeleteRunner{m: m} }
+func NewClusterDeleteRunner(s *Server) *ClusterDeleteRunner {
+	return &ClusterDeleteRunner{m: s.hub, s: s}
+}
 
 func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p ClusterJobParams
@@ -1085,9 +1168,20 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	jc.StepKey(total, total, "hub.clusterStepDeleteRecord")
 	r.removeMesh(ctx, jc, cl)
-	// Кластер токена: учёт узлов, порт API и запись владельца.
 	var spec ClusterSpec
-	if json.Unmarshal([]byte(cl.SpecJSON), &spec) == nil && spec.HostID != 0 {
+	parsed := json.Unmarshal([]byte(cl.SpecJSON), &spec) == nil
+	// Слушатель общего адреса: маршрут кластера снимается с шлюза и
+	// применяется. Неудача — только в журнал: узлы уже убраны, а запись
+	// кластера из-за недоступного шлюза переживать их не должна; карта
+	// Traffic Fly показывает осиротевший маршрут.
+	if parsed && spec.Endpoint != "" {
+		note := msgs.T(jc.Lang(), "hub.clusterListenerRemoveNote", cl.Name)
+		if err := r.s.clusterListenerRemoveRoute(ctx, jc, jc.Job.Author, clusterListenerID(cl.Name), note); err != nil {
+			jc.Log("hub.clusterListenerRemoveWarn", clusterListenerID(cl.Name), err)
+		}
+	}
+	// Кластер токена: учёт узлов, порт API и запись владельца.
+	if parsed && spec.HostID != 0 {
 		hostName := ""
 		if h, err := r.m.db.HostByID(ctx, spec.HostID); err == nil {
 			hostName = h.Name

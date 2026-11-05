@@ -74,8 +74,10 @@ simulated.
   failover pair — there is export/import.
 - Kubernetes clusters from the hub are experimental: no rollback, start
   with a dry run. Three control planes work for kubeadm too — with a
-  shared address (`endpoint`); a listener answering that address on the
-  placement hosts is not there yet, it is planned.
+  shared address (`endpoint`); on that address the hub puts a Traffic Fly
+  listener, but only where the address points: your own VIP or someone
+  else's balancer is left alone, and with no gateway on the hub the
+  shared address has to be served outside it.
 - Scripts are experimental: no rollback, and the language deliberately
   has no arbitrary shell commands.
 - The registry mirror caches public images only.

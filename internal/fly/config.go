@@ -1,4 +1,4 @@
-// Package fly — Traffic Fly: проброс трафика из интернета через VPS-шлюз
+// Package fly — Traffic Fly: проброс трафика из интернета через шлюз
 // к сервисам на хостах (контейнеры, машины, сам хост), с настоящим IP
 // клиента и балансировкой.
 //
@@ -282,8 +282,13 @@ func (r Route) protos() []string {
 // Named — маршрут по имени (обслуживает маршрутизатор, не ядро).
 func (r Route) Named() bool { return r.Kind == KindHTTPS || r.Kind == KindHTTP }
 
-// maxAllow — сколько адресов и сетей в белом списке маршрута.
-const maxAllow = 200
+// MaxAllow — сколько адресов и сетей в белом списке маршрута.
+const MaxAllow = 200
+
+// ValidAllow — строка белого списка маршрута: адрес IPv4 или сеть. Нужна
+// тем, кто собирает список извне (хаб — для слушателя кластера), чтобы
+// отказывать до записи в документ.
+func ValidAllow(s string) bool { _, err := parseAllow(s); return err == nil }
 
 // parseAllow — адрес или сеть IPv4 белого списка.
 func parseAllow(s string) (netip.Prefix, error) {
@@ -400,8 +405,8 @@ func (r Route) validate(peers map[string]bool) error {
 	if r.MaxConns < 0 || r.MaxConns > 100000 || r.Rate < 0 || r.Rate > 100000 {
 		return fmt.Errorf("fly: route %s: per-client limits", r.ID)
 	}
-	if len(r.Allow) > maxAllow {
-		return fmt.Errorf("fly: route %s: more than %d allowed addresses", r.ID, maxAllow)
+	if len(r.Allow) > MaxAllow {
+		return fmt.Errorf("fly: route %s: more than %d allowed addresses", r.ID, MaxAllow)
 	}
 	for _, a := range r.Allow {
 		if _, err := parseAllow(a); err != nil {

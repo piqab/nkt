@@ -104,7 +104,7 @@ Under `/api/hub/`:
 | Machines | `/hub/vm/provision`, `/hub/hosts/{id}/vm*` | Creating, finding and importing machines, access checks |
 | Scripts | `/hub/scripts*` | Scripts, check, run, versions, help |
 | Service descriptions | `/hub/svcdescs*` | Library with versions, `check`, `eval` (path builder), `deliver` (delivery job to hosts) |
-| Clusters | `/hub/clusters*`, `/hub/cluster-images*`, `/hub/cluster-presets*`, `/hub/k8s-versions` | Creation, dry run, workers, resume, upgrade, kubeconfig, images, presets |
+| Clusters | `/hub/clusters*`, `/hub/cluster/gateways`, `/hub/cluster-images*`, `/hub/cluster-presets*`, `/hub/k8s-versions` | Creation, dry run, workers, resume, upgrade, kubeconfig, images, presets, the gateways a shared address can listen on |
 | Manifests and Helm | `/hub/k8s/manifests*`, `/hub/k8s/helm/install`, `/hub/k8s/findings` | One YAML or release into several clusters, findings across clusters |
 | Deployments | `/hub/pipelines*` | Pipelines, access, webhook secret, deploy, rollback, history |
 | API tokens | `/hub/tokens*`, `/hub/jobs/{id}*` | Tokens (from the browser only), a hub job and its log |

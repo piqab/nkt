@@ -447,6 +447,12 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 			}
 		}
 	}
+	// Слушатель общего адреса control plane: шлюз, порт, белые списки и
+	// тот же вопрос, что и у TLS — куда смотрит имя endpoint'а.
+	if spec.Endpoint != "" {
+		jc.Log("hub.preflightListenerHeader")
+		r.listenerPreflight(ctx, spec, nodes, add)
+	}
 	return r.finishPreflight(jc, checks), nil
 }
 
