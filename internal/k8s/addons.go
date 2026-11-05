@@ -50,6 +50,19 @@ type AddonRequest struct {
 	SkipLocalPath bool `json:"skip_local_path,omitempty"`
 }
 
+// AddonPackages — пакеты дистрибутива, которые дополнение требует на
+// каждом узле. Хаб ставит их cloud-init при первом запуске машины
+// (vmcreate.Spec.Packages), а не шагом подготовки на готовом кластере: к
+// тому моменту в дате-пас узла уже сидит Cilium с заменой kube-proxy, и
+// в NAT-сети хоста TCP-соединения наружу могут не проходить — apt
+// повиснет до таймаута задания, хотя ping и DNS остаются живыми.
+func AddonPackages(name string) []string {
+	if name == AddonLonghorn {
+		return []string{"open-iscsi", "nfs-common"}
+	}
+	return nil
+}
+
 // ValidAddon — известно ли дополнение.
 func ValidAddon(name string) bool {
 	for _, a := range Addons {
@@ -85,12 +98,28 @@ func (r AddonRequest) Validate() error {
 // AddonPrepareScript — подготовка узла под Longhorn: iSCSI (тома
 // подключаются по нему), NFS-клиент (тома ReadWriteMany), модуль ядра.
 // Текст — константа; skipLocalPath — только флаг.
+//
+// Пакеты обычно приходят с машиной из cloud-init (AddonPackages), так что
+// apt здесь нужен лишь там, где их нет: узел-хост, машина прежнего
+// кластера, образ без пакетов. Ходит он с короткими таймаутами и без
+// повторов: на узле после Cilium исходящий TCP может молчать, и прежний
+// «update -qq» с Lock::Timeout=600 вешал шаг на весь таймаут задания,
+// тогда как ICMP и DNS оставались рабочими — по ним неисправность не
+// увидеть.
 func AddonPrepareScript(skipLocalPath bool) string {
 	lines := []string{
 		"set -e",
 		"export DEBIAN_FRONTEND=noninteractive",
-		"apt-get -o DPkg::Lock::Timeout=600 update -qq",
-		"apt-get -o DPkg::Lock::Timeout=600 install -y -qq open-iscsi nfs-common",
+		"need=0",
+		"for p in open-iscsi nfs-common; do dpkg -s $p >/dev/null 2>&1 || need=1; done",
+		"if [ $need = 1 ]; then",
+		"  if ! timeout 90 apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=8 -o Acquire::https::Timeout=8" +
+			" -o DPkg::Lock::Timeout=60 update -qq; then",
+		`    echo "apt update failed: this node has no working TCP egress (ICMP and DNS can still be fine). The packages normally arrive with the machine from cloud-init; after Cilium replaces kube-proxy check the node's outbound path, or install open-iscsi and nfs-common by hand." >&2`,
+		"    exit 42",
+		"  fi",
+		"  apt-get -o DPkg::Lock::Timeout=600 install -y -qq open-iscsi nfs-common",
+		"fi",
 		"modprobe iscsi_tcp",
 		"echo iscsi_tcp > /etc/modules-load.d/nkt-longhorn.conf",
 		"systemctl enable --now iscsid",

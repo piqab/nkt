@@ -877,6 +877,13 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 		// cloud-init ставит его при первом запуске.
 		vm.Packages = append(vm.Packages, "qemu-guest-agent")
 	}
+	// Пакеты дополнений (Longhorn — open-iscsi и nfs-common) едут сюда же,
+	// в первый запуск машины: шагом подготовки apt попал бы уже на узел с
+	// Cilium вместо kube-proxy, где исходящий TCP в NAT-сети хоста может не
+	// работать.
+	for _, a := range spec.Addons {
+		vm.Packages = append(vm.Packages, k8s.AddonPackages(a.Name)...)
+	}
 	if r.s.jobs == nil {
 		return msgs.Errorf("api.backgroundJobsAreUnavailable")
 	}

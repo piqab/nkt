@@ -2473,6 +2473,7 @@ var enCatalog = map[string]string{
 	"hub.clusterAddonDup":                                 "the add-on %s is listed twice",
 	"hub.addonIndexEmpty":                                 "the repository has no versions of the chart %s",
 	"hub.addonPreparing":                                  "%s: preparing the node %s",
+	"hub.addonPrepareFailed":                              "%s: node %s — the packages normally arrive with the machine on first boot; apt here needs outbound TCP, which can be gone after Cilium replaces kube-proxy while ping and DNS still work",
 	"hub.addonOldNode":                                    "%s: nkt on the node does not know add-ons — update nkt on the host to the hub version",
 	"hub.addonStart":                                      "%s: could not start the add-on job: %v",
 	"hub.addonInstalling":                                 "%s %s: installing on %s",

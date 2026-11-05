@@ -137,9 +137,16 @@ hub:<файл>`, `endpoint АДРЕС` ([Сценарии](/guide/hub-scripts)).
   longhorn[=1.12.1]`, в API и MCP — `"addons":[{"name":"longhorn",
   "version":"1.12.1"}]`) — блочные тома с репликами по узлам. Ставится
   последним шагом, когда все узлы `Ready`:
-  - на каждом узле — `open-iscsi`, `nfs-common` (тома ReadWriteMany),
-    модуль `iscsi_tcp`, служба `iscsid`; если работает `multipathd`, в
-    журнале — предупреждение (его `multipath.conf` nkt не трогает);
+  - `open-iscsi` и `nfs-common` (тома ReadWriteMany) ставит **cloud-init при
+    первом запуске машины** — пока у неё ещё есть исходящий TCP: шагом
+    подготовки узел уже сидит на Cilium вместо kube-proxy, а в NAT-сети
+    хоста после этого TCP наружу может молчать, хотя ping и DNS остаются
+    рабочими; на готовом узле пакеты проверяются (`dpkg -s`) и докачиваются
+    только если их нет (узлы-хосты, машины прежних кластеров), с короткими
+    таймаутами и внятной строкой в журнале, а не зависанием до таймаута
+    задания; там же — модуль `iscsi_tcp`, служба `iscsid`; если работает
+    `multipathd`, в журнале — предупреждение (его `multipath.conf` nkt не
+    трогает);
   - на первом control plane — чарт `longhorn/longhorn` из
     `https://charts.longhorn.io` в `longhorn-system` (helm ставится сам,
     если его нет), ожидание `longhorn-manager`;

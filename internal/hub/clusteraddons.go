@@ -259,6 +259,10 @@ func (m *Manager) applyAddons(ctx context.Context, jc *jobs.Context, spec Cluste
 				continue
 			}
 			if err := m.addonPrepare(ctx, jc, h, a.Name, spec.Flavor == k8s.FlavorK3s); err != nil {
+				// Подсказка в журнал: чаще всего это не «apt медленный», а
+				// узел без исходящего TCP после установки Cilium — пакеты при
+				// этом уже должны приехать с машиной из cloud-init.
+				jc.Log("hub.addonPrepareFailed", a.Name, h.Name)
 				return err
 			}
 			done.Addons[key] = true

@@ -148,8 +148,15 @@ hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
   `"addons":[{"name":"longhorn","version":"1.12.1"}]`) — block volumes
   replicated across nodes. Installed as the last step, once every node is
   `Ready`:
-  - on every node — `open-iscsi`, `nfs-common` (ReadWriteMany volumes), the
-    `iscsi_tcp` module, the `iscsid` service; if `multipathd` runs, the log
+  - `open-iscsi` and `nfs-common` (ReadWriteMany volumes) are installed by
+    **cloud-init on the machine's first boot**, while its outbound TCP still
+    works: by the node-prepare step the node already runs Cilium instead of
+    kube-proxy, and in the host's NAT network outbound TCP can go silent
+    after that while ping and DNS stay fine. On a ready node the packages
+    are checked (`dpkg -s`) and fetched only if missing (host nodes,
+    machines of older clusters), with short timeouts and one clear log line
+    instead of hanging until the job times out; the same step loads the
+    `iscsi_tcp` module and starts `iscsid`; if `multipathd` runs, the log
     warns (nkt does not touch its `multipath.conf`);
   - on the first control plane — the `longhorn/longhorn` chart from
     `https://charts.longhorn.io` into `longhorn-system` (helm is installed

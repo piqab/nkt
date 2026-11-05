@@ -1,6 +1,9 @@
 package k8s
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -53,6 +56,36 @@ func TestLonghornScripts(t *testing.T) {
 	}
 	if p := AddonPrepareScript(true); !strings.Contains(p, "local-storage.yaml.skip") {
 		t.Errorf("prepare with skip:\n%s", p)
+	}
+	// apt — только когда пакет нет, и короткими таймаутами: на узле после
+	// Cilium исходящий TCP может молчать, и прежний update -qq вешал шаг.
+	p := AddonPrepareScript(false)
+	for _, want := range []string{"dpkg -s $p", "Acquire::Retries=0", "Acquire::http::Timeout=8", "exit 42", "modprobe iscsi_tcp"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prepare lacks %q:\n%s", want, p)
+		}
+	}
+	if !strings.Contains(p, "for p in open-iscsi nfs-common") || !strings.Contains(p, "[ $need = 1 ]") {
+		t.Errorf("apt must stay behind the dpkg check:\n%s", p)
+	}
+	// Сценарий пишется построчно из Go — синтаксис проверяем bash'ем, как и
+	// остальные серверные сценарии.
+	f := filepath.Join(t.TempDir(), "prepare.sh")
+	if err := os.WriteFile(f, []byte(p), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("bash", "-n", f).CombinedOutput(); err != nil {
+		t.Fatalf("bash -n: %v %s", err, out)
+	}
+}
+
+func TestAddonPackages(t *testing.T) {
+	got := AddonPackages(AddonLonghorn)
+	if strings.Join(got, " ") != "open-iscsi nfs-common" {
+		t.Errorf("longhorn packages: %v", got)
+	}
+	if len(AddonPackages("неткого")) != 0 {
+		t.Error("неизвестное дополнение не должно давать пакетов")
 	}
 }
 

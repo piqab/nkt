@@ -2472,6 +2472,7 @@ var ruCatalog = map[string]string{
 	"hub.clusterAddonDup":                                 "дополнение %s указано дважды",
 	"hub.addonIndexEmpty":                                 "в репозитории нет версий чарта %s",
 	"hub.addonPreparing":                                  "%s: подготовка узла %s",
+	"hub.addonPrepareFailed":                              "%s: узел %s — пакеты обычно приезжают с машиной при первом запуске; apt здесь требует исходящего TCP, которого после замены kube-proxy на Cilium может не быть, хотя ping и DNS остаются рабочими",
 	"hub.addonOldNode":                                    "%s: nkt на узле не знает дополнений — обновите nkt на хосте до версии хаба",
 	"hub.addonStart":                                      "%s: не удалось запустить задание дополнения: %v",
 	"hub.addonInstalling":                                 "%s %s: установка на %s",
