@@ -930,6 +930,13 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			return err
 		}
 	}
+	// 6. Автомат целей Traffic Fly: маршруты, ведущие в этот кластер,
+	// перекладываются на его узлы. Неудача — только в журнал: кластер
+	// собран, а карта Traffic Fly не должна рвать задание создания из-за
+	// недоступного шлюза (минутное наблюдение повторит само).
+	if err := r.s.flyClusterReconcile(ctx, jc, jc.Job.Author, spec.Name); err != nil {
+		jc.Log("hub.clusterFlyWarn", spec.Name, err)
+	}
 	jc.Log("hub.clusterDone", spec.Name, serverAddr)
 	return nil
 }
@@ -1179,6 +1186,13 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		if err := r.s.clusterListenerRemoveRoute(ctx, jc, jc.Job.Author, clusterListenerID(cl.Name), note); err != nil {
 			jc.Log("hub.clusterListenerRemoveWarn", clusterListenerID(cl.Name), err)
 		}
+	}
+	// Маршруты, привязанные к кластеру (ingress клиентов, NodePort):
+	// вести больше некуда — убираются с карты. Та же осторожность, что со
+	// слушателем: узлы уже убраны, а запись кластера из-за шлюза
+	// переживать их не должна.
+	if err := r.s.flyClusterDropRoutes(ctx, jc, jc.Job.Author, cl.Name); err != nil {
+		jc.Log("hub.clusterFlyWarn", cl.Name, err)
 	}
 	// Кластер токена: учёт узлов, порт API и запись владельца.
 	if parsed && spec.HostID != 0 {

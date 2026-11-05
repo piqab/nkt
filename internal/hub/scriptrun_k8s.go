@@ -214,19 +214,19 @@ func (r *ScriptRunner) flyRouteFromStep(ctx context.Context, done *scriptRunResu
 		if err != nil {
 			return nil, err
 		}
-		port, _ := strconv.Atoi(st.Args["target_port"])
-		hosts, err := r.m.db.ClusterHosts(ctx, cl.ID)
-		if err != nil {
-			return nil, err
+		// Пул целей строит автомат (clusterFlyTargets): тот же разбор
+		// узлов, что и при последующей сверке, — маршрут с первого
+		// применения выглядит так, как его знает автомат, и сверка
+		// ничего не перекладывает.
+		route.Cluster, route.TargetPort = cl.Name, 0
+		if p, err := strconv.Atoi(st.Args["target_port"]); err == nil && p > 0 {
+			route.TargetPort = p
 		}
-		for _, h := range hosts {
-			t := FlyTarget{ID: fmt.Sprintf("n%d", h.ID), HostID: h.ID, Kind: "host", Port: port}
-			if h.ParentID != 0 {
-				// Узел — машина хоста: в libvirt она называется как в хабе.
-				t.HostID, t.Kind, t.Ref = h.ParentID, "vm", h.Name
-			}
-			route.Targets = append(route.Targets, t)
+		targets, why := r.s.clusterFlyTargets(ctx, route)
+		if why != flyClusterOK {
+			return nil, clusterFlyError(why, route)
 		}
+		route.Targets = append(route.Targets, targets...)
 	}
 	for i, ft := range st.FlyTargets() {
 		h, err := r.hostByName(ctx, done, ft.Host)

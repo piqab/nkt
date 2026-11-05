@@ -1757,6 +1757,7 @@ var ruCatalog = map[string]string{
 	"hub.clusterListenerRemoved":                          "      слушатель %s снят",
 	"hub.clusterListenerRemoveNote":                       "слушатель снят: кластер %s удалён",
 	"hub.clusterListenerRemoveWarn":                       "      слушатель %s снять не удалось (%v) — проверьте карту Traffic Fly",
+	"hub.clusterFlyWarn":                                  "      Traffic Fly, кластер %s: %v — задание из-за карты не рвётся, проверьте Traffic Fly",
 	"hub.clusterListenerDead":                             "общий адрес %s не отвечает (слушатель %s на шлюзе): узлы входят именно по нему, и ждать дальше незачем — проверьте, что хосты размещения и их адреса видны снаружи, а белые списки совпадают",
 	"hub.clusterBadTopology":                              "неизвестная топология: %q",
 	"hub.clusterTooManyWorkers":                           "не больше 20 worker'ов за раз",

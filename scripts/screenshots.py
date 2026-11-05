@@ -106,6 +106,13 @@ SCREENS = [
     # слушать» показывает, что слушать негде. Раздел «Кластеры» — по
     # галочке: PUT /api/hub/experimental {"clusters": true}.
     ('hub-cluster-ha', 'hub', '/', "menu({ru: 'Кластеры', en: 'Clusters'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Новый кластер', en: 'New cluster'}) + '$')); await sleep(2500); const sel = [...document.querySelectorAll('.ant-modal .ant-select')].find((e) => /^k3s/.test(e.textContent)); sel?.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(800); clickText('.ant-select-item-option-content', /^kubeadm/); await sleep(900); const setV = (el, v) => { if (!el) return; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, v); el.dispatchEvent(new Event('input', {bubbles: true})); }; const lab = (re) => [...document.querySelectorAll('.ant-modal label')].find((l) => re.test(l.textContent))?.querySelector('input'); setV(lab(new RegExp('^' + pick({ru: 'Имя кластера', en: 'Cluster name'}))), 'demo-ha'); setV(document.querySelector('.ant-modal input.sensitive'), 'api.example.net'); setV([...document.querySelectorAll('.ant-modal input.sensitive')][1], '198.51.100.7, 203.0.113.0/28'); await sleep(600)"),
+    # Редактор маршрута, привязанного к кластеру: поле «Кластер» и «Порт на
+    # узле» — цели такого маршрута строит автомат по его узлам. Нужен
+    # маршрут с cluster на карте (PUT /api/hub/fly) и кластер с узлами.
+    ('traffic-fly-cluster', 'hub', '/', "menu({ru: 'Traffic Fly', en: 'Traffic Fly'}); await sleep(2500); [...document.querySelectorAll('tr')].find((r) => /web\\.example/.test(r.textContent))?.querySelectorAll('button').forEach((b) => { if (new RegExp('^' + pick({ru: 'Изменить', en: 'Edit'}) + '$').test(b.textContent.trim())) b.click() }); await sleep(1500)"),
+    # Карточка кластера с кнопкой «Цели Traffic Fly»: она появляется,
+    # у кластера есть привязанные маршруты (их число — в подсказке).
+    ('hub-cluster-fly', 'hub', '/', "menu({ru: 'Кластеры', en: 'Clusters'}); await sleep(2000); [...document.querySelectorAll('.ant-card')].find((e) => /demo/.test(e.textContent))?.scrollIntoView({block: 'start'}); await sleep(500)"),
 ]
 
 # Помощники, доступные действию: клик по пункту меню/вкладке/тексту.

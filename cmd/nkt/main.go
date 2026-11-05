@@ -973,6 +973,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindFlyApply, hub.NewFlyApplyRunner(server))
 	r.jobs.Register(hub.KindFlySwitch, hub.NewFlySwitchRunner(server))
 	r.jobs.Register(hub.KindFlyOps, hub.NewFlyOpsRunner(server))
+	r.jobs.Register(hub.KindFlyCluster, hub.NewFlyClusterRunner(server))
 	r.jobs.Register(hub.KindLXDCreate, hub.NewLXDCreateRunner(server))
 	r.jobs.Register(hub.KindContainerMigrate, hub.NewMigrateRunner(server))
 	r.jobs.Register(hub.KindEdgeUninstall, hub.NewEdgeUninstallRunner(server))

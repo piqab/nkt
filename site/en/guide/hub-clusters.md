@@ -160,6 +160,18 @@ into the cache and brings up the libvirt network right away.
   (`fly own … cluster … namespace …`, MCP `fly_own_add`); without it no
   route to a client namespace can be made. The window shows a diff, empty
   turns it off.
+- **Traffic Fly routes following the nodes** — a route bound to the cluster
+  takes its targets from the cluster's nodes: a node arrives, a target
+  appears; a node leaves, the target leaves. The target port is the client
+  ingress, or the one a human named (NodePort passes through). The rewrite
+  runs from the creation and deletion jobs, from the minute watch, and from
+  a button: **“Traffic Fly targets”** on the cluster card (it shows when
+  the cluster has bound routes, their number is in the tooltip),
+  **“Check targets”** inside the route. The shared address listener is
+  not rewritten by the automation — it carries control planes only.
+  Details — [Traffic Fly](/en/guide/traffic-fly).
+
+  ![The cluster card with the “Traffic Fly targets” button](/screens/en/hub-cluster-fly.png)
 - **Client resources** — operator resources (CRDs) clients may create in
   their namespaces: one per line, `resource.group`
   (`registries.registry.rgstr.io`). The hub applies the ClusterRole

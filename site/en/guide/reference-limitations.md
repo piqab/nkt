@@ -78,6 +78,13 @@ simulated.
   listener, but only where the address points: your own VIP or someone
   else's balancer is left alone, and with no gateway on the hub the
   shared address has to be served outside it.
+- A Traffic Fly route bound to a cluster takes its targets from the
+  cluster's nodes. A target drained by hand is not counted as drift — but
+  the first real rewrite clears the drain, so a machine cannot be kept
+  “drained” that way for long. The watch wakes the job for a cluster no
+  more than once every 10 minutes (the button has no such restraint). The
+  shared address listener is not rewritten by the automation: it carries
+  control planes only.
 - Scripts are experimental: no rollback, and the language deliberately
   has no arbitrary shell commands.
 - The registry mirror caches public images only.

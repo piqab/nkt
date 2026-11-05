@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.28 — 2026-11-06
+
+- **A Traffic Fly route's target pool now follows the cluster.** A route gained a “Cluster” field: a route bound to a cluster takes its targets from the cluster's nodes — a node arrives, a target appears; a node leaves, the target goes. Otherwise client traffic silently runs into a machine that is no longer in the list, and removing that machine from the hub leaves the route untouched.
+  - The target port is the one a person names in “Port on the node”; when it is not named it follows the kind of the route — the client ingress for `http`/`https`, the route's own port for `tcp`/`udp` (a NodePort passes straight through).
+  - The rewrite uses the same mechanism as a deployment: a diff, a smooth drain of the previous targets, apply, and a check that the address answers. It runs from the cluster creation job, from the deletion job (its routes lead nowhere, so they come off the map), from the minute watch over the map, and from a button: “Traffic Fly targets” on the cluster card, “Check targets” inside the route.
+  - The shared address listener is not rewritten by the automation: it carries control planes only and has its own targets.
+  - What the automation cannot judge is a log line, not a failed job: no ingress set, the cluster is gone, no nodes yet. Creating a cluster must not die because of the Traffic Fly map.
+  - Over the API — `POST /api/hub/fly/cluster {"cluster":"lab"}` (with no name, every cluster that has bound routes); the cluster list now reports `fly_routes` for each cluster.
+
 ## v1.17.27 — 2026-11-05
 
 - **The shared control plane address got its listener and a form field.** The hub does not build a load balancer of its own — Traffic Fly is one: a route `api-<cluster name>` on a gateway whose targets are the cluster's control planes. The listener goes down **before** the first control plane — at the end of `init` kubeadm waits for the API exactly at the shared address (the `apicheck` phase), and without a live address `init` does not pass no matter how the API listens locally — and it is removed by the cluster deletion job.

@@ -85,6 +85,17 @@ type FlyRoute struct {
 	// DNS — записи имён маршрута ведёт DNS-плагин хаба: A на адрес шлюза
 	// (несколько шлюзов с этим именем — Failover). Без плагина — ничего.
 	DNS bool `json:"dns,omitempty" yaml:"dns,omitempty"`
+	// Cluster — имя кластера хаба, чьи узлы составляют пул целей: ingress
+	// слушает на каждом узле, и NodePort узел держит на себе тоже, поэтому
+	// пул обязан следовать за составом кластера. Пусто — цели человеческие,
+	// автомат их не трогает (имя, а не id: документ переживает экспорт).
+	Cluster string `json:"cluster,omitempty" yaml:"cluster,omitempty"`
+	// TargetPort — порт, на котором узел кластера принимает трафик этого
+	// маршрута, если он назван явно (у шага сценария — «targets cluster …
+	// port …», у маршрута токена — порт ingress'а кластера). 0 — автомат
+	// берёт порт по смыслу маршрута: ingress для клиентов у http/https,
+	// сам порт маршрута у tcp/udp.
+	TargetPort int `json:"target_port,omitempty" yaml:"target_port,omitempty"`
 }
 
 // FlyAlloc — постоянные номера: хост в подсети шлюза, служебный порт

@@ -445,6 +445,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/fly/apply", s.handleFlyApply)
 					r.Post("/hub/fly/routes/{id}/switch", s.handleFlySwitch)
 					r.Post("/hub/fly/ops", s.handleFlyOps)
+					r.Post("/hub/fly/cluster", s.handleFlyCluster)
 					// Перенос контейнера Docker с хоста на хост (карта хостов).
 					r.Post("/hub/migrate/preview", s.handleMigratePreview)
 					r.Post("/hub/migrate", s.handleMigrateStart)

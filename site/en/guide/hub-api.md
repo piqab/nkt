@@ -403,7 +403,8 @@ to the hub through the tunnel. Conditions:
 | `POST /api/hub/fly/ops` | admin | point changes: add or remove a target, make active, reserve, drain → `job_id` |
 | `POST /api/hub/fly/routes/{id}/switch` | admin | switch a route's active target |
 | `POST /api/hub/fly/apply` | admin | apply (`{"dry_run":false}`) → `job_id` |
-| `GET /api/hub/clusters`, `/{id}/nodes` | read | clusters and nodes |
+| `POST /api/hub/fly/cluster` | admin | reconcile the targets of routes bound to a cluster (`{"cluster":"lab"}`; no name — every cluster that has bound routes) → `job_id` |
+| `GET /api/hub/clusters`, `/{id}/nodes` | read | clusters and nodes; a cluster carries `fly_routes` — how many Traffic Fly routes lead into it |
 | `GET /api/hub/k8s/manifests`, `/{id}` | admin | saved manifests |
 | `POST /api/hub/k8s/manifests/diff` | admin | `kubectl diff` per cluster (`{"name":"…","content":"…","clusters":[1,2]}`) |
 | `POST /api/hub/k8s/manifests/apply?job=1` | admin | `kubectl apply` per cluster as a job (body as for diff, plus `note`) → `job_id` |

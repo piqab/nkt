@@ -43,6 +43,8 @@ export interface Cluster {
   error_msg?: string
   server_addr?: string
   has_kubeconfig: boolean
+  /** Маршрутов Traffic Fly, чьи цели — узлы этого кластера. */
+  fly_routes?: number
   nodes: ClusterNode[]
   created_at: string
 }
@@ -527,6 +529,13 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                 <Tooltip title={t('clusters.clientIngressHint')}>
                   <Button size="small" onClick={() => setIngressOf(c)}>
                     {t('clusters.clientIngress')}
+                  </Button>
+                </Tooltip>
+              )}
+              {(c.fly_routes ?? 0) > 0 && (
+                <Tooltip title={t('clusters.flyTargetsHint', { n: c.fly_routes ?? 0 })}>
+                  <Button size="small" loading={busy === `fly:${c.id}`} onClick={() => void call(`fly:${c.id}`, '/hub/fly/cluster', 'POST', { cluster: c.name })}>
+                    {t('clusters.flyTargets')}
                   </Button>
                 </Tooltip>
               )}

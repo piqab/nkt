@@ -58,6 +58,11 @@ interface FlyRoute {
   tls?: boolean
   /** Записи имён ведёт DNS-плагин хаба (A на адрес шлюза). */
   dns?: boolean
+  /** Кластер хаба, чьи узлы составляют пул: их перекладывает автомат. */
+  cluster?: string
+  /** Порт, на котором узел кластера принимает трафик (0 — по смыслу
+   * маршрута: ingress кластера у http/https, сам порт у tcp/udp). */
+  target_port?: number
   /** Белый список адресов клиентов (IPv4, сети); пусто — все. */
   allow?: string[]
   /** Не больше одновременных / новых в секунду соединений с одного адреса. */
@@ -264,6 +269,19 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
     if (!doc) return
     await api('/hub/fly', { method: 'PUT', body: { gateways: doc.gateways, routes, note, base: doc.revision } })
     await fly.reload()
+  }
+
+  // Пул целей кластерного маршрута — за узлами кластера: после правки
+  // сверяем сразу, не дожидаясь минутного наблюдения. Не встало (такое
+  // уже в работе) — наблюдение сделает своё.
+  async function reconcileCluster(cluster?: string) {
+    if (!cluster) return
+    try {
+      const res = await api<{ job_id: number }>('/hub/fly/cluster', { method: 'POST', body: { cluster } })
+      if (res.job_id) onOpenJob(res.job_id)
+    } catch {
+      await fly.reload()
+    }
   }
 
   async function removeRoute(r: FlyRoute) {
@@ -919,6 +937,7 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
             onOpenJob(res.job_id)
             void fly.reload()
           }}
+          onReconcile={() => void reconcileCluster(doc.routes.find((x) => x.id === openRoute)?.cluster)}
           onClose={() => setOpenRoute(null)}
         />
       )}
@@ -937,6 +956,9 @@ export function TrafficFly({ me, onOpenJob }: { me: Me; onOpenJob: (id: number) 
               run: async (note) => {
                 await saveDoc(next, note)
                 setEdit(null)
+                // Цели привязанного к кластеру маршрута автомат строит по
+                // его узлам: зовём сразу, а не через минуту.
+                await reconcileCluster(route.cluster)
               },
             })
           }}
@@ -1337,7 +1359,8 @@ function FlyMap({
           {doc.routes.map((r, i) => {
             const st = stats.get(r.id)
             const ps = poolState(r, st)
-            return node(1, i, doc.routes.length, routeTitle(r), `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}`, ps.color, `r-${r.id}`, {
+            const sub = `${poolText(t, ps)} · ${st?.active ?? 0} ${t('fly.connsShort')}` + (r.cluster ? ` · ${t('fly.clusterTag', { cluster: r.cluster })}` : '')
+            return node(1, i, doc.routes.length, routeTitle(r), sub, ps.color, `r-${r.id}`, {
               onClick: () => onRoute(r.id),
               secret: named(r.kind),
               drop: editing ? `route:${r.id}` : undefined,
@@ -1604,6 +1627,7 @@ function RouteDetails({
   admin,
   missing,
   onRemoveTarget,
+  onReconcile,
   onClose,
 }: {
   route: FlyRoute
@@ -1614,6 +1638,8 @@ function RouteDetails({
   /** «маршрут/цель», чьего контейнера на хосте нет. */
   missing: Set<string>
   onRemoveTarget: (target: string) => Promise<void>
+  /** Привести цели к узлам кластера сейчас, не дожидаясь наблюдения. */
+  onReconcile?: () => void
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -1628,6 +1654,11 @@ function RouteDetails({
           {route.proxy_protocol && <Tag color="blue">PROXY protocol</Tag>}
           {route.tls && <Tag color="green">{t('fly.tlsTag')}</Tag>}
           {route.dns && <Tag color="cyan">{t('fly.dnsTag')}</Tag>}
+          {route.cluster && (
+            <Tooltip title={t('fly.clusterPoolHint')}>
+              <Tag color="geekblue">{t('fly.clusterTag', { cluster: route.cluster })}</Tag>
+            </Tooltip>
+          )}
           {(route.allow ?? []).length > 0 && (
             <Tooltip title={(route.allow ?? []).join(', ')}>
               <Tag color="purple">{t('fly.allowTag', { n: route.allow?.length })}</Tag>
@@ -1706,6 +1737,18 @@ function RouteDetails({
             { title: t('fly.colWeight'), key: 'w', render: (_, x) => x.weight || 1 },
           ]}
         />
+        {route.cluster && (
+          <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+            <span className="small muted">{t('fly.clusterPoolHint')}</span>
+            {admin && onReconcile && (
+              <Tooltip title={t('fly.clusterReconcileHint')}>
+                <Button size="small" onClick={onReconcile}>
+                  {t('fly.clusterReconcile')}
+                </Button>
+              </Tooltip>
+            )}
+          </div>
+        )}
         <div className="small">
           <strong>{t('fly.clients')}</strong>{' '}
           {showIPs ? (
@@ -1742,6 +1785,9 @@ function RouteEditor({
   const { t } = useTranslation()
   const [r, setR] = useState<FlyRoute>(() => (route ? (JSON.parse(JSON.stringify(route)) as FlyRoute) : emptyRoute(gateways[0]?.edge_id ?? 0)))
   const hosts = useApi<HubHost[]>('/hub/hosts')
+  // Кластеры хаба: маршрут, привязанный к кластеру, получает цели от его
+  // узлов, и автомат перекладывает их, когда состав меняется.
+  const clusters = useApi<{ name: string }[]>('/hub/clusters', 60_000)
   // DNS-плагин подключён — галочка «DNS через плагин».
   const dnsState = useApi<{ plugins: string[] }>('/hub/dns')
   const hasDNS = (dnsState.data?.plugins?.length ?? 0) > 0
@@ -1769,7 +1815,7 @@ function RouteEditor({
             ? t('fly.why.wildcardTls')
             : !(r.port > 0)
               ? t('fly.why.port')
-              : r.targets.length === 0
+              : !r.cluster && r.targets.length === 0
                 ? t('fly.why.targets')
                 : !r.targets.every((x) => x.port > 0 && x.host_id !== undefined && (x.kind === 'host' || !!x.ref))
                   ? t('fly.why.target')
@@ -1951,6 +1997,29 @@ function RouteEditor({
             </label>
           )}
         </div>
+        <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
+          <label>
+            {t('fly.fieldCluster')}
+            <Select
+              allowClear
+              showSearch
+              value={r.cluster ?? null}
+              onChange={(v: string | undefined) => set({ cluster: v || undefined, target_port: v ? r.target_port : undefined })}
+              options={(clusters.data ?? []).map((c) => ({ value: c.name, label: c.name }))}
+              style={{ width: 220 }}
+              placeholder="—"
+            />
+          </label>
+          {r.cluster && (
+            <Tooltip title={t('fly.fieldTargetPortHint')}>
+              <label>
+                {t('fly.fieldTargetPort')}
+                <InputNumber min={1} max={65535} value={r.target_port || null} placeholder={t('fly.targetPortByKind')} onChange={(v) => set({ target_port: v ?? 0 })} />
+              </label>
+            </Tooltip>
+          )}
+        </div>
+        {r.cluster && <span className="small muted">{t('fly.clusterPoolHint')}</span>}
         <strong className="small">{t('fly.targets')}</strong>
         {r.targets.map((x, i) => (
           <TargetRow

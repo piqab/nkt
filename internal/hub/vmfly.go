@@ -53,8 +53,14 @@ func (s *Server) ownFlyRoutes(ctx context.Context, t store.APIToken) []ownFlyRou
 			continue
 		}
 		tg := r.Targets[0]
-		out = append(out, ownFlyRoute{ID: r.ID, Name: r.Names[0], VM: tg.Ref, Port: tg.Port,
-			HostID: vmIDs[strconv.FormatInt(tg.HostID, 10)+"/"+tg.Ref]})
+		row := ownFlyRoute{ID: r.ID, Name: r.Names[0], VM: tg.Ref, Port: tg.Port, Cluster: r.Cluster,
+			HostID: vmIDs[strconv.FormatInt(tg.HostID, 10)+"/"+tg.Ref]}
+		if r.Cluster != "" {
+			// Цели — весь кластер: машина из первой строки тут ничего не
+			// значит, клиенту важно имя и кластер.
+			row.VM, row.HostID = "", 0
+		}
+		out = append(out, row)
 	}
 	return out
 }
@@ -160,9 +166,19 @@ func (s *Server) ownFlyAdd(ctx context.Context, t store.APIToken, req OwnFlyRequ
 	}
 	route := FlyRoute{ID: id, Label: name, Gateway: gw, Kind: fly.KindHTTPS, Names: []string{name}, Port: 443, TLS: true,
 		Algorithm: fly.AlgoRoundRobin, Check: fly.Check{Kind: fly.CheckTCP}, DNS: true, Targets: []FlyTarget{target}}
+	if req.Cluster != "" {
+		// Маршрут клиента привязан к кластеру: ingress слушает на каждом
+		// узле, поэтому цели — все узлы, а не один названный. Узел уйдёт —
+		// имя не оборвётся, а дальше пул ведёт автомат целей.
+		route.Cluster, route.TargetPort = req.Cluster, target.Port
+		if pool, why := s.clusterFlyTargets(ctx, route); why == flyClusterOK && len(pool) > 0 {
+			route.Targets = pool
+		}
+		out.Port = route.Targets[0].Port
+	}
 	user := auth.Username(ctx)
 	saved, err := s.flySave(ctx, FlyDoc{Gateways: d.Gateways, Routes: append(slices.Clone(d.Routes), route)}, user, msgs.Tc(ctx, "fly.ownAddedNote", name, t.Name))
-	s.db.Audit(ctx, user, "fly.own_add", name, auditOutcome(err), map[string]any{"route": id, "target": target.Label, "port": target.Port})
+	s.db.Audit(ctx, user, "fly.own_add", name, auditOutcome(err), map[string]any{"route": id, "target": target.Label, "port": target.Port, "cluster": route.Cluster})
 	if err != nil {
 		return ownFlyRoute{}, 0, http.StatusBadRequest, err
 	}
@@ -214,9 +230,14 @@ func (s *Server) removeFlyRoutes(ctx context.Context, user string, drop func(Fly
 }
 
 // releaseVMFly убирает маршруты токенов, ведущие на машину (перед её
-// удалением). Маршруты администратора не трогаются.
+// удалением). Маршруты администратора не трогаются. Маршрут, привязанный
+// к кластеру, ведёт не одна машина: его пул перекладывает автомат целей по
+// составу кластера, и удаление узла не должно срывать имя клиента.
 func (s *Server) releaseVMFly(ctx context.Context, vm store.Host) {
 	_, _ = s.removeFlyRoutes(ctx, auth.Username(ctx), func(rt FlyRoute) bool {
+		if rt.Cluster != "" {
+			return false
+		}
 		if len(rt.ID) < 2 || rt.ID[0] != 't' || !strings.Contains(rt.ID, "-") {
 			return false
 		}

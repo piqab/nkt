@@ -389,7 +389,8 @@ function sign(secret, method, uri, body = '') {
 | `POST /api/hub/fly/ops` | администратор | точечно: добавить или убрать цель, в работу, в резерв, вывести → `job_id` |
 | `POST /api/hub/fly/routes/{id}/switch` | администратор | переключить рабочую цель маршрута |
 | `POST /api/hub/fly/apply` | администратор | применить (`{"dry_run":false}`) → `job_id` |
-| `GET /api/hub/clusters`, `/{id}/nodes` | чтение | кластеры и узлы |
+| `POST /api/hub/fly/cluster` | администратор | сверить цели маршрутов, привязанных к кластеру (`{"cluster":"lab"}`; без имени — все такие кластеры) → `job_id` |
+| `GET /api/hub/clusters`, `/{id}/nodes` | чтение | кластеры и узлы; у кластера — `fly_routes`, сколько маршрутов Traffic Fly ведут в него |
 | `GET /api/hub/k8s/manifests`, `/{id}` | администратор | сохранённые манифесты |
 | `POST /api/hub/k8s/manifests/diff` | администратор | `kubectl diff` по кластерам (`{"name":"…","content":"…","clusters":[1,2]}`) |
 | `POST /api/hub/k8s/manifests/apply?job=1` | администратор | `kubectl apply` по кластерам заданием (тело — как у diff, плюс `note`) → `job_id` |

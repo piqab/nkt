@@ -33,6 +33,10 @@ type clusterJSON struct {
 	HostName string            `json:"host_name"`
 	Nodes    []clusterNodeJSON `json:"nodes"`
 	HasKube  bool              `json:"has_kubeconfig"`
+	// FlyRoutes — сколько маршрутов Traffic Fly ведут в этот кластер:
+	// их цели автоматически перекладываются по составу узлов, и карточка
+	// показывает кнопку сверки только когда сверять есть чего.
+	FlyRoutes int `json:"fly_routes,omitempty"`
 }
 
 func (s *Server) clusterJSON(ctx context.Context, cl store.Cluster) clusterJSON {
@@ -58,12 +62,15 @@ func (s *Server) handleClusterList(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
+	counts := s.flyClusterCounts(r.Context())
 	out := make([]clusterJSON, 0, len(list))
 	for _, cl := range list {
 		if !s.clusterInScope(r.Context(), cl.ID) {
 			continue // токену с пределом — только кластеры на его хостах
 		}
-		out = append(out, s.clusterJSON(r.Context(), cl))
+		row := s.clusterJSON(r.Context(), cl)
+		row.FlyRoutes = counts[cl.Name]
+		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

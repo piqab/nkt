@@ -1758,6 +1758,7 @@ var enCatalog = map[string]string{
 	"hub.clusterListenerRemoved":                          "      listener %s removed",
 	"hub.clusterListenerRemoveNote":                       "listener removed: cluster %s deleted",
 	"hub.clusterListenerRemoveWarn":                       "      could not remove listener %s (%v) — check the Traffic Fly map",
+	"hub.clusterFlyWarn":                                  "      Traffic Fly, cluster %s: %v — the job does not fail over the map, check Traffic Fly",
 	"hub.clusterListenerDead":                             "the shared address %s does not answer (listener %s on the gateway): nodes join through exactly this address, so waiting further makes no sense — check that the placement hosts are visible from outside and that the allow lists match",
 	"hub.clusterBadTopology":                              "unknown topology: %q",
 	"hub.clusterTooManyWorkers":                           "no more than 20 workers at once",

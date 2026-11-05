@@ -42,6 +42,10 @@ func (s *Server) StartFlyMonitor(ctx context.Context) {
 				s.flyNoteChanges(ctx, d, prev, now)
 			}
 			prev = now
+			// Пул целей кластерных маршрутов — по составу кластера:
+			// узла тронули мимо задания хаба, цели подтянет задание
+			// (наблюдение само карту не перекладывает).
+			s.noteFlyClusterDrift(ctx, d)
 		}
 	}()
 }

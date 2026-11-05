@@ -442,6 +442,58 @@ Ingress controller port of all nodes gives access to the cluster with the
 certificate on the gateway and balancing across nodes — [Cluster: from zero
 to the first pod](/en/guide/k8s-first-pod).
 
+### A target pool that follows the cluster
+
+Both the Ingress controller and NodePort listen on **every** node, so a
+route has a **“Cluster”** field: the route binds to a cluster by name and
+an automation keeps its target pool — it follows the set of nodes. A node
+arrived, a target appeared; a node left, the target left. Otherwise client
+traffic quietly runs into a machine that is no longer in the list.
+
+![A route bound to a cluster](/screens/en/traffic-fly-cluster.png)
+
+The port where a node takes this route's traffic is the one named in
+**“Port on the node”**; if it is not named, it follows what the route is:
+
+| Route kind | Target port when not named |
+|---|---|
+| `http`, `https` | the **client Ingress** port of that cluster |
+| `tcp`, `udp`, `tcp/udp` | the route's own port (NodePort passes through) |
+
+A named port is a human decision and the automation does not move it: that
+is how a scenario sets it (`targets cluster CLUSTER port PORT`) and how
+token routes to a client namespace are built (the cluster's Ingress port).
+A node that is a machine becomes a `vm` target on its host (the host knows
+the machine's address); a node that is a host becomes a target on that
+host.
+
+Rewriting uses the same order as in a pipeline: add the new targets, drain
+the old ones, apply, wait for the old ones to finish their connections,
+then remove them. Same set — the route is not rewritten, only checked. The
+automation runs:
+
+- in the **cluster creation job** — the nodes just changed;
+- in the **cluster deletion job** — its routes lead nowhere and leave the
+  map (the same job removes them; the shared address listener has its own
+  helper);
+- from the **minute watch** — the node set changed outside the hub: the
+  watch wakes the job rather than rewriting the map itself, so the log,
+  the diff and the version history live where every other Traffic Fly
+  edit does;
+- from a **button** — “Traffic Fly targets” on the cluster card,
+  “Check targets” in the route details; it asks for the check now,
+  ignoring recent attempts.
+
+A route without a binding has human targets and the automation does not
+touch them. The shared address listener (`api-<cluster name>`) is not a
+reason to rewrite: it carries control planes only, with its own targets,
+and it stays out of the automation even if somebody binds a route with
+that name to the cluster. A manually drained target is not a mismatch (the
+set is the same) — but a real reconciliation clears the drain. What the
+automation cannot judge becomes a line in the job log rather than a failed
+cluster creation: no client Ingress set, the cluster is gone, the cluster
+has no nodes yet.
+
 ## Without the hub
 
 The hub is needed for changes, the map and alerts. Traffic itself flows
