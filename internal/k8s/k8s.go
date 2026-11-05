@@ -588,9 +588,18 @@ func k3sSteps(s InstallSpec) []Step {
 }
 
 // ciliumStep — установка Cilium официальным CLI: последняя стабильная
-// версия, архив с GitHub с проверкой суммы, затем cilium install и
-// ожидание готовности.
+// версия, архив с GitHub с проверкой суммы, затем cilium install — если
+// Cilium ещё не поставлен — и ожидание готовности.
 func ciliumStep(s InstallSpec, kubeconfig string) Step {
+	// Команда проверки — как у Manager.kubectl: у k3s встроенная
+	// подкоманда «k3s kubectl»; симлинк /usr/local/bin/kubectl делает
+	// установщик, но пропускает его при INSTALL_K3S_SYMLINK=skip и на
+	// read-only каталоге бинарников — в шаге от этого лучше не зависеть.
+	// У kubeadm kubectl приезжает пакетом рядом с kubeadm.
+	kubectl := "kubectl"
+	if s.Flavor == FlavorK3s {
+		kubectl = "k3s kubectl"
+	}
 	install := "cilium install"
 	if s.KubeProxyReplacement {
 		install += " --set kubeProxyReplacement=true"
@@ -607,7 +616,19 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 		"  sha256sum --check cilium-linux-$ARCH.tar.gz.sha256sum",
 		"  tar -C /usr/local/bin -xzf cilium-linux-$ARCH.tar.gz && rm -f cilium-linux-$ARCH.tar.gz*",
 		"fi",
-		"cilium status --brief >/dev/null 2>&1 || " + install,
+		// Уже поставленный Cilium не переставляется. Прежняя проверка
+		// «cilium status --brief» не работала: флаг --brief есть у
+		// cilium-dbg — отладочной утилиты агента, а у cilium-cli его нет
+		// (проверено на v0.20.2: «unknown flag: --brief», код 1),
+		// команда падала всегда, и ветка «|| cilium install» бегала при
+		// каждом проходе задания. Там, где Cilium уже стоит, install не
+		// обновлял его, а падал: это helm install с занятым именем релиза
+		// — «cannot reuse a name that is still in use», — то есть повтор
+		// упавшего задания умирал на этом шаге, не дойдя до ожидания
+		// готовности. Смотрим на DaemonSet в kube-system: его создаёт
+		// именно cilium-cli, и проверка не ждёт, пока кластер станет
+		// Ready.
+		"if " + kubectl + " -n kube-system get ds cilium >/dev/null 2>&1; then echo 'cilium: already installed, skipping cilium install'; else " + install + "; fi",
 		"cilium status --wait --wait-duration 10m",
 	}, "\n")
 	return Step{"k8s.step.cilium", script}

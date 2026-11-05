@@ -1,9 +1,6 @@
 package k8s
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -70,13 +67,7 @@ func TestLonghornScripts(t *testing.T) {
 	}
 	// Сценарий пишется построчно из Go — синтаксис проверяем bash'ем, как и
 	// остальные серверные сценарии.
-	f := filepath.Join(t.TempDir(), "prepare.sh")
-	if err := os.WriteFile(f, []byte(p), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := exec.Command("bash", "-n", f).CombinedOutput(); err != nil {
-		t.Fatalf("bash -n: %v %s", err, out)
-	}
+	checkBashSyntax(t, "addon prepare", p)
 }
 
 func TestAddonPackages(t *testing.T) {

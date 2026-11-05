@@ -144,8 +144,12 @@ hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
   are enabled on it, the previous config stays in `config.toml.nkt-bak`,
   Docker containers are not stopped.
 - **Cilium** — after the control plane starts, the `cilium` CLI (latest
-  stable, checksum-verified) is installed and `cilium install` runs;
-  "replace kube-proxy" — `--disable-kube-proxy` for k3s,
+  stable, checksum-verified) is installed and `cilium install` runs; an
+  already installed Cilium is not reinstalled — the check looks at
+  `ds/cilium` in `kube-system`, and `cilium install` over a release name
+  still in use is refused by helm ("cannot reuse a name that is still in
+  use"), so without that check a retried failed job tripped over the
+  working Cilium; "replace kube-proxy" — `--disable-kube-proxy` for k3s,
   `--skip-phases=addon/kube-proxy` for kubeadm.
 - **Longhorn** (the "Longhorn" checkbox and a chart version; in a script —
   `addon longhorn[=1.12.1]`, in the API and MCP —

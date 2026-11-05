@@ -134,8 +134,12 @@ hub:<файл>`, `endpoint АДРЕС` ([Сценарии](/guide/hub-scripts)).
   `SystemdCgroup`, прежний конфиг остаётся в `config.toml.nkt-bak`,
   контейнеры Docker не останавливаются.
 - **Cilium** — после старта control plane ставится `cilium` CLI
-  (последняя стабильная, с проверкой суммы) и `cilium install`; «заменить
-  kube-proxy» — `--disable-kube-proxy` у k3s,
+  (последняя стабильная, с проверкой суммы) и `cilium install`; уже
+  поставленный Cilium не переставляется — проверка идёт по `ds/cilium` в
+  `kube-system`, а `cilium install` поверх занятого имени релиза helm
+  отклоняет («cannot reuse a name that is still in use»), так что без
+  такой проверки повтор упавшего задания спотыкался о рабочий Cilium;
+  «заменить kube-proxy» — `--disable-kube-proxy` у k3s,
   `--skip-phases=addon/kube-proxy` у kubeadm.
 - **Longhorn** (галочка «Longhorn» и версия чарта; в сценарии — `addon
   longhorn[=1.12.1]`, в API и MCP — `"addons":[{"name":"longhorn",
