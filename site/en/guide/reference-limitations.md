@@ -88,6 +88,12 @@ simulated.
 - Scripts are experimental: no rollback, and the language deliberately
   has no arbitrary shell commands.
 - The registry mirror caches public images only.
+- The cache does not serve helm OCI repositories (`oci://…`): helm goes
+  there with its own registry client, and through the cache address such
+  a request is only tunnelled — it does not settle in the cache and is
+  not replaced by the `/v2/` mirror. What comes over http(s) does: the
+  helm archive, the chart tarball, the index of an ordinary repository
+  (it changes, so it passes through the proxy but is not cached).
 
 ## Deployments
 

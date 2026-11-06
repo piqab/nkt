@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.29 — 2026-11-06
+
+- **Helm and the Longhorn chart now reach the node through the hub.** The add-on was the one cluster step that could only ask the internet itself: on a node without outbound TCP (Cilium replacing kube-proxy in the host's NAT network) the `get.helm.sh` download hung for two minutes and failed the job with code 28, while apt, k3s and the Cilium CLI were happily downloading through the cache.
+  - `helm` installs the same way everything else does, and the Longhorn chart arrives as its own step and stays on the control plane at `/var/lib/nkt/addons/longhorn-<version>.tgz`: an update reuses it, and it leaves for the internet once for every node (a path with the version in it the cache treats as immutable).
+  - The step is optional: if the chart does not arrive, the install takes `longhorn/longhorn` from the repository as before, and with the cache open `helm repo add` and `helm repo update` run through the hub proxy. The proxy is set on those commands only — the install step talks to the cluster's API server, and a shared `HTTPS_PROXY` would route that request through the hub.
+  - “Also prepare” in the dry run now puts both the helm archive and the chosen Longhorn chart version into the cache.
+  - Nodes without a hub cache install exactly as before: the same commands, no extra step, no proxy.
+
 ## v1.17.28 — 2026-11-06
 
 - **A Traffic Fly route's target pool now follows the cluster.** A route gained a “Cluster” field: a route bound to a cluster takes its targets from the cluster's nodes — a node arrives, a target appears; a node leaves, the target goes. Otherwise client traffic silently runs into a machine that is no longer in the list, and removing that machine from the hub leaves the route untouched.

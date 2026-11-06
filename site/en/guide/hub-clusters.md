@@ -204,10 +204,11 @@ into the cache and brings up the libvirt network right away.
   the host, a cluster machine gets the same checkbox by itself (the hub
   keeps the reverse-forward session to the machine, so the machine's
   virtual network is not opened outward), and the same port serves files
-  by URL (the k3s installer and
-  binary with airgap images, Cilium CLI, the `pkgs.k8s.io` key, machine
-  images) and a **registry mirror** (docker.io, quay.io, registry.k8s.io,
-  ghcr.io, gcr.io) — containerd on the nodes is configured for it
+  by URL (the k3s installer and binary with airgap images, Cilium CLI,
+  the `pkgs.k8s.io` key, machine images, the helm archive and the
+  Longhorn chart tarball — an add-on installs on such nodes too) and a
+  **registry mirror** (docker.io, quay.io, registry.k8s.io, ghcr.io,
+  gcr.io) — containerd on the nodes is configured for it
   automatically. Everything stays on the hub and leaves for the internet
   once; apt on a machine goes through the hub for `https` too — with only
   the http line, `https` mirrors stayed outside the cache.
@@ -260,9 +261,15 @@ hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
     instead of hanging until the job times out; the same step loads the
     `iscsi_tcp` module and starts `iscsid`; if `multipathd` runs, the log
     warns (nkt does not touch its `multipath.conf`);
-  - on the first control plane — the `longhorn/longhorn` chart from
-    `https://charts.longhorn.io` into `longhorn-system` (helm is installed
-    if missing), then waiting for `longhorn-manager`;
+  - on the first control plane — the chart into `longhorn-system` (helm
+    is installed if missing), then waiting for `longhorn-manager`. Both
+    helm and the chart tarball come **through the hub cache** when the
+    host has the package port open: a node without internet installs the
+    add-on over the same channel as k3s and Cilium, and a downloaded
+    chart stays on the node at `/var/lib/nkt/addons/` and is reused when
+    the add-on is updated. If the chart did not arrive, the install takes
+    `longhorn/longhorn` from `https://charts.longhorn.io`, and with the
+    cache open the repository commands run through the hub proxy;
   - volume replicas — one per node, at most three (one on a single-node
     cluster);
   - Longhorn becomes the **default** StorageClass: the previous one

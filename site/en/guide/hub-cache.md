@@ -67,11 +67,24 @@ it. Port closed — everything goes direct.
 URL itself and serves it from the cache. That's how the k3s installer
 and binary with **airgap images** (k3s is installed with
 `INSTALL_K3S_SKIP_DOWNLOAD`), the Cilium CLI, the `pkgs.k8s.io`
-repository key, the Flannel manifest and cloud machine images are
-fetched. URLs with a version in the path and `.deb` files are kept
-indefinitely, the rest (`get.k3s.io`, `…/latest/…`, the "current" Ubuntu
-image) is re-downloaded when older than 6 hours; if the source is
-unavailable, the copy is served.
+repository key, the Flannel manifest, cloud machine images, the helm
+archive and the Longhorn chart tarball are fetched. URLs with a version
+in the path and `.deb` files are kept indefinitely, the rest
+(`get.k3s.io`, `…/latest/…`, the "current" Ubuntu image) is
+re-downloaded when older than 6 hours; if the source is unavailable, the
+copy is served.
+
+An add-on chart is installed in two steps: first the chart tarball
+arrives through `/nkt/artifact` and lands on the control plane at
+`/var/lib/nkt/addons/longhorn-<version>.tgz` (the step is optional — if
+it does not arrive, the install still takes the chart from the
+repository), then helm installs the downloaded file. If the chart does
+come from the repository, `helm repo add` and `helm repo update` run
+with `HTTPS_PROXY` set to the cache address — a repository index changes,
+so it is not cached, but it reaches the node through the hub. The proxy
+is set on those commands only: the helm install step talks to the
+cluster's API server, and a shared `HTTPS_PROXY` would route that
+request through the hub.
 
 ## Registry mirror
 

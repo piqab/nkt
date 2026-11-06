@@ -54,10 +54,39 @@ func (s *Server) handleHelmValues(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"values": values, "source": m.Source(rel)})
 }
 
-// handleHelmSetup — POST /k8s/helm/setup: установить helm заданием.
+// handleHelmSetup — POST /k8s/helm/setup: установить helm заданием. Архив
+// берётся через кэш хаба, если он на этом хосте открыт: узлу без выхода
+// наружу get.helm.sh недоступен, а хаб скачает один раз для всех.
 func (s *Server) handleHelmSetup(w http.ResponseWriter, r *http.Request) {
 	s.startCmdJob(w, r, "k8s.helmSetupJob", []any{k8s.HelmVersion}, "k8s:helm:setup",
-		cmdjob.Params{Commands: []cmdjob.Command{{Script: k8s.HelmSetupScript, StepKey: "k8s.helmStep.setup"}}}, "k8s.helm.setup", k8s.HelmVersion)
+		cmdjob.Params{Commands: []cmdjob.Command{{Script: k8s.HelmSetupScript(s.hubCacheURL()), StepKey: "k8s.helmStep.setup"}}}, "k8s.helm.setup", k8s.HelmVersion)
+}
+
+// helmJobCommands — шаги задания установки релиза. Шаги репозитория
+// (add и update) качают из интернета, поэтому при открытом кэше хаба они
+// заворачиваются в прокси и индекс с tarball'ом доезжают до узла. Установка
+// релиза остаётся argv без окружения: ей нужен API сервер кластера, а
+// go-клиент helm берёт прокси из окружения — под общим HTTPS_PROXY релиз
+// уехал бы через хаб в 127.0.0.1:6443 или в общий адрес control plane.
+func helmJobCommands(hubCache string, argvs [][]string, release, repoName string) []cmdjob.Command {
+	cmds := make([]cmdjob.Command, 0, len(argvs))
+	for i, argv := range argvs {
+		c := cmdjob.Command{Argv: argv}
+		last := i == len(argvs)-1
+		switch {
+		case last:
+			c.StepKey, c.StepArgs = "k8s.helmStep.install", []any{release}
+		case i == 0:
+			c.StepKey, c.StepArgs = "k8s.helmStep.repoAdd", []any{repoName}
+		default:
+			c.StepKey, c.StepArgs = "k8s.helmStep.repoUpdate", []any{repoName}
+		}
+		if !last && hubCache != "" {
+			c.Argv, c.Script = nil, k8s.HelmProxyScript(argv, hubCache)
+		}
+		cmds = append(cmds, c)
+	}
+	return cmds
 }
 
 // helmInstallJob — задание установки или обновления релиза.
@@ -77,19 +106,7 @@ func (s *Server) helmInstallJob(w http.ResponseWriter, r *http.Request, m *k8s.M
 		return
 	}
 	m.SaveSource(req)
-	cmds := make([]cmdjob.Command, 0, len(argvs))
-	for i, argv := range argvs {
-		c := cmdjob.Command{Argv: argv}
-		switch {
-		case i == len(argvs)-1:
-			c.StepKey, c.StepArgs = "k8s.helmStep.install", []any{req.Release}
-		case i == 0:
-			c.StepKey, c.StepArgs = "k8s.helmStep.repoAdd", []any{req.RepoName}
-		default:
-			c.StepKey, c.StepArgs = "k8s.helmStep.repoUpdate", []any{req.RepoName}
-		}
-		cmds = append(cmds, c)
-	}
+	cmds := helmJobCommands(s.hubCacheURL(), argvs, req.Release, req.RepoName)
 	target := req.Namespace + "/" + req.Release
 	s.startCmdJob(w, r, titleKey, []any{target, req.ChartRef()}, "k8s:helm:"+target,
 		cmdjob.Params{Commands: cmds, Refresh: true}, audit, target+" "+req.ChartRef())

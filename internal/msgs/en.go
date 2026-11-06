@@ -2510,6 +2510,7 @@ var enCatalog = map[string]string{
 	"k8s.addonPrepareStep":                                "%s: open-iscsi, nfs-common, iscsid",
 	"k8s.addonInstallJob":                                 "Add-on %s %s",
 	"k8s.addonInstallStep":                                "helm: %s %s, waiting for readiness, StorageClass",
+	"k8s.addonChartStep":                                  "%s: chart %s through the hub cache",
 	"hub.clusterAddonDup":                                 "the add-on %s is listed twice",
 	"hub.addonIndexEmpty":                                 "the repository has no versions of the chart %s",
 	"hub.addonPreparing":                                  "%s: preparing the node %s",

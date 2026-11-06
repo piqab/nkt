@@ -2509,6 +2509,7 @@ var ruCatalog = map[string]string{
 	"k8s.addonPrepareStep":                                "%s: open-iscsi, nfs-common, iscsid",
 	"k8s.addonInstallJob":                                 "Дополнение %s %s",
 	"k8s.addonInstallStep":                                "helm: %s %s, ожидание готовности, StorageClass",
+	"k8s.addonChartStep":                                  "%s: чарт %s через кэш хаба",
 	"hub.clusterAddonDup":                                 "дополнение %s указано дважды",
 	"hub.addonIndexEmpty":                                 "в репозитории нет версий чарта %s",
 	"hub.addonPreparing":                                  "%s: подготовка узла %s",

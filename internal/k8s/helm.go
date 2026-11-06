@@ -380,9 +380,19 @@ func (m *Manager) HelmUninstallArgs(ctx context.Context, r HelmRelease) ([]strin
 }
 
 // HelmSetupScript — установка helm: официальный архив нужной архитектуры
-// в /usr/local/bin. Сценарий — константа, без значений из запроса.
-const HelmSetupScript = `set -eu
-case "$(uname -m)" in
+// в /usr/local/bin. Из запроса — только адрес кэша хаба, остальное
+// фиксировано.
+//
+// Раньше это была константа с прямым curl к get.helm.sh, и единственной
+// загрузкой кластера, которая не умела ходить через хаб: на узле без
+// исходящего TCP (Cilium с заменой kube-proxy в NAT-сети хоста) шаг висел
+// две минуты и валил задание кодом 28, тогда как apt, k3s и Cilium CLI
+// тем временем спокойно качались через кэш. Теперь — тот же art.
+func HelmSetupScript(hubCache string) string {
+	return strings.Join([]string{
+		strings.TrimRight(fetchPreludeCache(hubCache), "\n"),
+		"set -u",
+		`case "$(uname -m)" in
   x86_64|amd64) arch=amd64 ;;
   aarch64|arm64) arch=arm64 ;;
   armv7l|armv7*) arch=arm ;;
@@ -390,10 +400,27 @@ case "$(uname -m)" in
 esac
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-curl -fsSL -o "$tmp/helm.tgz" "https://get.helm.sh/helm-` + HelmVersion + `-linux-$arch.tar.gz"
+art "https://get.helm.sh/helm-` + HelmVersion + `-linux-$arch.tar.gz" > "$tmp/helm.tgz"
 tar -xzf "$tmp/helm.tgz" -C "$tmp"
 install -m 0755 "$tmp/linux-$arch/helm" /usr/local/bin/helm
-/usr/local/bin/helm version --short`
+/usr/local/bin/helm version --short`,
+	}, "\n") + "\n"
+}
+
+// HelmProxyScript — команда helm, завёрнутая в прокси кэша хаба: так
+// идут только шаги, которые качают из интернета (repo add, repo update).
+// Шаг установки релиза под прокси быть не может: helm говорит с API
+// сервером кластера по https, а go-клиент берёт прокси из окружения —
+// установка поехала бы через хаб в 127.0.0.1:6443 или в общий адрес
+// control plane и упала бы уже по другой причине. Поэтому install
+// остаётся argv без окружения.
+func HelmProxyScript(argv []string, hubCache string) string {
+	q := make([]string, len(argv))
+	for i, a := range argv {
+		q[i] = shq(a)
+	}
+	return "set -eu\nexport HTTPS_PROXY=" + shq(hubCache) + " HTTP_PROXY=" + shq(hubCache) + "\nexec " + strings.Join(q, " ") + "\n"
+}
 
 // HelmSource — откуда релиз ставился из nkt: для формы обновления.
 type HelmSource struct {

@@ -45,6 +45,49 @@ func TestHelmFromFixtures(t *testing.T) {
 	}
 }
 
+// Установка helm и команды репозитория — через кэш хаба: узел без выхода
+// наружу не достанет ни get.helm.sh, ни индекс репозитория, а хаб качает
+// их своим интернетом. Прокси при этом только на командах, которые качают.
+func TestHelmSetupAndProxyScripts(t *testing.T) {
+	const cache = "http://127.0.0.1:3142"
+	cached := HelmSetupScript(cache)
+	for _, want := range []string{
+		"NKT_CACHE=" + cache,
+		`art "https://get.helm.sh/helm-` + HelmVersion + `-linux-$arch.tar.gz" > "$tmp/helm.tgz"`,
+		"--connect-timeout 8",
+		`install -m 0755 "$tmp/linux-$arch/helm" /usr/local/bin/helm`,
+	} {
+		if !strings.Contains(cached, want) {
+			t.Errorf("с кэшем нет %q:\n%s", want, cached)
+		}
+	}
+	if strings.Contains(cached, "curl -fsSL -o") {
+		t.Errorf("прямой curl к get.helm.sh остался:\n%s", cached)
+	}
+	direct := HelmSetupScript("")
+	if strings.Contains(direct, "NKT_CACHE") || !strings.Contains(direct, `art "https://get.helm.sh/helm-`) {
+		t.Errorf("без кэша загрузка остаётся прямой, но через ту же art:\n%s", direct)
+	}
+	if !strings.Contains(direct, `curl -fsSL --connect-timeout 8 "$1"`) {
+		t.Errorf("прямая загрузка обязана отваливаться за секунды, а не за две минуты:\n%s", direct)
+	}
+	checkBashSyntax(t, "helm setup через кэш", cached)
+	checkBashSyntax(t, "helm setup напрямую", direct)
+
+	argv := []string{"helm", "repo", "add", "longhorn", "https://charts.longhorn.io", "--force-update", "--kubeconfig", "/etc/rancher/k3s/k3s.yaml"}
+	p := HelmProxyScript(argv, cache)
+	if !strings.Contains(p, "export HTTPS_PROXY='"+cache+"' HTTP_PROXY='"+cache+"'") {
+		t.Errorf("прокси не задан: %s", p)
+	}
+	if !strings.Contains(p, "exec 'helm' 'repo' 'add' 'longhorn' 'https://charts.longhorn.io'") {
+		t.Errorf("команда не собрана argv'ом: %s", p)
+	}
+	if strings.Contains(p, "upgrade") {
+		t.Errorf("под прокси только команды репозитория: %s", p)
+	}
+	checkBashSyntax(t, "helm через прокси кэха", p)
+}
+
 func TestHelmValidate(t *testing.T) {
 	ok := HelmInstallRequest{RepoName: "r", RepoURL: "https://x.example/charts", Chart: "c", Release: "rel", Namespace: "ns"}
 	if err := ok.Validate(); err != nil {

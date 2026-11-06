@@ -137,10 +137,48 @@ func AddonPrepareScript(skipLocalPath bool) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
+// LonghornChartURL — tarball чарта в GitHub releases: ровно тот файл, на
+// который указывает urls: в index.yaml репозитория (проверено по живому
+// индексу: шаблон един для всех 54 версий, что в нём лежат). Путь с
+// /releases/download/<версия>/ кэш хаба считает неизменяемым, поэтому
+// чарт ложится на хабе бессрочно и уходит в интернет один раз на все узлы.
+func LonghornChartURL(version string) string {
+	return "https://github.com/longhorn/charts/releases/download/longhorn-" + version + "/longhorn-" + version + ".tgz"
+}
+
+// LonghornChartPath — где чарт лежит на control plane: каталог данных nkt,
+// а не /tmp — файл с предсказуемым именем в общем каталоге подменили бы
+// между загрузкой и установкой.
+func LonghornChartPath(version string) string {
+	return "/var/lib/nkt/addons/longhorn-" + version + ".tgz"
+}
+
+// LonghornChartFetchScript — скачать чарт через кэш хаба (шаг опционален:
+// не приехал — установка возьмёт чарт из репозитория, как раньше).
+// Проверка tar -tzf обязательна: кэш при недоступном источнике отдаёт и
+// устаревшую копию, а тело ответа «проверьте доступ» от curl с -f не
+// отличается от настоящего файла.
+func LonghornChartFetchScript(hubCache, version string) string {
+	dest := shq(LonghornChartPath(version))
+	part := shq(LonghornChartPath(version) + ".part")
+	return strings.Join([]string{
+		strings.TrimRight(fetchPreludeCache(hubCache), "\n"),
+		"set -u",
+		"install -d -m 700 /var/lib/nkt/addons",
+		"if tar -tzf " + dest + " >/dev/null 2>&1; then echo \"longhorn-" + version + ".tgz is already on this node; not re-downloading\"; exit 0; fi",
+		"art " + shq(LonghornChartURL(version)) + " > " + part,
+		"tar -tzf " + part + " >/dev/null",
+		"mv " + part + " " + dest,
+		"ls -l " + dest,
+	}, "\n") + "\n"
+}
+
 // LonghornInstallScript — установка или обновление чарта Longhorn и
 // ожидание готовности; helm — команда helm с настройками nkt без
-// подкоманды (HelmArgv). Значения проверены Validate.
-func LonghornInstallScript(flavor string, helm []string, r AddonRequest) string {
+// подкоманды (HelmArgv), hubCache — адрес кэша хаба на этом узле (пусто —
+// выхода через хаб нет и чарт берётся из репозитория напрямую). Значения
+// проверены Validate.
+func LonghornInstallScript(flavor string, helm []string, r AddonRequest, hubCache string) string {
 	kubeconfig := "/etc/kubernetes/admin.conf"
 	if flavor == FlavorK3s {
 		kubeconfig = "/etc/rancher/k3s/k3s.yaml"
@@ -154,24 +192,56 @@ func LonghornInstallScript(flavor string, helm []string, r AddonRequest) string 
 	h := func(args ...string) string {
 		return quoted[0] + " " + strings.Join(args, " ") + " " + strings.Join(quoted[1:], " ")
 	}
-	install := []string{"upgrade", "--install", "longhorn", "longhorn/longhorn", "-n", LonghornNamespace, "--create-namespace",
-		"--version", r.Version, "--wait", "--timeout", "15m"}
-	if r.Upgrade {
-		install = append(install, "--reuse-values")
-	} else {
-		install = append(install,
+	// Порядок флагов — прежний: установка по репозиторию обязана выглядеть
+	// ровно как до кэха. version — то, что стоит на месте --version: два
+	// флага либо ничего (скачанный tarball сам знает свою версию), либо
+	// неразвёрнутая $vflags — выбор делает уже сценарий.
+	flags := func(version ...string) []string {
+		fl := append([]string{"-n", LonghornNamespace, "--create-namespace"}, version...)
+		fl = append(fl, "--wait", "--timeout", "15m")
+		if r.Upgrade {
+			return append(fl, "--reuse-values")
+		}
+		return append(fl,
 			"--set", "persistence.defaultClass="+strconv.FormatBool(r.Default),
 			"--set", "persistence.defaultClassReplicaCount="+strconv.Itoa(r.Replicas))
 	}
+	install := append([]string{"upgrade", "--install", "longhorn", "longhorn/longhorn"}, flags("--version", r.Version)...)
 	lines := []string{
 		"set -e",
 		"export KUBECONFIG=" + kubeconfig,
-		h("repo", "add", "longhorn", LonghornRepoURL, "--force-update"),
-		h("repo", "update", "longhorn"),
-		h(install...),
-		"kubectl -n " + LonghornNamespace + " rollout status ds/longhorn-manager --timeout=10m",
-		"for i in $(seq 1 60); do kubectl get storageclass longhorn >/dev/null 2>&1 && break; sleep 5; done",
 	}
+	if hubCache == "" {
+		// Кэша нет: прежний путь — репозиторий напрямую с узла.
+		lines = append(lines,
+			h("repo", "add", "longhorn", LonghornRepoURL, "--force-update"),
+			h("repo", "update", "longhorn"),
+			h(install...))
+	} else {
+		// Кэш есть: ставим скачанный tarball, а репозиторий остаётся
+		// запасным путём — и он идёт под прокси хаба, только команды
+		// репозитория: установка helm говорит с API кластера, и общий
+		// HTTPS_PROXY украл бы у неё этот запрос (см. HelmProxyScript).
+		proxy := "HTTPS_PROXY=" + shq(hubCache) + " HTTP_PROXY=" + shq(hubCache) + " "
+		installLocal := quoted[0] + " upgrade --install longhorn \"$chart\" " +
+			strings.Join(flags("$vflags"), " ") + " " + strings.Join(quoted[1:], " ")
+		lines = append(lines,
+			"chart=longhorn/longhorn",
+			"vflags='--version "+r.Version+"'",
+			"if [ -s "+shq(LonghornChartPath(r.Version))+" ]; then chart="+shq(LonghornChartPath(r.Version))+"; vflags=; fi",
+			"if [ \"$chart\" = longhorn/longhorn ]; then",
+			`  echo "chart did not arrive from the hub cache — taking longhorn/longhorn from the repository through the hub proxy" >&2`,
+			"  "+proxy+h("repo", "add", "longhorn", LonghornRepoURL, "--force-update"),
+			"  "+proxy+h("repo", "update", "longhorn"),
+			"else",
+			`  echo "installing the chart fetched through the hub cache: $chart"`,
+			"fi",
+			installLocal)
+	}
+	lines = append(lines,
+		"kubectl -n "+LonghornNamespace+" rollout status ds/longhorn-manager --timeout=10m",
+		"for i in $(seq 1 60); do kubectl get storageclass longhorn >/dev/null 2>&1 && break; sleep 5; done",
+	)
 	if r.Default && !r.Upgrade {
 		// Прежний класс по умолчанию (local-path у k3s) — больше не по
 		// умолчанию: два таких класса — неоднозначность для PVC без класса.

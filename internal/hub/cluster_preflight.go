@@ -508,6 +508,22 @@ func (r *ClusterRunner) prepareArtifacts(ctx context.Context, spec ClusterSpec, 
 	if spec.CNI == "cilium" {
 		out = append(out, "https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-"+arch+".tar.gz")
 	}
+	// Дополнения: helm и чарт тоже качает хаб. Без этого узел без выхода
+	// наружу падал на шаге установки helm — единственный, который ещё
+	// умел просить интернет только напрямую с себя.
+	for _, a := range spec.Addons {
+		if a.Name != k8s.AddonLonghorn {
+			continue
+		}
+		ver := a.Version
+		if ver == "" {
+			ver = k8s.LonghornDefaultVersion
+		}
+		if !k8s.ValidAddonVersion(ver) {
+			continue
+		}
+		out = append(out, "https://get.helm.sh/helm-"+k8s.HelmVersion+"-linux-"+arch+".tar.gz", k8s.LonghornChartURL(ver))
+	}
 	return out
 }
 

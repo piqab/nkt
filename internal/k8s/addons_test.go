@@ -32,7 +32,8 @@ func TestAddonRequestValidate(t *testing.T) {
 
 func TestLonghornScripts(t *testing.T) {
 	helm := []string{"helm", "--kubeconfig", "/etc/rancher/k3s/k3s.yaml", "--repository-config", "/var/lib/nkt/helm/repositories.yaml"}
-	s := LonghornInstallScript(FlavorK3s, helm, AddonRequest{Name: AddonLonghorn, Version: "1.12.1", Replicas: 1, Default: true})
+	// Без кэша хаба — прежний путь: репозиторий напрямую с узла.
+	s := LonghornInstallScript(FlavorK3s, helm, AddonRequest{Name: AddonLonghorn, Version: "1.12.1", Replicas: 1, Default: true}, "")
 	for _, want := range []string{
 		"'helm' upgrade --install longhorn longhorn/longhorn -n longhorn-system --create-namespace --version 1.12.1",
 		"--set persistence.defaultClass=true --set persistence.defaultClassReplicaCount=1 '--kubeconfig' '/etc/rancher/k3s/k3s.yaml'",
@@ -44,9 +45,12 @@ func TestLonghornScripts(t *testing.T) {
 			t.Errorf("install script lacks %q:\n%s", want, s)
 		}
 	}
-	up := LonghornInstallScript(FlavorKubeadm, helm, AddonRequest{Name: AddonLonghorn, Version: "1.12.1", Replicas: 3, Upgrade: true, Default: true})
+	up := LonghornInstallScript(FlavorKubeadm, helm, AddonRequest{Name: AddonLonghorn, Version: "1.12.1", Replicas: 3, Upgrade: true, Default: true}, "")
 	if !strings.Contains(up, "--reuse-values") || strings.Contains(up, "persistence.defaultClass") || strings.Contains(up, "kubectl patch") || !strings.Contains(up, "/etc/kubernetes/admin.conf") {
 		t.Errorf("upgrade script:\n%s", up)
+	}
+	if strings.Contains(up, "HTTPS_PROXY") {
+		t.Errorf("без кэша хаба прокси в сценарии появился ниоткуда:\n%s", up)
 	}
 	if p := AddonPrepareScript(false); !strings.Contains(p, "open-iscsi nfs-common") || strings.Contains(p, ".skip") {
 		t.Errorf("prepare:\n%s", p)
@@ -68,6 +72,55 @@ func TestLonghornScripts(t *testing.T) {
 	// Сценарий пишется построчно из Go — синтаксис проверяем bash'ем, как и
 	// остальные серверные сценарии.
 	checkBashSyntax(t, "addon prepare", p)
+}
+
+// Longhorn через кэш хаба: чарт приезжает отдельным шагом, установка
+// ставит скачанный tarball, а репозиторий остаётся запасным путём — под
+// прокси и только командами репозитория.
+func TestLonghornChartThroughCache(t *testing.T) {
+	const cache = "http://127.0.0.1:3142"
+	if got := LonghornChartURL("1.12.1"); got != "https://github.com/longhorn/charts/releases/download/longhorn-1.12.1/longhorn-1.12.1.tgz" {
+		t.Errorf("chart url: %s", got)
+	}
+	if got := LonghornChartPath("1.12.1"); got != "/var/lib/nkt/addons/longhorn-1.12.1.tgz" {
+		t.Errorf("chart path: %s", got)
+	}
+	f := LonghornChartFetchScript(cache, "1.12.1")
+	for _, want := range []string{
+		"NKT_CACHE=" + cache,
+		"art 'https://github.com/longhorn/charts/releases/download/longhorn-1.12.1/longhorn-1.12.1.tgz'",
+		"'/var/lib/nkt/addons/longhorn-1.12.1.tgz.part'",
+		"tar -tzf",
+		"install -d -m 700 /var/lib/nkt/addons",
+	} {
+		if !strings.Contains(f, want) {
+			t.Errorf("chart fetch lacks %q:\n%s", want, f)
+		}
+	}
+	checkBashSyntax(t, "chart fetch", f)
+
+	helm := []string{"helm", "--kubeconfig", "/etc/rancher/k3s/k3s.yaml"}
+	s := LonghornInstallScript(FlavorK3s, helm, AddonRequest{Name: AddonLonghorn, Version: "1.12.1", Replicas: 2, Default: true}, cache)
+	tgz := shq(LonghornChartPath("1.12.1"))
+	if !strings.Contains(s, "[ -s "+tgz+" ]") || !strings.Contains(s, "chart="+tgz) {
+		t.Errorf("install must prefer the cached chart:\n%s", s)
+	}
+	if !strings.Contains(s, `"$chart" -n longhorn-system --create-namespace $vflags --wait --timeout 15m`) ||
+		!strings.Contains(s, "vflags='--version 1.12.1'") || !strings.Contains(s, "vflags=;") {
+		t.Errorf("--version передаётся только когда чарт берётся из репозитория:\n%s", s)
+	}
+	if strings.Contains(s, "export HTTPS_PROXY") {
+		t.Errorf("общий export HTTPS_PROXY увёл бы у helm запрос к API кластера:\n%s", s)
+	}
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, "HTTPS_PROXY") && !strings.Contains(line, "repo add longhorn") && !strings.Contains(line, "repo update longhorn") {
+			t.Errorf("прокси появился не на команде репозитория: %q", line)
+		}
+	}
+	if !strings.Contains(s, "upgrade --install longhorn \"$chart\"") || strings.Contains(s, "upgrade --install longhorn longhorn/longhorn") {
+		t.Errorf("установка обязана идти по переменной, а не по имени из репозитория:\n%s", s)
+	}
+	checkBashSyntax(t, "install with cache", s)
 }
 
 func TestAddonPackages(t *testing.T) {

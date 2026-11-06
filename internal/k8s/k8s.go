@@ -927,11 +927,22 @@ func registryServer(reg string) string {
 // подменили бы между проверкой хэша и установкой).
 const k3sWorkDir = "install -d -m 700 /var/lib/nkt-k3s\n"
 
-func fetchPrelude(s InstallSpec) string {
-	if s.HubCache != "" {
-		return "set -e\nNKT_CACHE=" + s.HubCache + "\nart() { curl -fsSL -G --data-urlencode \"url=$1\" \"$NKT_CACHE/nkt/artifact\"; }\n"
+func fetchPrelude(s InstallSpec) string { return fetchPreludeCache(s.HubCache) }
+
+// fetchPreludeCache — та же прелюдия по одному адресу кэша: шагам helm и
+// чартов InstallSpec не нужен, а способ качать у них должен быть общий со
+// всеми остальными.
+//
+// --connect-timeout 8 — чтобы узел без исходящего TCP падал за секунды, а
+// не висел: без него curl держит свой потолок подключения в пять минут, и
+// живьём шаг установки helm висел 135 секунд, а потом валил задание кодом
+// 28. Общего -m нет намеренно: airgap-образы k3s и tar'ы больше ста
+// мегабайт на медленном канале как раз и качаются дольше.
+func fetchPreludeCache(cache string) string {
+	if cache != "" {
+		return "set -e\nNKT_CACHE=" + cache + "\nart() { curl -fsSL --connect-timeout 8 -G --data-urlencode \"url=$1\" \"$NKT_CACHE/nkt/artifact\"; }\n"
 	}
-	return "set -e\nart() { curl -fsSL \"$1\"; }\n"
+	return "set -e\nart() { curl -fsSL --connect-timeout 8 \"$1\"; }\n"
 }
 
 // registriesYAML — зеркала для k3s (/etc/rancher/k3s/registries.yaml).
