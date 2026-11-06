@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.30 — 2026-11-06
+
+- **The walkthrough "A Kubernetes cluster: from zero to the first pod" now covers both flavors.** It only knew kubeadm with Cilium Ingress and taught listing route targets by hand — on a k3s cluster outside access did not come out of it.
+  - The ingress branch: on **k3s** Traefik comes with k3s itself (nkt does not disable it), `ingressClassName: traefik`, the target port is **80** of the node; on **kubeadm** it is Cilium Ingress with `host network`, `ingressClassName: cilium`, port **8080**.
+  - The route step is the **"Cluster"** field: the automation builds the targets from the cluster's nodes instead of three hand-typed targets, with "Port on the node" and the hint that this pool is not edited by hand. The route screenshot was retaken.
+  - "If it doesn't work" gained what people actually hit: `cilium status` without a kubeconfig answers with `localhost:8080` errors that check nothing; on k3s `ss -ltn` shows no `:80` listener while the node's address answers — that is normal; an `ingressClassName` of the other controller means silence from outside; `kubectl exec`/`logs` of one node failing with `502 while dialing …:10250` while the node is `Ready` is the agent tunnel on k3s, not the network.
+  - Check the ingress controller and the target port through the node's address: `127.0.0.1` may not answer at all.
+
 ## v1.17.29 — 2026-11-06
 
 - **Helm and the Longhorn chart now reach the node through the hub.** The add-on was the one cluster step that could only ask the internet itself: on a node without outbound TCP (Cilium replacing kube-proxy in the host's NAT network) the `get.helm.sh` download hung for two minutes and failed the job with code 28, while apt, k3s and the Cilium CLI were happily downloading through the cache.

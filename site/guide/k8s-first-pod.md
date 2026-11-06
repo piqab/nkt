@@ -4,17 +4,24 @@
 **WireGuard** между ними), сеть подов **Cilium**, и тестовый под, который
 открывается снаружи по `https://hello.example.com` через **Ingress** и шлюз
 [Traffic Fly](/guide/traffic-fly). Справочно о кластерах —
-[Кластеры Kubernetes](/guide/hub-clusters).
+[Кластеры Kubernetes](/guide/hub-clusters). Всё то же выходит и на **k3s**;
+там отличается только ingress-контроллер — шаг 5, 6 и порт целей.
 
-Как устроен вход снаружи: Ingress-контроллер Cilium слушает порт **8080** на
-каждом узле, маршрут Traffic Fly ведёт с VPS-шлюза на `узел:8080` всех трёх
-машин, сертификат `hello.example.com` выпускает шлюз. Пробрасывать 80/443
-хостов не нужно, упавший узел шлюз выводит из маршрута сам.
+Как устроен вход снаружи: ingress-контроллер слушает свой порт на каждом
+узле, маршрут Traffic Fly **привязан к кластеру** и ведёт с шлюза на
+`узел:порт` всех его машин, сертификат `hello.example.com` выпускает шлюз.
+Пробрасывать 80/443 хостов не нужно; упавший узел шлюз выводит из маршрута
+сам, а новый узел добавляет в цели автомат.
+
+| Вариант | Ingress-контроллер | `ingressClassName` | Порт на каждом узле |
+|---|---|---|---|
+| **kubeadm** | Ingress Cilium — включается шагом 5 | `cilium` | **8080** |
+| **k3s** | Traefik — приезжает с самим k3s, включать нечего | `traefik` | **80** |
 
 ```
-клиент ─https─▶ шлюз Traffic Fly ─WireGuard─▶ хост 1 ─▶ cp-1:8080, w-1:8080
-  (сертификат,                              ─▶ хост 2 ─▶ w-2:8080
-   проверка целей)                    Ingress Cilium ─▶ под whoami (любой узел)
+клиент ─https─▶ шлюз Traffic Fly ─WireGuard─▶ хост 1 ─▶ cp-1:порт, w-1:порт
+  (сертификат,                              ─▶ хост 2 ─▶ w-2:порт
+   проверка целей)       Ingress (Cilium · Traefik) ─▶ под whoami (любой узел)
 ```
 
 ::: warning Экспериментальная возможность
@@ -43,7 +50,7 @@
   контейнеров. Без него — кэш пакетов хаба («О системе» → «Использовать
   кэш пакетов хаба» и галочка у хоста): через хаб пойдут и файлы, и registry
   ([Кэш хаба](/guide/hub-cache)).
-- **Шлюз Traffic Fly** — VPS с nkt-edge в роли fly: «Traffic Fly» →
+- **Шлюз Traffic Fly** — машина в интернете с nkt-edge в роли fly: «Traffic Fly» →
   «Шлюзы» → «Добавить шлюз» ([nkt-edge](/guide/edge)).
 - **Домен:** A-запись `hello.example.com` — на адрес шлюза.
 
@@ -55,7 +62,7 @@
 | Поле | Значение | Зачем |
 |---|---|---|
 | Имя кластера | `lab` | имя машин и карточки |
-| Вариант | **kubeadm** | стандартный Kubernetes |
+| Вариант | **kubeadm** | стандартный Kubernetes; на **k3s** всё то же, кроме шагов 5–6 |
 | Версия Kubernetes | актуальная stable | одна на все узлы; старые ветки (v1.31) на Debian 13 не ставятся |
 | Сеть между хостами | **WireGuard между хостами** | хосты в разных сетях; в одном L2-сегменте — «мост» |
 | Размещение, строка 1 | хост 1 · виртуальные машины · **control plane** · 1 | первый узел с API |
@@ -127,10 +134,24 @@ kubectl get pods -A              # системные поды Running
 машине; адрес API в нём — хост первого control plane и порт из «Пробросить
 наружу».
 
-## 5. Включить Ingress в Cilium
+Терминал из карточки уже с `KUBECONFIG` — важно для `cilium`: без него CLI
+уходит на `http://localhost:8080` и отвечает ошибками `status`, которые
+ничего не проверяют.
 
-В том же терминале — Ingress-контроллер Cilium в режиме **host network**: он
-слушает порт **8080** прямо на каждом узле, LoadBalancer не нужен.
+## 5. Ingress: две ветки по варианту кластера
+
+Что есть в кластере — видно сразу:
+
+```sh
+kubectl get ingressclass
+```
+
+### kubeadm: включить Ingress в Cilium
+
+Своего ingress-контроллера у kubeadm нет — дальше считается Ingress Cilium;
+свой контроллер (Traefik, NGINX) — та же схема, только свой порт. Ingress
+Cilium в режиме **host network** слушает порт **8080** прямо на каждом узле,
+LoadBalancer не нужен.
 
 ```sh
 # Версия работающего Cilium: без --version «cilium upgrade» обновил бы
@@ -161,6 +182,29 @@ ss -ltn | grep ':8080 '                   # Envoy слушает 8080 на уз�
 узлов и добавление новых. Порт можно сменить
 (`--set ingressController.hostNetwork.sharedListenerPort=…`), только тогда
 и в маршруте ниже — тот же.
+
+### k3s: Traefik уже стоит
+
+k3s приносит Traefik сам, nkt при установке его не отключает — включать
+нечего: `kubectl get ingressclass` даёт `traefik` с пометкой `(default)`, под
+`traefik` сидит в kube-system, а рядом `svclb-traefik-*` на **каждом** узле —
+они держат порты **80** и **443** этого узла.
+
+```sh
+kubectl -n kube-system get pods -o wide | grep -E 'traefik|svclb'
+```
+
+Порт целей маршрута — **80** узла. Слушателя в `ss -ltn` на хосте при этом
+нет: порт держит не сокет в сетевом пространстве хоста, а правило
+kube-proxy (с заменой на Cilium — eBPF), так что проверять надо адресом
+узла, а не списком слушателей:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' http://$(hostname -I | awk '{print $1}'):80/
+# 404            ← до шага 6 это норма: Traefik жив, ни одно правило не подходит
+```
+
+По `127.0.0.1:80` ответ может не прийти вовсе — так не проверяют.
 
 ## 6. Тестовый под
 
@@ -199,7 +243,7 @@ kind: Ingress
 metadata:
   name: hello
 spec:
-  ingressClassName: cilium
+  ingressClassName: cilium      # на k3s — traefik
   rules:
     - host: hello.example.com
       http:
@@ -214,12 +258,22 @@ kubectl get pods -l app=hello -o wide     # два пода Running, на раз
 kubectl get ingress hello
 ```
 
-Проверка изнутри — через Ingress на этом узле:
+`ingressClassName` — контроллер своего варианта: `cilium` на kubeadm,
+`traefik` на k3s. Не угадать — и Ingress не возьмёт никто, снаружи будет
+молчание. `kubectl get ingress` адрес может не показать: у host network
+контроллера адреса в статусе нет, проверять ответом ниже.
+
+Проверка изнутри — через Ingress на адресе этого узла (**8080** на kubeadm,
+**80** на k3s):
 
 ```sh
 curl -s -H 'Host: hello.example.com' http://$(hostname -I | awk '{print $1}'):8080/
 # Hostname: hello-…   ← под, который ответил
 ```
+
+`kubectl exec` в этот под ничего не покажет: у `traefik/whoami` нет ни шелла,
+ни `env` — exec вернёт «executable file not found in $PATH», и это не ошибка
+сети.
 
 Тот же YAML можно применить из раздела «Кластеры» → «Манифесты» — сразу в
 несколько кластеров, с `kubectl diff` перед записью.
@@ -234,14 +288,26 @@ curl -s -H 'Host: hello.example.com' http://$(hostname -I | awk '{print $1}'):80
 | Имена | `hello.example.com` |
 | Сертификат на шлюзе (Let's Encrypt) | включено — цели отдаётся обычный HTTP |
 | Проверка целей | **TCP-подключение** |
-| Цели | «Добавить цель» ×3: хост 1 · **виртуальная машина** · `lab-cp-1`, порт **8080**; хост 1 · `lab-w-1`, 8080; хост 2 · `lab-w-2`, 8080 |
+| **Кластер** | `lab` |
+| **Порт на узле** | **8080** (kubeadm) / **80** (k3s) |
 
-Имена машин — как в карточке кластера (там же видно, на каком они хосте).
+Цели у привязанного маршрута руками не перечисляют: их строит автомат по
+узлам кластера — узел прибыл, цель появилась, узел ушёл, цель ушла. В
+редакторе под полем это сказано подсказкой, а в списке целей у каждой стоит
+метка «кластер lab». «Порт на узле» можно оставить пустым, если в карточке
+кластера задан **«Ingress для клиентов»** (узел и порт HTTP
+ingress-контроллера) — автомат возьмёт порт оттуда.
+
 Сохранить → **«Применить»**: хаб поднимет туннели Traffic Fly на обоих хостах
-(если их ещё нет), шлюз выпустит сертификат. Через минуту у маршрута все три
-цели — **живые**.
+(если их ещё нет), шлюз выпустит сертификат, а цели соберёт по узлам. Через
+минуту у маршрута три цели — все **живые**.
 
-![Маршрут на три узла кластера](/screens/ru/k8s-first-pod-route.png)
+Перекладывать их потом не руками: это делает задание создания и удаления
+кластера, наблюдение (раз в минуту, не чаще раза в 10 минут на кластер) и
+кнопки — **«Цели Traffic Fly»** в карточке кластера и **«Сверить цели»** в
+самом маршруте.
+
+![Маршрут, привязанный к кластеру](/screens/ru/k8s-first-pod-route.png)
 
 ## 8. Проверить снаружи
 
@@ -261,6 +327,9 @@ curl -s https://hello.example.com/
 перезапустит под на оставшемся worker — `curl` продолжает отвечать.
 Включите машину — цель вернётся сама.
 
+Удалите машину из хаба — цель уйдёт из пула вместе с ней, и имя сайта
+останется на живых узлах; руками править цели для этого не нужно.
+
 ## 9. Убрать
 
 ```sh
@@ -269,7 +338,8 @@ kubectl delete ingress,service,deployment hello
 
 Маршрут — «Удалить» в «Traffic Fly» и «Применить». Весь кластер —
 **«удалить кластер»** в карточке: машины с дисками, туннель WireGuard и сеть
-машин уходят с хостов, хосты-узлы (если были) остаются.
+машин уходят с хостов, хосты-узлы (если были) остаются. Задание удаления
+снимает с карты и привязанные к кластеру маршруты — вести трафик больше некуда.
 
 ## По API и из n8n
 
@@ -277,7 +347,9 @@ kubectl delete ingress,service,deployment hello
 (`POST /api/hub/k8s/manifests/apply?job=1`) или в n8n **Cluster → Apply
 Manifest**; применить Traffic Fly — `POST /api/hub/fly/apply` или
 **Traffic Fly → Apply**; весь путь целиком — сохранённым сценарием
-(**Script → Run**). Создание кластера и kubeconfig по токену закрыты.
+(**Script → Run**); сверить цели привязанного маршрута —
+`POST /api/hub/fly/cluster {"cluster":"lab"}`. Создание кластера и kubeconfig
+по токену закрыты.
 Подробно — [API хаба](/guide/hub-api#что-доступно-токену), [n8n](/guide/n8n).
 
 ## Что дальше
@@ -286,8 +358,8 @@ Manifest**; применить Traffic Fly — `POST /api/hub/fly/apply` или
 - **Манифесты** — один YAML в несколько кластеров с `kubectl diff`.
 - **Обновить** — версия Kubernetes по узлам: cordon, drain, обновление,
   uncordon.
-- **+ worker** — ещё узел в готовый кластер (та же ветка Kubernetes); в
-  маршрут Traffic Fly — ещё одна цель на его 8080.
+- **+ worker** — ещё узел в готовый кластер (та же ветка Kubernetes);
+  привязанный маршрут возьмёт его в цели сам, как только узел станет `Ready`.
 
 ## То же сценарием
 
@@ -314,7 +386,7 @@ param DOMAIN "имя тестового сайта — A-запись на ад�
 # kubeadm: 1 control plane + 2 worker на двух хостах, WireGuard, Cilium без kube-proxy
 on ${HOST1} k8s create lab flavor kubeadm nodes "${HOST1}: cp 1, w 1; ${HOST2}: w 1" network wireguard cni cilium no-kube-proxy image debian-13 expose http 0 https 0
 
-# Ingress Cilium: порт 8080 на каждом узле
+# Ingress Cilium: порт 8080 на каждом узле (на k3s шаг не нужен — Traefik уже стоит)
 k8s lab ingress cilium port 8080
 
 # Тестовый под, сервис и Ingress
@@ -370,10 +442,13 @@ wait url https://${DOMAIN}/ 200 10m
   размещение по двум хостам, WireGuard, Cilium без kube-proxy, наружу —
   только API).
 - **`k8s lab ingress cilium port 8080`** — шаг 5: та же команда `cilium
-  upgrade` с версией работающего Cilium, заданием на control plane.
+  upgrade` с версией работающего Cilium, заданием на control plane. На k3s
+  шаг пропускают (Traefik приезжает с самим k3s), а в манифесте —
+  `ingressClassName: traefik`.
 - **`k8s lab apply … end`** и **`k8s lab wait deployment hello`** — шаг 6.
-- **`fly route … targets cluster lab port 8080`** — шаг 7: маршрут на все
-  узлы кластера; применяется сразу.
+- **`fly route … targets cluster lab port 8080`** — шаг 7: маршрут,
+  привязанный к кластеру; цели он строит по его узлам и применяет сразу. На
+  k3s в этом шаге `port 80`.
 - **`wait url`** — шаг 8: ответ снаружи, с хаба по настоящему имени.
 
 ## Если не работает
@@ -383,8 +458,12 @@ wait url https://${DOMAIN}/ 200 10m
 | узел `NotReady` | Cilium на узле не поднялся: `cilium status`, `kubectl -n kube-system get pods -o wide`; узел без связи с control plane — туннель WireGuard (рукопожатие в журнале создания) |
 | поды `Pending` | мало ресурсов: `kubectl describe pod`; на control plane kubeadm поды не ставит (taint) — нужен хотя бы один worker |
 | `ImagePullBackOff` | у узлов нет доступа к registry: интернет хоста или кэш пакетов хаба (зеркало registry хаба) |
-| `kubectl get ingressclass` пусто | Cilium без замены kube-proxy или upgrade не применился — шаг 5, `cilium status` |
-| `curl … :8080` с узла — 404 | имя в `Host:` не совпало с `host:` в Ingress |
-| цель маршрута «не жива» | на узле не слушает 8080 (шаг 5), туннель Traffic Fly хоста не поднят — подсказка под шлюзом в «Traffic Fly» |
+| `cilium status` отвечает сплошными `dial tcp [::1]:8080: connect: connection refused` | CLI запускают без kubeconfig — он идёт на `http://localhost:8080` и эти «ошибки» ничего не проверяют: работайте из терминала карточки кластера (там `KUBECONFIG` уже задан) или экспортируйте сами |
+| `kubectl get ingressclass` пусто | **kubeadm**: Cilium без замены kube-proxy или upgrade не применился — шаг 5, `cilium status`. **k3s**: Traefik отключён при установке — проверьте `kubectl -n kube-system get pods -o wide \| grep traefik` |
+| Ingress есть, снаружи молчание | `ingressClassName` не от того контроллера: Traefik не берёт `cilium`, Ingress Cilium не берёт `traefik` — шаг 6 |
+| `curl … :8080` с узла — 404 | имя в `Host:` не совпало с `host:` в Ingress — или порт не от варианта кластера: **8080** у kubeadm, **80** у k3s |
+| на узле k3s `ss -ltn` не показывает `:80` | это не симптом: порт держит `svclb-traefik-*` (правило kube-proxy или eBPF у Cilium), слушателя в сетевом пространстве хоста нет — проверять `curl` на адрес узла |
+| цель маршрута «не жива» | на узле не слушает порт ingress (8080 / 80 — шаги 5 и 6), туннель Traffic Fly хоста не поднят — подсказка под шлюзом в «Traffic Fly» |
+| `kubectl exec` или `logs` пода на **одном** узле: `proxy error from 127.0.0.1:6443 while dialing <узел>:10250, code 502`, узел при этом `Ready` | **k3s**: эти запросы идут не напрямую на kubelet, а через туннель, который агент сам открыл на `server:6443`, — проверка «открыта ли 10250 с другой машины» ничего не доказывает; 502 — состояние агента этого узла, `systemctl restart k3s-agent` на worker (на control plane — `k3s`). **kubeadm**: путь apiserver → kubelet прямой, смотреть `ss -ltn \| grep ':10250 '` на узле и маршрут до него |
 | сертификат не выпускается | A-запись `hello.example.com` не на адрес шлюза или закрыт его порт 80 |
 | `kubeadm` не ставится на Debian 13 | выбрана старая ветка (v1.31): `sqv` отвергает её подпись — выберите актуальную |

@@ -4,18 +4,26 @@ Step by step: a **kubeadm** cluster of three machines on **two hosts**
 (**WireGuard** network between them), **Cilium** as the pod network, and a
 test pod reachable from outside at `https://hello.example.com` through an
 **Ingress** and a [Traffic Fly](/en/guide/traffic-fly) gateway. For reference
-on clusters see [Kubernetes clusters](/en/guide/hub-clusters).
+on clusters see [Kubernetes clusters](/en/guide/hub-clusters). The same works
+on **k3s**; only the ingress controller differs there — steps 5, 6 and the
+target port.
 
-How outside access works: the Cilium Ingress controller listens on port
-**8080** on every node, a Traffic Fly route leads from the VPS gateway to
-`node:8080` on all three machines, and the gateway issues the
-`hello.example.com` certificate. No host 80/443 forwarding is needed, and the
-gateway takes a failed node out of the route by itself.
+How outside access works: the ingress controller listens on its port on every
+node, the Traffic Fly route is **bound to the cluster** and leads from the
+gateway to `node:port` of all its machines, and the gateway issues the
+`hello.example.com` certificate. No host 80/443 forwarding is needed; the
+gateway takes a failed node out of the route by itself, and the automation
+adds a new node to the pool.
+
+| Flavor | Ingress controller | `ingressClassName` | Port on every node |
+|---|---|---|---|
+| **kubeadm** | Cilium Ingress — turned on in step 5 | `cilium` | **8080** |
+| **k3s** | Traefik — comes with k3s itself, nothing to turn on | `traefik` | **80** |
 
 ```
-client ─https─▶ Traffic Fly gateway ─WireGuard─▶ host 1 ─▶ cp-1:8080, w-1:8080
-  (certificate,                                ─▶ host 2 ─▶ w-2:8080
-   target checks)                  Cilium Ingress ─▶ whoami pod (any node)
+client ─https─▶ Traffic Fly gateway ─WireGuard─▶ host 1 ─▶ cp-1:port, w-1:port
+  (certificate,                                ─▶ host 2 ─▶ w-2:port
+   target checks)      Ingress (Cilium · Traefik) ─▶ whoami pod (any node)
 ```
 
 ::: warning Experimental feature
@@ -44,8 +52,9 @@ hosts first; "Dry run" before creating, the job log after.
   container images. Without it — the hub package cache ("About" → "Use the
   hub package cache" and the checkbox at the host): files and the registry
   also go through the hub ([Hub cache](/en/guide/hub-cache)).
-- **A Traffic Fly gateway** — a VPS with nkt-edge in the fly role: "Traffic
-  Fly" → "Gateways" → "Add gateway" ([nkt-edge](/en/guide/edge)).
+- **A Traffic Fly gateway** — a machine on the internet with nkt-edge in the
+  fly role: "Traffic Fly" → "Gateways" → "Add gateway"
+  ([nkt-edge](/en/guide/edge)).
 - **A domain:** the `hello.example.com` A record points at the gateway.
 
 ## 1. New cluster
@@ -56,7 +65,7 @@ hosts".
 | Field | Value | Why |
 |---|---|---|
 | Cluster name | `lab` | machine and card names |
-| Flavor | **kubeadm** | standard Kubernetes |
+| Flavor | **kubeadm** | standard Kubernetes; on **k3s** everything is the same except steps 5–6 |
 | Kubernetes version | current stable | one for all nodes; old branches (v1.31) do not install on Debian 13 |
 | Network between hosts | **WireGuard between hosts** | hosts in different networks; in one L2 segment — "bridge" |
 | Placement, row 1 | host 1 · virtual machines · **control plane** · 1 | the first node with the API |
@@ -125,10 +134,24 @@ kubectl get pods -A              # system pods Running
 machine; its API address is the first control plane's host and the port from
 "Expose outside".
 
-## 5. Turn on Ingress in Cilium
+The terminal from the card already sets `KUBECONFIG` — that matters for
+`cilium`: without it the CLI falls back to `http://localhost:8080` and answers
+with `status` errors that check nothing.
 
-In the same terminal — the Cilium Ingress controller in **host network** mode:
-it listens on port **8080** right on every node, no LoadBalancer needed.
+## 5. Ingress: two branches by flavor
+
+What the cluster has is visible right away:
+
+```sh
+kubectl get ingressclass
+```
+
+### kubeadm: turn on Ingress in Cilium
+
+kubeadm ships no ingress controller — this branch assumes Cilium Ingress; your
+own controller (Traefik, NGINX) follows the same scheme, only with its own
+port. Cilium Ingress in **host network** mode listens on port **8080** right
+on every node, no LoadBalancer needed.
 
 ```sh
 # The running Cilium version: without --version "cilium upgrade" would also
@@ -159,6 +182,30 @@ The setting lives in Cilium's own Helm values — it survives node reboots and
 new nodes. The port can be changed
 (`--set ingressController.hostNetwork.sharedListenerPort=…`), then use the
 same one in the route below.
+
+### k3s: Traefik is already there
+
+k3s brings Traefik itself and nkt does not disable it during installation, so
+there is nothing to turn on: `kubectl get ingressclass` gives `traefik` marked
+`(default)`, the `traefik` pod sits in kube-system, and next to it
+`svclb-traefik-*` on **every** node — those hold ports **80** and **443** of
+that node.
+
+```sh
+kubectl -n kube-system get pods -o wide | grep -E 'traefik|svclb'
+```
+
+The route's target port is **80** of the node. `ss -ltn` on the host shows no
+listener for it: the port is held not by a socket in the host's network
+namespace but by a kube-proxy rule (with Cilium replacing kube-proxy — by
+eBPF), so check it through the node's address, not through the listener list:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' http://$(hostname -I | awk '{print $1}'):80/
+# 404            ← before step 6 this is normal: Traefik is alive, no rule matches
+```
+
+`127.0.0.1:80` may not answer at all — that is not how you check it.
 
 ## 6. Test pod
 
@@ -197,7 +244,7 @@ kind: Ingress
 metadata:
   name: hello
 spec:
-  ingressClassName: cilium
+  ingressClassName: cilium      # on k3s — traefik
   rules:
     - host: hello.example.com
       http:
@@ -212,12 +259,22 @@ kubectl get pods -l app=hello -o wide     # two pods Running, on different worke
 kubectl get ingress hello
 ```
 
-Check from inside — through the Ingress on this node:
+`ingressClassName` — the controller of your flavor: `cilium` on kubeadm,
+`traefik` on k3s. Guess wrong and no controller takes the Ingress at all; from
+outside it will be silence. `kubectl get ingress` may show no address: a host
+network controller has no address in the status, so check by the answer below.
+
+Check from inside — through the Ingress on this node's address (**8080** on
+kubeadm, **80** on k3s):
 
 ```sh
 curl -s -H 'Host: hello.example.com' http://$(hostname -I | awk '{print $1}'):8080/
 # Hostname: hello-…   ← the pod that answered
 ```
+
+`kubectl exec` into this pod shows nothing: `traefik/whoami` has neither a
+shell nor `env`, and exec returns "executable file not found in $PATH" — that
+is not a network error.
 
 The same YAML can be applied from "Clusters" → "Manifests" — to several
 clusters at once, with `kubectl diff` before writing.
@@ -232,14 +289,27 @@ clusters at once, with `kubectl diff` before writing.
 | Names | `hello.example.com` |
 | Certificate on the gateway (Let's Encrypt) | on — the target gets plain HTTP |
 | Target check | **TCP connect** |
-| Targets | "Add target" ×3: host 1 · **virtual machine** · `lab-cp-1`, port **8080**; host 1 · `lab-w-1`, 8080; host 2 · `lab-w-2`, 8080 |
+| **Cluster** | `lab` |
+| **Port on the node** | **8080** (kubeadm) / **80** (k3s) |
 
-The machine names are as in the cluster card (it also shows which host they
-are on). Save → **"Apply"**: the hub brings up the Traffic Fly tunnels on both
-hosts (if they are not there yet), the gateway issues the certificate. Within
-a minute all three route targets are **alive**.
+A bound route's targets are not listed by hand: the automation builds them
+from the cluster's nodes — a node arrives, a target appears; a node leaves, a
+target goes. The editor says so under the field, and each target in the list
+is tagged "cluster lab". "Port on the node" can be left empty if the cluster
+card has **"Client ingress"** set (a node and the HTTP port of its ingress
+controller) — the automation takes the port from there.
 
-![A route to the three cluster nodes](/screens/en/k8s-first-pod-route.png)
+Save → **"Apply"**: the hub brings up the Traffic Fly tunnels on both hosts (if
+they are not there yet), the gateway issues the certificate, and the targets
+are pooled from the nodes. Within a minute the route has three targets, all
+**alive**.
+
+Re-pooling them later is also not manual work: the cluster creation and
+deletion jobs do it, the watcher does (once a minute, at most once per 10
+minutes per cluster), and so do the buttons — **"Traffic Fly targets"** in the
+cluster card and **"Check targets"** in the route itself.
+
+![A route bound to a cluster](/screens/en/k8s-first-pod-route.png)
 
 ## 8. Check from outside
 
@@ -259,6 +329,10 @@ seconds the gateway marks its target "not alive" and takes it out of the
 route, Kubernetes restarts the pod on the remaining worker — `curl` keeps
 answering. Start the machine again — the target comes back by itself.
 
+Remove the machine from the hub and its target leaves the pool with it, and
+the site name stays on the live nodes — no manual target editing for that
+either.
+
 ## 9. Clean up
 
 ```sh
@@ -267,7 +341,9 @@ kubectl delete ingress,service,deployment hello
 
 The route — "Delete" in "Traffic Fly" and "Apply". The whole cluster —
 **"delete cluster"** in the card: the machines with their disks, the WireGuard
-tunnel and the machine network leave the hosts; host nodes (if any) stay.
+tunnel and the machine network leave the hosts; host nodes (if any) stay. The
+deletion job also takes the cluster's bound routes off the map — there is
+nowhere left to lead the traffic.
 
 ## Through the API and n8n
 
@@ -275,8 +351,9 @@ Steps 6–7 also work without the UI: a manifest into clusters with an API
 token (`POST /api/hub/k8s/manifests/apply?job=1`) or the n8n **Cluster →
 Apply Manifest**; applying Traffic Fly — `POST /api/hub/fly/apply` or
 **Traffic Fly → Apply**; the whole path — as a saved script
-(**Script → Run**). Creating a cluster and the kubeconfig are closed to
-tokens. Details — [Hub API](/en/guide/hub-api#what-a-token-can-call),
+(**Script → Run**); re-pool a bound route's targets —
+`POST /api/hub/fly/cluster {"cluster":"lab"}`. Creating a cluster and the
+kubeconfig are closed to tokens. Details — [Hub API](/en/guide/hub-api#what-a-token-can-call),
 [n8n](/en/guide/n8n).
 
 ## What next
@@ -286,7 +363,8 @@ tokens. Details — [Hub API](/en/guide/hub-api#what-a-token-can-call),
 - **Upgrade** — the Kubernetes version node by node: cordon, drain, upgrade,
   uncordon.
 - **+ worker** — one more node in a ready cluster (the same Kubernetes
-  branch); add one more target on its 8080 to the Traffic Fly route.
+  branch); a bound route takes it into its targets by itself once the node is
+  `Ready`.
 
 ## The same as a script
 
@@ -314,7 +392,7 @@ param DOMAIN "имя тестового сайта — A-запись на ад�
 # kubeadm: 1 control plane + 2 worker на двух хостах, WireGuard, Cilium без kube-proxy
 on ${HOST1} k8s create lab flavor kubeadm nodes "${HOST1}: cp 1, w 1; ${HOST2}: w 1" network wireguard cni cilium no-kube-proxy image debian-13 expose http 0 https 0
 
-# Ingress Cilium: порт 8080 на каждом узле
+# Ingress Cilium: порт 8080 на каждом узле (на k3s шаг не нужен — Traefik уже стоит)
 k8s lab ingress cilium port 8080
 
 # Тестовый под, сервис и Ingress
@@ -373,10 +451,13 @@ language.
   placement on two hosts, WireGuard, Cilium without kube-proxy, only the API
   exposed).
 - **`k8s lab ingress cilium port 8080`** — step 5: the same `cilium upgrade`
-  with the running Cilium version, as a job on the control plane.
+  with the running Cilium version, as a job on the control plane. On k3s the
+  step is skipped (Traefik comes with k3s itself) and the manifest says
+  `ingressClassName: traefik`.
 - **`k8s lab apply … end`** and **`k8s lab wait deployment hello`** — step 6.
-- **`fly route … targets cluster lab port 8080`** — step 7: a route to all
-  cluster nodes; applied right away.
+- **`fly route … targets cluster lab port 8080`** — step 7: a route bound to
+  the cluster; it builds its targets from the cluster's nodes and is applied
+  right away. On k3s this step says `port 80`.
 - **`wait url`** — step 8: an answer from outside, from the hub to the real
   name.
 
@@ -387,8 +468,12 @@ language.
 | node `NotReady` | Cilium did not come up on the node: `cilium status`, `kubectl -n kube-system get pods -o wide`; the node cannot reach the control plane — the WireGuard tunnel (handshake in the creation log) |
 | pods `Pending` | not enough resources: `kubectl describe pod`; kubeadm does not schedule pods on the control plane (taint) — you need at least one worker |
 | `ImagePullBackOff` | the nodes cannot reach a registry: internet on the host or the hub package cache (the hub's registry mirror) |
-| `kubectl get ingressclass` is empty | Cilium without kube-proxy replacement or the upgrade did not apply — step 5, `cilium status` |
-| `curl … :8080` from the node gives 404 | the `Host:` name does not match `host:` in the Ingress |
-| a route target is "not alive" | nothing listens on 8080 on the node (step 5), the host's Traffic Fly tunnel is down — the hint under the gateway in "Traffic Fly" |
+| `cilium status` answers with `dial tcp [::1]:8080: connect: connection refused` everywhere | the CLI runs without a kubeconfig — it falls back to `http://localhost:8080` and those "errors" check nothing: work from the cluster card's terminal (it sets `KUBECONFIG`) or export it yourself |
+| `kubectl get ingressclass` is empty | **kubeadm**: Cilium without kube-proxy replacement, or the upgrade did not apply — step 5, `cilium status`. **k3s**: Traefik was disabled at install — check `kubectl -n kube-system get pods -o wide \| grep traefik` |
+| the Ingress exists, outside is silent | `ingressClassName` is not the controller's own: Traefik does not take `cilium`, Cilium Ingress does not take `traefik` — step 6 |
+| `curl … :8080` from the node gives 404 | the `Host:` name does not match `host:` in the Ingress — or the port is from the other flavor: **8080** on kubeadm, **80** on k3s |
+| on a k3s node `ss -ltn` shows no `:80` | not a symptom: the port is held by `svclb-traefik-*` (a kube-proxy rule, or eBPF with Cilium), there is no listener in the host's network namespace — check with `curl` on the node's address |
+| a route target is "not alive" | nothing listens on the ingress port on the node (8080 / 80 — steps 5 and 6), the host's Traffic Fly tunnel is down — the hint under the gateway in "Traffic Fly" |
+| `kubectl exec` or `logs` of a pod on **one** node: `proxy error from 127.0.0.1:6443 while dialing <node>:10250, code 502`, the node being `Ready` | **k3s**: these requests do not go to the kubelet directly, they go through the tunnel the agent opened to `server:6443` itself — "is 10250 open from another machine" proves nothing here; a 502 is that node's agent state, `systemctl restart k3s-agent` on a worker (`k3s` on a control plane). **kubeadm**: the apiserver → kubelet path is direct, look at `ss -ltn \| grep ':10250 '` on the node and the route to it |
 | no certificate | the `hello.example.com` A record does not point at the gateway, or its port 80 is closed |
 | `kubeadm` does not install on Debian 13 | an old branch (v1.31) was chosen: `sqv` rejects its signature — pick a current one |

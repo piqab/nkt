@@ -113,6 +113,10 @@ SCREENS = [
     # Карточка кластера с кнопкой «Цели Traffic Fly»: она появляется,
     # у кластера есть привязанные маршруты (их число — в подсказке).
     ('hub-cluster-fly', 'hub', '/', "menu({ru: 'Кластеры', en: 'Clusters'}); await sleep(2000); [...document.querySelectorAll('.ant-card')].find((e) => /demo/.test(e.textContent))?.scrollIntoView({block: 'start'}); await sleep(500)"),
+    # Walkthrough «Кластер Kubernetes: от нуля до первого пода»: редактор
+    # маршрута, привязанного к кластеру (имя из справки — lab). Нужен кластер
+    # lab с тремя узлами и маршрут hello на карте (PUT /api/hub/fly).
+    ('k8s-first-pod-route', 'hub', '/', "menu({ru: 'Traffic Fly', en: 'Traffic Fly'}); await sleep(2500); [...document.querySelectorAll('tr')].find((r) => /hello\\.example/.test(r.textContent))?.querySelectorAll('button').forEach((b) => { if (new RegExp('^' + pick({ru: 'Изменить', en: 'Edit'}) + '$').test(b.textContent.trim())) b.click() }); await sleep(1500); [...document.querySelectorAll('.ant-modal label')].find((l) => new RegExp('^' + pick({ru: 'Кластер', en: 'Cluster'}) + '$').test(l.textContent.trim()))?.scrollIntoView({block: 'center'}); await sleep(600)"),
 ]
 
 # Помощники, доступные действию: клик по пункту меню/вкладке/тексту.
