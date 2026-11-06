@@ -556,6 +556,9 @@ Encrypt certificate:
    already published on all addresses is used as is, with a warning.
    **"Request body limit"** (nginx): empty means 64m, `0` means no limit
    and streaming (large uploads, S3), otherwise a number with k, m, g.
+   **"Check path"** is where the hub looks to see whether the site answers
+   from outside: empty means the root "/", and an interface that does not
+   live there gets its own path (`/ui`).
 4. **"Set up"** is a hub job: DNS and ports, the proxy (installed if
    needed), then a host job: open 80/443 in ufw/firewalld (if ticked),
    publish the service, the **certificate** (one valid for more than 20
@@ -574,7 +577,11 @@ Encrypt certificate:
      Caddy obtains and renews the certificate itself (it runs as a
      non-root user and cannot read certbot's keys).
 5. **HTTPS check from outside**: the response code and the certificate's
-   expiry; "Check" in the site row repeats it at any time.
+   expiry; "Check" in the site row repeats it at any time. Without a
+   "Check path" any response except 5xx is enough; with a named path the
+   path has to open (2xx, 3xx, and 401/403 — the interface asks for a
+   login), and a 404 stays a failure: "the site answers, but the path did
+   not open". The path shows in the site row next to the code.
 
 **"Delete"** is a hub job: on the host the proxy configuration is removed
 (with a history record), the service's 127.0.0.1 publication is removed
@@ -602,6 +609,7 @@ compose:
     firewall: true               # open 80/443 (yes by default)
     cert: manual                 # certificate: manual (default), auto or /path to your own file
     max_body: 512m               # nginx request body limit: 64m by default, "0" — no limit
+    check: /ui                   # the path the site is checked at from outside: "/" by default
     dns: auto                    # domain records through the hub's DNS plugin (or addresses, comma-separated)
 ```
 
@@ -618,6 +626,19 @@ compose:
   off`): uploads stream to the service — for S3, file sharing, image
   registries. HAProxy and Caddy do not limit the size. The same field is "Request body
   limit" in the site window on the "Sites" tab.
+
+- **`check`** is the path the hub checks the site at from outside. Without
+  it — the root "/": any response except 5xx counts, because a stack often
+  serves a 404 or a redirect at the root, and that is not a deployment
+  error. When the web interface lives somewhere else (`/ui`, `/app`,
+  `/login`), the root proves nothing: with a named path, success means the
+  path opened — 2xx and 3xx, plus 401 and 403 (the interface is alive and
+  asks for a login); 404 or 5xx means "the site answers, but the path did
+  not open": its own line in the deployment log and a red flag on the site.
+  A query string (`?x=1`) or a fragment (`#top`) is of no use — the check
+  looks at the response and the certificate, not at the page. The same
+  field is "Check path" in the site window. Certificate expiry alerts walk
+  the same path: the hub checks `<domain><path>` once a day.
 
 - **First deployment:** the stack, then the site, the same way as "Set up"
   in the wizard (DNS and ports from outside, proxy, publishing on

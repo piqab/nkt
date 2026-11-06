@@ -291,12 +291,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 		problems += s.dryRunSite(ctx, jc, user, pl, c, targets[0], sitePort, on)
 	case c.Site.CheckDomain() != "":
 		d := c.Site.CheckDomain()
-		chk := httpsCheck(ctx, d)
-		if chk.OK {
-			jc.Log("deploy.siteOK", d, chk.Status, chk.CertDaysLeft)
-		} else {
-			jc.Log("deploy.siteFailed", d, chk.Error)
-		}
+		logHTTPS(jc, d, httpsCheck(ctx, d, c.Site.CheckPath))
 	}
 	problems += s.dryRunFly(ctx, jc, c)
 	if problems > 0 {

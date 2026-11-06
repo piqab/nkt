@@ -31,6 +31,8 @@ interface DNSReport {
 interface HTTPSCheck {
   ok: boolean
   status?: number
+  /** Путь, по которому проверялось (site.check); пусто — корень «/». */
+  path?: string
   error?: string
   cert_days_left?: number
   cert_issuer?: string
@@ -73,6 +75,8 @@ interface Site {
   open_firewall: boolean
   /** Предел тела запроса у прокси: "" — 64m, "0" — без предела. */
   max_body?: string
+  /** Путь, по которому хаб проверяет сайт снаружи: "" — корень «/». */
+  check_path?: string
   pipeline_id?: number
   pipeline_name?: string
   status: string
@@ -84,6 +88,16 @@ interface Site {
 
 const STATUS_COLOR: Record<string, string> = { ok: 'success', failed: 'error', 'setting-up': 'processing', removing: 'processing', 'remove-failed': 'error', 'proxy-manual': 'default' }
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
+/** Путь проверки снаружи: пусто — корень «/», иначе абсолютный путь без
+ * пробелов, строки запроса и чужого адреса в начале («//host»). Ведущий «/»
+ * при вводе не обязателен — хаб допишет его. */
+function checkPathOK(v: string) {
+  const p = v.trim()
+  if (p === '') return true
+  const path = p.startsWith('/') ? p : '/' + p
+  return !path.startsWith('//') && /^\/[A-Za-z0-9._~%!$&'()*+,;=:@/-]{0,254}$/.test(path)
+}
 
 function portTag(t: (k: string) => string, v?: string) {
   if (!v) return <Tag>—</Tag>
@@ -238,11 +252,14 @@ export function SitesPanel({ me }: { me: Me }) {
                           </Tooltip>
                         ) : c.https.ok ? (
                           <Tooltip title={c.https.cert_names?.length ? t('sites.certNames', { names: c.https.cert_names.join(', ') }) : undefined}>
-                            <Tag color="success">HTTPS {c.https.status}</Tag>
+                            <Tag color="success">
+                              HTTPS {c.https.status}
+                              {c.https.path ? ` ${c.https.path}` : ''}
+                            </Tag>
                           </Tooltip>
                         ) : (
                           <Tooltip title={c.https.error}>
-                            <Tag color="error">HTTPS</Tag>
+                            <Tag color="error">HTTPS{c.https.path ? ` ${c.https.path}` : ''}</Tag>
                           </Tooltip>
                         ))}
                       {c.https?.cert_days_left !== undefined && c.https.ok && (
@@ -328,6 +345,8 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
   const [openFW, setOpenFW] = useState(site?.open_firewall ?? true)
   const [maxBody, setMaxBody] = useState(site?.max_body ?? '')
   const maxBodyOK = /^(0|[1-9][0-9]{0,5}[kmgKMG]?)?$/.test(maxBody.trim())
+  const [checkPath, setCheckPath] = useState(site?.check_path ?? '')
+  const pathOK = checkPathOK(checkPath)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -382,6 +401,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
         upstream: targetKind === 'addr' ? upstream : '',
         open_firewall: openFW,
         max_body: maxBody.trim(),
+        check_path: checkPath.trim(),
         install_proxy: true,
       }
       const res = await api<{ job_id: number }>(site ? `/hub/sites/${site.id}` : '/hub/sites', { method: site ? 'PUT' : 'POST', body })
@@ -393,7 +413,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
     }
   }
 
-  const ready = hostID !== null && !!proxy && maxBodyOK && domains.trim() !== '' && (targetKind === 'addr' ? !!upstream : !!stack && !!service && !!port)
+  const ready = hostID !== null && !!proxy && maxBodyOK && pathOK && domains.trim() !== '' && (targetKind === 'addr' ? !!upstream : !!stack && !!service && !!port)
 
   return (
     <Modal title={site ? t('sites.editTitle', { name: site.domains[0] }) : t('sites.newTitle')} onClose={onClose} width={860} maskClosable={false}>
@@ -530,6 +550,18 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
                 status={maxBodyOK ? undefined : 'error'}
               />
               <span className="small muted">{t('sites.maxBodyHint')}</span>
+            </label>
+            <label style={{ maxWidth: 520 }}>
+              {t('sites.checkPath')}
+              <Input
+                value={checkPath}
+                onChange={(e) => setCheckPath(e.target.value)}
+                placeholder="/ui"
+                className="mono"
+                style={{ maxWidth: 220 }}
+                status={pathOK ? undefined : 'error'}
+              />
+              <span className="small muted">{t('sites.checkPathHint')}</span>
             </label>
             <Checkbox checked={openFW} onChange={(e) => setOpenFW(e.target.checked)}>
               {t('sites.openFirewall')}{' '}

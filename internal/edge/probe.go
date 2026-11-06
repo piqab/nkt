@@ -33,12 +33,17 @@ const (
 	probeTimeout   = 10 * time.Second
 )
 
-// ProbeCheck — одна проверка: dns (имя), tcp (адрес и порт), https (имя и
-// порт, по умолчанию 443).
+// ProbeCheck — одна проверка: dns (имя), tcp (адрес и порт), https (имя,
+// порт — по умолчанию 443 — и путь запроса).
 type ProbeCheck struct {
 	Type string `json:"type"`
 	Host string `json:"host"`
 	Port int    `json:"port,omitempty"`
+	// Path — путь запроса у https-проверки («/ui»): у сервиса с веб-мордой
+	// не в корне корень часто отдаёт 404, и проверка по нему ничего не
+	// доказывает. Пусто — корень «/» (так было до появления поля: edge
+	// прежней версии поле не читает, и хаб по ответу судит как про корень).
+	Path string `json:"path,omitempty"`
 }
 
 // ProbeRequest — проверки разом.
@@ -70,6 +75,12 @@ type ProbeResponse struct {
 
 var probeHostRe = regexp.MustCompile(`^[A-Za-z0-9.:_-]{1,253}$`)
 
+// probePathRe — путь https-проверки: абсолютный путь запроса без пробелов,
+// строки запроса и фрагмента. Схема и адрес в URL остаются хабовыми — их
+// берёт url.URL, — но путь, начинающийся с «//», отдельные парсеры читают
+// как чужой адрес, поэтому такой путь не допускается (проверка ниже).
+var probePathRe = regexp.MustCompile(`^/[A-Za-z0-9._~%!$&'()*+,;=:@/-]{0,254}$`)
+
 // errProbePrivate — адрес не из интернета: роль «проверки снаружи»
 // смотрит на то, что видит интернет, и в сеть самого VPS (локальные
 // службы, метаданные облака 169.254.169.254) не ходит.
@@ -77,6 +88,10 @@ var errProbePrivate = errors.New("blocked: not a public address")
 
 // probeAllowPrivate — тесты проверяют на loopback.
 var probeAllowPrivate = false
+
+// probeRoots — чему доверять при https-проверке (nil — системные корни).
+// Тестовый хук того же вида, что у хабовой проверки (httpsCheckRoots).
+var probeRoots *x509.CertPool
 
 // publicAddr — адрес из интернета (не loopback, не частная сеть, не
 // link-local, не CGNAT, не служебный).
@@ -116,9 +131,15 @@ func ValidProbe(c ProbeCheck) bool {
 	case "tcp":
 		return c.Port >= 1 && c.Port <= 65535
 	case "https":
-		return c.Port >= 0 && c.Port <= 65535
+		return c.Port >= 0 && c.Port <= 65535 && validProbePath(c.Path)
 	}
 	return false
+}
+
+// validProbePath — путь https-проверки: пусто (корень) или абсолютный путь,
+// не начинающийся с «//».
+func validProbePath(p string) bool {
+	return p == "" || (probePathRe.MatchString(p) && !strings.HasPrefix(p, "//"))
 }
 
 // RunProbe — проверки параллельно (не больше восьми разом).
@@ -186,9 +207,10 @@ func probeTCP(ctx context.Context, host string, port int) string {
 
 func probeHTTPS(ctx context.Context, c ProbeCheck, r *ProbeResult) {
 	// Имя или адрес — только допустимые знаки, прямо перед запросом (кроме
-	// проверки в RunProbe): ни пути, ни логина, ни другой схемы в URL не
-	// подсунуть. Куда можно соединяться — решает probeDialer.
-	if !probeHostRe.MatchString(c.Host) {
+	// проверки в RunProbe): ни логина, ни другой схемы в URL не подсунуть.
+	// Путь — тем же порядком: свой регистр и без «//» в начале. Куда можно
+	// соединяться — решает probeDialer.
+	if !probeHostRe.MatchString(c.Host) || !validProbePath(c.Path) {
 		r.Error = "invalid check"
 		return
 	}
@@ -199,14 +221,18 @@ func probeHTTPS(ctx context.Context, c ProbeCheck, r *ProbeResult) {
 	if port != 443 || strings.Contains(host, ":") {
 		host = net.JoinHostPort(c.Host, strconv.Itoa(port))
 	}
-	target := url.URL{Scheme: "https", Host: host, Path: "/"}
+	path := c.Path
+	if path == "" {
+		path = "/"
+	}
+	target := url.URL{Scheme: "https", Host: host, Path: path}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
 		r.Error = err.Error()
 		return
 	}
 	client := &http.Client{
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, DisableKeepAlives: true,
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: probeRoots}, DisableKeepAlives: true,
 			DialContext: probeDialer().DialContext},
 		// Переадресация — тоже ответ сайта.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },

@@ -26,8 +26,12 @@ type Site struct {
 	CertKey string `json:"cert_key,omitempty"`
 	// MaxBody — предел тела запроса у прокси ("" — 64m, "0" — без предела).
 	MaxBody string `json:"max_body,omitempty"`
-	Status  string `json:"status"`
-	Error   string `json:"error,omitempty"`
+	// CheckPath — путь, по которому хаб проверяет сайт снаружи (site.check;
+	// "" — корень «/»). У сервиса с веб-мордой не в корне корень часто
+	// отдаёт 404, и проверка по нему ничего не доказывает.
+	CheckPath string `json:"check_path,omitempty"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
 	// Check — последняя проверка снаружи (JSON hub.SiteCheck).
 	Check     json.RawMessage `json:"check,omitempty"`
 	JobID     int64           `json:"job_id,omitempty"`
@@ -51,13 +55,13 @@ const (
 	SiteRemoveFailed = "remove-failed"
 )
 
-const siteColumns = `id, domains, host_id, proxy, stack, service, container_port, upstream, open_firewall, pipeline_id, cert, cert_key, max_body, status, error, check_json, job_id, author, created_at, updated_at`
+const siteColumns = `id, domains, host_id, proxy, stack, service, container_port, upstream, open_firewall, pipeline_id, cert, cert_key, max_body, check_path, status, error, check_json, job_id, author, created_at, updated_at`
 
 func scanSite(row interface{ Scan(...any) error }) (Site, error) {
 	var s Site
 	var domains, check string
 	err := row.Scan(&s.ID, &domains, &s.HostID, &s.Proxy, &s.Stack, &s.Service, &s.ContainerPort, &s.Upstream,
-		&s.OpenFirewall, &s.PipelineID, &s.Cert, &s.CertKey, &s.MaxBody, &s.Status, &s.Error, &check, &s.JobID, &s.Author, &s.CreatedAt, &s.UpdatedAt)
+		&s.OpenFirewall, &s.PipelineID, &s.Cert, &s.CertKey, &s.MaxBody, &s.CheckPath, &s.Status, &s.Error, &check, &s.JobID, &s.Author, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return s, err
 	}
@@ -73,17 +77,17 @@ func (d *DB) SaveSite(ctx context.Context, s Site) (int64, error) {
 	domains, _ := json.Marshal(s.Domains)
 	now := Now()
 	if s.ID == 0 {
-		res, err := d.ExecContext(ctx, `INSERT INTO sites(domains, host_id, proxy, stack, service, container_port, upstream, open_firewall, pipeline_id, cert, cert_key, max_body, author, created_at, updated_at)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			string(domains), s.HostID, s.Proxy, s.Stack, s.Service, s.ContainerPort, s.Upstream, s.OpenFirewall, s.PipelineID, s.Cert, s.CertKey, s.MaxBody, s.Author, now, now)
+		res, err := d.ExecContext(ctx, `INSERT INTO sites(domains, host_id, proxy, stack, service, container_port, upstream, open_firewall, pipeline_id, cert, cert_key, max_body, check_path, author, created_at, updated_at)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			string(domains), s.HostID, s.Proxy, s.Stack, s.Service, s.ContainerPort, s.Upstream, s.OpenFirewall, s.PipelineID, s.Cert, s.CertKey, s.MaxBody, s.CheckPath, s.Author, now, now)
 		if err != nil {
 			return 0, err
 		}
 		return res.LastInsertId()
 	}
 	_, err := d.ExecContext(ctx, `UPDATE sites SET domains = ?, host_id = ?, proxy = ?, stack = ?, service = ?, container_port = ?,
-		upstream = ?, open_firewall = ?, pipeline_id = ?, cert = ?, cert_key = ?, max_body = ?, author = ?, updated_at = ? WHERE id = ?`,
-		string(domains), s.HostID, s.Proxy, s.Stack, s.Service, s.ContainerPort, s.Upstream, s.OpenFirewall, s.PipelineID, s.Cert, s.CertKey, s.MaxBody, s.Author, now, s.ID)
+		upstream = ?, open_firewall = ?, pipeline_id = ?, cert = ?, cert_key = ?, max_body = ?, check_path = ?, author = ?, updated_at = ? WHERE id = ?`,
+		string(domains), s.HostID, s.Proxy, s.Stack, s.Service, s.ContainerPort, s.Upstream, s.OpenFirewall, s.PipelineID, s.Cert, s.CertKey, s.MaxBody, s.CheckPath, s.Author, now, s.ID)
 	return s.ID, err
 }
 

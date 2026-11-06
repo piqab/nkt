@@ -668,6 +668,9 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "plugin", `ALTER TABLE hosts ADD COLUMN plugin TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "plugin_type", `ALTER TABLE hosts ADD COLUMN plugin_type TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "conn_enc", `ALTER TABLE hosts ADD COLUMN conn_enc BLOB`},
+	// check_path — путь, по которому хаб проверяет сайт снаружи (site.check:
+	// /ui); пусто — корень «/», как проверялось всегда.
+	{"sites", "check_path", `ALTER TABLE sites ADD COLUMN check_path TEXT NOT NULL DEFAULT ''`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

@@ -32,8 +32,26 @@ func TestSiteSpec(t *testing.T) {
 	if err != nil || !s.Compose.Site.Managed() || s.Compose.Site.Domains[0] != "app.example.com" || !s.Compose.Site.OpenFirewall() {
 		t.Fatalf("block form: %+v %v", s.Compose.Site, err)
 	}
+	// Без site.check поведение не меняется: проверка идёт по корню.
+	if s.Compose.Site.CheckPath != "" {
+		t.Fatalf("проверка без названного пути: %q", s.Compose.Site.CheckPath)
+	}
 	if m := s.Compose.Site.CertMode(); m != "manual" {
 		t.Errorf("по умолчанию: %q", m)
+	}
+	// site.check — путь проверки снаружи: ведущий «/» дописывается.
+	s, err = ParseSpec(block + "    check: ui\n")
+	if err != nil || s.Compose.Site.CheckPath != "/ui" {
+		t.Fatalf("check: %+v %v", s.Compose.Site, err)
+	}
+	for _, badCheck := range []string{
+		block + "    check: //evil.example.com/x\n",
+		block + "    check: '/ui login'\n",
+		block + "    check: ?x=1\n",
+	} {
+		if _, err := ParseSpec(badCheck); err == nil {
+			t.Fatalf("accepted:\n%s", badCheck)
+		}
 	}
 	for in, want := range map[string]string{"auto": "auto", "manual": "manual", "/etc/ssl/app.pem\n    cert_key: /etc/ssl/app.key": "/etc/ssl/app.pem"} {
 		s, err := ParseSpec(block + "    cert: " + in + "\n")

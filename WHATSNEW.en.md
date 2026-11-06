@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.31 — 2026-11-06
+
+- **A site can now be checked at a path you name, not at the root.** When a web interface does not live at the root, the root often answers 404, and the old rule ("any answer except 5xx") called that a success: the deployment said "the site answers" while the interface never came up.
+  - New field — **"Check path"** in the site window, and `check: /ui` in a pipeline's `site:` block; empty means the root "/", exactly as before.
+  - With a named path, success means the path **opened**: 2xx and 3xx, plus 401 and 403 (the interface is alive and asks for a login — which is just what `/ui` gives behind authentication). 404 and 5xx get their own log line: "the site answers, but `/ui` returns HTTP 404: the path did not open".
+  - Without a named path nothing changes: any code except 5xx still passes, otherwise a redirect or a 404 at the root would fail deployments that work.
+  - The hub uses that path for the "Check" button, for the deployment dry run, and for its once-a-day certificate expiry walk. With an edge in the "outside checks" role the path travels to the edge and comes back in the answer: an edge of an older release does not know the field, so the root counts there.
+  - The path shows in the "From outside" column next to the response code, so a "401 at /ui" is not a puzzle.
+
 ## v1.17.30 — 2026-11-06
 
 - **The walkthrough "A Kubernetes cluster: from zero to the first pod" now covers both flavors.** It only knew kubeadm with Cilium Ingress and taught listing route targets by hand — on a k3s cluster outside access did not come out of it.

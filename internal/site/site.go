@@ -114,6 +114,30 @@ var maxBodyRe = regexp.MustCompile(`^(0|[1-9][0-9]{0,5}[kmgKMG]?)$`)
 // ValidMaxBody — пусто или допустимый предел.
 func ValidMaxBody(v string) bool { return v == "" || maxBodyRe.MatchString(v) }
 
+// checkPathRe — путь проверки сайта: абсолютный путь запроса. Строки запроса
+// и фрагмента в нём нет: у проверки один смысл — открылся ли путь, а «#» до
+// сервиса вообще не доезжает. Путь не начинается с «//» (проверка ниже):
+// такие начала разные парсеры читают как чужой адрес, и edge его отвергнет.
+var checkPathRe = regexp.MustCompile(`^/[A-Za-z0-9._~%!$&'()*+,;=:@/-]{0,254}$`)
+
+// ValidCheckPath — путь, по которому хаб проверяет сайт снаружи: пусто —
+// корень «/» (как было всегда), иначе абсолютный путь. Написанный без
+// ведущего «/» дополняется им: в окне сайта и в блоке site: пишут и так,
+// и так.
+func ValidCheckPath(p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if !checkPathRe.MatchString(p) || strings.HasPrefix(p, "//") {
+		return "", msgs.Errorf("site.badCheckPath", p)
+	}
+	return p, nil
+}
+
 func (c Config) bodyLines() (server, location string) {
 	v := c.MaxBody
 	if !ValidMaxBody(v) || v == "" {

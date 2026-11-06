@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/piqab/nkt/internal/store"
@@ -33,11 +34,17 @@ func TestPickVMHost(t *testing.T) {
 		nokvm: {KVM: false, LibvirtdActive: true, MemAvailable: 64 * gb, ImagesFree: 500 * gb},
 		full:  {KVM: true, LibvirtdActive: true, MemAvailable: 32 * gb, ImagesFree: 5 * gb},
 	}
+	// pickVMHost опрашивает хосты параллельно, поэтому список «кого
+	// спрашивали» под замком: без него запись в map из нескольких горутин
+	// ловит fatal error: concurrent map writes.
+	var askedMu sync.Mutex
 	asked := map[int64]bool{}
 	saved := placePreflight
 	t.Cleanup(func() { placePreflight = saved })
 	placePreflight = func(_ *Server, _ context.Context, _ string, id int64, out *vmPreflight) error {
+		askedMu.Lock()
 		asked[id] = true
+		askedMu.Unlock()
 		p, ok := pf[id]
 		if !ok {
 			return errors.New("unreachable")

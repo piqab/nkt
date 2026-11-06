@@ -310,12 +310,7 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		}
 	case c.Site.CheckDomain() != "":
 		d := c.Site.CheckDomain()
-		chk := httpsCheck(ctx, d)
-		if chk.OK {
-			jc.Log("deploy.siteOK", d, chk.Status, chk.CertDaysLeft)
-		} else {
-			jc.Log("deploy.siteFailed", d, chk.Error)
-		}
+		logHTTPS(jc, d, httpsCheck(ctx, d, c.Site.CheckPath))
 	}
 	// Traffic Fly — после стека: целями маршрутов — его контейнеры.
 	s.pipelineFly(ctx, jc, user, pl, c, targets)
@@ -444,9 +439,13 @@ func (s *Server) composeEngineProblems(ctx context.Context, jc *jobs.Context, us
 
 // HTTPSCheck — ответ сайта снаружи (с хаба).
 type HTTPSCheck struct {
-	OK           bool   `json:"ok"`
-	Status       int    `json:"status,omitempty"`
-	Error        string `json:"error,omitempty"`
+	OK     bool   `json:"ok"`
+	Status int    `json:"status,omitempty"`
+	Error  string `json:"error,omitempty"`
+	// Path — по какому пути проверяли (site.check; пусто — корень «/»).
+	// Выводится в журнал и в карточку сайта: «HTTPS 401» без пути выглядит
+	// ошибкой, хотя это интерфейс, который просит вход.
+	Path         string `json:"path,omitempty"`
 	CertNotAfter string `json:"cert_not_after,omitempty"`
 	CertDaysLeft int    `json:"cert_days_left,omitempty"`
 	CertIssuer   string `json:"cert_issuer,omitempty"`
@@ -463,13 +462,20 @@ var (
 	httpsCheckRoots *x509.CertPool
 )
 
-// httpsCheck — GET https://<домен>/ с проверкой сертификата: ответил ли
-// (любой код, кроме 5xx) и сколько сертификату осталось.
-func httpsCheck(ctx context.Context, domain string) HTTPSCheck {
-	out := HTTPSCheck{CheckedAt: store.Now()}
+// httpsCheck — GET https://<домен><путь> с проверкой сертификата: ответил ли
+// и сколько сертификату осталось. Путь пустой — корень «/» (как было всегда);
+// названный (site.check: /ui) — успехом считается открытый путь, а не любой
+// ответ: у сервиса с веб-мордой не в корне корень часто отдаёт 404, и
+// довольствоваться им — значит не замечать лежащий интерфейс.
+func httpsCheck(ctx context.Context, domain, path string) HTTPSCheck {
+	out := HTTPSCheck{CheckedAt: store.Now(), Path: path}
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, "https://"+domain+"/", nil)
+	target := "https://" + domain + "/"
+	if path != "" {
+		target = "https://" + domain + path
+	}
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, target, nil)
 	if err != nil {
 		out.Error = err.Error()
 		return out
@@ -516,11 +522,53 @@ func httpsCheck(ctx context.Context, domain string) HTTPSCheck {
 		out.CertIssuer = cert.Issuer.CommonName
 		out.CertNames = certNames(cert)
 	}
-	out.OK = resp.StatusCode < 500
+	out.OK = httpsStatusOK(path, resp.StatusCode)
 	if !out.OK {
 		out.Error = resp.Status
 	}
 	return out
+}
+
+// httpsStatusOK — что считать ответом сайта. Без названного пути — любой код
+// кроме 5xx: у стека корень часто 404 или редирект, и это не ошибка
+// выкладки. С названным путём — что путь открылся: 2xx и 3xx, а 401 и 403
+// тоже успех (интерфейс жив и просит вход — ровно то, что даёт /ui под
+// аутентификацией); 404 и 4xx — интерфейс не поднялся.
+func httpsStatusOK(path string, status int) bool {
+	if path == "" {
+		return status < 500
+	}
+	switch {
+	case status >= 200 && status < 400:
+		return true
+	case status == http.StatusUnauthorized, status == http.StatusForbidden:
+		return true
+	}
+	return false
+}
+
+// httpsTarget — как назвать сайт в журнале: имя и, когда путь назван, путь:
+// «shop.example.org/ui». По нему видно, чем ответ 401 (интерфейс просит вход)
+// отличается от провала.
+func httpsTarget(domain, path string) string {
+	if path == "" {
+		return domain
+	}
+	return domain + path
+}
+
+// logHTTPS — строка журнала про ответ сайта после выкладки. Когда путь
+// назван и сайт отвечает, но путь не открылся, «не ответил по HTTPS» было бы
+// неправдой: отвечает — только интерфейс не поднялся.
+func logHTTPS(jc *jobs.Context, domain string, chk HTTPSCheck) {
+	switch {
+	case chk.OK:
+		jc.Log("deploy.siteOK", httpsTarget(domain, chk.Path), chk.Status, chk.CertDaysLeft)
+	case chk.Path != "" && chk.Status > 0:
+		jc.Log("site.pathFailed", domain, chk.Path, chk.Status)
+	default:
+		jc.Log("deploy.siteFailed", httpsTarget(domain, chk.Path), chk.Error)
+	}
 }
 
 // certNames — имена сертификата (SAN, иначе CN).

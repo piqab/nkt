@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/piqab/nkt/internal/site"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -39,7 +40,8 @@ func (m *Manager) exportSites(ctx context.Context, export *store.HubExport) erro
 		}
 		export.Sites = append(export.Sites, store.SiteExport{Domains: s.Domains, Host: host, Proxy: s.Proxy, Stack: s.Stack,
 			Service: s.Service, ContainerPort: s.ContainerPort, Upstream: s.Upstream, OpenFirewall: s.OpenFirewall,
-			Pipeline: pipes[s.PipelineID], Cert: s.Cert, CertKey: s.CertKey, MaxBody: s.MaxBody, Status: s.Status, Error: s.Error, Author: s.Author, CreatedAt: s.CreatedAt})
+			Pipeline: pipes[s.PipelineID], Cert: s.Cert, CertKey: s.CertKey, MaxBody: s.MaxBody, CheckPath: s.CheckPath,
+			Status: s.Status, Error: s.Error, Author: s.Author, CreatedAt: s.CreatedAt})
 	}
 	return nil
 }
@@ -94,6 +96,13 @@ func (m *Manager) importSites(ctx context.Context, list []store.SiteExport, res 
 			rep.Err("site %q: host %q missing — not imported", name, e.Host)
 			continue
 		}
+		// Путь проверки приезжает из файла — он проходит ту же проверку, что
+		// поле в окне сайта: журнал и адрес запроса строятся по нему.
+		path, err := site.ValidCheckPath(e.CheckPath)
+		if err != nil {
+			rep.Err("site %q: %v", name, err)
+			continue
+		}
 		var pipelineID int64
 		if e.Pipeline != "" {
 			if pipelineID, ok = pipes[e.Pipeline]; !ok {
@@ -101,7 +110,8 @@ func (m *Manager) importSites(ctx context.Context, list []store.SiteExport, res 
 			}
 		}
 		s := store.Site{Domains: e.Domains, HostID: hostID, Proxy: e.Proxy, Stack: e.Stack, Service: e.Service,
-			ContainerPort: e.ContainerPort, Upstream: e.Upstream, OpenFirewall: e.OpenFirewall, PipelineID: pipelineID, Cert: e.Cert, CertKey: e.CertKey, MaxBody: e.MaxBody, Author: e.Author}
+			ContainerPort: e.ContainerPort, Upstream: e.Upstream, OpenFirewall: e.OpenFirewall, PipelineID: pipelineID,
+			Cert: e.Cert, CertKey: e.CertKey, MaxBody: e.MaxBody, CheckPath: path, Author: e.Author}
 		if id, taken := ids[name]; taken {
 			if !res.Replace(store.SectionSites, name) {
 				cnt.Skipped++

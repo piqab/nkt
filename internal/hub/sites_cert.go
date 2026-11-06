@@ -84,7 +84,7 @@ func (s *Server) checkSiteCerts(ctx context.Context) {
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		chk := s.siteOutside(cctx, t, st.Domains, true)
+		chk := s.siteOutside(cctx, t, st.Domains, true, st.CheckPath)
 		cancel()
 		raw, _ := json.Marshal(chk)
 		_ = s.db.SetSiteCheck(ctx, st.ID, raw)

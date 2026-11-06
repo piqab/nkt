@@ -90,8 +90,10 @@ func probePort(ctx context.Context, host string, port int) string {
 	return "error: " + err.Error()
 }
 
-func (s *Server) siteOutside(ctx context.Context, t targetHost, domains []string, https bool) SiteCheck {
-	if chk, ok := s.siteOutsideEdge(ctx, t, domains, https); ok {
+// siteOutside — что видно снаружи: DNS, порты и, если https, HTTPS по пути
+// path (site.check; пусто — корень «/»).
+func (s *Server) siteOutside(ctx context.Context, t targetHost, domains []string, https bool, path string) SiteCheck {
+	if chk, ok := s.siteOutsideEdge(ctx, t, domains, https, path); ok {
 		return chk
 	}
 	chk := SiteCheck{Ports: map[string]string{}}
@@ -108,7 +110,7 @@ func (s *Server) siteOutside(ctx context.Context, t targetHost, domains []string
 		chk.Ports[strconv.Itoa(port)] = probePort(ctx, domains[0], port)
 	}
 	if https {
-		chk.HTTPS = httpsCheck(ctx, domains[0])
+		chk.HTTPS = httpsCheck(ctx, domains[0], path)
 	}
 	return chk
 }
@@ -116,7 +118,7 @@ func (s *Server) siteOutside(ctx context.Context, t targetHost, domains []string
 // siteOutsideEdge — то же с edge с ролью probe: хаб за NAT «снаружи» не
 // видит, edge на VPS видит как интернет. Нет такого edge или он не
 // ответил — false (проверка с хаба).
-func (s *Server) siteOutsideEdge(ctx context.Context, t targetHost, domains []string, https bool) (SiteCheck, bool) {
+func (s *Server) siteOutsideEdge(ctx context.Context, t targetHost, domains []string, https bool, path string) (SiteCheck, bool) {
 	st, sess, ok := s.probeEdge(ctx, 0)
 	if !ok {
 		return SiteCheck{}, false
@@ -127,7 +129,7 @@ func (s *Server) siteOutsideEdge(ctx context.Context, t targetHost, domains []st
 	}
 	checks = append(checks, edge.ProbeCheck{Type: "tcp", Host: domains[0], Port: 80}, edge.ProbeCheck{Type: "tcp", Host: domains[0], Port: 443})
 	if https {
-		checks = append(checks, edge.ProbeCheck{Type: "https", Host: domains[0]})
+		checks = append(checks, edge.ProbeCheck{Type: "https", Host: domains[0], Path: path})
 	}
 	for _, c := range checks {
 		if !edge.ValidProbe(c) {
@@ -158,12 +160,15 @@ func (s *Server) siteOutsideEdge(ctx context.Context, t targetHost, domains []st
 	chk.Ports["80"], chk.Ports["443"] = res.Results[n].State, res.Results[n+1].State
 	if https {
 		r := res.Results[n+2]
+		// Путь берётся из ответа edge, а не из запроса: edge прежней версии
+		// поля не знает и вернёт пусто — значит проверен корень, и судить о
+		// коде надо как про корень, а не как про «/ui не открылся».
 		h := HTTPSCheck{CheckedAt: store.Now(), Status: r.Status, Error: r.Error, CertNotAfter: r.CertNotAfter, CertIssuer: r.CertIssuer,
-			CertNames: r.CertNames, WrongCert: r.WrongCert}
+			CertNames: r.CertNames, WrongCert: r.WrongCert, Path: r.Path}
 		if na, err := time.Parse(time.RFC3339, r.CertNotAfter); err == nil {
 			h.CertDaysLeft = int(time.Until(na).Hours() / 24)
 		}
-		h.OK = r.Error == "" && r.Status > 0 && r.Status < 500
+		h.OK = r.Error == "" && r.Status > 0 && httpsStatusOK(r.Path, r.Status)
 		if r.Error == "" && !h.OK {
 			h.Error = strconv.Itoa(r.Status)
 		}
@@ -253,7 +258,7 @@ func (s *Server) handleSitePreflight(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
-		out["outside"] = s.siteOutside(ctx, t, domains, false)
+		out["outside"] = s.siteOutside(ctx, t, domains, false, "")
 	}
 	var host json.RawMessage
 	if _, err := s.hostCall(ctx, auth.Username(ctx), t.ID, "GET", "/api/sites/preflight", nil, &host); err != nil {
@@ -276,6 +281,10 @@ type siteRequest struct {
 	InstallProxy  bool     `json:"install_proxy"`
 	// MaxBody — предел тела запроса у прокси ("" — 64m, "0" — без предела).
 	MaxBody string `json:"max_body"`
+	// CheckPath — путь проверки снаружи (site.check). Поле не прислали — nil:
+	// у уже записанного сайта путь остаётся прежним (окно сайта правит
+	// настройки прокси и цели, а путь задаёт сценарий).
+	CheckPath *string `json:"check_path"`
 }
 
 // handleSiteSave — POST /hub/sites (новый) и PUT /hub/sites/{id}:
@@ -315,6 +324,7 @@ func (s *Server) handleSiteSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id, pipelineID int64
+	path := ""
 	if raw := chi.URLParam(r, "id"); raw != "" {
 		id, _ = strconv.ParseInt(raw, 10, 64)
 		prev, err := s.db.SiteByID(ctx, id)
@@ -324,6 +334,8 @@ func (s *Server) handleSiteSave(w http.ResponseWriter, r *http.Request) {
 		}
 		// Правка в мастере не отвязывает сайт от конвейера.
 		pipelineID = prev.PipelineID
+		// Путь проверки задаёт сценарий: не прислали поле — прежний.
+		path = prev.CheckPath
 	} else {
 		// Имя уже занято другим сайтом хаба — второй на то же имя не
 		// заводится.
@@ -336,9 +348,17 @@ func (s *Server) handleSiteSave(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if req.CheckPath != nil {
+		path = *req.CheckPath
+	}
+	if path, err = site.ValidCheckPath(path); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
 	user := auth.Username(ctx)
 	id, err = s.db.SaveSite(ctx, store.Site{ID: id, Domains: domains, HostID: req.HostID, Proxy: req.Proxy, Stack: req.Stack,
-		Service: req.Service, ContainerPort: req.ContainerPort, Upstream: req.Upstream, OpenFirewall: req.OpenFirewall, MaxBody: req.MaxBody, PipelineID: pipelineID, Author: user})
+		Service: req.Service, ContainerPort: req.ContainerPort, Upstream: req.Upstream, OpenFirewall: req.OpenFirewall,
+		MaxBody: req.MaxBody, CheckPath: path, PipelineID: pipelineID, Author: user})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
@@ -401,7 +421,7 @@ func (s *Server) handleSiteCheck(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	chk := s.siteOutside(ctx, t, st.Domains, true)
+	chk := s.siteOutside(ctx, t, st.Domains, true, st.CheckPath)
 	raw, _ := json.Marshal(chk)
 	_ = s.db.SetSiteCheck(ctx, id, raw)
 	writeJSON(w, http.StatusOK, chk)
@@ -499,7 +519,7 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 
 	// 1. DNS.
 	step(1, "hub.siteStepDNS", strings.Join(st.Domains, ", "))
-	chk := s.siteOutside(ctx, t, st.Domains, false)
+	chk := s.siteOutside(ctx, t, st.Domains, false, "")
 	if chk.Via != "" {
 		jc.Log("hub.siteViaEdge", chk.Via)
 	}
@@ -624,8 +644,8 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 	}
 
 	// 5. HTTPS снаружи.
-	step(5, "hub.siteStepHTTPS", st.Domains[0])
-	chk.HTTPS = httpsCheck(ctx, st.Domains[0])
+	step(5, "hub.siteStepHTTPS", httpsTarget(st.Domains[0], st.CheckPath))
+	chk.HTTPS = httpsCheck(ctx, st.Domains[0], st.CheckPath)
 	raw, _ := json.Marshal(chk)
 	_ = s.db.SetSiteCheck(ctx, st.ID, raw)
 	if chk.HTTPS.WrongCert {
@@ -633,18 +653,21 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 		// действует (не подхватилась, перекрыта другим server): не «готово».
 		return msgs.Errorf("hub.siteWrongCert", st.Domains[0], strings.Join(chk.HTTPS.CertNames, ", "))
 	}
-	if chk.HTTPS.OK {
-		jc.Log("hub.siteHTTPSOK", st.Domains[0], chk.HTTPS.Status, chk.HTTPS.CertDaysLeft)
-	} else {
+	switch {
+	case chk.HTTPS.OK:
+		jc.Log("hub.siteHTTPSOK", httpsTarget(st.Domains[0], chk.HTTPS.Path), chk.HTTPS.Status, chk.HTTPS.CertDaysLeft)
+	case chk.HTTPS.Path != "" && chk.HTTPS.Status > 0:
+		jc.Log("site.pathFailed", st.Domains[0], chk.HTTPS.Path, chk.HTTPS.Status)
+	default:
 		// Сайт настроен, но снаружи не ответил: DNS ещё не разошёлся,
 		// сервис стартует, фильтр провайдера — это видно в журнале, а не
 		// повод откатывать уже сделанное.
-		jc.Log("hub.siteHTTPSFailed", st.Domains[0], chk.HTTPS.Error)
-		if chk.HTTPS.Status == http.StatusBadGateway && st.Stack != "" {
-			// Прокси работает, а сервис за ним не ответил — чаще всего
-			// порт контейнера не тот, что слушает образ.
-			jc.Log("hub.site502Hint", st.Service, st.ContainerPort)
-		}
+		jc.Log("hub.siteHTTPSFailed", httpsTarget(st.Domains[0], chk.HTTPS.Path), chk.HTTPS.Error)
+	}
+	if !chk.HTTPS.OK && chk.HTTPS.Status == http.StatusBadGateway && st.Stack != "" {
+		// Прокси работает, а сервис за ним не ответил — чаще всего порт
+		// контейнера не тот, что слушает образ.
+		jc.Log("hub.site502Hint", st.Service, st.ContainerPort)
 	}
 	return nil
 }

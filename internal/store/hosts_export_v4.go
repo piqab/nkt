@@ -90,10 +90,12 @@ type SiteExport struct {
 	Cert          string   `json:"cert,omitempty"`
 	CertKey       string   `json:"cert_key,omitempty"`
 	MaxBody       string   `json:"max_body,omitempty"`
-	Status        string   `json:"status,omitempty"`
-	Error         string   `json:"error,omitempty"`
-	Author        string   `json:"author,omitempty"`
-	CreatedAt     string   `json:"created_at,omitempty"`
+	// CheckPath — путь, по которому хаб проверяет сайт снаружи; пусто — корень.
+	CheckPath string `json:"check_path,omitempty"`
+	Status    string `json:"status,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Author    string `json:"author,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
 }
 
 // UserExport — учётная запись веб-интерфейса с хэшем пароля (argon2id —

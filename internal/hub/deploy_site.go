@@ -82,7 +82,17 @@ func (s *Server) pipelineSiteFor(ctx context.Context, pl store.Pipeline, domains
 func sameSite(a, b store.Site) bool {
 	return slices.Equal(a.Domains, b.Domains) && a.HostID == b.HostID && a.Proxy == b.Proxy && a.Stack == b.Stack &&
 		a.Service == b.Service && a.ContainerPort == b.ContainerPort && a.OpenFirewall == b.OpenFirewall && a.Upstream == "" &&
-		siteCert(a) == siteCert(b) && a.CertKey == b.CertKey && a.MaxBody == b.MaxBody
+		siteCert(a) == siteCert(b) && a.CertKey == b.CertKey && a.MaxBody == b.MaxBody && a.CheckPath == b.CheckPath
+}
+
+// siteFromSpec — запись сайта, которую выкладка составляет о блоке site:.
+// Тем же способом её сравнивает сухой прогон: «ничего не поменялось» и
+// «будет настроено заново» не должны расходиться с тем, что запишется
+// (Author — того, кто выкладывает, добавляет вызывающий).
+func siteFromSpec(pl store.Pipeline, c *deploy.ComposeSpec, sp *deploy.SiteSpec, t targetHost, proxy string, port int) store.Site {
+	return store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy, Stack: c.Project, Service: sp.Service,
+		ContainerPort: port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID,
+		Cert: sp.CertMode(), CertKey: sp.CertKey, MaxBody: sp.MaxBody, CheckPath: sp.CheckPath}
 }
 
 // siteCert — режим сертификата сайта выкладки: пустой (сайт заведён до
@@ -120,31 +130,26 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 			return err
 		}
 	}
-	want := store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy, Stack: c.Project, Service: sp.Service,
-		ContainerPort: port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID, Author: user,
-		Cert: sp.CertMode(), CertKey: sp.CertKey, MaxBody: sp.MaxBody}
+	want := siteFromSpec(pl, c, sp, t, proxy, port)
+	want.Author = user
 	if cur != nil {
 		want.ID = cur.ID
 		// Настроен (или прокси настроен вручную) и ничего не поменялось —
 		// только проверка HTTPS: ни прокси, ни сертификат не трогаются.
 		if sameSite(*cur, want) && (cur.Status == store.SiteOK || cur.Status == store.SiteProxyManual) {
 			s.pipelineSiteDNS(ctx, jc, pl, sp)
-			chk := httpsCheck(ctx, want.Domains[0])
+			chk := httpsCheck(ctx, want.Domains[0], want.CheckPath)
 			var full SiteCheck
 			_ = json.Unmarshal(cur.Check, &full)
 			full.HTTPS = chk
 			raw, _ := json.Marshal(full)
 			_ = s.db.SetSiteCheck(ctx, cur.ID, raw)
-			switch {
-			case chk.WrongCert:
+			if chk.WrongCert {
 				err := msgs.Errorf("hub.siteWrongCert", want.Domains[0], strings.Join(chk.CertNames, ", "))
 				_ = s.db.SetSiteState(ctx, cur.ID, store.SiteFailed, msgs.Localize(jc.Lang(), err), jc.Job.ID)
 				return err
-			case chk.OK:
-				jc.Log("deploy.siteOK", want.Domains[0], chk.Status, chk.CertDaysLeft)
-			default:
-				jc.Log("deploy.siteFailed", want.Domains[0], chk.Error)
 			}
+			logHTTPS(jc, want.Domains[0], chk)
 			return nil
 		}
 		if cur.HostID != want.HostID && len(cur.Domains) > 0 {
@@ -166,12 +171,7 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 		}
 		_ = s.db.SetSiteState(ctx, id, store.SiteProxyManual, why, jc.Job.ID)
 		jc.Log("deploy.siteProxyManual", want.Domains[0], why)
-		chk := httpsCheck(ctx, want.Domains[0])
-		if chk.OK {
-			jc.Log("deploy.siteOK", want.Domains[0], chk.Status, chk.CertDaysLeft)
-		} else {
-			jc.Log("deploy.siteFailed", want.Domains[0], chk.Error)
-		}
+		logHTTPS(jc, want.Domains[0], httpsCheck(ctx, want.Domains[0], want.CheckPath))
 		return nil
 	}
 	id, err := s.db.SaveSite(ctx, want)
@@ -297,8 +297,7 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	if port == 0 {
 		port = sp.Port
 	}
-	if cur != nil && (cur.Status == store.SiteOK || cur.Status == store.SiteProxyManual) && sameSite(*cur, store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy,
-		Stack: c.Project, Service: sp.Service, ContainerPort: port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID, Cert: sp.CertMode(), CertKey: sp.CertKey}) {
+	if cur != nil && (cur.Status == store.SiteOK || cur.Status == store.SiteProxyManual) && sameSite(*cur, siteFromSpec(pl, c, sp, t, proxy, port)) {
 		jc.Log("deploy.drySiteSame", sp.Domains[0])
 		return problems
 	}
@@ -306,7 +305,7 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	if !on("site_dns") && !on("site_outside") {
 		return problems
 	}
-	chk := s.siteOutside(ctx, t, sp.Domains, false)
+	chk := s.siteOutside(ctx, t, sp.Domains, false, "")
 	if chk.Via != "" {
 		jc.Log("hub.siteViaEdge", chk.Via)
 	}

@@ -75,7 +75,11 @@ its check of port 80 or a site's HTTPS runs from inside the network and
 can be wrong either way. An edge with the **probe** role runs these checks
 from the VPS, as the internet does: where the name points (the VPS
 resolver), whether 80 and 443 are open, what HTTPS answers and with which
-certificate. The hub uses it by itself when such an edge is connected: in
+certificate. A site's HTTPS check runs against the path set for the site
+(`check: /ui`, "Check path") rather than always the root; the edge returns
+that path in its answer, and the hub judges by it what was actually checked
+(an edge of an older release does not know the field — the root counts
+then). The hub uses it by itself when such an edge is connected: in
 the "Sites" wizard, the site check and the dry run, marked "checked from
 outside via nkt-edge …"; without one, the check runs from the hub as
 before. The edge's **"Check from outside"** button does the same by hand

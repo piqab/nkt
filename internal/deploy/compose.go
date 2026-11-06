@@ -57,6 +57,10 @@ type SiteSpec struct {
 	// MaxBody — предел тела запроса у прокси: пусто — 64m, "0" — без
 	// предела (S3, большие загрузки), иначе число с k/m/g.
 	MaxBody string `yaml:"max_body"`
+	// CheckPath — путь, по которому хаб проверяет сайт снаружи: пусто —
+	// корень «/». У сервиса с веб-мордой не в корне (site.check: /ui) корень
+	// часто отдаёт 404, и проверка «любой ответ» ничего не доказывает.
+	CheckPath string `yaml:"check"`
 	// DNS — записи доменов через DNS-плагин хаба («О системе» →
 	// «Плагины»): auto — публичный адрес хоста; иначе адреса через
 	// запятую. Пусто — DNS хаб не трогает.
@@ -96,7 +100,7 @@ func (s *SiteSpec) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind != yaml.MappingNode {
 		return msgs.Errorf("deploy.specBad", "compose.site", n.Value)
 	}
-	known := map[string]bool{"domains": true, "service": true, "port": true, "proxy": true, "firewall": true, "cert": true, "cert_key": true, "max_body": true, "dns": true}
+	known := map[string]bool{"domains": true, "service": true, "port": true, "proxy": true, "firewall": true, "cert": true, "cert_key": true, "max_body": true, "check": true, "dns": true}
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		if k := n.Content[i].Value; !known[k] {
 			return msgs.Errorf("deploy.specBad", "compose.site."+k, n.Content[i+1].Value)
@@ -137,7 +141,7 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 		return nil
 	}
 	if !s.Managed() {
-		if s.Check == "" && (s.Service != "" || s.Port != 0 || s.Proxy != "") {
+		if s.Check == "" && (s.Service != "" || s.Port != 0 || s.Proxy != "" || s.CheckPath != "") {
 			return msgs.Errorf("deploy.specNeeds", "compose.site.domains")
 		}
 		if s.Check != "" && !composeDomainRe.MatchString(strings.ToLower(s.Check)) {
@@ -173,6 +177,14 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 	if !site.ValidMaxBody(s.MaxBody) {
 		return msgs.Errorf("deploy.specBad", "compose.site.max_body", s.MaxBody)
 	}
+	// Путь проверки нормализуется здесь же: ведущий «/» дописывается, и
+	// запись сайта уходит в хранилище уже тем значением, по которому хаб
+	// потом ходит.
+	path, err := site.ValidCheckPath(s.CheckPath)
+	if err != nil {
+		return err
+	}
+	s.CheckPath = path
 	if s.DNS != "" && s.DNS != SiteDNSAuto {
 		for _, a := range s.DNSAddrs() {
 			if ip := net.ParseIP(a); ip == nil || ip.IsPrivate() || ip.IsLoopback() || ip.IsUnspecified() {

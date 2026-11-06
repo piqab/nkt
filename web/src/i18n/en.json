@@ -4149,6 +4149,8 @@
     "openFirewall": "open 80 and 443 in the host firewall",
     "maxBody": "Request body limit",
     "maxBodyHint": "Empty — 64m; “0” — no limit and no buffering at the proxy (large uploads, S3); otherwise a number with k, m, g — for example 512m.",
+    "checkPath": "Check path",
+    "checkPathHint": "The path the hub checks the site at from outside; empty — the root “/”. When a web app is not mounted at the root, “/” often returns 404 — write the path, for example /ui: then an open path counts as an answer (2xx and 3xx, plus 401 and 403 — the interface is alive and asks for a login), while 404 or 5xx means the path did not open.",
     "firewallOff": "the firewall is off",
     "setup": "Set up",
     "status": {
