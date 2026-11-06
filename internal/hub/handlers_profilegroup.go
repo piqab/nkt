@@ -537,7 +537,10 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 		// созданная хабом (см. aptproxy.go); отказ здесь не повод считать
 		// ввод неудачным — флаг ставится в форме машины.
 		if err := s.hub.InheritAptViaHub(r.Context(), parent, newID); err != nil {
-			s.log.Warn("could not inherit apt-via-hub on machine", "machine", name, "err", err)
+			// Имя машины пришло из запроса (список выбирает человек), а
+			// запись журнала не должна распадаться на строки: переводы строк
+			// вырезаются, как в окне создания машины.
+			s.log.Warn("could not inherit apt-via-hub on machine", "machine", strings.ReplaceAll(strings.ReplaceAll(name, "\n", ""), "\r", ""), "err", err)
 		}
 		if via == store.HostViaDirect || via == store.HostViaJump {
 			_ = s.db.SetHostVia(r.Context(), newID, via)

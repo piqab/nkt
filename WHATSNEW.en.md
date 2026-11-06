@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.32 — 2026-11-06
+
+- **A machine name now takes one line in the hub log.** When machines were imported from the list a host had shown, the warning "could not inherit apt-via-hub" wrote the machine name into the log as it came. The name arrives from two sides the hub trusts: the request and the host itself. A name carrying a line break split one log record into several and put arbitrary text into them (CodeQL pointed this out — the `go/log-injection` alert). Line breaks are cut out of the name, the same way the create-machine window already did it. Site checks and deployments are untouched.
+
 ## v1.17.31 — 2026-11-06
 
 - **A site can now be checked at a path you name, not at the root.** When a web interface does not live at the root, the root often answers 404, and the old rule ("any answer except 5xx") called that a success: the deployment said "the site answers" while the interface never came up.
