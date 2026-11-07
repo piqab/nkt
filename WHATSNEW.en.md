@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.33 — 2026-11-07
+
+- **Hovering a hint no longer moves the field.** Where a field's caption is wrapped in a tooltip, pointing at it dropped the caption into the same line as the field and slid the field to the right, pulling its neighbours along. You can see it in the Traffic Fly route window on "Port on the node", "Port to" and the limits, but the rule was global: any window where a field caption sits inside a tooltip jumped.
+  - The cause is how the interface tells its own captions from antd's labels: it used to look for `ant-` anywhere in the class name, while antd marks the element with the hint's state class while the hint is open (`ant-tooltip-open`, or `ant-popover-open` for a popover). The rule switched off exactly when you hovered and came back when you left — hence the double jump.
+  - The exclusion is now the exact list of labels antd draws itself: checkbox, radio, radio button, segmented item and a required form caption. A state class can no longer switch the layout over.
+  - Without hovering nothing looks different: the route window was re-shot and compared with the previous screenshot — only the alert counters in the side menu differ.
+
 ## v1.17.32 — 2026-11-06
 
 - **A machine name now takes one line in the hub log.** When machines were imported from the list a host had shown, the warning "could not inherit apt-via-hub" wrote the machine name into the log as it came. The name arrives from two sides the hub trusts: the request and the host itself. A name carrying a line break split one log record into several and put arbitrary text into them (CodeQL pointed this out — the `go/log-injection` alert). Line breaks are cut out of the name, the same way the create-machine window already did it. Site checks and deployments are untouched.

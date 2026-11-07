@@ -404,8 +404,20 @@ textarea { font-family: var(--mono); font-size: 0.8rem; line-height: 1.5; width:
    исключены: Checkbox и Radio — тоже <label>, и заданное здесь
    flex-direction: column разводило галочку и её название по разным
    строкам (antd своё направление не задаёт, поэтому переопределять было
-   нечего — правило просто применялось). */
-label:not([class*='ant-']) {
+   нечего — правило просто применялось).
+
+   Исключение — точный список классов, а не «в имени есть ant-»: antd вешает
+   на дочерний элемент подсказки класс состояния, пока она открыта
+   (antd/lib/tooltip/index.js: childCls = clsx(className, `${prefixCls}-open`),
+   к метке — ant-tooltip-open, у Popover — ant-popover-open). Эвристика по
+   подстроке на этот класс не смотрела и снимала правило с собственной метки
+   в момент наведения: подпись падала в строку к полю, поле уезжало вправо, а
+   соседние метки в той же flex-строке — за ним. Список ниже исчерпывается
+   тем, что действительно рисует <label>: checkbox/Checkbox.js,
+   radio/radio.js (у RadioButton тот же префикс + -button-wrapper),
+   form/FormItemLabel.js (метка без обязательности класса не имеет и нашим
+   правилом окрашивается, как и раньше), @rc-component/segmented. */
+label:not(.ant-checkbox-wrapper, .ant-radio-wrapper, .ant-radio-button-wrapper, .ant-segmented-item, .ant-form-item-required) {
   font-size: 0.8rem;
   color: var(--text-secondary);
   display: flex;
@@ -415,8 +427,10 @@ label:not([class*='ant-']) {
 
 /* Наш собственный приём «галочка плюс текст в одной подписи» встречается
    в нескольких формах; чтобы каждая не выправляла направление своим
-   inline-стилем, это делается здесь один раз. */
-label:not([class*='ant-']):has(> .ant-checkbox-wrapper) {
+   inline-стилем, это делается здесь один раз. Список исключений — тот же,
+   что выше: и это правило эвристика по «ant-» в имени класса снимала в
+   момент наведения на подсказку. */
+label:not(.ant-checkbox-wrapper, .ant-radio-wrapper, .ant-radio-button-wrapper, .ant-segmented-item, .ant-form-item-required):has(> .ant-checkbox-wrapper) {
   flex-direction: row;
   align-items: center;
   gap: 0.4rem;
