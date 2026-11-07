@@ -67,7 +67,7 @@ func (s *Server) handleFly(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	d := s.flyDoc(ctx)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"doc": d, "text": d.Text(), "gateways": s.flyGateways(ctx), "applied": s.flyAppliedState(ctx).Revision,
+		"doc": d, "text": d.Text(), "gateways": s.flyGateways(ctx), "applied": s.flyAppliedRevision(ctx),
 	})
 }
 
@@ -233,7 +233,7 @@ func (s *Server) handleFlyStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"gateways": list, "hosts": names, "tunnels": s.flyTunnels(ctx, auth.Username(ctx), list),
-		"revision": s.flyDoc(ctx).Revision, "applied": s.flyAppliedState(ctx).Revision, "now": time.Now().Unix(),
+		"revision": s.flyDoc(ctx).Revision, "applied": s.flyAppliedRevision(ctx), "now": time.Now().Unix(),
 		"missing": s.flyMissingTargets(ctx, auth.Username(ctx))})
 }
 
@@ -297,7 +297,7 @@ func (s *Server) flyHostStatus(ctx context.Context, user string, hostID int64) *
 // хоста, чтобы сказать, где теряются пакеты.
 func (s *Server) flyTunnels(ctx context.Context, user string, list []flyGatewayStatusJSON) []flyTunnelJSON {
 	d := s.flyDoc(ctx)
-	applied := s.flyAppliedState(ctx)
+	applied, _ := s.flyAppliedState(ctx)
 	appliedHost := map[int64]bool{}
 	for _, id := range applied.Hosts {
 		appliedHost[id] = true

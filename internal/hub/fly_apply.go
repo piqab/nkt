@@ -18,6 +18,7 @@ import (
 	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // KindFlyApply — задание «применить Traffic Fly».
@@ -59,12 +60,81 @@ type FlyApplyRunner struct{ s *Server }
 // NewFlyApplyRunner строит исполнителя.
 func NewFlyApplyRunner(s *Server) *FlyApplyRunner { return &FlyApplyRunner{s: s} }
 
-func (s *Server) flyAppliedState(ctx context.Context) flyApplied {
+// flyAppliedState — что разложено последним применением, и кого в памяти
+// больше нет.
+//
+// Мёртвые id вымываются здесь, а не в момент удаления хоста: записей касаются
+// шесть разных путей (интерфейс, задание вычистки, удаление кластера, откат
+// создания машины, удаление хоста плагина), и после любого в памяти остаётся
+// хост, которому больше некуда класть конфигурацию. Снимать её с несуществующего
+// агента негде, а попытка была отказом всего применения — которое после этого
+// память не переписывает, потому что та пишется только в конце удачного. Так
+// один удалённый хост выключал Traffic Fly целиком и сам себя из списка не
+// вычистить: круг замыкался. Теперь применение доходит до шлюзов, а следующая
+// запись состояния список и дописывает.
+//
+// Вторым ответом — удалённые id, чтобы применение назвало их в журнале:
+// «пропало молча» здесь хуже, чем пропало и рассказало.
+func (s *Server) flyAppliedState(ctx context.Context) (flyApplied, []int64) {
 	var a flyApplied
-	if raw, ok, err := s.db.KVGet(ctx, flyAppliedKey); err == nil && ok {
-		_ = json.Unmarshal([]byte(raw), &a)
+	raw, ok, err := s.db.KVGet(ctx, flyAppliedKey)
+	if err != nil || !ok {
+		return a, nil
 	}
-	return a
+	_ = json.Unmarshal([]byte(raw), &a)
+	all, err := s.db.ListAllHosts(ctx)
+	if err != nil {
+		// Инвентарь не прочитан — ничего не забываем: хуже потерять память о
+		// разложенном, чем один раз переложить конфигурацию заново.
+		return a, nil
+	}
+	known := map[int64]bool{localHostID: true}
+	for _, h := range all {
+		known[h.ID] = true
+	}
+	var gone []int64
+	if len(a.Hosts) > 0 {
+		kept := make([]int64, 0, len(a.Hosts))
+		for _, id := range a.Hosts {
+			if known[id] {
+				kept = append(kept, id)
+				continue
+			}
+			gone = append(gone, id)
+		}
+		a.Hosts = kept
+	}
+	for _, id := range gone {
+		delete(a.HostPush, id)
+	}
+	slices.Sort(gone)
+	return a, gone
+}
+
+// flyAppliedRevision — применённая ревизия: тем, кому список забытых хостов
+// не нужен.
+func (s *Server) flyAppliedRevision(ctx context.Context) int64 {
+	a, _ := s.flyAppliedState(ctx)
+	return a.Revision
+}
+
+// flyHostLabel — имя хоста там, где без него фраза повисает. Удалённый хост
+// имени не имеет, и «Хост : ошибка» человек прочитать не может; интерфейс на
+// карте целей показывает тем же способом «#17».
+func flyHostLabel(names map[int64]string, id int64) string {
+	if n := names[id]; n != "" {
+		return n
+	}
+	return fmt.Sprintf("#%d", id)
+}
+
+// flyHostLabels — список «#17, #23» для журнала.
+func flyHostLabels(ids []int64) string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = flyHostLabel(nil, id)
+	}
+	return strings.Join(out, ", ")
 }
 
 // Run: 1) ключи шлюзов, 2) ключи хостов и адреса целей, 3) хосты (туннели
@@ -146,23 +216,30 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 				hk := flyHostKey(g.EdgeID, t.HostID)
 				iface := flyIface(g.Index)
 				if _, ok := hostKeys[hk]; !ok {
-					if err := s.flyHostReady(ctx, t.HostID, names[t.HostID]); err != nil {
+					if err := s.flyHostReady(ctx, t.HostID, flyHostLabel(names, t.HostID)); err != nil {
+						if errors.Is(err, store.ErrNotFound) {
+							// Карта ссылается на хост, удалённый уже после
+							// сохранения: цель надо убрать (или вернуть хост),
+							// и сказано это должно маршрутом, целью и id, а не
+							// безликим «не найдено».
+							return msgs.Errorf("fly.targetHostGone", rt.ID, t.ID, t.HostID)
+						}
 						return err
 					}
 					var key fly.KeyResponse
-					if err := s.flyHostCall(ctx, user, t.HostID, names[t.HostID], "POST", "/api/fly/key?iface="+iface, nil, &key); err != nil {
+					if err := s.flyHostCall(ctx, user, t.HostID, flyHostLabel(names, t.HostID), "POST", "/api/fly/key?iface="+iface, nil, &key); err != nil {
 						var me *msgs.Err
 						if errors.As(err, &me) && me.Key == "fly.hostTimeout" {
 							return err
 						}
-						return msgs.Errorf("fly.hostKey", names[t.HostID], err)
+						return msgs.Errorf("fly.hostKey", flyHostLabel(names, t.HostID), err)
 					}
 					hostKeys[hk] = key.PublicKey
 				}
 				addr := d.hostAddr(g, t.HostID)
 				ip, err := s.flyResolve(ctx, user, t, addr, cache)
 				if err != nil {
-					return msgs.Errorf("fly.targetResolve", rt.ID, t.ID, names[t.HostID], err)
+					return msgs.Errorf("fly.targetResolve", rt.ID, t.ID, flyHostLabel(names, t.HostID), err)
 				}
 				hc := hostCfg[t.HostID]
 				if hc == nil {
@@ -190,13 +267,13 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 					}
 					hi.Services = append(hi.Services, fly.Service{Port: port, Proto: proto, Addr: ip, ToPort: t.Port, Kind: t.Kind, Ref: t.Ref})
 				}
-				jc.Log("fly.targetResolved", rt.ID, names[t.HostID], t.Kind, t.Ref, ip, t.Port)
+				jc.Log("fly.targetResolved", rt.ID, flyHostLabel(names, t.HostID), t.Kind, t.Ref, ip, t.Port)
 			}
 		}
 	}
 	for id, hc := range hostCfg {
 		if err := hc.Validate(); err != nil {
-			return msgs.Errorf("fly.hostConfigBad", names[id], err)
+			return msgs.Errorf("fly.hostConfigBad", flyHostLabel(names, id), err)
 		}
 	}
 	gwCfg := map[int64]fly.GatewayConfig{}
@@ -226,11 +303,11 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 				Virt      string `json:"virt"`
 				Error     string `json:"error"`
 			}
-			if err := s.flyHostCall(ctx, user, id, names[id], "GET", "/api/fly/check", nil, &chk); err != nil {
+			if err := s.flyHostCall(ctx, user, id, flyHostLabel(names, id), "GET", "/api/fly/check", nil, &chk); err != nil {
 				continue // старый nkt или хост не ответил — скажет «Применить»
 			}
 			if !chk.WireGuard {
-				jc.Log("fly.hostNoWG", names[id], chk.Virt, chk.Error)
+				jc.Log("fly.hostNoWG", flyHostLabel(names, id), chk.Virt, chk.Error)
 				bad++
 			}
 		}
@@ -247,15 +324,23 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 
 	// 3. Хосты; те, где Traffic Fly был, а теперь нет, — пустая
 	// конфигурация (туннели снимаются).
-	prev := s.flyAppliedState(ctx)
+	prev, gone := s.flyAppliedState(ctx)
+	if len(gone) > 0 {
+		// Хосты, которых нет в инвентаре: снимать конфигурацию негде, и
+		// попытка оставляла всю карту неприменённой. О них — строка журнала,
+		// память применения их больше не держит.
+		jc.Log("fly.appliedHostsForgotten", flyHostLabels(gone))
+	}
 	ids := make([]int64, 0, len(hostCfg))
 	for id := range hostCfg {
 		ids = append(ids, id)
 	}
+	teardown := map[int64]bool{}
 	for _, id := range prev.Hosts {
 		if hostCfg[id] == nil {
 			hostCfg[id] = &fly.HostConfig{Revision: d.Revision, Ifaces: []fly.HostIface{}}
 			ids = append(ids, id)
+			teardown[id] = true
 		}
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
@@ -273,8 +358,8 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 		// перекладывать: туннели и правила не трогаются вовсе.
 		if pp, ok := prev.HostPush[id]; ok && pp.Hash == hash {
 			var hs fly.HostStatus
-			if err := s.flyHostCall(ctx, user, id, names[id], "GET", "/api/fly/status", nil, &hs); err == nil && hs.Revision == pp.Rev {
-				jc.Log("fly.hostUpToDate", names[id])
+			if err := s.flyHostCall(ctx, user, id, flyHostLabel(names, id), "GET", "/api/fly/status", nil, &hs); err == nil && hs.Revision == pp.Rev {
+				jc.Log("fly.hostUpToDate", flyHostLabel(names, id))
 				hostPush[id] = pp
 				continue
 			}
@@ -283,13 +368,26 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 			Log []string `json:"log"`
 		}
 		if _, err := s.hostCall(ctx, user, id, "PUT", "/api/fly/config", hostCfg[id], &res); err != nil {
-			return flyWGHint(msgs.Errorf("fly.hostApply", names[id], err))
+			if teardown[id] {
+				// Снимать конфигурацию с хоста, который молчит, — не то же
+				// самое, что класть её на нужный: туннели на нём останутся, но
+				// из-за одного недоступного узла вся карта не должна оставаться
+				// неприменённой. Хост остаётся в памяти применения — пустая
+				// конфигурация не снята, следующее применение попробует снова.
+				jc.Log("fly.hostTeardownSkipped", flyHostLabel(names, id), err)
+				applied = append(applied, id)
+				continue
+			}
+			return flyWGHint(msgs.Errorf("fly.hostApply", flyHostLabel(names, id), err))
 		}
 		for _, l := range res.Log {
-			jc.Logf("    %s: %s", names[id], l)
+			jc.Logf("    %s: %s", flyHostLabel(names, id), l)
 		}
 		hostPush[id] = flyPush{Hash: hash, Rev: d.Revision}
 	}
+	// Пропущенные при снятии добавлены в конце списка — память применения
+	// держит порядок, и переставлять его надо всем разом.
+	slices.Sort(applied)
 
 	// 4. Шлюзы.
 	jc.StepKey(4, 4, "fly.stepPushGateways", len(gws))

@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.37 — 2026-11-07
+
+- **One deleted host no longer switches Traffic Fly off.** Applying tripped over the host step whenever the applied state remembered a host that is no longer in the inventory, and it failed before reaching the gateways: the map stayed unapplied, a new cluster route stayed grey (“no data from the gateway”), and the applied state could not clean itself — it is only written at the end of a successful run. The loop closed on itself: however many times you press Apply, the same line — “Host : host not found: not found”, the name empty because a deleted host has none.
+  - A deleted host is now dropped while the state is read: there is nowhere to revoke its configuration, the apply moves on, and the state written at the end clears the list for good. The journal names which hosts were forgotten (`#17`) — it does not happen silently.
+  - A host that is still in the inventory but does not answer exactly when its configuration is being revoked (every one of its targets left the map) is no longer a refusal: a journal line, the rest of the map applied, and the host stays remembered so the next apply retries — configuration it still holds means tunnels still up on it. Where the map still wants the host — pushing a configuration rather than revoking one — the refusal stays: half a map applied in silence is worse than an unreachable host.
+  - Refusals name their subject where there was nothing to name before: the route, the target and `#17` instead of an empty name; a target pointing at a deleted host is reported by route and target rather than as a bare “not found”.
+
 ## v1.17.36 — 2026-11-07
 
 - **What a script's answer field is, `param` itself says — not the dialog.** In 1.17.34 host autocompletion went to every non-secret question, so the host list appeared in a password field, in a "number of copies" field, in anything else. There was nothing to guess from: a non-secret parameter has exactly one flag ("not a secret") and it says nothing about what the value should hold. Now the script writes the field kind: `param NAME "address of the new server" host` gets the list of hub host names and addresses (free text still accepted), `param NAME "database password" secret` gets a password field with what you type hidden, and with no flag the field is plain. The host list is fetched only where it is needed: the script dialog no longer pulls `/hub/hosts` for a script that asks for nothing with `host`.
