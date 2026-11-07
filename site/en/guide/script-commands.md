@@ -15,7 +15,7 @@ Every command of the hub script language — the same ones “Check”, the “R
 | Command | What it does |
 |---|---|
 | [`set NAME value`](#cmd-set) | A variable: ${NAME} further down is replaced with the value. |
-| [`param NAME "prompt"`](#cmd-param) | A parameter: its value is asked at run time, ${NAME} below is replaced with it. |
+| [`param NAME "prompt"`](#cmd-param) | A parameter: its value is asked at run time (the field autocompletes hub host names and addresses; your own text is accepted too), ${NAME} below is replaced with it. |
 
 **The hub: groups, hosts, install, waiting**
 
@@ -94,7 +94,7 @@ on web1 vm create app1 image ${IMAGE}
 
 ### `param NAME "prompt"` {#cmd-param}
 
-A parameter: its value is asked at run time, ${NAME} below is replaced with it. That is how one script deploys different stands.
+A parameter: its value is asked at run time (the field autocompletes hub host names and addresses; your own text is accepted too), ${NAME} below is replaced with it. That is how one script deploys different stands.
 
 | Argument | Required | What it is |
 |---|---|---|

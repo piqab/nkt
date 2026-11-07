@@ -152,21 +152,43 @@ func (m *ConfigManager) serviceForPath(path string) string {
 			}
 		}
 	}
-	// A compose-named file under /home is trusted even before it exists on
-	// disk — a brand-new stack a user is about to create has, by definition,
-	// no prior scan or running container to vouch for it. The filename
-	// pattern is the only signal available, same as docker compose itself
-	// uses to recognise its own config with no -f flag given.
-	if underRoot(path, "/home") && isComposeFileName(path) {
-		return model.ServiceDocker
-	}
-	// Каталог стеков из профилей: файла там может ещё не быть — его как
-	// раз и создаёт применение профиля, — а поручиться за путь, кроме
-	// имени файла, нечему, как и для /home выше.
-	if underRoot(path, parse.ComposeStacksDir) && isComposeFileName(path) {
-		return model.ServiceDocker
+	// Compose-файл по имени в разрешённом каталоге поручается за себя ещё до
+	// того, как он появился на диске: у нового стека, по определению, нет ни
+	// снимка, ни работающего контейнера, которые за него замолвят слово. Имя
+	// файла — единственный доступный сигнал, ровно как у самого docker
+	// compose, который без -f ищет configFile в текущем каталоге.
+	if isComposeFileName(path) {
+		for _, root := range m.composeRoots() {
+			if underRoot(path, root) {
+				return model.ServiceDocker
+			}
+		}
 	}
 	return ""
+}
+
+// composeRoots — каталоги, где compose-файлы считаются своими: то, что
+// перечислил оператор (NKT_COMPOSE_ROOTS), и каталог стеков из профилей —
+// он добавляется всегда, потому что применение профиля пишет по пути внутри
+// него, и настройка, которая это отменила бы, сломала не редактор, а
+// выкладку. Пустой список (конфиг, собранный в обход Load — тесты) означает
+// прежние два корня, а не «ничего».
+func (m *ConfigManager) composeRoots() []string {
+	list := m.cfg.ComposeRoots
+	if len(list) == 0 {
+		list = []string{"/home", parse.ComposeStacksDir}
+	}
+	out := make([]string, 0, len(list)+1)
+	seen := map[string]bool{}
+	for _, r := range append(append([]string{}, list...), parse.ComposeStacksDir) {
+		r = strings.TrimSuffix(strings.TrimSpace(r), "/")
+		if r == "" || !strings.HasPrefix(r, "/") || seen[r] {
+			continue
+		}
+		seen[r] = true
+		out = append(out, r)
+	}
+	return out
 }
 
 // composeFileNames are the filenames `docker compose` itself recognises
@@ -205,9 +227,43 @@ func (m *ConfigManager) checkPath(path string) (service string, err error) {
 	}
 	service = m.serviceForPath(path)
 	if service == "" {
-		return "", ErrPathNotAllowed
+		return "", &pathErr{err: msgs.Errorf("control.fileOutsideAllowedDirectoriesList", path, m.allowedRoots(path))}
 	}
 	return service, nil
+}
+
+// pathErr — отказ песочницы с перечислением каталогов, куда путь можно.
+// Sentinel при этом остаётся самим собой: errors.Is(err, ErrPathNotAllowed)
+// по-прежнему истинен (на него смотрят API — 403 — и шаги применения
+// профиля), а человек в тексте видит не «вне разрешённых каталогов», а какие
+// именно каталоги разрешены: без списка отказ превращался в гадание, где
+// лежит стек.
+type pathErr struct{ err error }
+
+func (e *pathErr) Error() string { return e.err.Error() }
+func (e *pathErr) Unwrap() error { return e.err }
+
+func (e *pathErr) Is(target error) bool { return target == ErrPathNotAllowed }
+
+// allowedRoots — что показать в отказе: у compose-имени только каталоги
+// стеков (искали-то именно в них, а корни остальных категорий в этом
+// ответе шум), у остального — все корни редактора.
+func (m *ConfigManager) allowedRoots(path string) string {
+	list := m.composeRoots()
+	if !isComposeFileName(path) {
+		set := map[string]bool{}
+		for _, roots := range m.CategoryRoots() {
+			for _, r := range roots {
+				set[r] = true
+			}
+		}
+		list = make([]string, 0, len(set))
+		for r := range set {
+			list = append(list, r)
+		}
+		sort.Strings(list)
+	}
+	return strings.Join(list, ", ")
 }
 
 // ServiceForPath сообщает, к какой категории относится путь — тем же
@@ -221,8 +277,9 @@ func (m *ConfigManager) ServiceForPath(path string) (string, error) {
 // «новый файл» ведёт оператора вглубь корня, а не даёт набрать что
 // угодно, и отказ «путь не разрешён» узнаётся до нажатия, а не после.
 //
-// У docker два корня: /home, где стеки держат сами операторы, и каталог
-// стеков из профилей.
+// У docker свои корни (composeRoots): /home, где стеки держат сами
+// операторы, и каталог стеков из профилей; первый список задаётся
+// NKT_COMPOSE_ROOTS.
 func (m *ConfigManager) CategoryRoots() map[string][]string {
 	roots := map[string][]string{
 		model.ServiceNginx:    {m.cfg.NginxRoot},
@@ -236,7 +293,7 @@ func (m *ConfigManager) CategoryRoots() map[string][]string {
 		model.ServiceCron:     {m.cfg.CronRoot},
 		model.ServiceSvcDesc:  {m.cfg.ServicesDir},
 		model.ServiceLibvirt:  {parse.LibvirtQEMUDir},
-		model.ServiceDocker:   {"/home", parse.ComposeStacksDir},
+		model.ServiceDocker:   m.composeRoots(),
 	}
 	for k, list := range roots {
 		clean := list[:0]

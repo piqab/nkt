@@ -3,7 +3,8 @@ import { Button, ColorPicker, Dropdown, Input, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import type { Job, Me } from '../types'
+import type { HubHost, Job, Me } from '../types'
+import { AskField } from '../components/AskField'
 import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { EditTextModal } from '../components/EditTextModal'
@@ -566,6 +567,9 @@ function AskValuesModal({
 }) {
   const { t } = useTranslation()
   const [values, setValues] = useState<Record<string, string>>({})
+  // Имена и адреса хостов — для автоподстановки ответа: сценарий либо
+  // ссылается на хост, который на хабе уже есть, либо заводит новый.
+  const hosts = useApi<HubHost[]>('/hub/hosts', 120_000)
   const ready = result.asks.every((a) => (values[a.key] ?? '') !== '')
   return (
     <Modal title={t(dryRun ? 'scripts.dryRunTitle' : 'scripts.runTitle')} onClose={onClose} closeLabel={t('common.cancel')}>
@@ -576,11 +580,13 @@ function AskValuesModal({
         {result.asks.map((a) => (
           <label key={a.key} className="col" style={{ gap: '0.2rem' }}>
             {a.prompt}
-            {a.secret ? (
-              <Input.Password value={values[a.key] ?? ''} onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} autoComplete="new-password" />
-            ) : (
-              <Input value={values[a.key] ?? ''} onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} />
-            )}
+            <AskField
+              prompt={a.prompt}
+              secret={a.secret}
+              value={values[a.key] ?? ''}
+              hosts={hosts.data ?? []}
+              onChange={(v) => setValues({ ...values, [a.key]: v })}
+            />
           </label>
         ))}
         <div className="row" style={{ justifyContent: 'flex-end' }}>

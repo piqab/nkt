@@ -78,6 +78,7 @@ in the host form on the hub, not by editing the file.
 | `NKT_CRON_ROOT` | `/etc/cron.d` | cron |
 | `NKT_COMPOSE_FILES` | `/srv/docker/docker-compose.yml,/opt/stacks/docker-compose.yml` | Compose files to show and edit |
 | `NKT_FILES_ROOTS` | `/home,/srv,/opt,/var/www` | Roots of the "Disks → Files" browser (only existing ones are shown; `/tmp` — always) |
+| `NKT_COMPOSE_ROOTS` | `/home,/srv/compose` | Directories where "Configs" recognise compose files and where they may be created; `/srv/compose` — the stack directory profiles write to — stays allowed whatever the list says |
 | `NKT_NGINX_ACCESS_LOGS` | `/var/log/nginx/access.log` | nginx access logs for usage |
 | `NKT_HAPROXY_ACCESS_LOGS` | `/var/log/haproxy.log` | haproxy access logs |
 | `NKT_DOCKER_SOCKET` | `/var/run/docker.sock` | Docker socket |

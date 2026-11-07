@@ -77,6 +77,7 @@ Docker — в `environment` compose-файла или `.env` рядом с ни�
 | `NKT_CRON_ROOT` | `/etc/cron.d` | cron |
 | `NKT_COMPOSE_FILES` | `/srv/docker/docker-compose.yml,/opt/stacks/docker-compose.yml` | Compose-файлы, которые показывать и править |
 | `NKT_FILES_ROOTS` | `/home,/srv,/opt,/var/www` | Корни проводника «Диски → Файлы» (показываются только существующие; `/tmp` — всегда) |
+| `NKT_COMPOSE_ROOTS` | `/home,/srv/compose` | Каталоги, где «Конфигурации» признают compose-файлы и где их можно заводить; `/srv/compose` — каталог стеков из профилей — разрешён всегда, какой бы список ни задали |
 | `NKT_NGINX_ACCESS_LOGS` | `/var/log/nginx/access.log` | Логи доступа nginx для нагрузки |
 | `NKT_HAPROXY_ACCESS_LOGS` | `/var/log/haproxy.log` | Логи доступа haproxy |
 | `NKT_DOCKER_SOCKET` | `/var/run/docker.sock` | Сокет Docker |

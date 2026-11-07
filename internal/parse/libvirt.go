@@ -279,11 +279,19 @@ func toKB(value int64, unit string) int64 {
 	}
 }
 
+// DomIfAddrSources — откуда инвентарь берёт адрес машины, в порядке
+// просмотра: аренды DHCP сети libvirt, затем таблица ARP хоста. Список
+// открыт (ответ /api/vms) нарочно: отказ «адреса нет» обязан называть то,
+// что реально смотрели, — иначе человек ищет причину в гостевом агенте,
+// которого инвентарь не спрашивает никогда.
+var DomIfAddrSources = []string{"lease", "arp"}
+
 // domIfAddrs — MAC → IPv4 работающей машины: сначала аренды DHCP сети
-// libvirt, для мостов без них — таблица ARP хоста.
+// libvirt, для мостов без них — таблица ARP хоста. Первый источник,
+// отдавший хоть один адрес, и есть ответ: ARP после lease не смотрим.
 func domIfAddrs(ctx context.Context, c collect.Collector, uri, name string) map[string]string {
 	out := map[string]string{}
-	for _, src := range []string{"lease", "arp"} {
+	for _, src := range DomIfAddrSources {
 		res, err := c.Run(ctx, "virsh", "-c", uri, "domifaddr", name, "--source", src)
 		if err != nil || !res.OK() {
 			continue

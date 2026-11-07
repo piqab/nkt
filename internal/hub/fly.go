@@ -22,6 +22,7 @@ import (
 	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/parse"
 )
 
 // Traffic Fly на хабе: конфигурация (маршруты, пулы, цели) — один
@@ -478,6 +479,13 @@ func flyEndpoint(ctx context.Context, st EdgeSettings, port int) (string, error)
 
 // flyResolve — адрес цели, как его видит хост: IP контейнера, машины,
 // инстанса; host — свой адрес в туннеле; addr — как есть.
+//
+// Отказ обязан отличать «цели нет в списке хоста» от «цель есть, но адреса
+// нет»: у первого причина в размещении (машина на другом хосте, её удалили,
+// маршрут смотрит не туда), у второго — в свежести снимка (аренда DHCP ещё
+// не появилась, ARP уже постарел), и лечится он тем, что хаб спросил хоста
+// сейчас. Машины кластеров хаб вообще-то знает сам: она записана у него
+// хостом, и адрес в этой записи живой, раз по нему ходит SSH.
 func (s *Server) flyResolve(ctx context.Context, user string, t FlyTarget, tunnelAddr string, cache map[string]any) (string, error) {
 	get := func(path string, out any) error {
 		k := fmt.Sprint(t.HostID, path)
@@ -492,6 +500,19 @@ func (s *Server) flyResolve(ctx context.Context, user string, t FlyTarget, tunne
 		var v any
 		_ = json.Unmarshal(raw, &v)
 		cache[k] = v
+		return json.Unmarshal(raw, out)
+	}
+	// fresh — запрос мимо кэша применения: промах по кэшированному снимку
+	// ничего не доказывает. Ответ ложится в кэш под обычным ключом, чтобы
+	// соседние цели того же хоста не вызывали каждый свой скан.
+	fresh := func(path string, out any) error {
+		var raw json.RawMessage
+		if _, err := s.hostCall(ctx, user, t.HostID, "GET", path, nil, &raw); err != nil {
+			return err
+		}
+		var v any
+		_ = json.Unmarshal(raw, &v)
+		cache[fmt.Sprint(t.HostID, "/api/vms")] = v
 		return json.Unmarshal(raw, out)
 	}
 	switch t.Kind {
@@ -516,21 +537,49 @@ func (s *Server) flyResolve(ctx context.Context, user string, t FlyTarget, tunne
 			}
 		}
 	case "vm":
-		var res struct {
-			VMs []model.VirtualMachine `json:"vms"`
+		// 1. Запись хаба. Машину, которую хаб завёл сам (узел кластера,
+		// «vm create» сценария, окно «Новая машина»), он держит в списке
+		// хостов под её именем и с её адресом — и адрес этот не вчерашний:
+		// по нему хаб ходит к машине по SSH. Снимок хоста тем временем
+		// берёт адрес только из аренд DHCP и ARP, а ARP стареет за минуты.
+		if ip, ok := s.flyMachineAddr(ctx, t); ok {
+			return ip, nil
 		}
+		// 2. Список машин хоста — из кэша применения.
+		var res flyVMList
 		if err := get("/api/vms", &res); err != nil {
 			return "", err
 		}
-		for _, v := range res.VMs {
-			if v.Name == t.Ref {
-				for _, n := range v.Networks {
-					if a, err := netip.ParseAddr(n.IP); err == nil && a.Is4() {
-						return a.String(), nil
-					}
-				}
-			}
+		ip, state, found := res.find(t.Ref)
+		if found && ip != "" {
+			return ip, nil
 		}
+		// 3. Промах по снимку: машина могла завестись после него, адрес мог
+		// уйти из lease до следующего продления. Один свежий скан — и уже
+		// потом отказ, с описанием, чего именно не хватило.
+		if err := fresh("/api/vms?fresh=1", &res); err != nil {
+			return "", err
+		}
+		ip, state, found = res.find(t.Ref)
+		if found && ip != "" {
+			return ip, nil
+		}
+		if !found {
+			return "", msgs.Errorf("fly.targetNoEntity", t.Kind, t.Ref, len(res.VMs))
+		}
+		if state == "" {
+			state = "—"
+		}
+		sources := strings.Join(res.AddrSources, ", ")
+		if sources == "" {
+			// Хост старше поля addr_sources: смотрел те же источники.
+			sources = strings.Join(parse.DomIfAddrSources, ", ")
+		}
+		ts := res.TS
+		if ts == "" {
+			ts = "—"
+		}
+		return "", msgs.Errorf("fly.targetVMNoIP", t.Kind, t.Ref, state, sources, ts)
 	case "lxd":
 		var res struct {
 			Instances []model.LXDInstance `json:"instances"`
@@ -549,6 +598,55 @@ func (s *Server) flyResolve(ctx context.Context, user string, t FlyTarget, tunne
 		}
 	}
 	return "", msgs.Errorf("fly.targetNoIP", t.Kind, t.Ref)
+}
+
+// flyVMList — ответ /api/vms: машины, возраст снимка, из которого их взяли,
+// и источники адреса, которыми хост их искал. Последние два нужны только
+// отказу: «не найден адрес» без них — догадка, а человек по такой догадке
+// идёт ставить гостевого агента, которого инвентарь не спрашивает.
+type flyVMList struct {
+	VMs         []model.VirtualMachine `json:"vms"`
+	TS          string                 `json:"ts"`
+	AddrSources []string               `json:"addr_sources"`
+}
+
+// find — IPv4 машины и её состояние; последнее значение — есть ли машина в
+// списке вовсе. Пустой адрес при найденной машине и ненайденная машина —
+// разные отказы, см. flyResolve.
+func (l flyVMList) find(ref string) (ip, state string, listed bool) {
+	for _, v := range l.VMs {
+		if v.Name != ref {
+			continue
+		}
+		for _, n := range v.Networks {
+			if a, err := netip.ParseAddr(n.IP); err == nil && a.Is4() {
+				return a.String(), v.State, true
+			}
+		}
+		return "", v.State, true
+	}
+	return "", "", false
+}
+
+// flyMachineAddr — адрес машины по записи хаба: тот же адрес, по которому
+// хаб к ней подключается, а он точный, раз подключение работает. Ищем машину
+// на том же физическом хосте, которому принадлежит цель (переезд машины
+// запись поправляет, и старый хост её больше не интересует). Хост плагина —
+// не машина: у него нет адреса, добытого при создании.
+func (s *Server) flyMachineAddr(ctx context.Context, t FlyTarget) (string, bool) {
+	hosts, err := s.db.ListHosts(ctx)
+	if err != nil {
+		return "", false
+	}
+	for _, h := range hosts {
+		if h.Name != t.Ref || h.ParentID != t.HostID || h.IsPlugin() {
+			continue
+		}
+		if a, err := netip.ParseAddr(h.Addr); err == nil && a.Is4() {
+			return a.String(), true
+		}
+	}
+	return "", false
 }
 
 // flyProtos — протоколы служебного порта по виду маршрута.

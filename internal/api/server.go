@@ -820,7 +820,11 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, control.ErrNotFound):
 		writeError(w, http.StatusNotFound, msgs.T(lang, "err.fileNotFound"))
 	case errors.Is(err, control.ErrPathNotAllowed):
-		writeError(w, http.StatusForbidden, msgs.T(lang, "err.pathNotAllowed"))
+		// Localize, а не короткий «err.pathNotAllowed»: отказ песочницы умеет
+		// нести список разрешённых каталогов (control.pathErr), и прятать его
+		// за общей фразой — лишать человека ответа на вопрос «а куда можно».
+		// Сам sentinel без аргументов переводится в ту же короткую строку.
+		writeError(w, http.StatusForbidden, msgs.Localize(lang, err))
 	case errors.Is(err, control.ErrTooLarge):
 		writeError(w, http.StatusRequestEntityTooLarge, msgs.T(lang, "err.tooLarge"))
 	default:

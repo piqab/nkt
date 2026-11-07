@@ -6,15 +6,38 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/parse"
 )
 
+// handleVMs — GET /api/vms: список машин и возраст снимка, из которого он
+// взят.
+//
+// ?fresh=1 — настоящий скан сейчас, а не кэш: адрес машины виден из ARP
+// лишь короткое время, и хаб, который собирается открыть на машину маршрут
+// Traffic Fly, должен смотреть на неё сейчас, а не на снимок пятиминутной
+// давности (тот же приём, что POST /api/fly/refresh, но без его побочного
+// обновления nftables — здесь только читают). Поле ts отвечает, чем хаб
+// рискнул бы вместо отказа: «адреса нет в снимке от <ts>» — это диагноз,
+// «адреса нет» — нет.
 func (s *Server) handleVMs(w http.ResponseWriter, r *http.Request) {
-	snap, err := s.scanner.LatestOrScan(r.Context())
+	ctx := r.Context()
+	var snap *model.Snapshot
+	var err error
+	if r.URL.Query().Get("fresh") == "1" && !s.cfg.IsFixtures() {
+		snap, err = s.scanner.Scan(ctx)
+	} else {
+		snap, err = s.scanner.LatestOrScan(ctx)
+	}
 	if err != nil {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"vms": snap.VMs})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"vms":          snap.VMs,
+		"ts":           snap.TS,
+		"addr_sources": parse.DomIfAddrSources,
+	})
 }
 
 // handleVMAction covers both lifecycle actions (start/shutdown/destroy/

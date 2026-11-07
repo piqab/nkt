@@ -144,6 +144,14 @@ entirely on its hosts. Details — [Hub API](/en/guide/hub-api#what-a-token-can-
   never go into the text) and starts a hub job. After a hub restart the
   job resumes from the same line; hosts already registered are not
   registered twice.
+- An answer to `param …` is a field that autocompletes the hub's hosts,
+  name and address as separate entries (a parameter goes either into
+  `on NAME` or into `host NAME ADDRESS`, and one field of the dialog does
+  not tell which). Free text still works — a script registers a new host
+  more often than it picks an existing one. A secret answer (`password
+  ask`, `set … ask` — passwords and tokens) stays a password field, a list
+  has no business there. The same field is used under a script proposed by
+  the assistant or by a finding analysis.
 
 ## Version history
 

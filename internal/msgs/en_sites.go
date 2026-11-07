@@ -327,6 +327,8 @@ var enSitesCatalog = map[string]string{
 	"fly.gatewayFailed":               "The gateway answered with an error: %s",
 	"fly.noEndpoint":                  "Can't find the public IPv4 of gateway %s",
 	"fly.targetNoIP":                  "No address for target %s %q (is it running?)",
+	"fly.targetNoEntity":              "%s %q is not in the host's machine list (machines listed: %d) — check the other hosts, the name and the machine's state",
+	"fly.targetVMNoIP":                "%s %q is in the machine list but has no IPv4 address (state: %s; the host looked for the address in: %s; snapshot taken %s)",
 	"fly.revisionChanged":             "The configuration changed while the job waited (was %d, now %d) — apply again",
 	"fly.stepGateways":                "Gateways: %d",
 	"fly.gatewayOffline":              "Gateway %s (edge %d) is not connected to the hub",

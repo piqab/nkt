@@ -327,6 +327,8 @@ var ruSitesCatalog = map[string]string{
 	"fly.gatewayFailed":               "Шлюз ответил ошибкой: %s",
 	"fly.noEndpoint":                  "Не узнать публичный IPv4 шлюза %s",
 	"fly.targetNoIP":                  "Не найден адрес цели: %s %q (запущена?)",
+	"fly.targetNoEntity":              "%s %q нет в списке машин хоста (машин в списке: %d) — другие хосты, имя или состояние машины проверьте",
+	"fly.targetVMNoIP":                "%s %q в списке машин есть, но IPv4-адреса нет (состояние: %s; хост искал адрес по: %s; снимок от %s)",
 	"fly.revisionChanged":             "Пока задание ждало очереди, конфигурацию изменили (было %d, сейчас %d) — примените заново",
 	"fly.stepGateways":                "Шлюзы: %d",
 	"fly.gatewayOffline":              "Шлюз %s (edge %d) не на связи с хабом",

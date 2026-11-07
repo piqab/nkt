@@ -306,6 +306,16 @@ hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
   or the address is wrong".
 - **Bridge**: a machine's address is found through `qemu-guest-agent`,
   which cloud-init installs on first boot.
+- **NAT and WireGuard** (a node not on a bridge): once the node's machine
+  exists, the hub pins its address — a DHCP reservation by MAC in the
+  libvirt network (`virsh net-update <net> add-last|modify ip-dhcp-host
+  --live --config`) using the address the host sees on it right now. A
+  node's address lives in Traffic Fly routes, in port forwards and in the
+  kubeconfig, and a lease without a reservation expires: the machine
+  reboots, the address changes, and the route target stops resolving. If
+  the reservation fails (the network does not answer, the machine has no
+  address yet) the log carries a warning and the node creation is not
+  cancelled.
 - The creation job is a hub job: machines are created the same way as
   "New machine", then the role install, the token, joining the other
   nodes, waiting for `Ready`, the port forward and the kubeconfig. Retry

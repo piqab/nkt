@@ -171,7 +171,17 @@ are reproducible: `go test ./internal/fly -run x -bench Router` and
 A route has one or more **targets**: a host and what runs on it
 (container, VM, LXD instance, the host itself or an address on the
 host's network) and a port. The hub looks up the container or VM address
-when applying.
+when applying. For a VM it first checks its own record of it: a cluster
+node and any machine the hub created sits in the hub's host list with the
+address the hub reaches it by. No such record — the address comes from the
+host's machine list; if the machine is missing there or has an empty
+address, the hub rescans the list right away instead of waiting for the
+next inventory run (`NKT_INVENTORY_INTERVAL`, 5 minutes by default). The
+refusal now tells the two causes apart: "the machine is not in the host's
+machine list" and "it is listed but has no IPv4 address" — naming the
+machine's state, where the host looked for the address (a libvirt network
+DHCP lease and the ARP table — inventory never asks the guest agent) and
+when the list was taken.
 
 ![Route: names, balancing, targets](/screens/en/traffic-fly-edit.png)
 

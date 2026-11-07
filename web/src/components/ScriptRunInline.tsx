@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Input, Tag } from 'antd'
+import { Button, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api'
-import type { Job, JobLogLine } from '../types'
+import { api, useApi } from '../api'
+import type { HubHost, Job, JobLogLine } from '../types'
 import { autoScriptName } from '../scriptName'
+import { AskField } from './AskField'
 import { Banner, Modal } from './ui'
 import { JobLogModal } from '../pages/Jobs'
 import type { ScriptOrigin } from './AIExplain'
@@ -54,6 +55,8 @@ export function ScriptRunInline({
   const [dialog, setDialog] = useState<'dry' | 'run' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fullLog, setFullLog] = useState(false)
+  // Хосты — для автоподстановки ответа на вопрос сценария (имя или адрес).
+  const hubHosts = useApi<HubHost[]>('/hub/hosts', 120_000)
   const lastSeq = useRef(0)
   const logRef = useRef<HTMLPreElement | null>(null)
 
@@ -170,13 +173,17 @@ export function ScriptRunInline({
                 </pre>
                 {(check?.asks ?? []).length > 0 && (
                   <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {check!.asks.map((a) =>
-                      a.secret ? (
-                        <Input.Password key={a.key} style={{ width: 240 }} placeholder={a.prompt} value={values[a.key] ?? ''} autoComplete="new-password" onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} />
-                      ) : (
-                        <Input key={a.key} style={{ width: 240 }} placeholder={a.prompt} value={values[a.key] ?? ''} onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} />
-                      ),
-                    )}
+                    {check!.asks.map((a) => (
+                      <AskField
+                        key={a.key}
+                        style={{ width: 240 }}
+                        prompt={a.prompt}
+                        secret={a.secret}
+                        value={values[a.key] ?? ''}
+                        hosts={hubHosts.data ?? []}
+                        onChange={(v) => setValues({ ...values, [a.key]: v })}
+                      />
+                    ))}
                   </div>
                 )}
                 {error && <Banner kind="error">{error}</Banner>}

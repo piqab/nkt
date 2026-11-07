@@ -1045,6 +1045,28 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 			_ = r.m.db.SetHostCluster(ctx, h.ID, clusterID, nd.Role)
 			done.Hosts[nd.Name] = h.ID
 			jc.SaveResume(*done)
+			// NAT-сеть хоста: адрес машины виден из неё только через аренду
+			// DHCP или ARP, а обе вещи не вечные: аренда появляется не в
+			// первый запрос и истекает, запись ARP стареет за минуты. Хаб
+			// ходит к узлу по SSH и открывает на него маршрут Traffic Fly —
+			// и то, и другое отказывает на ровном месте («адреса цели нет»),
+			// пока машина спокойно работает. Бронь по MAC закрепляет за узлом
+			// тот адрес, который он уже взял, и снимок хоста отдаёт его
+			// всегда. Узлу на мосту закреплять нечего: сети libvirt с её
+			// DHCP там нет, адрес машины сообщает гостевой агент. В
+			// туннельном режиме узлы видят друг друга по адресам плана, но
+			// машина на каждом хосте живёт в своей NAT-сети, и хаб этот
+			// адрес у хоста всё равно спрашивает.
+			if nd.Bridge == "" {
+				var fixed struct {
+					Address string `json:"address"`
+				}
+				if _, err := r.m.HostAPI(ctx, host.ID, "POST", vmPath(h, "/fixed-address"), nil, &fixed); err != nil {
+					jc.Log("hub.clusterFixAddressWarn", nd.Name, err)
+				} else {
+					jc.Log("hub.clusterFixAddress", nd.Name, fixed.Address)
+				}
+			}
 			return nil
 		}
 	}

@@ -213,6 +213,13 @@ type Config struct {
 	// see secretbox.ResolveKey.
 	// FilesRoots — каталоги, доступные проводнику «Диски → Файлы».
 	FilesRoots []string
+	// ComposeRoots — каталоги, в которых редактор конфигураций признаёт
+	// compose-файлы и где их можно заводить (NKT_COMPOSE_ROOTS через
+	// запятую). По умолчанию — те же два, что были разрешены всегда: /home,
+	// где стеки ведут руками, и каталог стеков из профилей
+	// (parse.ComposeStacksDir); он остаётся разрешён и когда список сократили:
+	// применение профиля пишет именно туда.
+	ComposeRoots []string
 
 	HubMasterKey string
 	// HubSourceRoot is where the hub cross-compiles nkt for a remote host's
@@ -414,6 +421,7 @@ func Load() (*Config, error) {
 
 		HubMasterKey:             envStr("NKT_HUB_MASTER_KEY", ""),
 		FilesRoots:               envList("NKT_FILES_ROOTS", "/home,/srv,/opt,/var/www"),
+		ComposeRoots:             envList("NKT_COMPOSE_ROOTS", "/home,/srv/compose"),
 		HubSourceRoot:            envStr("NKT_HUB_SOURCE_ROOT", wd),
 		HubGoBin:                 envStr("NKT_HUB_GO_BIN", "go"),
 		HubReleaseRepo:           envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),

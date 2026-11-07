@@ -29,6 +29,13 @@ straight to the line.
 - A new file — in the category's directory; writing to directories outside
   the systemd sandbox offers “Allow writes” (a `ReadWritePaths` drop-in
   and a service restart).
+- Where compose stacks live is configured on the host:
+  `NKT_COMPOSE_ROOTS`, comma-separated (`/home` and `/srv/compose` by
+  default). The stack directory that profiles deploy into stays allowed
+  even when the list is shortened — a setting that undid that would break
+  deployment, not the editor. A “path is outside the allowed directories”
+  refusal now lists the directories you may write to, not just the path you
+  hit.
 
 ## Version history
 
