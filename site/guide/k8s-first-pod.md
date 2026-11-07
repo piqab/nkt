@@ -379,8 +379,8 @@ Manifest**; применить Traffic Fly — `POST /api/hub/fly/apply` или
 
 ```
 # Кластер Kubernetes: от нуля до первого пода
-param HOST1 "хост с control plane и первым worker"
-param HOST2 "хост со вторым worker"
+param HOST1 "хост с control plane и первым worker" host
+param HOST2 "хост со вторым worker" host
 param DOMAIN "имя тестового сайта — A-запись на адрес шлюза Traffic Fly"
 
 # kubeadm: 1 control plane + 2 worker на двух хостах, WireGuard, Cilium без kube-proxy

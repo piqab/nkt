@@ -15,7 +15,7 @@ Every command of the hub script language — the same ones “Check”, the “R
 | Command | What it does |
 |---|---|
 | [`set NAME value`](#cmd-set) | A variable: ${NAME} further down is replaced with the value. |
-| [`param NAME "prompt"`](#cmd-param) | A parameter: its value is asked at run time (the field autocompletes hub host names and addresses; your own text is accepted too), ${NAME} below is replaced with it. |
+| [`param NAME "prompt"`](#cmd-param) | A parameter: its value is asked at run time, ${NAME} below is then replaced with it. |
 
 **The hub: groups, hosts, install, waiting**
 
@@ -92,21 +92,24 @@ set DB_PASS ask
 on web1 vm create app1 image ${IMAGE}
 ```
 
-### `param NAME "prompt"` {#cmd-param}
+### `param NAME "prompt" [secret|host]` {#cmd-param}
 
-A parameter: its value is asked at run time (the field autocompletes hub host names and addresses; your own text is accepted too), ${NAME} below is replaced with it. That is how one script deploys different stands.
+A parameter: its value is asked at run time, ${NAME} below is then replaced with it. That is how one script deploys different stands. The prompt is required and always quoted; the flag after it is either “secret” (a password field) or “host” (host autocompletion). Without a flag the field is plain: a parameter has no way to guess what its answer holds.
 
 | Argument | Required | What it is |
 |---|---|---|
 | `NAME` | ✓ | name — Latin letters, digits, underscore |
-| `prompt` |  | what to show in the question |
+| `prompt` | ✓ | what to show in the question; always quoted, an empty "" is a prompt too |
+| `secret` |  | the answer is a password field: what you type is hidden (“set NAME ask” and “password ask” are like that anyway) |
+| `host` |  | the answer gets a list of hub host names and addresses; free text is accepted too — a script registers a new host more often than it picks an existing one |
 
 Example:
 
 ```
-param ADDR "address of the new server"
-param NAME "host name on the hub"
+param ADDR "address of the new server" host
+param NAME "host name on the hub" host
 host ${NAME} ${ADDR} user root password ask
+param DB_PASS "database password" secret
 ```
 
 ### `group NAME [profile PROFILE]` {#cmd-group}
@@ -740,8 +743,8 @@ A Forgejo pipeline with access through the gateway, deployment, an outside check
 
 ```
 # Forgejo behind Traffic Fly: deploy and move to another host
-param FROM "host where Forgejo is deployed first"
-param TO "host to move it to"
+param FROM "host where Forgejo is deployed first" host
+param TO "host to move it to" host
 param DOMAIN "Forgejo name — A record at the Traffic Fly gateway"
 
 # Web and git over SSH go through the gateway; the gateway issues the certificate
@@ -794,8 +797,8 @@ kubeadm on two hosts over WireGuard, Cilium without kube-proxy, Cilium Ingress, 
 
 ```
 # A Kubernetes cluster: from zero to the first pod
-param HOST1 "host with the control plane and the first worker"
-param HOST2 "host with the second worker"
+param HOST1 "host with the control plane and the first worker" host
+param HOST2 "host with the second worker" host
 param DOMAIN "test site name — A record at the Traffic Fly gateway"
 
 # kubeadm: 1 control plane + 2 workers on two hosts, WireGuard, Cilium without kube-proxy

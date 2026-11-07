@@ -295,7 +295,7 @@ ns1, потом ns2 — пока переезжает один, второй о�
 — `technitium`):
 
 ```
-param HOST "хост со старым Technitium"
+param HOST "хост со старым Technitium" host
 on ${HOST} service dns stop
 on ${HOST} service dns disable
 deploy technitium
@@ -313,7 +313,7 @@ wait ${HOST} port 53 2m
 **Откат** — пока старые файлы целы (`/opt/technitium/dns`, `/etc/dns`):
 
 ```
-param HOST "хост"
+param HOST "хост" host
 deploy technitium stop
 on ${HOST} service dns enable
 on ${HOST} service dns start

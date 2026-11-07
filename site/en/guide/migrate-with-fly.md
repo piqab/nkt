@@ -192,8 +192,8 @@ At start it asks for the host to deploy on, the host to move to and the name;
 
 ```
 # Forgejo за Traffic Fly: выкладка и перенос на другой хост
-param FROM "хост, где Forgejo будет выложен сначала"
-param TO "хост, куда его перенести"
+param FROM "хост, где Forgejo будет выложен сначала" host
+param TO "хост, куда его перенести" host
 param DOMAIN "имя Forgejo — A-запись на адрес шлюза Traffic Fly"
 
 # Веб и git по SSH — через шлюз; сертификат выпускает шлюз

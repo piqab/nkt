@@ -102,13 +102,15 @@ var Commands = []CommandDoc{
 		Example: "set IMAGE ubuntu-24.04\nset DB_PASS ask\non web1 vm create app1 image ${IMAGE}",
 	},
 	{
-		Kind: KindParam, Syntax: "param ИМЯ \"подсказка\"",
+		Kind: KindParam, Syntax: "param ИМЯ \"подсказка\" [secret|host]",
 		Summary: "script.doc.param",
 		Args: []ArgDoc{
 			{Name: "ИМЯ", Required: true, Desc: "script.doc.param.name"},
-			{Name: "подсказка", Desc: "script.doc.param.prompt"},
+			{Name: "подсказка", Required: true, Desc: "script.doc.param.prompt"},
+			{Name: "secret", Desc: "script.doc.param.secret"},
+			{Name: "host", Desc: "script.doc.param.host"},
 		},
-		Example: "param ADDR \"адрес нового сервера\"\nparam NAME \"имя хоста в хабе\"\nhost ${NAME} ${ADDR} user root password ask",
+		Example: "param ADDR \"адрес нового сервера\" host\nparam NAME \"имя хоста в хабе\" host\nhost ${NAME} ${ADDR} user root password ask\nparam DB_PASS \"пароль базы данных\" secret",
 	},
 	{
 		Kind: KindGroup, Syntax: "group ИМЯ [profile ПРОФИЛЬ]",
@@ -548,6 +550,7 @@ var englishTerms = [][2]string{
 	{"содержимое построчно", "contents line by line"},
 	{"адрес нового сервера", "address of the new server"},
 	{"имя хоста в хабе", "host name on the hub"},
+	{"пароль базы данных", "database password"},
 	{"Этот сервер под управлением nkt", "This server is managed by nkt"},
 	{"hv1 уже есть в хабе — заводить не нужно", "hv1 is already on the hub — no need to register it"},
 	{"Хосты уже есть в хабе: только действия", "The hosts are already on the hub: actions only"},
@@ -597,8 +600,8 @@ func Localize(text string, en bool) string {
 // Forgejo через шлюз (examples/forgejo/pipeline.fly.yaml), выкладка,
 // проверка снаружи, перенос на другой хост и проверка снова.
 const ForgejoFlyExample = `# Forgejo за Traffic Fly: выкладка и перенос на другой хост
-param FROM "хост, где Forgejo будет выложен сначала"
-param TO "хост, куда его перенести"
+param FROM "хост, где Forgejo будет выложен сначала" host
+param TO "хост, куда его перенести" host
 param DOMAIN "имя Forgejo — A-запись на адрес шлюза Traffic Fly"
 
 # Веб и git по SSH — через шлюз; сертификат выпускает шлюз
@@ -649,8 +652,8 @@ wait url https://${DOMAIN}/api/healthz 200 5m
 // первого пода»: кластер kubeadm на двух хостах, Ingress Cilium, тестовый
 // под и вход снаружи через Traffic Fly.
 const K8sFirstPodExample = `# Кластер Kubernetes: от нуля до первого пода
-param HOST1 "хост с control plane и первым worker"
-param HOST2 "хост со вторым worker"
+param HOST1 "хост с control plane и первым worker" host
+param HOST2 "хост со вторым worker" host
 param DOMAIN "имя тестового сайта — A-запись на адрес шлюза Traffic Fly"
 
 # kubeadm: 1 control plane + 2 worker на двух хостах, WireGuard, Cilium без kube-proxy

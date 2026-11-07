@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.36 — 2026-11-07
+
+- **What a script's answer field is, `param` itself says — not the dialog.** In 1.17.34 host autocompletion went to every non-secret question, so the host list appeared in a password field, in a "number of copies" field, in anything else. There was nothing to guess from: a non-secret parameter has exactly one flag ("not a secret") and it says nothing about what the value should hold. Now the script writes the field kind: `param NAME "address of the new server" host` gets the list of hub host names and addresses (free text still accepted), `param NAME "database password" secret` gets a password field with what you type hidden, and with no flag the field is plain. The host list is fetched only where it is needed: the script dialog no longer pulls `/hub/hosts` for a script that asks for nothing with `host`.
+  - The prompt became required and is always quoted: `param NAME` and `param NAME secret` are errors. Otherwise a bare `secret` cannot be told apart from prompt text, nor a flag from a value. An empty `""` is a prompt too: the field stays unlabeled as its author wrote it, while the "question not answered …" refusal and the "what will be asked" list name the parameter instead of naming nothing.
+  - One flag: `param NAME "…" secret host` is an error, and an unknown word after the prompt is an error listing what exists. Flags live in one list in the parser, which is also where the refusal's list comes from, so a new flag cannot drift away from the error text.
+  - Values leak no further than they did: the step line in the plan and in the journal keeps `${NAME}`, and the real value is substituted only into the command that goes to the host — exactly as with `set NAME ask`.
+  - **Compatibility.** Parsing of lines whose prompt is already quoted (every example in the repository and in the docs) does not change, but a field without a flag is plain again: the host list that 1.17.34 gave to all non-secret questions now has to be asked for with the `host` flag, and a password field with `secret`. Example scripts, the "Script commands" page, the guide and the instruction the assistant writes scripts from were updated in the same commit.
+
 ## v1.17.35 — 2026-11-07
 
 - **A dead assignment in target-address resolution is gone (CodeQL `go/useless-assignment-to-local` #361).** In the branch where the machine was missing from the host's cached snapshot, its state was assigned and immediately overwritten after the fresh scan — the first value was never read. No behavior change: the refusal still describes what the host saw after the fresh scan (state, where the address was looked for, snapshot age).

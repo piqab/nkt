@@ -4,7 +4,7 @@ import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
-import { AskField } from '../components/AskField'
+import { AskField, askLabel } from '../components/AskField'
 import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { EditTextModal } from '../components/EditTextModal'
@@ -51,11 +51,14 @@ export interface ScriptStep {
 }
 
 /** Что сценарий спросит перед запуском: пароль хоста, параметр,
- * переменная или токен git — по ключу вида «host:web1». */
+ * переменная или токен git — по ключу вида «host:web1». Вид поля задаёт
+ * сценарий: secret — поле пароля, host — автоподстановка хостов, ничего
+ * из двух — обычное поле. */
 export interface ScriptAsk {
   key: string
   prompt: string
   secret: boolean
+  host?: boolean
 }
 
 export interface CheckResult {
@@ -567,9 +570,11 @@ function AskValuesModal({
 }) {
   const { t } = useTranslation()
   const [values, setValues] = useState<Record<string, string>>({})
-  // Имена и адреса хостов — для автоподстановки ответа: сценарий либо
-  // ссылается на хост, который на хабе уже есть, либо заводит новый.
-  const hosts = useApi<HubHost[]>('/hub/hosts', 120_000)
+  // Имена и адреса хостов — только для полей «param … host»: сценарий либо
+  // ссылается на хост, который на хабе уже есть, либо заводит новый. Если
+  // такого вопроса нет, список в окне не за чем и не спрашивается.
+  const hostList = result.asks.some((a) => a.host)
+  const hosts = useApi<HubHost[]>(hostList ? '/hub/hosts' : null, 120_000)
   const ready = result.asks.every((a) => (values[a.key] ?? '') !== '')
   return (
     <Modal title={t(dryRun ? 'scripts.dryRunTitle' : 'scripts.runTitle')} onClose={onClose} closeLabel={t('common.cancel')}>
@@ -579,10 +584,15 @@ function AskValuesModal({
         </p>
         {result.asks.map((a) => (
           <label key={a.key} className="col" style={{ gap: '0.2rem' }}>
+            {/* Подпись поля — ровно то, что написал автор: пустая подсказка
+                («param ИМЯ "" …») оставляет поле без подписи. Именем
+                параметра называются там, где без имени фраза повисает:
+                список «что будет спрошено» и отказ хаба. */}
             {a.prompt}
             <AskField
               prompt={a.prompt}
               secret={a.secret}
+              host={a.host}
               value={values[a.key] ?? ''}
               hosts={hosts.data ?? []}
               onChange={(v) => setValues({ ...values, [a.key]: v })}
@@ -770,7 +780,7 @@ function CheckView({ check }: { check: CheckResult }) {
                   )}
                   {check.asks.length > 0 && (
                     <p className="small muted" style={{ marginTop: 0 }}>
-                      {t('scripts.willAsk', { items: check.asks.map((a) => a.prompt).join(', ') })}
+                      {t('scripts.willAsk', { items: check.asks.map((a) => askLabel(a)).join(', ') })}
                     </p>
                   )}
                   <div className="table-wrap">

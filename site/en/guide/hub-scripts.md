@@ -22,7 +22,7 @@ window; **"Ready-made scripts ▾"** in it inserts an example whole. Then — a
 name, "Save", "Check", "Dry run", "Run".
 
 ```
-param ADDR "address of the new server"
+param ADDR "address of the new server" host
 group prod profile web-base
 host web1 ${ADDR} user root password ask group prod
 install web1
@@ -144,13 +144,23 @@ entirely on its hosts. Details — [Hub API](/en/guide/hub-api#what-a-token-can-
   never go into the text) and starts a hub job. After a hub restart the
   job resumes from the same line; hosts already registered are not
   registered twice.
-- An answer to `param …` is a field that autocompletes the hub's hosts,
-  name and address as separate entries (a parameter goes either into
-  `on NAME` or into `host NAME ADDRESS`, and one field of the dialog does
-  not tell which). Free text still works — a script registers a new host
-  more often than it picks an existing one. A secret answer (`password
-  ask`, `set … ask` — passwords and tokens) stays a password field, a list
-  has no business there. The same field is used under a script proposed by
+- What an answer field looks like is said by `param` itself, not by the
+  dialog: a non-secret parameter has no way to guess what its answer
+  holds — a host address, a password or a number of copies. The prompt is
+  required and always quoted (an empty `""` is a prompt too), and one flag
+  follows it:
+  - `param NAME "address of the new server" host` — a field that
+    autocompletes the hub's hosts, name and address as separate entries (a
+    parameter goes either into `on NAME` or into `host NAME ADDRESS`, and
+    one field of the dialog does not tell which). Free text still works — a
+    script registers a new host more often than it picks an existing one.
+  - `param NAME "database password" secret` — a password field, what you
+    type stays hidden. Like the answers that were always secret: `password
+    ask`, `set … ask`, git tokens.
+  - with no flag — a plain field.
+  Answers reach neither the script text nor the journal: the step line
+  keeps `${NAME}`, and the real value is substituted only into the command
+  that goes to the host. The same field is used under a script proposed by
   the assistant or by a finding analysis.
 
 ## Version history

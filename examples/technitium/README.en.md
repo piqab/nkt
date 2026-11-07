@@ -303,7 +303,7 @@ answers for all zones. The server itself is down for a minute or two.
 pipeline — `technitium`):
 
 ```
-param HOST "host with the old Technitium"
+param HOST "host with the old Technitium" host
 on ${HOST} service dns stop
 on ${HOST} service dns disable
 deploy technitium
@@ -322,7 +322,7 @@ before; the console — `ssh -L 5380:127.0.0.1:5380 host`.
 `/etc/dns`):
 
 ```
-param HOST "host"
+param HOST "host" host
 deploy technitium stop
 on ${HOST} service dns enable
 on ${HOST} service dns start

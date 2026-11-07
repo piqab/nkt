@@ -44,11 +44,29 @@ type Issue struct {
 }
 
 // Ask — что спросить при запуске: пароль хоста, параметр, секрет,
-// токен. Key — по нему значение возвращается исполнителю.
+// токен. Key — по нему значение возвращается исполнителю. Secret и
+// Host — как отвечать: поле пароля или автоподстановка хостов. Ими
+// ведает «param» (см. parseDecl); прочие вопросы задают их сами,
+// потому что секрет они и есть.
 type Ask struct {
 	Key    string `json:"key"`
 	Prompt string `json:"prompt"`
 	Secret bool   `json:"secret"`
+	Host   bool   `json:"host"`
+}
+
+// Label — как назвать вопрос там, где без имени фраза повисает: в отказе
+// «не заполнен вопрос …» и в списке «что будет спрошено». Пустая подсказка
+// («param ИМЯ "" secret») оставляет пустым поле — это автор сценария так
+// написал, — но не пустым отказ.
+func (a Ask) Label() string {
+	if a.Prompt != "" {
+		return a.Prompt
+	}
+	if i := strings.Index(a.Key, ":"); i >= 0 {
+		return a.Key[i+1:]
+	}
+	return a.Key
 }
 
 // Script — разобранный сценарий.
@@ -57,8 +75,8 @@ type Script struct {
 	// Vars — «set ИМЯ значение» в порядке появления.
 	Vars map[string]string
 	// Asks — что спрашивается при запуске: «password ask» у хоста
-	// (host:ИМЯ), «param» (param:ИМЯ), «set ИМЯ ask» (var:ИМЯ, секрет),
-	// «token ask» у git (token:URL).
+	// (host:ИМЯ), «param» (param:ИМЯ, флагами «secret»/«host»),
+	// «set ИМЯ ask» (var:ИМЯ, секрет), «token ask» у git (token:URL).
 	Asks []Ask
 	// Hosts — хосты, заведённые сценарием (по имени); Groups — группы;
 	// Pipelines — конвейеры, которые сценарий сохраняет.
@@ -197,39 +215,89 @@ func Parse(text string, values map[string]string) (Script, []Issue) {
 	return sc, issues
 }
 
-// parseDecl разбирает «param ИМЯ "подсказка"» и «set ИМЯ ask»: значение
-// берётся из values или заменяется заглушкой; вопрос запоминается.
+// paramFlag — флаг «param ИМЯ "подсказка" ФЛАГ»: что флаг меняет в
+// вопросе. Новые флаги («ip», «multiline») добавляются в этот список —
+// допустимые слова в отказе перечисляются отсюда же, поэтому текст
+// отказа и разбор не разъедутся.
+type paramFlag struct {
+	name  string
+	apply func(*Ask)
+}
+
+var paramFlags = []paramFlag{
+	{"secret", func(a *Ask) { a.Secret = true }},
+	{"host", func(a *Ask) { a.Host = true }},
+}
+
+// paramFlagNames — «secret, host» для отказа.
+func paramFlagNames() string {
+	names := make([]string, 0, len(paramFlags))
+	for _, f := range paramFlags {
+		names = append(names, f.name)
+	}
+	return strings.Join(names, ", ")
+}
+
+// findParamFlag — флаг по имени, nil, если слова нет в списке.
+func findParamFlag(word string) *paramFlag {
+	for i := range paramFlags {
+		if paramFlags[i].name == word {
+			return &paramFlags[i]
+		}
+	}
+	return nil
+}
+
+// parseDecl разбирает «param ИМЯ "подсказка" [флаг]» и «set ИМЯ ask»:
+// значение берётся из values или заменяется заглушкой; вопрос
+// запоминается. Подсказка «param» обязательна и всегда в кавычках —
+// иначе голое «secret» нельзя отличить от текста подсказки, а флаг
+// отличается ровно тем, что кавычек у него нет.
 func parseDecl(line string, sc *Script, values map[string]string) (bool, bool, error) {
-	toks, err := tokenize(line)
+	toks, err := tokenizeMarked(line)
 	if err != nil || len(toks) < 2 {
 		return false, false, nil
 	}
 	switch {
-	case toks[0] == "param":
-		if !varNameRe.MatchString(toks[1]) || len(toks) > 3 {
+	case toks[0].val == "param":
+		if !varNameRe.MatchString(toks[1].val) {
 			return false, false, msgs.Errorf("script.badParam")
 		}
-		prompt := toks[1]
-		if len(toks) == 3 {
-			prompt = toks[2]
+		if len(toks) < 3 || !toks[2].quoted {
+			return false, false, msgs.Errorf("script.paramNoPrompt")
 		}
-		sc.Asks = append(sc.Asks, Ask{Key: "param:" + toks[1], Prompt: prompt})
-		if v, ok := values["param:"+toks[1]]; ok {
-			sc.Vars[toks[1]] = v
+		ask := Ask{Key: "param:" + toks[1].val, Prompt: toks[2].val}
+		if len(toks) > 3 {
+			if toks[3].quoted {
+				return false, false, msgs.Errorf("script.paramFlagQuoted", paramFlagNames())
+			}
+			f := findParamFlag(toks[3].val)
+			if f == nil {
+				return false, false, msgs.Errorf("script.paramBadFlag", toks[3].val, paramFlagNames())
+			}
+			if len(toks) > 4 {
+				return false, false, msgs.Errorf("script.paramFlagExtra", paramFlagNames())
+			}
+			f.apply(&ask)
+		}
+		sc.Asks = append(sc.Asks, ask)
+		name := toks[1].val
+		if v, ok := values["param:"+name]; ok {
+			sc.Vars[name] = v
 		} else {
-			sc.Vars[toks[1]] = paramPlaceholder
+			sc.Vars[name] = paramPlaceholder
 			sc.Unresolved = true
 		}
 		return true, true, nil
-	case toks[0] == "set" && len(toks) == 3 && toks[2] == "ask":
-		if !varNameRe.MatchString(toks[1]) {
+	case toks[0].val == "set" && len(toks) == 3 && toks[2].val == "ask":
+		if !varNameRe.MatchString(toks[1].val) {
 			return false, false, msgs.Errorf("script.badSet")
 		}
-		sc.Asks = append(sc.Asks, Ask{Key: "var:" + toks[1], Prompt: toks[1], Secret: true})
-		if v, ok := values["var:"+toks[1]]; ok {
-			sc.Vars[toks[1]] = v
+		sc.Asks = append(sc.Asks, Ask{Key: "var:" + toks[1].val, Prompt: toks[1].val, Secret: true})
+		if v, ok := values["var:"+toks[1].val]; ok {
+			sc.Vars[toks[1].val] = v
 		} else {
-			sc.Vars[toks[1]] = paramPlaceholder
+			sc.Vars[toks[1].val] = paramPlaceholder
 			sc.Unresolved = true
 		}
 		return true, true, nil
@@ -255,11 +323,32 @@ func expandVars(line string, vars map[string]string) (string, error) {
 	return out, nil
 }
 
+// token — слово строки; quoted — было ли оно в кавычках. Признак
+// кавычек теряет смысл для большинства команд, но «param» по нему
+// отличает подсказку (обязательно «…» ) от флага (обязательно без них).
+type token struct {
+	val    string
+	quoted bool
+}
+
 // tokenize делит строку на слова; "…" — одно слово, внутри допустимо \".
 func tokenize(line string) ([]string, error) {
-	var toks []string
+	marked, err := tokenizeMarked(line)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(marked))
+	for i, t := range marked {
+		out[i] = t.val
+	}
+	return out, nil
+}
+
+// tokenizeMarked — то же, но с признаком кавычек у каждого слова.
+func tokenizeMarked(line string) ([]token, error) {
+	var toks []token
 	var cur strings.Builder
-	inQuote, hasTok := false, false
+	inQuote, quoted, hasTok := false, false, false
 	for i := 0; i < len(line); i++ {
 		c := line[i]
 		switch {
@@ -268,12 +357,13 @@ func tokenize(line string) ([]string, error) {
 			i++
 		case c == '"':
 			inQuote = !inQuote
+			quoted = true
 			hasTok = true
 		case !inQuote && (c == ' ' || c == '\t'):
 			if hasTok {
-				toks = append(toks, cur.String())
+				toks = append(toks, token{val: cur.String(), quoted: quoted})
 				cur.Reset()
-				hasTok = false
+				hasTok, quoted = false, false
 			}
 		case !inQuote && c == '#' && !hasTok && (i+1 == len(line) || line[i+1] == ' ' || line[i+1] == '\t'):
 			// Комментарий в конце строки: «# …» отдельным словом. Просто
@@ -288,7 +378,7 @@ func tokenize(line string) ([]string, error) {
 		return nil, msgs.Errorf("script.unclosedQuote")
 	}
 	if hasTok {
-		toks = append(toks, cur.String())
+		toks = append(toks, token{val: cur.String(), quoted: quoted})
 	}
 	return toks, nil
 }

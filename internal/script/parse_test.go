@@ -1,6 +1,7 @@
 package script
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -296,6 +297,92 @@ func TestParseVMLifecycle(t *testing.T) {
 	for _, bad := range []string{"on web1 vm resize app1", "on web1 vm resize app1 cpu 0", "on web1 vm snapshot app1", "on web1 vm snapshot app1 --x"} {
 		if _, issues := Parse(bad, nil); len(issues) == 0 {
 			t.Errorf("%s: accepted", bad)
+		}
+	}
+}
+
+// Форма вопроса для интерфейса: окно смотрит на «secret» и «host»,
+// поэтому теги json — часть договора с web/, а не деталь разбора.
+func TestAskJSON(t *testing.T) {
+	sc, issues := Parse("param A \"текст\" host\nparam B \"текст\" secret\n", nil)
+	if len(issues) != 0 {
+		t.Fatalf("%+v", issues)
+	}
+	raw, err := json.Marshal(sc.Asks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"key":"param:A"`, `"secret":false,"host":true`, `"secret":true,"host":false`} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("в %s нет %s", raw, want)
+		}
+	}
+}
+
+// Флаги «param»: чем ответ быть. Без флага поле обычное — у параметра нет
+// способа угадать, что в нём ждут (адрес хоста, пароль, что угодно), и
+// догадка по единственному признаку «не секрет» давала список хостов в
+// поле пароля. Подсказка при этом обязательна и в кавычках: иначе голое
+// «secret» не отличить от текста подсказки.
+func TestParseParamFlags(t *testing.T) {
+	askOf := func(t *testing.T, line string) Ask {
+		t.Helper()
+		sc, issues := Parse(line, map[string]string{"param:A": "x"})
+		if len(issues) != 0 {
+			t.Fatalf("%q: %+v", line, issues)
+		}
+		if len(sc.Asks) != 1 {
+			t.Fatalf("%q: вопросы %+v", line, sc.Asks)
+		}
+		return sc.Asks[0]
+	}
+	for _, tc := range []struct {
+		line   string
+		secret bool
+		host   bool
+		prompt string
+	}{
+		{`param A "текст"`, false, false, "текст"},
+		{`param A "текст" secret`, true, false, "текст"},
+		{`param A "текст" host`, false, true, "текст"},
+		// Слово флага в кавычках — подсказка, а не флаг.
+		{`param A "secret"`, false, false, "secret"},
+		// Пустая подсказка остаётся пустой: поля без подписи человек
+		// получил сам, отказ же обязан называть имя параметра.
+		{`param A "" secret`, true, false, ""},
+		// Комментарий после флага — не лишний токен.
+		{`param A "текст" host # про стенд`, false, true, "текст"},
+	} {
+		a := askOf(t, tc.line)
+		if a.Secret != tc.secret || a.Host != tc.host || a.Prompt != tc.prompt {
+			t.Errorf("%q: secret=%v host=%v prompt=%q", tc.line, a.Secret, a.Host, a.Prompt)
+		}
+	}
+	if got := askOf(t, `param A "" secret`).Label(); got != "A" {
+		t.Errorf("Label пустой подсказки: %q", got)
+	}
+	if got := askOf(t, `param A "хост" host`).Label(); got != "хост" {
+		t.Errorf("Label: %q", got)
+	}
+	bad := []struct {
+		line string
+		want string
+	}{
+		// Подсказка обязательна и в кавычках.
+		{`param A`, "paramNoPrompt"},
+		{`param A secret`, "paramNoPrompt"},
+		{`param A текст`, "paramNoPrompt"},
+		{`param A "текст" "host"`, "paramFlagQuoted"},
+		{`param A "текст" nope`, "paramBadFlag"},
+		{`param A "текст" ip`, "paramBadFlag"},
+		// Один флаг: «secret host» — два вопроса об одном поле.
+		{`param A "текст" secret host`, "paramFlagExtra"},
+		{`param A "текст" host secret`, "paramFlagExtra"},
+	}
+	for _, tc := range bad {
+		_, issues := Parse(tc.line, nil)
+		if len(issues) == 0 || !strings.Contains(issueKey(issues[0]), tc.want) {
+			t.Errorf("%q: %v, ожидалось %s", tc.line, issues, tc.want)
 		}
 	}
 }

@@ -19,7 +19,7 @@ func ScriptSystemPrompt(mode string, lang msgs.Lang, reference, names string) st
 Rules:
 - Use only the commands and syntax from the reference. Do not invent commands, options or shell commands.
 - Refer to hosts, groups, profiles, pipelines, clusters and gateways by the names listed below; a new one only if the script creates it itself (host, group, k8s create, pipeline).
-- Values the user did not give (addresses, domains, passwords) — "param NAME \"prompt\"" at the top, then ${NAME}; secrets — "set NAME ask". Never put real secrets in the text.
+- Values the user did not give (addresses, domains, passwords) — "param NAME \"prompt\"" at the top, then ${NAME}. The prompt is required and always quoted; add a flag after it: "host" where the answer is a hub host name or address (the field then offers the hub's list), "secret" where it is a password (a hidden field). Secrets a script should never carry in its text — "set NAME ask". Without a flag the answer field is plain, so a password param would be typed in clear view.
 - Prefer safe steps: "wait" after installs and deploys, "migrate" with switch-fly/switch-pipeline when the stack is behind Traffic Fly.
 - A stopped container or stack is brought back with start, not up: a stack deployed by a pipeline — "deploy PIPELINE start" (the same version; the pipeline's registry key for missing images), any other — "on HOST docker stack PATH start" (no registry). "docker stack … up" pulls images and fails on a private registry without a key. To stop — "deploy PIPELINE stop" or "docker stack PATH stop". A pipeline marked "stopped" was stopped on purpose — do not offer to start it unless asked.
 `)
@@ -29,7 +29,7 @@ Rules:
 Правила:
 - Только команды и синтаксис из справки. Не выдумывай команды, параметры и команды оболочки.
 - Хосты, группы, профили, конвейеры, кластеры и шлюзы — по именам из списка ниже; новые — только если сценарий сам их заводит (host, group, k8s create, pipeline).
-- Чего пользователь не сказал (адреса, домены, пароли) — «param ИМЯ "подсказка"» в начале и ${ИМЯ}; секреты — «set ИМЯ ask». Настоящих секретов в тексте не пиши.
+- Чего пользователь не сказал (адреса, домены, пароли) — «param ИМЯ "подсказка"» в начале и ${ИМЯ}. Подсказка обязательна и всегда в кавычках; после неё флаг: «host», если ответ — имя или адрес хоста хаба (поле тогда подсказывает список), «secret», если пароль (поле скрытое). Секреты, которых в тексте сценария быть не должно, — «set ИМЯ ask». Без флага поле обычное, то есть пароль параметра человек набирал бы у всех на виду.
 - Безопасные шаги: «wait» после установки и выкладки, «migrate» с switch-fly/switch-pipeline, если стек за Traffic Fly.
 - Остановленный контейнер или стек поднимают через start, а не up: стек, выложенный конвейером, — «deploy КОНВЕЙЕР start» (та же версия; недостающие образы — с ключом registry конвейера), прочий — «on ХОСТ docker stack ПУТЬ start» (без registry). «docker stack … up» скачивает образы и падает на закрытом registry без ключа. Остановить — «deploy КОНВЕЙЕР stop» или «docker stack ПУТЬ stop». Конвейер с пометкой «остановлена» остановили намеренно — не предлагай запускать, если не просят.
 `)

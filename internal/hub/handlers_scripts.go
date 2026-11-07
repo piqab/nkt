@@ -361,7 +361,9 @@ func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, a := range parsed.Asks {
 		if strings.TrimSpace(req.Values[a.Key]) == "" {
-			writeError(w, http.StatusBadRequest, msgs.T(lang, "hub.scriptPasswordMissing", a.Prompt))
+			// Label, а не Prompt: у «param ИМЯ "" secret» подсказка пустая,
+			// и отказ «вопрос «» не заполнен» человек не прочтёт.
+			writeError(w, http.StatusBadRequest, msgs.T(lang, "hub.scriptPasswordMissing", a.Label()))
 			return
 		}
 	}

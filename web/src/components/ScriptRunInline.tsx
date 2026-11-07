@@ -24,6 +24,7 @@ interface Ask {
   key: string
   prompt: string
   secret: boolean
+  host?: boolean
 }
 interface Check {
   steps: { line: number; host?: string; hosts?: string[]; text: string }[]
@@ -55,8 +56,11 @@ export function ScriptRunInline({
   const [dialog, setDialog] = useState<'dry' | 'run' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fullLog, setFullLog] = useState(false)
-  // Хосты — для автоподстановки ответа на вопрос сценария (имя или адрес).
-  const hubHosts = useApi<HubHost[]>('/hub/hosts', 120_000)
+  // Хосты — для автоподстановки ответа на вопросы «param … host». Список
+  // спрашивается не всегда: блок появляется и под сценарием без вопросов, и
+  // под таким, где все ответы — пароли или произвольные значения.
+  const hostList = (check?.asks ?? []).some((a) => a.host)
+  const hubHosts = useApi<HubHost[]>(hostList ? '/hub/hosts' : null, 120_000)
   const lastSeq = useRef(0)
   const logRef = useRef<HTMLPreElement | null>(null)
 
@@ -179,6 +183,7 @@ export function ScriptRunInline({
                         style={{ width: 240 }}
                         prompt={a.prompt}
                         secret={a.secret}
+                        host={a.host}
                         value={values[a.key] ?? ''}
                         hosts={hubHosts.data ?? []}
                         onChange={(v) => setValues({ ...values, [a.key]: v })}
