@@ -550,7 +550,10 @@ func (s *Server) flyResolve(ctx context.Context, user string, t FlyTarget, tunne
 		if err := get("/api/vms", &res); err != nil {
 			return "", err
 		}
-		ip, state, found := res.find(t.Ref)
+		// Состояние из этого ответа не нужно: промах по снимку всё равно
+		// перекрывается свежим сканом, а отказ обязан описывать то, что
+		// хост увидел сейчас (go/useless-assignment-to-local #361).
+		ip, _, found := res.find(t.Ref)
 		if found && ip != "" {
 			return ip, nil
 		}
@@ -560,6 +563,7 @@ func (s *Server) flyResolve(ctx context.Context, user string, t FlyTarget, tunne
 		if err := fresh("/api/vms?fresh=1", &res); err != nil {
 			return "", err
 		}
+		var state string
 		ip, state, found = res.find(t.Ref)
 		if found && ip != "" {
 			return ip, nil

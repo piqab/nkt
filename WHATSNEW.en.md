@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.35 — 2026-11-07
+
+- **A dead assignment in target-address resolution is gone (CodeQL `go/useless-assignment-to-local` #361).** In the branch where the machine was missing from the host's cached snapshot, its state was assigned and immediately overwritten after the fresh scan — the first value was never read. No behavior change: the refusal still describes what the host saw after the fresh scan (state, where the address was looked for, snapshot age).
+
 ## v1.17.34 — 2026-11-07
 
 - **A Traffic Fly route finds the machine even when the host's snapshot lost it.** A VM target's address used to come only from the host's machine list — a snapshot refreshed once per `NKT_INVENTORY_INTERVAL` (5 minutes by default) that looks at nothing but a libvirt network DHCP lease and the ARP table. A machine that appeared or moved after the snapshot is invisible there, so a route to it was refused while the hub had the address in hand: a cluster node and any machine the hub created sits in the hub's own host list with the address the hub reaches it by.
