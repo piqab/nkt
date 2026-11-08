@@ -33,9 +33,14 @@ import (
 //
 // Белый список обязателен: адрес кластера на публичном шлюзе — это вход в
 // kube-apiserver и через него в etcd всего кластера. Хаб кладёт в него
-// наружные адреса хостов размещения (узлы входят и работают по общему
-// адресу, их соединения приходят на шлюз с адресов этих хостов) и то, что
-// добавил человек, — остальным вход закрыт.
+// наружные адреса хостов размещения и то, что добавил человек, — остальным
+// вход закрыт. Про «адрес хоста размещения» надо понимать буквально: в
+// список попадает тот адрес, с которого соединение придёт на шлюз. У машины
+// в NAT и в мосту это адрес её хоста, у машины в macvtap — адрес её
+// собственного шлюза по умолчанию (egress сайта), и он совпадает с адресом
+// хоста размещения только по случайности. Поэтому список проверяется по
+// факту: если по общему адресу никто не прошёл, хаб говорит об этом, а не
+// делает вид, что живой адрес обязателен кому-то ещё.
 
 // k8sAPIPort — порт API на узле: куда приходит DNAT служебного порта хоста.
 // Публичный порт endpoint'а может быть другим — маршрут их и связывает.
@@ -51,19 +56,59 @@ type listenerNode struct {
 	HostID int64 // хост, на котором узел (машина — на нём, узел-хост — он сам)
 	VM     bool  // машина, а не сам хост
 	CP     bool  // control plane: только они служат API
+	// Self — собственная запись узла в списке хостов: у машины она есть
+	// (хаб заводит её сам, и по ней ходит к машине по SSH), у ещё не
+	// созданной машины — нет. Узел-хост — это он сам.
+	Self int64
+	// Macvtap — машина включена в устройство хоста: хост с ней по сети не
+	// говорит, и её адрес знает только гостевой агент.
+	Macvtap bool
 }
 
-// listenerNodesFromSpec — узлы из размещения (сухой прогон: машин ещё нет).
-func listenerNodesFromSpec(nodes []clusterNode) []listenerNode {
+// hostTarget — узел, чей адрес шлюз знает сам: цель строится как «сам
+// хост», то есть адрес узла в туннеле шлюза. У машины в macvtap другого
+// пути нет — хост размещения до неё по сети не дойдёт, а адрес из
+// гостевого агента шлюзу не виден.
+func (n listenerNode) hostTarget() bool {
+	return !n.VM || (n.Macvtap && n.Self != 0)
+}
+
+// ownHost — запись узла в списке хостов: у узла-хоста это он сам, у машины
+// — её собственная запись (хаб заводит её при создании); 0 — машины ещё нет.
+func (n listenerNode) ownHost() int64 {
+	if n.Self != 0 {
+		return n.Self
+	}
+	if !n.VM {
+		return n.HostID
+	}
+	return 0
+}
+
+// macvtapMachine — машина размещения в режиме macvtap: устройства
+// обязательны для каждой строки с машинами (ValidatePlacements), поэтому
+// режим и есть признак; узел-хост машиной не бывает.
+func macvtapMachine(spec ClusterSpec, vm bool) bool {
+	return vm && spec.NetworkMode == NetworkMacvtap
+}
+
+// listenerNodesFromSpec — узлы из размещения (сухой прогон: машин ещё нет,
+// и их записей хаб ещё не знает).
+func listenerNodesFromSpec(nodes []clusterNode, spec ClusterSpec) []listenerNode {
 	out := make([]listenerNode, 0, len(nodes))
 	for _, n := range nodes {
-		out = append(out, listenerNode{Name: n.Name, HostID: n.HostID, VM: n.Kind != KindHost, CP: n.Role == RoleControlPlane})
+		ln := listenerNode{Name: n.Name, HostID: n.HostID, VM: n.Kind != KindHost, CP: n.Role == RoleControlPlane,
+			Macvtap: macvtapMachine(spec, n.Kind != KindHost)}
+		if n.Kind == KindHost {
+			ln.Self = n.HostID
+		}
+		out = append(out, ln)
 	}
 	return out
 }
 
 // listenerNodesFromHosts — узлы из записей кластера (машины уже заведены).
-func listenerNodesFromHosts(hosts []store.Host) []listenerNode {
+func listenerNodesFromHosts(hosts []store.Host, spec ClusterSpec) []listenerNode {
 	out := make([]listenerNode, 0, len(hosts))
 	for _, h := range hosts {
 		// У машины запись хоста своя, а живёт она на родителе.
@@ -71,7 +116,20 @@ func listenerNodesFromHosts(hosts []store.Host) []listenerNode {
 		if h.ParentID != 0 {
 			id, vm = h.ParentID, true
 		}
-		out = append(out, listenerNode{Name: h.Name, HostID: id, VM: vm, CP: h.K8sRole == RoleControlPlane})
+		out = append(out, listenerNode{Name: h.Name, HostID: id, VM: vm, CP: h.K8sRole == RoleControlPlane,
+			Self: h.ID, Macvtap: macvtapMachine(spec, vm)})
+	}
+	return out
+}
+
+// listenerNames — имена control plane по признаку узла: одной функцией,
+// потому что и журнал, и сухой прогон называют одни и те же узлы.
+func listenerNames(nodes []listenerNode, take func(listenerNode) bool) []string {
+	var out []string
+	for _, n := range nodes {
+		if n.CP && take(n) {
+			out = append(out, n.Name)
+		}
 	}
 	return out
 }
@@ -306,13 +364,35 @@ func (r *ClusterRunner) clusterListenerRoute(ctx context.Context, spec ClusterSp
 		if !n.CP {
 			continue
 		}
-		t := FlyTarget{ID: n.Name, HostID: n.HostID, Kind: "host", Port: k8sAPIPort}
-		if n.VM {
-			t.Kind, t.Ref = "vm", n.Name
+		// Форма цели решает, кто отвечает за адрес. «Сам хост» — адрес узла в
+		// туннеле шлюза: так узел-хост и так машина в macvtap (до неё хост
+		// размещения по сети не дойдёт). «Машина» — хост размещения сам
+		// ищет её адрес (аренда DHCP, ARP, гостевой агент) и DNAT'ит на
+		// него служебный порт: так машины в NAT, мосту и wireguard.
+		t := FlyTarget{ID: n.Name, Kind: "host", Port: k8sAPIPort}
+		if n.hostTarget() {
+			t.HostID = n.ownHost()
+		} else {
+			t.HostID, t.Kind, t.Ref = n.HostID, "vm", n.Name
 		}
 		route.Targets = append(route.Targets, t)
 	}
 	return route, allow, unknown, nil
+}
+
+// listenerKeepDrain — человеческий вывод целей: цель, которую убрали из
+// пула на карте Traffic Fly, хаб возвращает обратно только вместе с явным
+// изменением состава. Молча снять чужое решение «эта цель не участвует»
+// значит вернуть в пул узел, который кто-то только что выключил.
+func listenerKeepDrain(cur, want FlyRoute) FlyRoute {
+	for i := range want.Targets {
+		for _, t := range cur.Targets {
+			if t.ID == want.Targets[i].ID && t.Drain {
+				want.Targets[i].Drain = true
+			}
+		}
+	}
+	return want
 }
 
 // clusterListenerSame — слушатель уже такой: ни записывать, ни применять
@@ -358,7 +438,8 @@ func (r *ClusterRunner) clusterListenerStep(ctx context.Context, jc *jobs.Contex
 	if err != nil {
 		return false, err
 	}
-	route, allow, unknown, err := r.clusterListenerRoute(ctx, spec, d.gw, listenerNodesFromHosts(hosts))
+	nodes := listenerNodesFromHosts(hosts, spec)
+	route, allow, unknown, err := r.clusterListenerRoute(ctx, spec, d.gw, nodes)
 	if err != nil {
 		return false, err
 	}
@@ -370,6 +451,23 @@ func (r *ClusterRunner) clusterListenerStep(ctx context.Context, jc *jobs.Contex
 		// открывал бы API кластера всему интернету.
 		return false, msgs.Errorf("hub.clusterListenerEmptyAllow", route.ID)
 	}
+	// Узлы, чей адрес шлюз узнаёт сам: хост размещения до macvtap-машины по
+	// сети не дойдёт, поэтому цель строится «сам хост», а не «машина».
+	if form := listenerNames(nodes, func(n listenerNode) bool { return n.Macvtap }); len(form) > 0 {
+		jc.Log("hub.clusterListenerHostForm", route.ID, strings.Join(form, ", "))
+		// Белый список собран из адресов хостов размещения, а macvtap-машина
+		// приходит к шлюзу со своего шлюза по умолчанию — наружный адрес её
+		// сайта. Совпадение с адресом хоста не гарантия, поэтому об этом
+		// говорится заранее, а не тогда, когда вход будет отбит.
+		jc.Log("hub.clusterListenerAllowMacvtap", strings.Join(allow, ", "))
+	}
+	for _, t := range route.Targets {
+		if t.Drain {
+			// Цель выведена человеком на карте: через неё соединения не идут,
+			// и ждать её живости задание не будет.
+			jc.Log("hub.clusterListenerTargetDrain", route.ID, t.ID)
+		}
+	}
 	user := jc.Job.Author
 	note := msgs.T(jc.Lang(), "hub.clusterListenerNote", spec.Name)
 	doc := r.s.flyDoc(ctx)
@@ -378,6 +476,7 @@ func (r *ClusterRunner) clusterListenerStep(ctx context.Context, jc *jobs.Contex
 		// Человеческие настройки маршрута хаб не перетирает.
 		cur := doc.Routes[idx]
 		route.Label, route.MaxConns, route.Rate, route.DNS = cur.Label, cur.MaxConns, cur.Rate, cur.DNS
+		route = listenerKeepDrain(cur, route)
 		if clusterListenerSame(cur, route) {
 			jc.Log("hub.clusterListenerUnchanged", route.ID)
 			return true, nil
@@ -399,6 +498,96 @@ func (r *ClusterRunner) clusterListenerStep(ctx context.Context, jc *jobs.Contex
 	}
 	jc.Log("hub.clusterListenerApplied", route.ID, d.gw.Name, route.Port, len(route.Targets), len(allow))
 	return true, r.s.flyApplyRun(ctx, deployFlyLog{jc}, user, FlyApplyParams{Revision: saved.Revision})
+}
+
+// clusterListenerAlive — ждёт, пока через слушатель начнёт служить хоть одна
+// из целей ids, и пишет, что мешает остальным. Ждёт не дольше, чем живёт
+// проверка целей шлюзом. Возвращает число служащих целей: 0 — общий адрес не
+// работает, меньше, чем целей, — отказоустойчивость ниже той, что обещает
+// кластер из трёх control plane.
+func (r *ClusterRunner) clusterListenerAlive(ctx context.Context, jc *jobs.Context, routeID string, ids []string) int {
+	if len(ids) == 0 {
+		return 0
+	}
+	statuses := r.s.flyStatuses(ctx)
+	checks := flyTargetChecks(statuses, routeID, ids)
+	deadline := time.Now().Add(flyAliveWait)
+	for flyServing(checks) == 0 && time.Now().Before(deadline) {
+		if !sleepCtx(ctx, 5*time.Second) {
+			break
+		}
+		statuses = r.s.flyStatuses(ctx)
+		checks = flyTargetChecks(statuses, routeID, ids)
+	}
+	return r.clusterListenerReport(ctx, jc, statuses, routeID, ids)
+}
+
+// clusterListenerReport — что сводка шлюза говорит о целях слушателя:
+// сколько служит и почему не служат остальные. Отделена от ожидания,
+// потому что её и проверяют, и по ней человек разбирает отказ: «общий
+// адрес не отвечает» без этой строки — отказ, который ничего не объясняет.
+func (r *ClusterRunner) clusterListenerReport(ctx context.Context, jc *jobs.Context, statuses []flyGatewayStatusJSON, routeID string, ids []string) int {
+	rs, why, ok := flyRouteStats(statuses, routeID)
+	if !ok {
+		// Сводки нет — говорить о живости целей нечего: хаб не знает даже
+		// того, разложено ли решение вообще.
+		jc.Log("hub.clusterListenerRouteMissing", routeID, why)
+		return 0
+	}
+	checks := flyTargetChecks(statuses, routeID, ids)
+	serving := 0
+	for _, id := range ids {
+		c := checks[id]
+		switch {
+		case c.Serving:
+			serving++
+		case c.Drain:
+			// Выведенную цель шаг уже назвал: она не мёртвая, её нет в пуле.
+		case !c.Seen:
+			jc.Log("hub.clusterListenerTargetMissing", routeID, id)
+		default:
+			jc.Log("hub.clusterListenerTargetDead", routeID, id, c.Err)
+		}
+	}
+	if serving > 0 && serving < len(ids) {
+		jc.Log("hub.clusterListenerPartial", routeID, serving, len(ids))
+	}
+	if serving == 0 && !flyTouched(rs) {
+		// Живость проверяет сам шлюз из себя, и белый список на неё не
+		// влияет: «цель жива» при нулевом трафике — это про путь, а не про
+		// вход. Нулевой трафик и есть то, что видит оператор: адрес есть,
+		// соединение отбивается.
+		applied, _ := r.appliedListener(ctx, routeID)
+		jc.Log("hub.clusterListenerNoTraffic", routeID, strings.Join(applied.Allow, ", "))
+	}
+	return serving
+}
+
+// appliedListener — применённый маршрут слушателя: не пересобранное
+// предположение о том, что хаб хотел разложить, а ровно то, что лежит в
+// документе и уехало на шлюз.
+func (r *ClusterRunner) appliedListener(ctx context.Context, routeID string) (FlyRoute, bool) {
+	for _, rt := range r.s.flyDoc(ctx).Routes {
+		if rt.ID == routeID {
+			return rt, true
+		}
+	}
+	return FlyRoute{}, false
+}
+
+// clusterListenerTargets — цели control plane применённого слушателя: чей
+// живости ждать. По документу, а не по размещению: состав мог поменять
+// человек на карте, и задание разбирается с тем, что разложено.
+func (r *ClusterRunner) clusterListenerTargets(ctx context.Context, routeID string) []string {
+	rt, ok := r.appliedListener(ctx, routeID)
+	if !ok {
+		return nil
+	}
+	ids := make([]string, 0, len(rt.Targets))
+	for _, t := range rt.Targets {
+		ids = append(ids, t.ID)
+	}
+	return ids
 }
 
 // clusterListenerRemoveRoute — снять слушатель кластера: маршрут убирается
@@ -442,7 +631,8 @@ func (r *ClusterRunner) listenerPreflight(ctx context.Context, spec ClusterSpec,
 	if d.mismatch != "" {
 		add(true, true, "hub.preflightListenerMismatch", spec.Endpoint, d.gw.Address, d.mismatch)
 	}
-	route, allow, unknown, err := r.clusterListenerRoute(ctx, spec, d.gw, listenerNodesFromSpec(nodes))
+	specNodes := listenerNodesFromSpec(nodes, spec)
+	route, allow, unknown, err := r.clusterListenerRoute(ctx, spec, d.gw, specNodes)
 	if err != nil {
 		add(false, false, "hub.preflightListenerRoute", err)
 		return
@@ -452,6 +642,13 @@ func (r *ClusterRunner) listenerPreflight(ctx context.Context, spec ClusterSpec,
 		names = append(names, t.ID)
 	}
 	add(len(route.Targets) > 0, false, "hub.preflightListenerTargets", route.ID, route.Port, strings.Join(names, ", "))
+	// Машин в macvtap ещё нет, поэтому цель для них разложится после
+	// создания: «сам хост», адрес — туннель шлюза. Сказать это в сухом
+	// прогоне значит не оставлять вопроса «почему в списке не адрес машины».
+	if form := listenerNames(specNodes, func(n listenerNode) bool { return n.Macvtap }); len(form) > 0 {
+		add(true, false, "hub.preflightListenerHostForm", strings.Join(form, ", "))
+		add(true, true, "hub.clusterListenerAllowMacvtap", strings.Join(allow, ", "))
+	}
 	for _, name := range unknown {
 		add(true, true, "hub.clusterListenerPrivate", name)
 	}

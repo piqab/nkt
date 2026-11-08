@@ -152,21 +152,42 @@ func TestClusterListenerIDAndNodes(t *testing.T) {
 		{Name: "lab-cp-1", ID: 7, ParentID: 3, K8sRole: RoleControlPlane},
 		{Name: "hv2", ID: 2, K8sRole: RoleControlPlane},
 		{Name: "lab-w-1", ID: 8, ParentID: 3, K8sRole: RoleWorker},
-	})
+	}, ClusterSpec{})
 	want := []listenerNode{
-		{Name: "lab-cp-1", HostID: 3, VM: true, CP: true},
-		{Name: "hv2", HostID: 2, CP: true},
-		{Name: "lab-w-1", HostID: 3, VM: true},
+		{Name: "lab-cp-1", HostID: 3, VM: true, CP: true, Self: 7},
+		{Name: "hv2", HostID: 2, CP: true, Self: 2},
+		{Name: "lab-w-1", HostID: 3, VM: true, Self: 8},
 	}
 	if !slices.Equal(nodes, want) {
 		t.Errorf("узлы: %+v, надо %+v", nodes, want)
 	}
+	// macvtap: машина остаётся машиной, но режим меняет форму её цели.
+	mac := listenerNodesFromHosts([]store.Host{{Name: "lab-cp-1", ID: 7, ParentID: 3, K8sRole: RoleControlPlane}},
+		ClusterSpec{NetworkMode: NetworkMacvtap})
+	if len(mac) != 1 || !mac[0].Macvtap || !mac[0].hostTarget() {
+		t.Errorf("macvtap-машина: %+v", mac)
+	}
+	// Мост и NAT остаются целью «машина»: хост размещения её адрес знает.
+	for _, mode := range []string{NetworkBridge, NetworkNAT, ""} {
+		n := listenerNodesFromHosts([]store.Host{{Name: "lab-cp-1", ID: 7, ParentID: 3, K8sRole: RoleControlPlane}},
+			ClusterSpec{NetworkMode: mode})[0]
+		if n.Macvtap || n.hostTarget() {
+			t.Errorf("режим %s: машина стала целью «сам хост» (%+v)", mode, n)
+		}
+	}
 	fromSpec := listenerNodesFromSpec([]clusterNode{
 		{Name: "lab-cp-1", HostID: 3, Role: RoleControlPlane, Kind: KindVM},
 		{Name: "hv2", HostID: 2, Role: RoleWorker, Kind: KindHost},
-	})
-	if !slices.Equal(fromSpec, []listenerNode{{Name: "lab-cp-1", HostID: 3, VM: true, CP: true}, {Name: "hv2", HostID: 2}}) {
+	}, ClusterSpec{})
+	if !slices.Equal(fromSpec, []listenerNode{{Name: "lab-cp-1", HostID: 3, VM: true, CP: true}, {Name: "hv2", HostID: 2, Self: 2}}) {
 		t.Errorf("узлы из размещения: %+v", fromSpec)
+	}
+	// Сухой прогон: машины ещё нет, и её записи нет — форму цели хаб
+	// предсказывает по режиму, а разложит её после создания.
+	pre := listenerNodesFromSpec([]clusterNode{{Name: "lab-cp-1", HostID: 3, Role: RoleControlPlane, Kind: KindVM}},
+		ClusterSpec{NetworkMode: NetworkMacvtap})
+	if !pre[0].Macvtap || pre[0].hostTarget() {
+		t.Errorf("macvtap в сухом прогоне: %+v", pre[0])
 	}
 }
 
@@ -537,6 +558,233 @@ func TestClusterListenerStep(t *testing.T) {
 	}
 }
 
+// Шаг слушателя в macvtap: цели строятся «сам хост» по записям самих машин,
+// и журнал называет и форму, и цену белого списка. Повтор шага при этом
+// остаётся «уже разложен»: форма не меняется от прохода к проходу, и хаб не
+// перетирает ручной выбор человека видом «машина».
+func TestClusterListenerStepMacvtap(t *testing.T) {
+	s, gwEdge, hosts := listenerFixture(t, "8.8.8.8", "9.9.9.9")
+	ctx := context.Background()
+	r := NewClusterRunner(s)
+	clID := listenerNodes(t, s, hosts, []string{"vm", "host"}, []string{RoleControlPlane, RoleControlPlane})
+	cl, err := s.db.ClusterByID(ctx, clID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectFly(s, gwEdge)
+	spec := ClusterSpec{Name: "lab", Flavor: "kubeadm", Endpoint: "203.0.113.10", NetworkMode: NetworkMacvtap}
+	step := func(c context.Context, jc *jobs.Context) error {
+		_, e := r.clusterListenerStep(c, jc, cl, spec)
+		return e
+	}
+	runErr, keys := runInJob(t, s, step)
+	if runErr != nil && strings.Contains(runErr.Error(), "api-lab") {
+		t.Errorf("раскладка не собралась: %v", runErr)
+	}
+	for _, k := range []string{"hub.clusterListenerHostForm", "hub.clusterListenerAllowMacvtap", "hub.clusterListenerApplied"} {
+		if !slices.Contains(keys, k) {
+			t.Errorf("журнал не говорит %s: %v", k, keys)
+		}
+	}
+	doc := s.flyDoc(ctx)
+	i := slices.IndexFunc(doc.Routes, func(x FlyRoute) bool { return x.ID == "api-lab" })
+	if i < 0 {
+		t.Fatalf("маршрута нет: %+v", doc.Routes)
+	}
+	for _, tgt := range doc.Routes[i].Targets {
+		if tgt.Kind != "host" || tgt.Ref != "" {
+			t.Errorf("цель %s: вид %q, ссылка %q — надо «сам хост»", tgt.ID, tgt.Kind, tgt.Ref)
+		}
+	}
+	if len(doc.Routes[i].Targets) != 2 {
+		t.Errorf("целей %d, надо 2", len(doc.Routes[i].Targets))
+	}
+	_, keys = runInJob(t, s, step)
+	if !slices.Contains(keys, "hub.clusterListenerUnchanged") {
+		t.Errorf("повтор не помечен: %v", keys)
+	}
+}
+
+// Форма цели слушателя решает режим сети, а не то, машина это или хост: до
+// машины в macvtap хост размещения по сети не дойдёт, и адресом цели может
+// быть только адрес узла в туннеле шлюза.
+func TestClusterListenerTargetForm(t *testing.T) {
+	s, gwEdge, hosts := listenerFixture(t, "8.8.8.8", "9.9.9.9")
+	ctx := context.Background()
+	r := NewClusterRunner(s)
+	gw := flyGatewayJSON{EdgeID: gwEdge, Address: "203.0.113.10"}
+	// Запись машины узла: своя (hosts[1]), живёт на родителе (hosts[0]).
+	records := []store.Host{{Name: "lab-cp-1", ID: hosts[1], ParentID: hosts[0], K8sRole: RoleControlPlane}}
+	targets := func(mode string) []FlyTarget {
+		t.Helper()
+		spec := ClusterSpec{Name: "lab", Flavor: "kubeadm", Endpoint: "203.0.113.10", NetworkMode: mode}
+		route, _, _, err := r.clusterListenerRoute(ctx, spec, gw, listenerNodesFromHosts(records, spec))
+		if err != nil {
+			t.Fatalf("режим %q: %v", mode, err)
+		}
+		return route.Targets
+	}
+	// NAT, мост и wireguard: адрес машины ищет хост размещения, и цель —
+	// «машина» (аренда, ARP, гостевой агент — на его стороне).
+	vmWant := []FlyTarget{{ID: "lab-cp-1", HostID: hosts[0], Kind: "vm", Ref: "lab-cp-1", Port: k8sAPIPort}}
+	for _, mode := range []string{"", NetworkNAT, NetworkBridge, NetworkWireGuard} {
+		if got := targets(mode); !slices.Equal(got, vmWant) {
+			t.Errorf("режим %q: цели %+v, надо %+v", mode, got, vmWant)
+		}
+	}
+	// macvtap: до машины хост по сети не дойдёт, поэтому цель — «сам хост»,
+	// то есть запись самой машины и её адрес в туннеле шлюза.
+	hostWant := []FlyTarget{{ID: "lab-cp-1", HostID: hosts[1], Kind: "host", Port: k8sAPIPort}}
+	macTargets := targets(NetworkMacvtap)
+	if !slices.Equal(macTargets, hostWant) {
+		t.Errorf("macvtap: цели %+v, надо %+v", macTargets, hostWant)
+	}
+	// Узел-хост остаётся «сам хост» и в macvtap: своим адресом владеет сам.
+	spec := ClusterSpec{Name: "lab", Flavor: "kubeadm", Endpoint: "203.0.113.10", NetworkMode: NetworkMacvtap}
+	hostRoute, _, _, err := r.clusterListenerRoute(ctx, spec, gw,
+		listenerNodesFromHosts([]store.Host{{Name: "hv1", ID: hosts[0], K8sRole: RoleControlPlane}}, spec))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(hostRoute.Targets, []FlyTarget{{ID: "hv1", HostID: hosts[0], Kind: "host", Port: k8sAPIPort}}) {
+		t.Errorf("узел-хост: %+v", hostRoute.Targets)
+	}
+	// Машин ещё нет (сухой прогон): форму хаб предсказывает по режиму, но
+	// цели разложит после создания — записей машин он ещё не знает.
+	pre := listenerNodesFromSpec([]clusterNode{{Name: "lab-cp-1", HostID: hosts[0], Role: RoleControlPlane, Kind: KindVM}}, spec)
+	preRoute, _, _, err := r.clusterListenerRoute(ctx, spec, gw, pre)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preRoute.Targets) != 1 || preRoute.Targets[0].Kind != "vm" {
+		t.Errorf("сухой прогон macvtap: %+v", preRoute.Targets)
+	}
+	// Смена формы — это расхождение: старый маршрут надо разложить заново,
+	// иначе задание скажет «слушатель уже такой» про пул из машин.
+	same := func(a, b []FlyTarget) bool {
+		return clusterListenerSame(FlyRoute{Targets: a}, FlyRoute{Targets: b})
+	}
+	if same(targets(NetworkBridge), macTargets) {
+		t.Error("смена формы цели не замечена")
+	}
+	if same(hostRoute.Targets, macTargets) {
+		t.Error("узел-хост и машина в macvtap с одним именем — одна и та же цель")
+	}
+	// Человеческий вывод цели хаб не снимает молча: с ним маршрут остаётся
+	// тем же, что разложен, и задание его не переписывает.
+	drained := FlyRoute{Targets: []FlyTarget{{ID: "lab-cp-1", HostID: hosts[1], Kind: "host", Port: k8sAPIPort, Drain: true}}}
+	kept := listenerKeepDrain(drained, FlyRoute{Targets: macTargets})
+	if !kept.Targets[0].Drain || !clusterListenerSame(drained, kept) {
+		t.Errorf("вывод цели не сохранён: %+v", kept.Targets)
+	}
+	// Новая цель (узел добавился) выводом не помечается: вывод — решение
+	// про конкретную цель, а не про маршрут.
+	kept.Targets = append(slices.Clone(kept.Targets), FlyTarget{ID: "lab-cp-2", HostID: hosts[1], Kind: "host", Port: k8sAPIPort})
+	two := listenerKeepDrain(drained, kept)
+	if !two.Targets[0].Drain || two.Targets[1].Drain {
+		t.Errorf("вывод уехал на новую цель: %+v", two.Targets)
+	}
+}
+
+// Причины отказа слушателя: «общий адрес не отвечает» без них — отказ,
+// который оператор разбирает сам. Живость шлюз проверяет со своего адреса,
+// поэтому белый список для неё невидим: нулевой трафик — это и есть ответ
+// «цель жива, а войти нельзя».
+func TestClusterListenerReport(t *testing.T) {
+	s, gwEdge, hosts := listenerFixture(t, "8.8.8.8")
+	ctx := context.Background()
+	r := NewClusterRunner(s)
+	ids := []string{"lab-cp-1", "lab-cp-2"}
+	route := FlyRoute{ID: "api-lab", Gateway: gwEdge, Kind: fly.KindTCP, Port: 6443, Algorithm: fly.AlgoSourceHash,
+		Check: fly.Check{Kind: fly.CheckTCP}, Allow: []string{"8.8.8.8", "198.51.100.9"},
+		Targets: []FlyTarget{{ID: ids[0], HostID: hosts[0], Kind: "vm", Ref: ids[0], Port: k8sAPIPort},
+			{ID: ids[1], HostID: hosts[0], Kind: "vm", Ref: ids[1], Port: k8sAPIPort}}}
+	if _, err := s.flySave(ctx, FlyDoc{Routes: []FlyRoute{route}}, "admin", "проба"); err != nil {
+		t.Fatal(err)
+	}
+	status := func(targets []fly.TargetStats, traffic fly.RouteStats) []flyGatewayStatusJSON {
+		rs := fly.RouteStats{ID: "api-lab", Targets: targets}
+		rs.Active, rs.Clients, rs.BytesIn = traffic.Active, traffic.Clients, traffic.BytesIn
+		return []flyGatewayStatusJSON{{EdgeID: gwEdge, Connected: true, Status: &fly.GatewayStatus{Routes: []fly.RouteStats{rs}}}}
+	}
+	alive := fly.TargetStats{ID: ids[0], Alive: true, Checked: true, LatencyMS: 37}
+	down := fly.TargetStats{ID: ids[1], Checked: true, LastError: "dial tcp 10.77.1.3:40001: i/o timeout"}
+	refused := []fly.TargetStats{down, {ID: ids[0], Checked: true, LastError: "connection refused"}}
+	report := func(st []flyGatewayStatusJSON, want int, has []string, nothas ...string) {
+		t.Helper()
+		var got int
+		runErr, logKeys := runInJob(t, s, func(c context.Context, jc *jobs.Context) error {
+			got = r.clusterListenerReport(c, jc, st, "api-lab", ids)
+			return nil
+		})
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+		if got != want {
+			t.Errorf("служит %d целей, надо %d (%v)", got, want, logKeys)
+		}
+		for _, k := range has {
+			if !slices.Contains(logKeys, k) {
+				t.Errorf("журнал не говорит %s: %v", k, logKeys)
+			}
+		}
+		for _, k := range nothas {
+			if slices.Contains(logKeys, k) {
+				t.Errorf("журнал говорит лишнее (%s): %v", k, logKeys)
+			}
+		}
+	}
+	dead := []string{"hub.clusterListenerTargetDead"}
+	// Одна цель служит, другая молчит: отказывать нечем, но и пул не тот.
+	report(status([]fly.TargetStats{alive, down}, fly.RouteStats{Active: 1, Clients: 1}), 1,
+		[]string{"hub.clusterListenerTargetDead", "hub.clusterListenerPartial"})
+	// Ни одна не служит и через слушатель не прошло ни одного соединения —
+	// это белый список, и хаб называет его прямо.
+	report(status(refused, fly.RouteStats{}), 0,
+		[]string{"hub.clusterListenerTargetDead", "hub.clusterListenerNoTraffic"})
+	// Соединения шли — про белый список молчим: он ни при чём.
+	report(status(refused, fly.RouteStats{BytesIn: 1 << 20}), 0, dead, "hub.clusterListenerNoTraffic")
+	// Выведенную человеком цель не считаем мёртвой: шаг уже сказал про неё,
+	// и ждать её живости задание не будет.
+	report(status([]fly.TargetStats{alive, {ID: ids[1], Checked: true, Alive: true, Drain: true}},
+		fly.RouteStats{Active: 1}), 1, nil, "hub.clusterListenerTargetDead", "hub.clusterListenerTargetMissing")
+	// Цели нет в сводке шлюза: применение не дошло — хаб не выдумывает, что
+	// она молчит.
+	report(status([]fly.TargetStats{alive}, fly.RouteStats{Active: 1}), 1, []string{"hub.clusterListenerTargetMissing"})
+	// Маршрута в сводке нет вовсе.
+	missing := []string{"hub.clusterListenerRouteMissing"}
+	report([]flyGatewayStatusJSON{{EdgeID: gwEdge, Connected: true, Status: &fly.GatewayStatus{
+		Routes: []fly.RouteStats{{ID: "ssh"}}}}}, 0, missing)
+	// Шлюз не связан: причина — в его ответе, а не в цели.
+	report([]flyGatewayStatusJSON{{EdgeID: gwEdge, Connected: false, Error: "edge offline"}}, 0, missing)
+}
+
+// Чьей живости ждать задание: по применённому маршруту, а не по
+// размещению, — состав целей могла поменять и карта Traffic Fly, и
+// разбираться должно с тем, что разложено.
+func TestClusterListenerTargets(t *testing.T) {
+	s, gwEdge, hosts := listenerFixture(t, "8.8.8.8")
+	ctx := context.Background()
+	r := NewClusterRunner(s)
+	if got := r.clusterListenerTargets(ctx, "api-lab"); got != nil {
+		t.Errorf("маршрута нет, а цели нашлись: %v", got)
+	}
+	route := FlyRoute{ID: "api-lab", Gateway: gwEdge, Kind: fly.KindTCP, Port: 6443, Algorithm: fly.AlgoSourceHash,
+		Check: fly.Check{Kind: fly.CheckTCP}, Allow: []string{"8.8.8.8"},
+		Targets: []FlyTarget{{ID: "lab-cp-1", HostID: hosts[0], Kind: "host", Port: k8sAPIPort},
+			{ID: "lab-cp-2", HostID: hosts[0], Kind: "host", Port: k8sAPIPort, Drain: true}}}
+	if _, err := s.flySave(ctx, FlyDoc{Routes: []FlyRoute{route}}, "admin", "проба"); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.clusterListenerTargets(ctx, "api-lab"); !slices.Equal(got, []string{"lab-cp-1", "lab-cp-2"}) {
+		t.Errorf("цели: %v", got)
+	}
+	ap, ok := r.appliedListener(ctx, "api-lab")
+	if !ok || !slices.Equal(ap.Allow, []string{"8.8.8.8"}) {
+		t.Errorf("белый список применённого маршрута: %+v (%v)", ap.Allow, ok)
+	}
+}
+
 // Снятие слушателя вместе с кластером: маршрут уходит из документа, чужие
 // остаются.
 func TestClusterListenerRemoveRoute(t *testing.T) {
@@ -648,6 +896,23 @@ func TestClusterListenerPreflight(t *testing.T) {
 	}
 	if c, ok := has(list, "hub.preflightListenerAllow"); !ok || c.ok {
 		t.Errorf("пустой белый список прошёл: %+v", list)
+	}
+
+	// macvtap: целей «машина» не будет — хост размещения до машины не
+	// дойдёт; хаб говорит об этом заранее, как и про белый список, которому
+	// адресов хостов размещения на такой сети обычно не хватает.
+	s5, gw5, _ := listenerFixture(t, "8.8.8.8")
+	connectFly(s5, gw5)
+	mac := ClusterSpec{Name: "lab", Flavor: "kubeadm", Endpoint: "203.0.113.10", NetworkMode: NetworkMacvtap}
+	list = collect(s5, mac, one)
+	if c, ok := has(list, "hub.preflightListenerHostForm"); !ok || c.warn || !c.ok {
+		t.Errorf("форма цели macvtap в сухом прогоне: %+v (%v)", c, list)
+	}
+	if c, ok := has(list, "hub.clusterListenerAllowMacvtap"); !ok || !c.warn {
+		t.Errorf("про egress сайта не предупреждено: %+v", list)
+	}
+	if _, ok := has(list, "hub.preflightListenerFree"); !ok {
+		t.Errorf("с остальными проверками macvtap не ругается: %+v", list)
 	}
 
 	// Имя, которое смотрит не на шлюз, — «!»: слушателя не будет, и это

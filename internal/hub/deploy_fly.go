@@ -366,6 +366,90 @@ func (s *Server) flyWaitAlive(ctx context.Context, route string, ids []string) b
 	return false
 }
 
+// flyTargetCheck — состояние цели по сводке шлюза: служит ли она (проверка
+// пройдена, цель в пуле) и что сказала проверка, если нет.
+type flyTargetCheck struct {
+	Serving bool
+	Drain   bool
+	Seen    bool
+	Err     string
+}
+
+// flyTargetChecks — состояния целей ids по сводке шлюзов. Функция чистая:
+// проверки слушателя строятся на подставной сводке, без живого шлюза, —
+// иначе «почему адрес не отвечает» пришлось бы проверять тем же шлюзом,
+// который и молчит.
+func flyTargetChecks(statuses []flyGatewayStatusJSON, route string, ids []string) map[string]flyTargetCheck {
+	out := make(map[string]flyTargetCheck, len(ids))
+	for _, id := range ids {
+		out[id] = flyTargetCheck{}
+	}
+	for _, g := range statuses {
+		if g.Status == nil {
+			continue
+		}
+		for _, r := range g.Status.Routes {
+			if r.ID != route {
+				continue
+			}
+			for _, t := range r.Targets {
+				if _, ok := out[t.ID]; !ok {
+					continue
+				}
+				out[t.ID] = flyTargetCheck{Seen: true, Drain: t.Drain,
+					Serving: t.Checked && t.Alive && !t.Drain, Err: t.LastError}
+			}
+		}
+	}
+	return out
+}
+
+// flyServing — сколько целей из checks служат.
+func flyServing(checks map[string]flyTargetCheck) int {
+	n := 0
+	for _, c := range checks {
+		if c.Serving {
+			n++
+		}
+	}
+	return n
+}
+
+// flyRouteStats — сводка маршрута в ответах шлюзов: есть ли он там вовсе и
+// что видно по соединениям. ok — false, когда ни один шлюз маршрут не
+// отдаёт: применение не дошло либо шлюз не связан; why — причина строкой из
+// каталога (вложенной в строку журнала), чтобы её читал тот же язык, что и
+// остальной журнал, а не тот, на котором хаб спрашивал шлюз.
+func flyRouteStats(statuses []flyGatewayStatusJSON, route string) (fly.RouteStats, *msgs.Err, bool) {
+	for _, g := range statuses {
+		if g.Status == nil {
+			continue
+		}
+		for _, r := range g.Status.Routes {
+			if r.ID == route {
+				return r, nil, true
+			}
+		}
+	}
+	why := &msgs.Err{Key: "hub.flyStatusSilent"}
+	for _, g := range statuses {
+		if g.Error != "" {
+			why = &msgs.Err{Key: "hub.flyStatusError", Args: []any{g.Error}}
+			break
+		}
+		if !g.Connected {
+			why = &msgs.Err{Key: "hub.flyStatusOffline"}
+		}
+	}
+	return fly.RouteStats{}, why, false
+}
+
+// flyTouched — шли ли через маршрут соединения: active и bytes видны и у
+// маршрутов ядра (conntrack), total — только у тех, где слушает user-space.
+func flyTouched(rs fly.RouteStats) bool {
+	return rs.Total > 0 || rs.Active > 0 || rs.BytesIn > 0 || rs.Clients > 0
+}
+
 // flyPipelineCheck — маршрут на месте: цели живы, сертификаты действуют.
 func (s *Server) flyPipelineCheck(ctx context.Context, jc flyJobLog, r FlyRoute) {
 	for _, g := range s.flyStatuses(ctx) {

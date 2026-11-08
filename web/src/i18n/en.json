@@ -2793,7 +2793,7 @@
     "gatewayOffline": "not connected",
     "gatewayNone": "The hub has no Traffic Fly gateways: the listener has nowhere to sit — the shared address must be served outside the hub.",
     "allow": "Who else",
-    "allowHint": "Comma-separated addresses and networks allowed to reach the shared address besides the cluster's own hosts: workstations, external systems. Empty — cluster nodes only.",
+    "allowHint": "Comma-separated addresses and networks allowed to reach the shared address besides the cluster's own hosts: workstations, external systems. Empty — cluster nodes only. The hub adds the cluster's own nodes by their placement hosts' addresses; a macvtap machine arrives from its own site's address, so add that one if it differs from the host's.",
     "bridgeMissingRow": "in bridge mode every row with machines needs a bridge",
     "natSingle": "a libvirt network (NAT) works for one host only",
     "endpoints": "Host addresses for peers",

@@ -894,10 +894,12 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		jc.SaveResume(*done)
 	}
 	// Узел входит по общему адресу, значит, адрес уже должен отвечать:
-	// первый control plane по сводке шлюза жив — можно входить. Проверка
-	// идёт с хоста назначения на его служебный порт, поэтому «не жив» —
-	// это не про API, а про путь: туннель, DNAT или белый список.
-	if listener && !r.s.flyWaitAlive(ctx, clusterListenerID(spec.Name), []string{cp1Name}) {
+	// первый control plane по сводке шлюза жив — можно входить. Проверку
+	// делает сам шлюз, со своего адреса, поэтому она не видит белого
+	// списка: «жива» означает «путь есть», а не «вход разрешён». Именно
+	// поэтому отказ разбирается по строкам журнала, а не по слову «не
+	// отвечает».
+	if listener && r.clusterListenerAlive(ctx, jc, clusterListenerID(spec.Name), []string{cp1Name}) == 0 {
 		return msgs.Errorf("hub.clusterListenerDead", spec.Endpoint, clusterListenerID(spec.Name))
 	}
 	// Узлы входят по общему адресу, когда он задан: у kubeadm это тот же
@@ -988,6 +990,17 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	if len(spec.Addons) > 0 {
 		step++
 		jc.StepKey(step, total, "hub.clusterStepAddons")
+		// Дополнения входят в кластер с узла и по общему адресу (kubeconfig
+		// и --apiserver-advertise-address указывают на него): к этому шагу
+		// адрес обязан отвечать не только первому control plane. Ждём все
+		// цели применённого слушателя и называем то, что не служит, — иначе
+		// Cilium падал бы с SSL_ERROR_SYSCALL, ничего не объясняя.
+		if listener {
+			route := clusterListenerID(spec.Name)
+			if r.clusterListenerAlive(ctx, jc, route, r.clusterListenerTargets(ctx, route)) == 0 {
+				return msgs.Errorf("hub.clusterListenerDead", spec.Endpoint, route)
+			}
+		}
 		var prepare []store.Host
 		for _, nd := range nodes {
 			if h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name]); err == nil {

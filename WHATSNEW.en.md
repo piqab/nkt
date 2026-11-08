@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.18.2 — 2026-11-08
+
+- **The listener for the shared address now leads macvtap nodes through their hosts, not their machines.** A placement host cannot be reached by network at its own macvtap machine — that is the macvlan limitation — yet a "machine" target made the gateway look up an address the host cannot see. A macvtap node is now a "the host itself" target: the gateway goes to the host's own record in its tunnel, and the hub writes in the log which targets it built and why. If no target serves through the listener, the job stops before the cluster addons (Cilium and the rest) instead of after them; some targets serving is a warning, not a failure.
+- **The reason the shared address does not work is now in the log.** The hub used to wait for the first control plane only and stay silent about the rest. Reading the gateway's summary it now explains every target: dead — with the error its check last returned, drained — separately, missing from the route or no route in the summary — in the same words; and one more line when not a single connection went through the route: the address the node arrives from is not on the allow list.
+- **A node in macvtap arrives at the gateway from its own site's address, and the hub says so up front.** The allow list is built from the outward addresses of the placement hosts, while a macvtap machine takes its address from its own network's DHCP, so it does not always match the host. The hub does not guess it and never adds foreign addresses: there is a checklist item in the dry run, a line in the job log and a hint under the "who else" field — a mismatch is added by hand. Liveness is checked from the gateway, so "the target is alive" still does not mean "the node is allowed in".
+- **A drained target is not quietly brought back.** Draining on the Traffic Fly map is a person's decision: the next apply keeps the route with it and the job says so, instead of silently undoing the drain and putting the node back into balancing.
+
 ## v1.18.1 — 2026-11-08
 
 - **A macvtap machine reports its address on its very first boot.** The address used to appear only after a manual reboot: cloud-init installs `qemu-guest-agent` as a package but never starts the service — installed under cloud-init it stays disabled, so the host could only ask for the address from the second boot on. Now the machine gets a first-boot script along with the package that enables the agent: the address is known right away and no reboot is needed.

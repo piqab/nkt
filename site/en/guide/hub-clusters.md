@@ -119,19 +119,34 @@ address) and `allow ADDRESS[,ADDRESS…]` parameters.
 The route port is the endpoint's port, the targets are the control planes
 on their 6443, and the balancing is by source address (API connections
 are long-lived, moving them between nodes would achieve nothing). The
-allow list is mandatory: a gateway address is an entry to kube-apiserver
-and through it to the etcd of the whole cluster. The hub puts the
-outward addresses of the placement hosts in it plus what a person
-added; an empty list at Traffic Fly means “everyone”, so an empty list is
-a refusal, not an open port. A host behind NAT, whose address is not
-visible from outside, is logged with “!” — its nodes would be locked
+shape of a target depends on the network mode: a host node and a machine
+in NAT, bridge or WireGuard become “the host itself” and “the machine”
+(the gateway resolves the machine's address on its placement host), while
+**a machine in macvtap also becomes “the host itself”** — the host cannot
+be reached by network, but its own record in the gateway's tunnel is
+visible and alive. The allow list is mandatory: a gateway address is an
+entry to kube-apiserver and through it to the etcd of the whole cluster.
+The hub puts the outward addresses of the placement hosts in it plus what
+a person added; an empty list at Traffic Fly means “everyone”, so an empty
+list is a refusal, not an open port. A host behind NAT, whose address is
+not visible from outside, is logged with “!” — its nodes would be locked
 out, and that should be seen before creating.
 
+A macvtap machine needs its own line in that list: it arrives at the
+gateway from the address its own network gave it (usually the site's
+router), not from the parent host's address. The two may coincide, but
+nothing guarantees it, so the hub warns about this in the checklist and in
+the job log, and a person adds the address under “who else” — the hub does
+not guess it and never puts foreign addresses into the list. A gateway
+checks a target's liveness from itself, so “the target is alive” does not
+mean “the node is allowed in”: dead targets and a route with no connection
+at all are explained line by line in the log.
+
 **Dry run** shows all of it as a checklist: the gateway and its address,
-the port and targets of the route, who is in the allow list, whether the
-port on the gateway is free of someone else's route, and “!” where the
-address looks somewhere else than a gateway or there is no gateway at
-all.
+the port and targets of the route, the target shape for the network mode,
+who is in the allow list, whether the port on the gateway is free of
+someone else's route, and “!” where the address looks somewhere else than
+a gateway or there is no gateway at all.
 
 **Network between hosts** — how nodes on different hosts see each other:
 
@@ -167,7 +182,9 @@ reservation tables here.
   plane address — a Traffic Fly gateway serves it, not the placement host;
   if the gateway stands on a host whose machines are in macvtap, the hub
   skips the listener with an explicit line in the log and asks for
-  another gateway.
+  another gateway. Such a cluster still reaches its nodes through the
+  gateway: the listener builds its targets as “the host itself”, from the
+  machines' records, not as “the machine”.
 - **The host cannot see these machines either** — no SSH to them, no
   address read from them, no port check. That is why the hub takes the
   node's address from `qemu-guest-agent`, which is installed into the

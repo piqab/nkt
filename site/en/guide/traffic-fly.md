@@ -499,7 +499,10 @@ touch them. The shared address listener (`api-<cluster name>`) is not a
 reason to rewrite: it carries control planes only, with its own targets,
 and it stays out of the automation even if somebody binds a route with
 that name to the cluster. A manually drained target is not a mismatch (the
-set is the same) — but a real reconciliation clears the drain. What the
+set is the same) — but a real reconciliation clears the drain. The listener
+stands outside that rewriting, and its job keeps its targets as laid down: a
+drained target stays drained and the hub writes a line about it — clearing a
+drain is the person's call on the map. What the
 automation cannot judge becomes a line in the job log rather than a failed
 cluster creation: no client Ingress set, the cluster is gone, the cluster
 has no nodes yet.
