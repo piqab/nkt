@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -114,7 +115,9 @@ func TestStepsCilium(t *testing.T) {
 		t.Error("Cilium должен ставиться до ожидания Ready")
 	}
 	ka := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, Single: true, CNI: "cilium"}))
-	if strings.Contains(ka, "kube-flannel") || strings.Contains(ka, "skip-phases") ||
+	// Проверяется именно пропуск addon/kube-proxy: у каскада сброса состояния
+	// тоже есть свой --skip-phases, и по одному лишь слову не отличить.
+	if strings.Contains(ka, "kube-flannel") || strings.Contains(ka, "skip-phases=addon/kube-proxy") ||
 		!strings.Contains(ka, "else cilium install; fi") {
 		t.Errorf("kubeadm cilium без замены kube-proxy: %s", ka)
 	}
@@ -220,6 +223,247 @@ func TestCiliumStepGuardSkipsInstalled(t *testing.T) {
 				} else {
 					t.Errorf("%s: не поставил Cilium, которого нет:\n%s", s.Flavor, calls)
 				}
+			}
+		}
+	}
+}
+
+// nodeState — что лежит на узле в момент повтора шага «установка роли».
+// Манифесты control plane пишутся в фазе control-plane-prepare, участником
+// etcd узел становится и пишет etcd.yaml только в фазе etcd-join — дальше
+// которой вход и падал, поэтому apiserver без etcd — недоделанный узел.
+type nodeState struct {
+	adminConf   bool // /etc/kubernetes/admin.conf
+	apiserver   bool // manifests/kube-apiserver.yaml
+	etcdMember  bool // manifests/etcd.yaml
+	kubeletConf bool // /etc/kubernetes/kubelet.conf
+	kubeletUp   bool // systemctl is-active kubelet
+	healthzOK   bool // API отвечает
+	resetFails  int  // сколько попыток reset подряд падают
+}
+
+// runInstallGuard прогоняет guard шага «установка роли» живьём: подставные
+// kubeadm, kubectl и systemctl пишут вызовы в файл, состояние узла —
+// подставной каталог в NKT_KUBE_DIR.
+func runInstallGuard(t *testing.T, script string, st nodeState) (string, error) {
+	t.Helper()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "calls")
+	kubeDir := filepath.Join(dir, "kubernetes")
+	if err := os.MkdirAll(filepath.Join(kubeDir, "manifests"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{
+		"admin.conf": st.adminConf, "kubelet.conf": st.kubeletConf,
+		"manifests/kube-apiserver.yaml": st.apiserver, "manifests/etcd.yaml": st.etcdMember,
+	} {
+		if want {
+			if err := os.WriteFile(filepath.Join(kubeDir, name), []byte("x\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "reset-left"), []byte(itoa(st.resetFails)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Отказывает ровно reset (все три фазы каскада зовут его первой
+	// подкомандой), init и join — пишут себя в журнал и проходят.
+	stubs := []struct{ name, body string }{
+		{"kubeadm", "#!/bin/sh\necho \"kubeadm $*\" >>\"$NKT_TEST_CALLS\"\nif [ \"$1\" = reset ]; then n=$(cat \"$NKT_TEST_RESET\"); if [ \"$n\" -gt 0 ]; then echo $((n-1)) >\"$NKT_TEST_RESET\"; echo \"kubeadm: [reset] simulated failure\"; exit 1; fi; fi\nexit 0\n"},
+		{"kubectl", "#!/bin/sh\necho \"kubectl $*\" >>\"$NKT_TEST_CALLS\"\nexit \"$NKT_TEST_HEALTHZ\"\n"},
+		{"systemctl", "#!/bin/sh\necho \"systemctl $*\" >>\"$NKT_TEST_CALLS\"\nexit \"$NKT_TEST_KUBELET\"\n"},
+	}
+	for _, s := range stubs {
+		if err := os.WriteFile(filepath.Join(dir, s.name), []byte(s.body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f := filepath.Join(dir, "step.sh")
+	if err := os.WriteFile(f, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	healthz, kubelet := "1", "1"
+	if st.healthzOK {
+		healthz = "0"
+	}
+	if st.kubeletUp {
+		kubelet = "0"
+	}
+	cmd := exec.Command("bash", f)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+":"+os.Getenv("PATH"),
+		"NKT_KUBE_DIR="+kubeDir,
+		"NKT_TEST_CALLS="+logPath,
+		"NKT_TEST_RESET="+filepath.Join(dir, "reset-left"),
+		"NKT_TEST_HEALTHZ="+healthz,
+		"NKT_TEST_KUBELET="+kubelet,
+	)
+	out, err := cmd.CombinedOutput()
+	raw, _ := os.ReadFile(logPath)
+	return string(raw) + "\n" + string(out), err
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }
+
+// installStep — скрипт шага «установка роли».
+func installStep(t *testing.T, s InstallSpec) string {
+	t.Helper()
+	for _, st := range Steps(s) {
+		if st.Title == "k8s.step.install" {
+			return st.Script
+		}
+	}
+	t.Fatal("нет шага k8s.step.install")
+	return ""
+}
+
+// guardCut — начало скрипта до строки cut (её уже не видно в бою — там
+// права root и живой /root/.kube, тесту нужен только guard вместе с самой
+// командой kubeadm).
+func guardCut(script, cut string) string {
+	var lines []string
+	for _, l := range strings.Split(script, "\n") {
+		if strings.HasPrefix(l, cut) {
+			break
+		}
+		lines = append(lines, l)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Повтор шага «установка роли» определяет состояние узла по манифестам, а
+// не по kubelet.conf, и сносит его каскадом reset'ов, не пряча вывод:
+// недоделанный вход control plane (манифесты есть, etcd-участника нет)
+// раньше объявлялся «уже присоединённым», а снесение состояния падало на
+// фазе вычёркивания участника etcd — манифесты оставались, и следующий
+// заход отказывался с FileAvailable--etc-kubernetes-manifests-*.yaml.
+func TestKubeadmInstallStepGuardIsIdempotent(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("нет bash")
+	}
+	initSpec := InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, Single: true}
+	cpSpec := InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "10.0.0.1:6443", Token: "t", CAHash: "h", CertKey: certKey}
+	workerSpec := InstallSpec{Flavor: FlavorKubeadm, Role: RoleAgent, ServerURL: "10.0.0.1:6443", Token: "t", CAHash: "h"}
+	initScript := guardCut(installStep(t, initSpec), "mkdir -p /root/.kube")
+	cpScript := installStep(t, cpSpec)
+	workerScript := installStep(t, workerSpec)
+	for _, s := range []InstallSpec{initSpec, cpSpec, workerSpec} {
+		checkBashSyntax(t, s.Flavor+" install step", installStep(t, s))
+	}
+	// Состояние узла решается по манифестам — проверки на «есть ли
+	// kubelet.conf» и на живой kubelet без них недостаточно.
+	for _, script := range []string{initScript, cpScript} {
+		if !strings.Contains(script, "manifests/kube-apiserver.yaml") || !strings.Contains(script, "manifests/etcd.yaml") {
+			t.Errorf("guard не смотрит на манифесты control plane:\n%s", script)
+		}
+	}
+	// Сброс не должен молча проваливаться: старые формы «>/dev/null 2>&1 ||
+	// true» прятали причину и оставляли узел недоделанным.
+	for _, script := range []string{initScript, cpScript, workerScript} {
+		if strings.Contains(script, "kubeadm reset -f >/dev/null") || strings.Contains(script, "reset -f || true") {
+			t.Errorf("сброс состояния спрятан или прощён:\n%s", script)
+		}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		script string
+		st     nodeState
+		want   []string // подстроки журнала вызовов
+		none   []string // чего в журнале быть не должно
+		fail   bool     // шаг обязан упасть
+	}{
+		{
+			name:   "init чистый узел",
+			script: initScript,
+			st:     nodeState{},
+			want:   []string{"kubeadm init "},
+			none:   []string{"kubeadm reset"},
+		},
+		{
+			name:   "init живой control plane",
+			script: initScript,
+			st:     nodeState{adminConf: true, apiserver: true, etcdMember: true, kubeletConf: true, healthzOK: true},
+			none:   []string{"kubeadm init", "kubeadm reset"},
+			want:   []string{"control plane already initialized"},
+		},
+		{
+			name:   "init только admin.conf",
+			script: initScript,
+			st:     nodeState{adminConf: true, kubeletConf: true, healthzOK: true},
+			want:   []string{"kubeadm reset -f\n", "kubeadm init "},
+		},
+		{
+			name:   "init манифесты без ответа API",
+			script: initScript,
+			st:     nodeState{adminConf: true, apiserver: true, etcdMember: true, kubeletConf: true},
+			want:   []string{"leftovers of a failed init", "kubeadm reset -f\n", "kubeadm init "},
+		},
+		{
+			name:   "вход control plane готов",
+			script: cpScript,
+			st:     nodeState{apiserver: true, etcdMember: true, kubeletConf: true, kubeletUp: true},
+			want:   []string{"node already joined"},
+			none:   []string{"kubeadm join", "kubeadm reset"},
+		},
+		{
+			// Тот самый случай: узел дошёл до etcd-join и упал. Kubelet
+			// при этом жив — прежний guard считал узел присоединённым.
+			name:   "недоделанный вход control plane",
+			script: cpScript,
+			st:     nodeState{apiserver: true, kubeletConf: true, kubeletUp: true},
+			want:   []string{"leftovers of a failed join", "kubeadm reset -f\n", "kubeadm join 10.0.0.1:6443"},
+			none:   []string{"node already joined"},
+		},
+		{
+			name:   "работник с мёртвым kubelet",
+			script: workerScript,
+			st:     nodeState{kubeletConf: true},
+			want:   []string{"leftovers of a failed join", "kubeadm reset -f\n", "kubeadm join 10.0.0.1:6443"},
+		},
+		{
+			name:   "работник готов",
+			script: workerScript,
+			st:     nodeState{kubeletConf: true, kubeletUp: true},
+			want:   []string{"node already joined"},
+			none:   []string{"kubeadm join", "kubeadm reset"},
+		},
+		{
+			// Первая попытка падает на вычёркивании участника etcd —
+			// каскад обязан повторить без неё.
+			name:   "каскад: reset без вычёркивания участника",
+			script: cpScript,
+			st:     nodeState{apiserver: true, kubeletConf: true, resetFails: 1},
+			want:   []string{"kubeadm reset -f\n", "kubeadm reset -f --skip-phases=remove-etcd-member\n", "kubeadm join 10.0.0.1:6443"},
+			none:   []string{"dropping the node state"},
+		},
+		{
+			name:   "каскад: только очистка узла",
+			script: cpScript,
+			st:     nodeState{apiserver: true, kubeletConf: true, resetFails: 2},
+			want:   []string{"dropping the node state", "kubeadm reset phase cleanup-node\n", "kubeadm join 10.0.0.1:6443"},
+		},
+		{
+			name:   "каскад: снести нечем",
+			script: cpScript,
+			st:     nodeState{apiserver: true, kubeletConf: true, resetFails: 3},
+			want:   []string{"kubeadm reset phase cleanup-node"},
+			none:   []string{"kubeadm join"},
+			fail:   true,
+		},
+	} {
+		log, err := runInstallGuard(t, tc.script, tc.st)
+		if tc.fail != (err != nil) {
+			t.Errorf("%s: ошибка %v, хотели fail=%v\n%s", tc.name, err, tc.fail, log)
+		}
+		for _, w := range tc.want {
+			if !strings.Contains(log, w) {
+				t.Errorf("%s: в журнале нет %q:\n%s", tc.name, w, log)
+			}
+		}
+		for _, n := range tc.none {
+			if strings.Contains(log, n) {
+				t.Errorf("%s: в журнале лишнее %q:\n%s", tc.name, n, log)
 			}
 		}
 	}

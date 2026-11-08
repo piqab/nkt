@@ -219,7 +219,8 @@ into the cache and brings up the libvirt network right away.
   machines, the tunnel and installed roles are not redone.
 - Before a role is installed the node is updated to the hub's nkt
   version; on retry the leftovers of a failed `kubeadm init/join` are
-  removed automatically.
+  removed automatically — the node's state is judged by the control
+  plane manifests (below).
 - Deleting a cluster removes the machines, the tunnel and the machine
   network; a host node stays in the host list.
 
@@ -233,6 +234,22 @@ hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
   the branch is recorded in the cluster, and workers added later get the
   same one. Old branches like v1.31 don't work on Debian 13: `sqv`
   rejects their signature as outdated.
+- **Retrying "install role"** decides whether the node is ready by its
+  manifests, not by `kubelet.conf`: `kubeadm join --control-plane` writes
+  `kubelet.conf` and the apiserver/controller-manager/scheduler manifests
+  already in the `control-plane-prepare` phase, and only becomes an etcd
+  member — writing `etcd.yaml` — in the `etcd-join` phase, which is exactly
+  where the join used to fail when a peer's etcd address was unreachable.
+  Manifests without `etcd.yaml` mean a half-finished node: it is reset and
+  rejoined, not declared ready (with the kubelet running such a node looked
+  joined, and a green step left a broken control plane). The reset is a
+  cascade: first the plain `kubeadm reset -f`, then the same without
+  removing the etcd member — that first phase is what fails when etcd is
+  unreachable, so reset aborted on it, the manifests stayed on disk and the
+  next attempt refused with
+  `FileAvailable--etc-kubernetes-manifests-*.yaml` — then node cleanup
+  alone. The reset output stays in the job log: if the state cannot be
+  removed, the step fails with a reason instead of pretending it cleaned.
 - **containerd** on a machine from a cloud image is installed as a
   distribution package; an existing one on a "bare-metal" host (e.g.
   Docker's `containerd.io`) isn't reinstalled — CRI and `SystemdCgroup`

@@ -835,6 +835,25 @@ func kubeadmSteps(s InstallSpec) []Step {
 	const sysprep = "set -e\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true\n" +
 		"printf 'overlay\\nbr_netfilter\\n' > /etc/modules-load.d/k8s.conf\nmodprobe overlay\nmodprobe br_netfilter\n" +
 		"printf 'net.bridge.bridge-nf-call-iptables=1\\nnet.bridge.bridge-nf-call-ip6tables=1\\nnet.ipv4.ip_forward=1\\n' > /etc/sysctl.d/k8s.conf\nsysctl --system >/dev/null"
+	// Сброс состояния узла. Первой фазой `kubeadm reset` вычёркивает себя из
+	// кластера etcd — а когда etcd недоступен (недоделанный вход control
+	// plane, отключённый узел), эта фаза не проходит, reset выходит на ней,
+	// и манифесты остаются на диске: следующий заход спотыкается о
+	// FileAvailable--etc-kubernetes-manifests-*.yaml. Отсюда каскад —
+	// обычный reset, затем тот же без вычёркивания участника, затем одна
+	// только очистка узла. Вывод не прячется: это журнал задания, и если
+	// снести не удалось, шаг обязан упасть с причиной, а не сделать вид.
+	// Каталог состояния — переменная NKT_KUBE_DIR: в бою она не задаётся и
+	// остаётся /etc/kubernetes (сам kubeadm пишет всё равно туда), а тест
+	// подставляет пустой каталог и прогоняет guard живьём.
+	const nktKubeDir = "K=\"${NKT_KUBE_DIR:-/etc/kubernetes}\"\n"
+	const nktReset = "kubeadm_nkt_reset() {\n" +
+		"if kubeadm reset -f; then return 0; fi\n" +
+		"echo 'kubeadm: reset with etcd member removal failed — retrying without it'\n" +
+		"if kubeadm reset -f --skip-phases=remove-etcd-member; then return 0; fi\n" +
+		"echo 'kubeadm: dropping the node state without the etcd phases'\n" +
+		"kubeadm reset phase cleanup-node\n" +
+		"}\n"
 	repo := fetchPrelude(s) + "export DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq apt-transport-https ca-certificates curl gpg\n" +
 		"install -m 0755 -d /etc/apt/keyrings\nart " + KubeadmRepo(s.Version) + "/Release.key | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\n" +
 		"echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] " + KubeadmRepo(s.Version) + "/ /' > /etc/apt/sources.list.d/kubernetes.list\n" +
@@ -845,8 +864,20 @@ func kubeadmSteps(s InstallSpec) []Step {
 		// Версия — своя, без похода в интернет за stable-1.txt (у узла
 		// его может не быть, а ждать таймаут незачем). Остатки прошлой
 		// неудачной попытки — снести reset'ом; живой control plane —
-		// оставить.
-		init := "set -e\nif [ -f /etc/kubernetes/admin.conf ]; then if kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw=/healthz >/dev/null 2>&1; then echo 'kubeadm: control plane already initialized, skipping init'; SKIP_INIT=1; else echo 'kubeadm: leftovers of a failed init — resetting'; kubeadm reset -f >/dev/null 2>&1 || true; fi; fi\n" +
+		// оставить. Живой — это манифесты control plane, etcd-участник и
+		// отвечающий API: одного admin.conf мало (фаза [kubeconfig] пишет
+		// его раньше [etcd]), а недоделанный узел надо заметить, а не
+		// тащить его на следующий заход.
+		init := "set -e\n" + nktKubeDir + nktReset +
+			"if [ -f \"$K/admin.conf\" ] || [ -f \"$K/manifests/kube-apiserver.yaml\" ]; then\n" +
+			"if [ -f \"$K/manifests/kube-apiserver.yaml\" ] && [ -f \"$K/manifests/etcd.yaml\" ] && kubectl --kubeconfig \"$K/admin.conf\" get --raw=/healthz >/dev/null 2>&1; then\n" +
+			"echo 'kubeadm: control plane already initialized, skipping init'\n" +
+			"SKIP_INIT=1\n" +
+			"else\n" +
+			"echo 'kubeadm: leftovers of a failed init — resetting'\n" +
+			"kubeadm_nkt_reset\n" +
+			"fi\n" +
+			"fi\n" +
 			"[ -n \"$SKIP_INIT\" ] || kubeadm init --kubernetes-version=$(kubeadm version -o short) --pod-network-cidr=10.244.0.0/16"
 		if s.NodeIP != "" {
 			init += " --apiserver-advertise-address=" + s.NodeIP
@@ -887,7 +918,27 @@ func kubeadmSteps(s InstallSpec) []Step {
 		steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nexit 1"})
 		return steps
 	}
-	join := "set -e\nif [ -f /etc/kubernetes/kubelet.conf ]; then if systemctl is-active --quiet kubelet; then echo 'kubeadm: node already joined, skipping join'; exit 0; fi; echo 'kubeadm: leftovers of a failed join — resetting'; kubeadm reset -f >/dev/null 2>&1 || true; fi\n" +
+	// Признак узла — манифесты, а не kubelet.conf: вход control plane
+	// пишет kubelet.conf и манифесты apiserver/controller-manager/scheduler
+	// в фазе control-plane-prepare, а участником etcd становится и пишет
+	// etcd.yaml только в фазе etcd-join — дальше которой отказ и случался.
+	// Значит манифесты apiserver без etcd.yaml — недоделанный узел: его
+	// надо снести и войти заново, а не объявлять готовым (проверка по
+	// живому kubelet на таком узеле проходила, и шаг зелёный оставлял
+	// нерабочий control plane). Рабочий узел — etcd.yaml на месте либо
+	// (для обычного работника) никаких манифестов control plane.
+	join := "set -e\n" + nktKubeDir + nktReset +
+		"if [ -f \"$K/manifests/kube-apiserver.yaml\" ] && [ ! -f \"$K/manifests/etcd.yaml\" ]; then\n" +
+		"echo 'kubeadm: control plane manifests without an etcd member — leftovers of a failed join, resetting'\n" +
+		"kubeadm_nkt_reset\n" +
+		"elif [ -f \"$K/kubelet.conf\" ]; then\n" +
+		"if systemctl is-active --quiet kubelet; then\n" +
+		"echo 'kubeadm: node already joined, skipping join'\n" +
+		"exit 0\n" +
+		"fi\n" +
+		"echo 'kubeadm: leftovers of a failed join — resetting'\n" +
+		"kubeadm_nkt_reset\n" +
+		"fi\n" +
 		"kubeadm join " + s.ServerURL + " --token " + s.Token + " --discovery-token-ca-cert-hash " + s.CAHash
 	if s.Role == RoleServer {
 		join += " --control-plane --certificate-key " + s.CertKey

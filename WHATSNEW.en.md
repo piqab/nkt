@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.17.38 — 2026-11-08
+
+- **Retrying "install role" no longer sticks on a half-finished node.** When `kubeadm join --control-plane` broke at the etcd check (`error execution phase check-etcd`, `no route to host` to a peer's address), the node kept the control plane manifests on disk, and the second attempt refused: `[ERROR FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml] … already exists`. You had to log into the node and run `kubeadm reset` by hand.
+  - Whether the node is ready is decided by its manifests. Apiserver manifests without `etcd.yaml` mean a half-finished join: the node is reset and rejoined. "Already joined" is only said when the node did become an etcd member (or when it is an ordinary worker). The previous check — is the kubelet running — passed on such a node and left the step green with a broken control plane.
+  - Cleaning the state no longer fails silently: plain `kubeadm reset -f`, then the same without removing the etcd member — that phase is exactly what does not pass when etcd is unreachable, and the reset aborted there, cleaning nothing — then node cleanup alone. The output stays in the job log; if the state cannot be removed the step fails with a reason instead of pretending it cleaned.
+  - The fix is on the hub's side: no agent update on the node needed, just rerun the failed job.
+
 ## v1.17.37 — 2026-11-07
 
 - **One deleted host no longer switches Traffic Fly off.** Applying tripped over the host step whenever the applied state remembered a host that is no longer in the inventory, and it failed before reaching the gateways: the map stayed unapplied, a new cluster route stayed grey (“no data from the gateway”), and the applied state could not clean itself — it is only written at the end of a successful run. The loop closed on itself: however many times you press Apply, the same line — “Host : host not found: not found”, the name empty because a deleted host has none.
