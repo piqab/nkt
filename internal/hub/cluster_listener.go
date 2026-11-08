@@ -125,6 +125,34 @@ type listenerDecision struct {
 // здесь не отдаём: без указанного шлюза это обычный «общий адрес обслуживает
 // не хаб», и задание не должно падать из-за того, чего не просили.
 func (r *ClusterRunner) clusterListenerDecide(ctx context.Context, spec ClusterSpec) listenerDecision {
+	d := r.listenerDecideByAddress(ctx, spec)
+	// Шлюз, на котором стоят macvtap-машины этого кластера, не может
+	// говорить со своими гостями (ограничение macvlan), и слушатель общего
+	// адреса на нём — путь, которого нет. Отказа заданию это не делает:
+	// адресом может управлять кто-то вне хаба, — но хаб его не ставит и
+	// говорит, чем заменить.
+	if d.need && clusterHostsMacvtap(spec, d.gw.HostID) {
+		return listenerDecision{gw: d.gw, mismatch: d.mismatch,
+			key: "hub.clusterListenerSkipMacvtapHost", args: []any{d.gw.Name, spec.Endpoint}}
+	}
+	return d
+}
+
+// clusterHostsMacvtap — размещает ли хост машины кластера в macvtap.
+func clusterHostsMacvtap(spec ClusterSpec, hostID int64) bool {
+	if spec.NetworkMode != NetworkMacvtap || hostID == 0 {
+		return false
+	}
+	for _, pl := range spec.Placements {
+		if pl.HostID == hostID && pl.Kind == KindVM && pl.Nic != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// listenerDecideByAddress — выбор шлюза по адресу общего адреса.
+func (r *ClusterRunner) listenerDecideByAddress(ctx context.Context, spec ClusterSpec) listenerDecision {
 	look := listenerLookEndpoint(ctx, spec.Endpoint)
 	gws := r.s.flyGateways(ctx)
 	if len(gws) == 0 {

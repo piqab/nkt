@@ -585,7 +585,10 @@ group are not touched. A host's drift from the profile shows in its
 ## Machines inside a host
 
 A **new machine** is created on a host right from the hub: cloud-init,
-nkt inside, the group's profile. **Find machines on the host** (a tab in
+nkt inside, the group's profile; the network can be a libvirt network or a
+bridge, or the machine can be plugged straight into a host device (macvtap) —
+the hub takes the list of devices that are up from the host agent, and fitness
+is checked on the host itself. **Find machines on the host** (a tab in
 the same window) registers libvirt domains created outside nkt: each with
 all its addresses (libvirt lease, guest agent, host ARP; without
 loopback, link-local and the guest's internal bridges), its own SSH

@@ -13,6 +13,7 @@ import (
 	"github.com/piqab/nkt/internal/k8s"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
+	"github.com/piqab/nkt/internal/vmcreate"
 	"github.com/piqab/nkt/internal/vmimage"
 )
 
@@ -39,12 +40,58 @@ type hostPreflight struct {
 	MissingPackages []string `json:"missing_packages"`
 	ImagesDownload  []string `json:"images_downloaded"`
 	Bridges         []string `json:"bridges"`
-	WireGuard       bool     `json:"wireguard"`
-	HubCache        bool     `json:"hub_cache"`
-	Networks        []struct {
+	// Direct — пригодность устройств хоста быть нижними для macvtap: имя
+	// → причина (пусто — годится, «missing» — такого нет). Отвечает не
+	// всякий агент: пусто значит «спрашивать нечем», а не «устройств
+	// нет».
+	Direct    map[string]string `json:"direct"`
+	WireGuard bool              `json:"wireguard"`
+	HubCache  bool              `json:"hub_cache"`
+	Networks  []struct {
 		Name   string `json:"name"`
 		Active bool   `json:"active"`
 	} `json:"networks"`
+}
+
+// nicCheck — пункт чек-листа про устройство хоста, вынесенный из обхода
+// хостов: годность устройства решает не хаб на глаз, а ровно тот же
+// способ, каким её решает хост при создании машины, и проверять это
+// надо отдельно от живого канала до хоста.
+type nicCheck struct {
+	ok   bool
+	warn bool
+	key  string
+	args []any
+}
+
+// preflightNicChecks — пригодность устройств, названных для машин этого
+// хоста. Пустой (nil) pf.Direct — агент старше проверки:
+// устройства он не описывает, и это предупреждение, а не отказ: создание
+// машины проверит их на месте и не даст включить узел куда попало.
+func preflightNicChecks(pf hostPreflight, nodes []clusterNode) []nicCheck {
+	if pf.Direct == nil {
+		return []nicCheck{{ok: true, warn: true, key: "hub.preflightNicUnknown"}}
+	}
+	seen := map[string]bool{}
+	var out []nicCheck
+	for _, m := range nodes {
+		if m.Kind != KindVM || m.Nic == "" || seen[m.Nic] {
+			continue
+		}
+		seen[m.Nic] = true
+		reason, known := pf.Direct[m.Nic]
+		switch {
+		case !known:
+			out = append(out, nicCheck{key: "hub.preflightNicMissing", args: []any{m.Nic}})
+		case reason == vmcreate.DeviceDown:
+			out = append(out, nicCheck{key: "hub.preflightNicDown", args: []any{m.Nic}})
+		case reason != vmcreate.DeviceOK:
+			out = append(out, nicCheck{key: "hub.preflightNicBad", args: []any{m.Nic}})
+		default:
+			out = append(out, nicCheck{ok: true, key: "hub.preflightNicOK", args: []any{m.Nic}})
+		}
+	}
+	return out
 }
 
 // runPreflight проходит проверки по каждому хосту размещения, пишет
@@ -289,6 +336,15 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 				}
 			}
 			add(found, false, map[bool]string{true: "hub.preflightBridgeOK", false: "hub.preflightBridgeMissing"}[found], br)
+		}
+		// macvtap: то же устройство проверяется тем же способом, каким
+		// проверка будет делаться при создании машины, — «проверки
+		// зелёные, создание упало» здесь означало бы, что хаб и хост
+		// понимают пригодность интерфейса по-разному.
+		if spec.NetworkMode == NetworkMacvtap {
+			for _, c := range preflightNicChecks(pf, mine) {
+				add(c.ok, c.warn, c.key, c.args...)
+			}
 		}
 		if spec.Expose && host.ID == spec.HostID {
 			for _, rule := range spec.exposeRules() {

@@ -430,10 +430,10 @@ Creates a Kubernetes cluster on the host's virtual machines — like “new clus
 |---|---|---|
 | `NAME` | ✓ | cluster name — also the group and the prefix of machine names (lowercase letters, digits, hyphen) |
 | `flavor` |  | k3s (default) or kubeadm |
-| `nodes` |  | single — one machine; 1+N — a control plane and N workers (default 1+1); 3+N — three control planes (kubeadm requires endpoint with them); in quotes — placement across hosts, as in the “Clusters” section: “HOST: cp N, w N, host cp\|w, bridge BRIDGE, endpoint ADDR; HOST2: …” (cp/w N — machines with a role, host — the host itself as a node, endpoint — the host's address for WireGuard peers) |
+| `nodes` |  | single — one machine; 1+N — a control plane and N workers (default 1+1); 3+N — three control planes (kubeadm requires endpoint with them); in quotes — placement across hosts, as in the “Clusters” section: “HOST: cp N, w N, host cp\|w, bridge BRIDGE, nic DEVICE, endpoint ADDR; HOST2: …” (cp/w N — machines with a role, host — the host itself as a node, bridge/nic — that host's bridge or device, endpoint — the host's address for WireGuard peers) |
 | `image` |  | an image from the host catalog (default ubuntu-24.04) |
 | `cpu / mem / disk` |  | size of every machine: cores, memory in MB, disk in GB (2 / 4096 / 30) |
-| `network / bridge` |  | on one host — a libvirt network name; with a placement — the network mode between hosts: nat (one host), bridge (a host bridge: bridge BRIDGE for all or “bridge …” in a host's part) or wireguard (a tunnel the hub sets up itself) |
+| `network / bridge` |  | on one host — a libvirt network name; with a placement — the network mode between hosts: nat (one host), bridge (a host bridge: bridge BRIDGE for all or “bridge …” in a host's part), macvtap (the machine is plugged into a host device: nic DEVICE for all or “nic …” in a host's part) or wireguard (a tunnel the hub sets up itself) |
 | `cni` |  | cilium — Cilium instead of flannel (installed after the control plane); flannel — the flavor default |
 | `no-kube-proxy` |  | with cilium: replace kube-proxy with Cilium (eBPF) |
 | `version` |  | the Kubernetes minor version: the pkgs.k8s.io branch for kubeadm, the v1.36 channel for k3s; default — the current stable |

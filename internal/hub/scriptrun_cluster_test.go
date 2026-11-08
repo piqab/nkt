@@ -69,6 +69,33 @@ func TestClusterSpecFromScriptPlacement(t *testing.T) {
 	if spec.NetworkMode != NetworkWireGuard || spec.jobSteps() != 7 {
 		t.Errorf("wg spec: %+v", spec)
 	}
+	// macvtap: устройство берётся из строки хоста, а общий «nic» дописывает
+	// тем строкам, где своё не названо; мост при этом ни при чём.
+	sc, _ = script.Parse(`on hv1 k8s create lab nodes "hv1: cp 1, nic eth0; hv2: w 1; hv3: host w" nic ens1f0`, nil)
+	spec, err = r.clusterSpecFromStep(ctx, done, h, sc.Steps[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.NetworkMode != NetworkMacvtap {
+		t.Fatalf("режим: %+v", spec)
+	}
+	if spec.Placements[0].Nic != "eth0" || spec.Placements[1].Nic != "ens1f0" {
+		t.Errorf("устройства: %+v %+v", spec.Placements[0], spec.Placements[1])
+	}
+	if spec.Placements[2].Kind != KindHost || spec.Placements[2].Nic != "" {
+		t.Errorf("узел-хост с устройством: %+v", spec.Placements[2])
+	}
+	// Устройство назвали только в строке хоста — режим угадывается по нему:
+	// в nat оно не значило бы ничего и создание машины упало бы на форме
+	// spec'а, а не на выборе человека.
+	sc, _ = script.Parse(`on hv1 k8s create lab nodes "hv1: cp 1, w 1, nic eth0"`, nil)
+	spec, err = r.clusterSpecFromStep(ctx, done, h, sc.Steps[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.NetworkMode != NetworkMacvtap || spec.Placements[0].Nic != "eth0" {
+		t.Errorf("nic в строке без network: %+v", spec)
+	}
 	// Неизвестный хост в размещении.
 	sc, _ = script.Parse(`on hv1 k8s create lab nodes "nope: cp 1"`, nil)
 	if _, err := r.clusterSpecFromStep(ctx, done, h, sc.Steps[0]); err == nil {

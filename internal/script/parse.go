@@ -744,7 +744,7 @@ func parseOn(toks []string) (Step, error) {
 			}
 			return Step{Kind: KindK8sDestroy, Name: toks[2]}, nil
 		case "create":
-			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "api", "http", "https", "cni", "version", "addon", "endpoint", "gateway", "allow"}, []string{"expose", "no-kube-proxy"})
+			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "nic", "api", "http", "https", "cni", "version", "addon", "endpoint", "gateway", "allow"}, []string{"expose", "no-kube-proxy"})
 			if err != nil {
 				return Step{}, err
 			}
@@ -758,11 +758,16 @@ func parseOn(toks []string) (Step, error) {
 				if _, err := ParsePlacement(n); err != nil {
 					return Step{}, err
 				}
-				if m := args["network"]; m != "" && m != "nat" && m != "bridge" && m != "wireguard" {
+				if m := args["network"]; m != "" && m != "nat" && m != "bridge" && m != "macvtap" && m != "wireguard" {
 					return Step{}, msgs.Errorf("script.badK8sNetworkMode", m)
 				}
 				if b := args["bridge"]; b != "" && !nameRe.MatchString(b) {
 					return Step{}, msgs.Errorf("script.badK8sBridge", b)
+				}
+				// Устройство для macvtap: имя то же, что у моста, — оно
+				// уходит в команду ip и в XML домена.
+				if n := args["nic"]; n != "" && !nameRe.MatchString(n) {
+					return Step{}, msgs.Errorf("script.badK8sNic", n)
 				}
 			case n != "" && !k8sNodesRe.MatchString(n):
 				return Step{}, msgs.Errorf("script.badK8sNodes", n)

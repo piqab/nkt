@@ -81,6 +81,11 @@ func (s *Server) handleVMPreflight(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out["bridges"] = bridges
+	// Пригодность устройств быть нижними для macvtap — по каждому
+	// устройству хоста, причиной (пусто — годится). Хаб сверяет с этим
+	// те имена, что выбрал оператор, и видит, почему устройство не
+	// подходит, а не только «такого нет».
+	out["direct"] = vmcreate.DirectDevices(ctx, RunTooling)
 	// wireguard-tools — для туннеля между хостами.
 	out["wireguard"] = collect.Which(ctx, c, "wg")
 	// Кэш хаба на хосте: загрузки пойдут через него.

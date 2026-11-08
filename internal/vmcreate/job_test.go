@@ -426,6 +426,58 @@ func TestCreateSkipsNetworkWithBridge(t *testing.T) {
 	}
 }
 
+// С прямым подключением сеть libvirt ни при чём, а устройство хоста
+// спрашивается до создания диска: опущенный интерфейс не должен стоить
+// минут копирования образа.
+func TestCreateSkipsNetworkWithDirect(t *testing.T) {
+	m, db := newManager(t)
+	esc := &fakeEscape{out: map[string]string{
+		"ip -d -o link show dev eth0": `2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000\    link/ether 00:15:5d:45:3d:0a brd ff:ff:ff:ff:ff:ff`,
+	}}
+	m.Register(KindCreate, testRunner(t, esc))
+
+	spec := createSpec()
+	spec.Direct = "eth0"
+	id, _ := m.Start(context.Background(), jobs.Spec{
+		Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: spec},
+	})
+	waitJob(t, db, id, store2Succeeded)
+
+	joined := strings.Join(esc.calls, "\n")
+	if strings.Contains(joined, "net-") {
+		t.Errorf("сеть libvirt тронута, хотя машина в macvtap:\n%s", joined)
+	}
+	if !strings.Contains(joined, "ip -d -o link show dev eth0") {
+		t.Errorf("устройство не проверено:\n%s", joined)
+	}
+	// Проверка — первое, до образа и диска.
+	if first := esc.calls[0]; !strings.HasPrefix(first, "sh -c command -v") && !strings.Contains(first, "ip -d -o link") {
+		t.Errorf("состояние устройства спрашивается не в начале задания: %q", first)
+	}
+}
+
+// Опущенное устройство — отказ задания, и машина не создана вовсе.
+func TestCreateRefusesDownDirectDevice(t *testing.T) {
+	m, db := newManager(t)
+	esc := &fakeEscape{out: map[string]string{
+		"ip -d -o link show dev eth0": `2: eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN mode DEFAULT group default qlen 1000\    link/ether 00:15:5d:45:3d:0a brd ff:ff:ff:ff:ff:ff`,
+	}}
+	m.Register(KindCreate, testRunner(t, esc))
+
+	spec := createSpec()
+	spec.Direct = "eth0"
+	id, _ := m.Start(context.Background(), jobs.Spec{
+		Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: spec},
+	})
+	job := waitJob(t, db, id, store2Failed)
+	if !strings.Contains(job.Error, "eth0") {
+		t.Errorf("отказ не называет устройство: %q", job.Error)
+	}
+	if joined := strings.Join(esc.calls, "\n"); strings.Contains(joined, "qemu-img") {
+		t.Errorf("диск начали делать на опущенном устройстве:\n%s", joined)
+	}
+}
+
 // Машина токена: сеть токена заводится, nftables ставится, если его нет,
 // правила — до первого запуска; не встали правила — машина не стартует.
 func TestCreateIsolatedNetwork(t *testing.T) {

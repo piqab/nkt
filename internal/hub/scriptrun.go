@@ -1208,20 +1208,38 @@ func (r *ScriptRunner) clusterSpecFromStep(ctx context.Context, done *scriptRunR
 		if err != nil {
 			return spec, err
 		}
-		pl := Placement{HostID: ph.ID, Role: row.Role, Kind: row.Kind, Count: row.Count, Bridge: row.Bridge, Endpoint: row.Endpoint}
+		pl := Placement{HostID: ph.ID, Role: row.Role, Kind: row.Kind, Count: row.Count, Bridge: row.Bridge, Nic: row.Nic, Endpoint: row.Endpoint}
 		if row.Kind == KindVM {
 			pl.VCPUs, pl.MemMB, pl.DiskGB, pl.ImageID = spec.CPVCPUs, spec.CPMemoryMB, spec.CPDiskGB, spec.ImageID
 			if pl.Bridge == "" {
 				pl.Bridge = st.Args["bridge"]
 			}
+			if pl.Nic == "" {
+				pl.Nic = st.Args["nic"]
+			}
 		}
 		spec.Placements = append(spec.Placements, pl)
 	}
 	spec.NetworkMode, spec.Network = st.Args["network"], ""
+	// Устройство могли назвать и в строке хоста, и общим аргументом: mode
+	// угадывается по любому из двух — в другом режиме оно не значит ничего,
+	// а молча превратиться в «nat с неизвестным полем» оно не должно.
+	named := st.Args["nic"] != ""
+	for _, pl := range spec.Placements {
+		if pl.Nic != "" {
+			named = true
+		}
+	}
 	if spec.NetworkMode == "" {
-		spec.NetworkMode = NetworkNAT
-		if st.Args["bridge"] != "" {
+		// Режим не назван — угадывается по тому, что указано: мост хоста
+		// означает режим моста, устройство — macvtap.
+		switch {
+		case named:
+			spec.NetworkMode = NetworkMacvtap
+		case st.Args["bridge"] != "":
 			spec.NetworkMode = NetworkBridge
+		default:
+			spec.NetworkMode = NetworkNAT
 		}
 	}
 	return spec, spec.Validate()

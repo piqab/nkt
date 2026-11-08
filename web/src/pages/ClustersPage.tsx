@@ -9,7 +9,8 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { HubManifestsCard } from '../components/HubManifests'
 import { ClustersFindingsCard, HelmMultiModal } from '../components/HubClustersMulti'
-import type { HubHost, Job, Me } from '../types'
+import type { HubHost, Job, Me, NetworkInterface } from '../types'
+import { nicLabel, nicService, nicSuitable, nicV4 } from '../nics'
 import { Banner, Card, ErrorNote, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
 import { ClustersCard, ListenerFields, listenerBody, type ClusterGateway } from '../components/Clusters'
@@ -42,6 +43,9 @@ interface Row {
   image_id: string
   network: string
   bridge: string
+  // nic — устройство хоста, в которое машина включается напрямую (macvtap):
+  // на каждом хосте своё, поэтому оно в строке, а не в режиме целиком.
+  nic: string
 }
 
 /** Что известно о хосте для строки размещения: каталог образов, мосты. */
@@ -49,11 +53,16 @@ interface HostInfo {
   images: { id: string; name: string; downloaded: boolean }[]
   bridges: string[]
   networks: string[]
+  // nics — устройства, годные под macvtap; nicsUnknown — хост про пригодность
+  // устройств не ответил (агент старше той проверки), и список собран по
+  // снимку интерфейсов: выбирать можно, ручается хост при создании машины.
+  nics: { name: string; addr: string }[]
+  nicsUnknown: boolean
   loading: boolean
   error?: string
 }
 
-const newRow = (role: Row['role']): Row => ({ host_id: null, role, kind: 'vm', count: 1, vcpus: 2, memory_mb: 4096, disk_gb: 30, image_id: '', network: '', bridge: '' })
+const newRow = (role: Row['role']): Row => ({ host_id: null, role, kind: 'vm', count: 1, vcpus: 2, memory_mb: 4096, disk_gb: 30, image_id: '', network: '', bridge: '', nic: '' })
 
 const cell: CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.15rem' }
 
@@ -228,7 +237,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [cilium, setCilium] = useState(true)
   const [kpr, setKPR] = useState(false)
   const [longhorn, setLonghorn] = useState<LonghornChoice>({ on: false, version: '' })
-  const [network, setNetwork] = useState<'nat' | 'bridge' | 'wireguard'>('bridge')
+  const [network, setNetwork] = useState<'nat' | 'bridge' | 'macvtap' | 'wireguard'>('bridge')
   // Общий адрес control plane и всё, что вокруг него (см. ListenerFields).
   const gws = useApi<{ gateways: ClusterGateway[] }>('/hub/cluster/gateways', 60_000)
   const [endpoint, setEndpoint] = useState('')
@@ -254,7 +263,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     cilium: boolean
     kpr: boolean
     longhorn?: LonghornChoice
-    network: 'nat' | 'bridge' | 'wireguard'
+    network: 'nat' | 'bridge' | 'macvtap' | 'wireguard'
     rows: (Omit<Row, 'host_id'> & { host: string })[]
     // endpoints — адреса хостов для туннеля (по хосту), endpoint — общий
     // адрес control plane всего кластера.
@@ -359,29 +368,49 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const cpCount = rows.filter((r) => r.role === 'control-plane').reduce((n, r) => n + (r.kind === 'host' ? 1 : r.count), 0)
   const update = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
 
-  // Образы и мосты — с хоста строки: у каждого хоста свой каталог.
+  // Образы, мосты и устройства — с хоста строки: у каждого хоста свой
+  // каталог, свои мосты и свои интерфейсы.
   useEffect(() => {
     for (const id of hostIDs) {
       if (info[id]) continue
-      setInfo((m) => ({ ...m, [id]: { images: [], bridges: [], networks: [], loading: true } }))
+      setInfo((m) => ({ ...m, [id]: { images: [], bridges: [], networks: [], nics: [], nicsUnknown: false, loading: true } }))
       void (async () => {
         try {
-          const [img, pf] = await Promise.all([
+          const [img, pf, ifs] = await Promise.all([
             api<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(`/hosts/${id}/vm/images`),
-            api<{ bridges?: string[]; networks?: { name: string }[] }>(`/hosts/${id}/vm/preflight`),
+            api<{ bridges?: string[]; networks?: { name: string }[]; direct?: Record<string, string> | null }>(`/hosts/${id}/vm/preflight`),
+            // Адреса устройств — из снимка: за пригодность отвечает хост, а
+            // подпись «eth0 — 192.168.1.5» он не даёт, выбирать же надо вслепую
+            // без неё. Снимок недоступен — список останется без адресов.
+            api<{ interfaces?: NetworkInterface[] }>(`/hosts/${id}/interfaces`).catch(() => ({ interfaces: [] as NetworkInterface[] })),
           ])
           const downloaded = new Set((img.local ?? []).filter((l) => l.downloaded).map((l) => l.id))
+          const addrOf = new Map((ifs.interfaces ?? []).map((i) => [i.name, nicV4(i)]))
+          const fit = (name: string) => ({ name, addr: addrOf.get(name) ?? '' })
+          // Пустая причина в ответе хоста — «годится»: тот же ответ, по которому
+          // создание машины откажет, поэтому ручаться на него можно. Но годность
+          // хост смотрит по состоянию устройства, а по имени — нет: поднятый
+          // virbr0 или wg0 годится и вернёт пустую причину, а машина в них
+          // окажется там, откуда ей не выйти. Имя фильтруем здесь — и в обеих
+          // ветках, чтобы список не зависел от того, ответил ли хост.
+          const known = pf.direct != null
+          const nics = (known
+            ? Object.entries(pf.direct!).filter(([name, reason]) => reason === '' && !nicService(name)).map(([name]) => name)
+            : (ifs.interfaces ?? []).filter(nicSuitable).map((i) => i.name)
+          ).map(fit).sort((a, b) => a.name.localeCompare(b.name))
           setInfo((m) => ({
             ...m,
             [id]: {
               images: (img.catalog ?? []).map((i) => ({ id: i.id, name: i.name, downloaded: downloaded.has(i.id) })),
               bridges: pf.bridges ?? [],
               networks: (pf.networks ?? []).map((n) => n.name),
+              nics,
+              nicsUnknown: !known,
               loading: false,
             },
           }))
         } catch (err) {
-          setInfo((m) => ({ ...m, [id]: { images: [], bridges: [], networks: [], loading: false, error: err instanceof Error ? err.message : String(err) } }))
+          setInfo((m) => ({ ...m, [id]: { images: [], bridges: [], networks: [], nics: [], nicsUnknown: false, loading: false, error: err instanceof Error ? err.message : String(err) } }))
         }
       })()
     }
@@ -403,6 +432,14 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     for (const r of rows) if (r.kind === 'vm' && r.host_id !== null && !r.bridge) problems.push(t('clusters.bridgeMissingRow'))
   }
   if (effectiveNetwork === 'nat' && distinctHosts > 1) problems.push(t('clusters.natSingle'))
+  // macvtap: устройство выбирается на каждом хосте своё, и без него строка
+  // с машинами не значит ничего — хаб не угадывает, куда включать машину.
+  if (effectiveNetwork === 'macvtap') {
+    for (const r of rows) if (r.kind === 'vm' && r.host_id !== null && !r.nic) problems.push(t('clusters.nicMissingRow'))
+    // Проброс с хоста на его же macvtap-машину не работает: хост с ними не
+    // говорит. Общий адрес кластера при этом остаётся — его обслуживает шлюз.
+    if (expose) problems.push(t('clusters.exposeMacvtap'))
+  }
   const valid = !!name && rows.length > 0 && rows.every((r) => r.host_id !== null && (r.kind === 'host' || (r.count > 0 && imageOf(r)))) && problems.length === 0
 
   async function start(dry: boolean) {
@@ -428,6 +465,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           image_id: r.kind === 'vm' ? imageOf(r) : '',
           network: effectiveNetwork === 'nat' ? r.network : '',
           bridge: effectiveNetwork === 'bridge' ? r.bridge : '',
+          nic: effectiveNetwork === 'macvtap' ? r.nic : '',
           endpoint: effectiveNetwork === 'wireguard' && r.host_id !== null ? (endpoints[r.host_id] ?? '').trim() : '',
         })),
         expose,
@@ -511,14 +549,23 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           {t('clusters.network')}
           <Select
             value={network}
-            onChange={(v: 'nat' | 'bridge' | 'wireguard') => setNetwork(v)}
+            onChange={(v: 'nat' | 'bridge' | 'macvtap' | 'wireguard') => setNetwork(v)}
             options={[
               { value: 'nat', label: t('clusters.netNAT'), disabled: distinctHosts > 1 },
               { value: 'bridge', label: t('clusters.netBridge') },
+              { value: 'macvtap', label: t('clusters.netMacvtap') },
               { value: 'wireguard', label: t('clusters.netWireGuard') },
             ]}
           />
-          <span className="small muted">{network === 'wireguard' ? t('clusters.netWireGuardHint') : network === 'bridge' ? t('clusters.netBridgeHint') : t('clusters.netNATHint')}</span>
+          <span className="small muted">
+            {network === 'wireguard'
+              ? t('clusters.netWireGuardHint')
+              : network === 'macvtap'
+                ? t('clusters.netMacvtapHint')
+                : network === 'bridge'
+                  ? t('clusters.netBridgeHint')
+                  : t('clusters.netNATHint')}
+          </span>
         </label>
       </div>
 
@@ -549,7 +596,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                     size="small"
                     value={r.host_id ?? undefined}
                     placeholder={t('clusters.pickHost')}
-                    onChange={(v: number) => update(i, { host_id: v, image_id: '', bridge: '' })}
+                    onChange={(v: number) => update(i, { host_id: v, image_id: '', bridge: '', nic: '' })}
                     options={online.map((h) => ({
                       value: h.id,
                       label: (
@@ -621,6 +668,36 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                           onChange={(v: string) => update(i, { bridge: v })}
                           options={(hi?.bridges ?? []).map((b) => ({ value: b, label: b }))}
                         />
+                      )}
+                    </div>
+                  )}
+                  {effectiveNetwork === 'macvtap' && (
+                    <div style={{ ...cell, minWidth: '13rem' }}>
+                      <span className="small muted">{t('clusters.colNic')}</span>
+                      {hi && !hi.loading && hi.nics.length === 0 ? (
+                        // Списка нет — имя вписывают руками: хост проверит его
+                        // при создании машины и откажет по имени устройства.
+                        <Input
+                          size="small"
+                          value={r.nic}
+                          disabled={r.host_id === null}
+                          placeholder={t('clusters.nicPlaceholder')}
+                          onChange={(e) => update(i, { nic: e.target.value.trim() })}
+                        />
+                      ) : (
+                        <Select
+                          size="small"
+                          showSearch
+                          value={r.nic || undefined}
+                          loading={hi?.loading}
+                          placeholder={r.host_id === null ? t('clusters.pickHostFirst') : t('clusters.pickNic')}
+                          disabled={r.host_id === null}
+                          onChange={(v: string) => update(i, { nic: v })}
+                          options={(hi?.nics ?? []).map((n) => ({ value: n.name, label: nicLabel(n.name, n.addr) }))}
+                        />
+                      )}
+                      {hi && !hi.loading && hi.nicsUnknown && (
+                        <span className="small muted">{t('clusters.nicUnknown')}</span>
                       )}
                     </div>
                   )}

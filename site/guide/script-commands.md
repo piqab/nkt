@@ -430,10 +430,10 @@ on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 |---|---|---|
 | `ИМЯ` | ✓ | имя кластера — оно же группа и префикс имён машин (строчные буквы, цифры, дефис) |
 | `flavor` |  | k3s (по умолчанию) или kubeadm |
-| `nodes` |  | single — одна машина; 1+N — control plane и N worker (по умолчанию 1+1); 3+N — три control plane (у kubeadm с ними обязателен endpoint); в кавычках — размещение по хостам, как в разделе «Кластеры»: «ХОСТ: cp N, w N, host cp\|w, bridge МОСТ, endpoint АДРЕС; ХОСТ2: …» (cp/w N — машины с ролью, host — сам хост как узел, endpoint — адрес хоста для соседей по туннелю WireGuard) |
+| `nodes` |  | single — одна машина; 1+N — control plane и N worker (по умолчанию 1+1); 3+N — три control plane (у kubeadm с ними обязателен endpoint); в кавычках — размещение по хостам, как в разделе «Кластеры»: «ХОСТ: cp N, w N, host cp\|w, bridge МОСТ, nic УСТРОЙСТВО, endpoint АДРЕС; ХОСТ2: …» (cp/w N — машины с ролью, host — сам хост как узел, bridge/nic — мост или устройство этого хоста, endpoint — адрес хоста для соседей по туннелю WireGuard) |
 | `image` |  | образ из каталога хоста (по умолчанию ubuntu-24.04) |
 | `cpu / mem / disk` |  | размеры каждой машины: ядра, память в МБ, диск в ГБ (2 / 4096 / 30) |
-| `network / bridge` |  | на одном хосте — имя сети libvirt; при размещении по хостам — режим сети между хостами: nat (один хост), bridge (мост хоста: bridge МОСТ для всех или «bridge …» в строке хоста) или wireguard (туннель, хаб настроит сам) |
+| `network / bridge` |  | на одном хосте — имя сети libvirt; при размещении по хостам — режим сети между хостами: nat (один хост), bridge (мост хоста: bridge МОСТ для всех или «bridge …» в строке хоста), macvtap (машина включена в устройство хоста: nic УСТРОЙСТВО для всех или «nic …» в строке хоста) или wireguard (туннель, хаб настроит сам) |
 | `cni` |  | cilium — Cilium вместо flannel (ставится после control plane); flannel — как у варианта по умолчанию |
 | `no-kube-proxy` |  | с cilium: заменить kube-proxy на Cilium (eBPF) |
 | `version` |  | минорная версия Kubernetes: у kubeadm — ветка pkgs.k8s.io, у k3s — канал v1.36; по умолчанию — актуальная stable |

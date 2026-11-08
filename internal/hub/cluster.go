@@ -83,8 +83,9 @@ type ClusterSpec struct {
 	// один хост из HostID/Topology/Workers (диалог у хоста).
 	Placements []Placement `json:"placements,omitempty"`
 	// NetworkMode — как узлы на разных хостах видят друг друга: nat (один
-	// хост, сеть libvirt), bridge (машины в сети хостов), wireguard
-	// (туннели между хостами).
+	// хост, сеть libvirt), bridge (машины в сети хостов), macvtap (машина
+	// включена в устройство хоста напрямую — в той же физической сети,
+	// что и хосты), wireguard (туннели между хостами).
 	NetworkMode string `json:"network_mode,omitempty"`
 	ImageID     string `json:"image_id"`
 	Network     string `json:"network,omitempty"`
@@ -118,10 +119,13 @@ type Placement struct {
 	VCPUs  int    `json:"vcpus,omitempty"`
 	MemMB  int    `json:"memory_mb,omitempty"`
 	DiskGB int    `json:"disk_gb,omitempty"`
-	// ImageID/Network — для машин; Bridge — мост хоста в режиме bridge.
+	// ImageID/Network — для машин; Bridge — мост хоста в режиме bridge;
+	// Nic — устройство хоста, в которое включается машина в режиме
+	// macvtap (у каждого хоста оно своё).
 	ImageID string `json:"image_id,omitempty"`
 	Network string `json:"network,omitempty"`
 	Bridge  string `json:"bridge,omitempty"`
+	Nic     string `json:"nic,omitempty"`
 	// Endpoint — адрес этого хоста для соседей по туннелю (режим
 	// wireguard); пусто — адрес хоста из списка nkt.
 	Endpoint string `json:"endpoint,omitempty"`
@@ -130,6 +134,7 @@ type Placement struct {
 const (
 	NetworkNAT       = "nat"
 	NetworkBridge    = "bridge"
+	NetworkMacvtap   = "macvtap"
 	NetworkWireGuard = "wireguard"
 
 	RoleControlPlane = "control-plane"
@@ -150,9 +155,16 @@ type clusterNode struct {
 	ImageID string
 	Network string
 	Bridge  string
+	// Nic — устройство хоста для macvtap: машина включается в него
+	// напрямую, и на каждом хосте оно своё.
+	Nic string
 }
 
 var k8sMinorRe = regexp.MustCompile(`^\d+\.\d+$`)
+
+// nicNameRe — имя устройства хоста: форма та же, что у моста и сети
+// libvirt (имя уходит в команду ip и в XML домена).
+var nicNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
 
 // hostnameLikeRe — имя кластера: оно же префикс имён машин и hostname.
 var hostnameLikeRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
@@ -203,6 +215,12 @@ func (s *ClusterSpec) Validate() error {
 		}
 		if s.NetworkMode == "" {
 			s.NetworkMode = NetworkNAT
+		}
+		if s.NetworkMode == NetworkMacvtap {
+			// Устройство для macvtap выбирается по хостам: в одном
+			// размещении «на весь кластер» его назвать негде — на каждом
+			// хосте оно своё.
+			return msgs.Errorf("hub.clusterMacvtapNeedsPlacements")
 		}
 	}
 	if s.CNI != "" && s.CNI != "cilium" {
@@ -376,6 +394,33 @@ func (s *ClusterSpec) validatePlacements() error {
 				return msgs.Errorf("hub.clusterBridgeNeeded")
 			}
 		}
+	case NetworkMacvtap:
+		// Машина включается в устройство хоста напрямую — мост и сеть
+		// libvirt при этом ни при чём. Устройство обязано быть названо для
+		// каждой машины: на каждом хосте своё, и угадать его хаб не может.
+		for i := range s.Placements {
+			pl := &s.Placements[i]
+			pl.Bridge, pl.Network = "", ""
+			pl.Nic = strings.TrimSpace(pl.Nic)
+			if pl.Kind == KindHost {
+				pl.Nic = ""
+				continue
+			}
+			if pl.Nic == "" {
+				return msgs.Errorf("hub.clusterNicNeeded")
+			}
+			if !nicNameRe.MatchString(pl.Nic) {
+				return msgs.Errorf("hub.clusterBadNic", pl.Nic)
+			}
+		}
+		// Проброс с хоста на его собственную macvtap-гостью не делается:
+		// хост с ней не говорит (ограничение macvlan), поэтому DNAT на
+		// адрес узла не сработает и «проброс наружу» дал бы зелёный шаг с
+		// мёртвым адресом. Общий адрес кластера при этом остаётся — его
+		// обслуживает шлюз, а не хост размещения.
+		if s.Expose {
+			return msgs.Errorf("hub.clusterExposeMacvtap")
+		}
 	case NetworkWireGuard:
 		// Сеть машин на каждом хосте заводится своя (см. cluster_wg.go),
 		// мост и выбранная сеть не нужны.
@@ -421,7 +466,8 @@ func (s ClusterSpec) nodes(hostName func(int64) string) []clusterNode {
 				continue
 			}
 			for i := 0; i < pl.Count; i++ {
-				n := clusterNode{HostID: pl.HostID, Role: pl.Role, Kind: pl.Kind, VCPUs: pl.VCPUs, MemMB: pl.MemMB, DiskGB: pl.DiskGB, ImageID: pl.ImageID, Network: pl.Network, Bridge: pl.Bridge}
+				n := clusterNode{HostID: pl.HostID, Role: pl.Role, Kind: pl.Kind, VCPUs: pl.VCPUs, MemMB: pl.MemMB, DiskGB: pl.DiskGB,
+					ImageID: pl.ImageID, Network: pl.Network, Bridge: pl.Bridge, Nic: pl.Nic}
 				if pl.Kind == KindHost {
 					n.Name = hostName(pl.HostID)
 				} else if role == RoleControlPlane {
@@ -550,6 +596,23 @@ type clusterResume struct {
 type ClusterRunner struct {
 	m *Manager
 	s *Server
+}
+
+// nodeIPAdvertise — адрес, который узел обязан рекламровать соседям, либо
+// пусто, если узел пусть берёт свой сам. Два случая, когда адрес называет
+// хаб: узел — сам хост в туннеле WireGuard (его адрес наружу соседи не
+// видят, а видят адрес в туннеле) и машина, включённая в устройство хоста
+// (сети libvirt с её DHCP и DNS здесь нет, и kubelet иначе возьмёт адрес,
+// который соседи не видят, — ровно тот отказ, где etcd не может достучаться
+// до соседа).
+func nodeIPAdvertise(h store.Host, tunnelAddr string, macvtap bool) string {
+	if h.ParentID == 0 && tunnelAddr != h.Addr {
+		return tunnelAddr
+	}
+	if macvtap && h.Addr != "" {
+		return h.Addr
+	}
+	return ""
 }
 
 func NewClusterRunner(s *Server) *ClusterRunner { return &ClusterRunner{m: s.hub, s: s} }
@@ -728,6 +791,15 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		}
 		return h.Addr
 	}
+	// macvtapOf — узлы, включённые в устройство хоста: у машины вне сети
+	// libvirt адрес тот, что сообщил гостевой агент, и kubelet обязан
+	// взять именно его, а не первый найденный на интерфейсе.
+	macvtapOf := map[string]bool{}
+	for _, nd := range nodes {
+		if nd.Nic != "" {
+			macvtapOf[nd.Name] = true
+		}
+	}
 
 	// 1. Узлы: машины — по одной, сам хост — просто запись.
 	for _, nd := range nodes {
@@ -814,9 +886,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr, Version: spec.K8sVersion,
 			ControlPlaneEndpoint: spec.Endpoint,
 		}
-		if cp1.ParentID == 0 && cp1Addr != cp1.Addr {
-			is.NodeIP = cp1Addr
-		}
+		is.NodeIP = nodeIPAdvertise(cp1, cp1Addr, macvtapOf[cp1Name])
 		if err := r.installRole(ctx, jc, cp1, is); err != nil {
 			return err
 		}
@@ -864,9 +934,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		}
 		is := k8s.InstallSpec{Flavor: spec.Flavor, Role: k8s.RoleAgent, ServerURL: join.ServerURL, Token: join.Token, CAHash: join.CAHash, NodeName: nd.Name,
 			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr, Version: spec.K8sVersion}
-		if h.ParentID == 0 && nodeAddr(h) != h.Addr {
-			is.NodeIP = nodeAddr(h)
-		}
+		is.NodeIP = nodeIPAdvertise(h, nodeAddr(h), nd.Nic != "")
 		if nd.Role == RoleControlPlane {
 			is.Role, is.CertKey, is.TLSSANs = k8s.RoleServer, join.CertKey, tlsSANs
 		}
@@ -1007,11 +1075,12 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 		}
 		imageID = vmcreate.HostPrefix + name
 	}
-	vm := vmcreate.Spec{Name: nd.Name, ImageID: imageID, Network: nd.Network, Bridge: nd.Bridge, User: spec.User, Autostart: true,
-		VCPUs: nd.VCPUs, MemoryMB: nd.MemMB, DiskGB: nd.DiskGB}
-	if nd.Bridge != "" {
-		// На мосту адрес машины узнаётся через гостевого агента —
-		// cloud-init ставит его при первом запуске.
+	vm := vmcreate.Spec{Name: nd.Name, ImageID: imageID, Network: nd.Network, Bridge: nd.Bridge, Direct: nd.Nic,
+		User: spec.User, Autostart: true, VCPUs: nd.VCPUs, MemoryMB: nd.MemMB, DiskGB: nd.DiskGB}
+	if nd.Bridge != "" || nd.Nic != "" {
+		// Вне сети libvirt адрес машины узнаётся через гостевого агента —
+		// cloud-init ставит его при первом запуске. Без него хаб не узнал
+		// бы, куда ходить к узлу.
 		vm.Packages = append(vm.Packages, "qemu-guest-agent")
 	}
 	// Пакеты дополнений (Longhorn — open-iscsi и nfs-common) едут сюда же,
@@ -1057,7 +1126,15 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 			// туннельном режиме узлы видят друг друга по адресам плана, но
 			// машина на каждом хосте живёт в своей NAT-сети, и хаб этот
 			// адрес у хоста всё равно спрашивает.
-			if nd.Bridge == "" {
+			if nd.Nic != "" {
+				// macvtap: сети libvirt с её DHCP-арендой тут нет, адрес
+				// сообщает гостевой агент, и закрепить его хаб нечем — это
+				// делает администратор сети (бронь за MAC или статика на
+				// узле). Без закрепления адрес уезжает при следующей
+				// выдаче DHCP, и узел выпадает из кластера с «no route to
+				// host» к старому.
+				jc.Log("hub.clusterAddressStatic", nd.Name, nd.Nic)
+			} else if nd.Bridge == "" {
 				var fixed struct {
 					Address string `json:"address"`
 				}

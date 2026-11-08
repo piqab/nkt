@@ -1072,6 +1072,9 @@ export interface VMSpec {
   ssh_key: string
   network?: string
   bridge?: string
+  /** Устройство хоста для прямого подключения (macvtap); с network и
+   * bridge не совмещается. */
+  direct?: string
 }
 
 /** Программа, без которой машину не создать (см. internal/vmcreate). */

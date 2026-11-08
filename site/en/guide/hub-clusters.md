@@ -40,11 +40,12 @@ to the host.
 ## The “Clusters” section: several hosts
 
 The “New cluster on several hosts” dialog is a placement table: host →
-role → **machines** (how many, sizes, image, bridge) or **the host
-itself** as a node. The image comes from the host catalogue (“will be
+role → **machines** (how many, sizes, image, bridge or device) or **the
+host itself** as a node. The image comes from the host catalogue (“will be
 downloaded” if it is not there yet) or from the hub library (below); the
 form itself reports a wrong number of control planes, a missing shared
-control plane address for kubeadm, and a missing bridge.
+control plane address for kubeadm, a missing bridge, and a machine row
+with no device in macvtap mode.
 
 ### The shared control plane address (kubeadm)
 
@@ -97,6 +98,11 @@ The listener is needed where the shared address points:
   the name is not in DNS yet) — the step writes to the log that the
   address is served outside the hub, and the job continues: someone
   else's port on the gateway would not help the cluster.
+- the gateway runs on a host whose machines of this cluster are plugged
+  into macvtap — the hub does not put the listener through it and says
+  why in the log (a host cannot talk to its own macvtap guests): the
+  shared address has to lead to a node, not to an address the placement
+  host cannot reach.
 
 The form fields — **“Shared control plane address”**, **“Where to
 listen”** and **“Who else”** — appear for kubeadm only.
@@ -134,6 +140,48 @@ all.
 | **NAT** | all nodes on one host | nothing: the host's libvirt network |
 | **Bridge** | hosts in one L2 segment | a bridge on every host with machines; machine addresses come from the hosts' network |
 | **WireGuard** | hosts in different networks | UDP 51820 between the hosts: the hub generates keys, installs `wireguard-tools`, brings up `wg-quick@nktwg<N>` and a separate machine network on every host; peer subnets go through the tunnel |
+| **macvtap** | the machine needs an address in the hosts' own network and there is no bridge on it | a device on every host with machines (picked in the placement row from the ones that are up); no libvirt network, no bridge; the machine's address comes from that network's DHCP |
+
+**macvtap** plugs the machine straight into a host device (libvirt
+`type='direct'`, `bridge` mode), past the host's bridges and networks: it
+stands in the same network as the hosts, and peers see it by a real
+address. The list offers the host's devices that are up, with their
+addresses (service ones — tunnels, bridges, libvirt networks and `lo` —
+are not offered); the host agent answers for whether a device fits, and a
+**dry run** marks it right in the host's row: missing, not up, a loopback
+or already a macvlan/macvtap. In a real run the check is the same one and
+runs in the same place — when the machine is created — so picking
+something from the list does not promise the creation will pass.
+
+![macvtap mode: a device in every placement row](/screens/en/hub-cluster-macvtap.png)
+
+Two consequences of the macvlan limitation have to be accepted before
+creating: **a host cannot talk to its own macvtap machines** (this is a
+Linux limitation, not a setting), and **the hub has nothing to pin the
+machine's address with** — there is no libvirt network with its DHCP and
+reservation tables here.
+
+- **Port forwarding from the host** into such machines does not work and
+  is not offered: DNAT would run from a peer that is not in the
+  receiver's network. Outward the cluster is led by the shared control
+  plane address — a Traffic Fly gateway serves it, not the placement host;
+  if the gateway stands on a host whose machines are in macvtap, the hub
+  skips the listener with an explicit line in the log and asks for
+  another gateway.
+- **The host cannot see these machines either** — no SSH to them, no
+  address read from them, no port check. That is why the hub takes the
+  node's address from `qemu-guest-agent`, which is installed into the
+  machine together with nkt, and uses the same address for kubeadm's
+  `--node-ip`, `--advertise-address` and
+  `--apiserver-advertise-address`: a machine outside a libvirt network has
+  neither a DNS name the peers can resolve nor an address everyone sees
+  the same way — without this, kubelet advertises an address the peers do
+  not have, and the control plane join fails in the etcd check.
+- **The network administrator pins the address**: a DHCP reservation by
+  the machine's MAC or a static address on the node. In the creation log
+  this is its own line — the next DHCP lease would move the address and
+  the node would drop out of the cluster: Traffic Fly routes, the port
+  forward and the kubeconfig all hold exactly that address.
 
 WireGuard works when the hosts can reach each other by address (LAN,
 VPN, public IPs — then open UDP 51820 in the external firewall). If the
@@ -145,8 +193,9 @@ traffic never goes through the hub — the hub only hands out keys and
 configs.
 
 The **dry run** checks every host — KVM and libvirtd, memory and cores,
-ports, required packages, the image, the bridge or the WireGuard address,
-ping between hosts, link availability — and writes a checklist (✓ / ! /
+ports, required packages, the image, the bridge, the WireGuard address and
+the macvtap device, ping between hosts, link availability — and writes a
+checklist (✓ / ! /
 ✗) to a log over the form: the settings stay in place, ready to adjust
 and create. With “prepare as well” the hub downloads images and packages
 into the cache and brings up the libvirt network right away.
@@ -225,8 +274,9 @@ into the cache and brings up the libvirt network right away.
   network; a host node stays in the host list.
 
 Scripts do the same — `k8s create` with `nodes "hv1: cp 1, w 2; hv2: w 2;
-hv3: host w"`, `network nat|bridge|wireguard`, `version 1.34`, `image
-hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
+hv3: host w"`, `network nat|bridge|macvtap|wireguard`, `nic DEVICE` (or
+`nic DEVICE` in a host's row — a device of its own per host), `version
+1.34`, `image hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
 
 ## Installation details
 
@@ -313,7 +363,9 @@ hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
 - **Expose** — DNAT from host ports (`6443`, `80`, `443`, any can be
   changed or cleared) to the control plane: its own `NKT-PF` chains, the
   `nkt-portforward.service` unit restores them on boot. The kubeconfig
-  then points to the host and the chosen API port.
+  then points to the host and the chosen API port. Forwarding into nodes
+  plugged into macvtap does not work — the host cannot talk to them — so
+  the form does not offer it while any machine stands in a device.
 - **WireGuard**: interface `nktwg<N>` with address `10.200.<N>.<i>/24`,
   machine network `10.<100+N>.<i>.0/24`; `PostUp` opens the UDP port,
   allows FORWARD through the tunnel and removes libvirt masquerading
@@ -321,9 +373,18 @@ hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
   addresses. Before creating machines the hub checks every pair of hosts
   over the tunnel; without a handshake the log says "UDP 51820 is closed
   or the address is wrong".
-- **Bridge**: a machine's address is found through `qemu-guest-agent`,
-  which cloud-init installs on first boot.
-- **NAT and WireGuard** (a node not on a bridge): once the node's machine
+- **Bridge and macvtap**: a machine's address is found through
+  `qemu-guest-agent`, which cloud-init installs on first boot — outside a
+  libvirt network the host does not see its machine's address (on macvtap
+  it cannot see it at all), and without the agent the hub would not know
+  where to reach the node.
+- **macvtap**: there is nothing to pin the address with — the network
+  here is the hosts' own, with its DHCP, not a libvirt network with
+  reservation tables. The hub writes a line to the job log that the
+  network administrator has to pin the address (a reservation by MAC or a
+  static address on the node) and uses that address itself for kubeadm's
+  `--node-ip` and advertise addresses.
+- **NAT** (a node in a libvirt network): once the node's machine
   exists, the hub pins its address — a DHCP reservation by MAC in the
   libvirt network (`virsh net-update <net> add-last|modify ip-dhcp-host
   --live --config`) using the address the host sees on it right now. A

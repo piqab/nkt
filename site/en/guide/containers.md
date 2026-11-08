@@ -229,9 +229,18 @@ live output) and **storage pools** (read-only).
   history, rollback and `virsh define` on save. For a running machine the
   changes take effect after it restarts.
 - **New machine** from a cloud image: name, cores, memory, disk, network,
-  user and SSH key via cloud-init. Missing tools (`virt-install`,
-  `qemu-img`…) install themselves. Machine templates — to create identical
-  ones again.
+  user and SSH key via cloud-init. The network can be a libvirt network or a
+  bridge, or the machine can be plugged straight into a host device
+  (**macvtap**, past bridges and networks): the list offers the host's devices
+  that are up, with their addresses (service ones — tunnels, bridges, libvirt
+  networks and `lo` — are not offered), and on creation the host checks the
+  device again and refuses it if it is missing, down, a loopback or already a
+  macvlan/macvtap. Such a machine really stands in the hosts' network, but the
+  host itself cannot talk to it: its address comes from that network's DHCP and
+  the network administrator has to pin it (a reservation by MAC or a static
+  address on the machine), otherwise the next lease moves it. Missing tools
+  (`virt-install`, `qemu-img`…) install themselves. Machine templates — to
+  create identical ones again; the device is part of a template too.
 - **Images**: a catalogue of Ubuntu, Debian and other cloud images —
   downloaded with a checksum check; your own images — upload a file, move
   it into the disk directory.

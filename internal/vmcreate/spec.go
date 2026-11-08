@@ -109,6 +109,12 @@ type Spec struct {
 	// там, где мост уже настроен руками и заводить под него сеть
 	// libvirt незачем.
 	Bridge string `json:"bridge,omitempty"`
+	// Direct — устройство хоста, в которое машина включается напрямую как
+	// macvtap (mode='bridge'), мимо мостов и сетей libvirt. Нужен там,
+	// где машине надо быть в той же физической сети, что и хост, —
+	// например узлам kubeadm, разнесённым по разным хостам, которые
+	// должны видеть друг друга без моста на каждом хосте.
+	Direct string `json:"direct,omitempty"`
 	// User и SSHKey — учётная запись, под которой в машину заходят.
 	// Без ключа машина будет создана, но войти в неё будет нечем: пароля
 	// облачные образы не заводят вовсе.
@@ -155,7 +161,7 @@ func (s Spec) Validate() error {
 		return msgs.Errorf("vmcreate.coresMustBetween1", maxVCPUs)
 	case !userRe.MatchString(s.User):
 		return msgs.Errorf("vmcreate.userNameInsideMachineInvalid", s.User)
-	case s.Isolated && (s.Bridge != "" || !vmnet.IsIsolated(s.Network)):
+	case s.Isolated && (s.Bridge != "" || s.Direct != "" || !vmnet.IsIsolated(s.Network)):
 		return msgs.Errorf("vmcreate.isolatedNeedsNetwork")
 	}
 	if s.UserData != "" {
@@ -191,6 +197,16 @@ func (s Spec) Validate() error {
 	}
 	if s.Network != "" && !regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`).MatchString(s.Network) {
 		return msgs.Errorf("vmcreate.invalidNetworkName", s.Network)
+	}
+	// Форма та же, что у моста и сети: имя уходит в команду ip и в XML
+	// домена.
+	if s.Direct != "" && !regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`).MatchString(s.Direct) {
+		return msgs.Errorf("vmcreate.invalidDirectDevice", s.Direct)
+	}
+	// Машина включается во что-то одно: macvtap заменяет и мост, и сеть
+	// libvirt, а не добавляется к ним.
+	if s.Direct != "" && (s.Bridge != "" || s.Network != "") {
+		return msgs.Errorf("vmcreate.directWithBridgeOrNetwork")
 	}
 	return nil
 }
@@ -283,6 +299,12 @@ func DomainXML(s Spec, diskPath, seedPath string) string {
 	if s.Bridge != "" {
 		network = fmt.Sprintf("    <interface type='bridge'>\n      <source bridge='%s'/>\n      <model type='virtio'/>\n    </interface>",
 			html.EscapeString(s.Bridge))
+	}
+	if s.Direct != "" {
+		// mode='bridge' — тот случай, когда несколько машин на одном
+		// устройстве видят друг друга напрямую, а не только наружу.
+		network = fmt.Sprintf("    <interface type='direct'>\n      <source dev='%s' mode='bridge'/>\n      <model type='virtio'/>\n    </interface>",
+			html.EscapeString(s.Direct))
 	}
 	// Полоса: average — КБ/с (Мбит/с × 125), в обе стороны.
 	if s.NetMbit > 0 {

@@ -67,7 +67,7 @@ hosts".
 | Cluster name | `lab` | machine and card names |
 | Flavor | **kubeadm** | standard Kubernetes; on **k3s** everything is the same except steps 5–6 |
 | Kubernetes version | current stable | one for all nodes; old branches (v1.31) do not install on Debian 13 |
-| Network between hosts | **WireGuard between hosts** | hosts in different networks; in one L2 segment — "bridge" |
+| Network between hosts | **WireGuard between hosts** | hosts in different networks; in one L2 segment — "bridge"; if the machine needs an address in the hosts' own network and there is no bridge on it — "macvtap" with a device in every placement row (there the network administrator pins the address, and port forwarding from the host does not work) |
 | Placement, row 1 | host 1 · virtual machines · **control plane** · 1 | the first node with the API |
 | Placement, row 2 | host 1 · virtual machines · **worker** · 1 | |
 | Placement, row 3 | host 2 · virtual machines · **worker** · 1 | "add row" |
@@ -478,3 +478,5 @@ language.
 | no certificate | the `hello.example.com` A record does not point at the gateway, or its port 80 is closed |
 | `kubeadm` does not install on Debian 13 | an old branch (v1.31) was chosen: `sqv` rejects its signature — pick a current one |
 | the "install role" step fails with `FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml` or with `error execution phase check-etcd` | the node is half-finished from the previous attempt (the join broke in the `etcd-join` phase, while the control plane manifests were already written): a retry removes the state itself, through the `kubeadm reset` cascade. If the retry fails too, the job log shows which attempt of the reset refused; by hand — `kubeadm reset -f --skip-phases=remove-etcd-member` on that node, then rerun the job |
+| a node on **macvtap** does not answer from the host it was created on | that is not a failure: a host cannot talk to its own macvtap machines (a Linux limitation, not a setting) — check access from another machine or from the hub; the cluster nodes see it by its real address in the hosts' network |
+| a node on **macvtap** was `Ready` and dropped after the machine rebooted, peers report `no route to host` to its address | that network's DHCP gives the machine its address, and the hub has nothing to pin it with — there is no libvirt network with reservations here: a reservation by MAC or a static address on the node is the network administrator's job (the creation log carries its own line about it); Traffic Fly routes, the port forward and the kubeconfig all hold exactly that address |

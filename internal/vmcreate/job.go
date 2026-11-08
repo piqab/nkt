@@ -80,6 +80,14 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if r.escape == nil {
 		return msgs.Errorf("vmcreate.machineCreationUnavailableMode")
 	}
+	// Прямое подключение: состояние устройства хоста спрашивается до
+	// всякой работы. Копия диска и настройки первого запуска — минуты и
+	// гигабайты, а устройство может оказаться опущенным уже сейчас.
+	if spec.Direct != "" {
+		if err := CheckDirectDevice(ctx, r.run, spec.Direct); err != nil {
+			return err
+		}
+	}
 	img, err := resolveImage(r.store, spec.ImageID)
 	if err != nil {
 		return err
@@ -166,7 +174,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// свежем libvirt: сама сеть «default» заведена, но не поднята, и
 	// virsh отвечает «Failed to start domain» с причиной на следующей
 	// строке. Поднять её — обычное дело, а не правка чужой настройки.
-	if spec.Bridge == "" {
+	if spec.Bridge == "" && spec.Direct == "" {
 		if err := r.ensureNetwork(ctx, jc, spec.Network); err != nil {
 			return err
 		}

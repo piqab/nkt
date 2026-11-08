@@ -383,6 +383,15 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	// Устройство для прямого подключения проверяется здесь же, до
+	// задания: «выбранного интерфейса нет» или «он опущен» нужно видеть
+	// сразу в окне создания машины, а не в журнале через две минуты.
+	if spec.Direct != "" {
+		if err := vmcreate.CheckDirectDevice(r.Context(), RunTooling, spec.Direct); err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+	}
 	if s.jobs == nil {
 		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return

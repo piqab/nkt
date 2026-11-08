@@ -15,8 +15,8 @@ import (
 //
 // Хосты через «;», внутри хоста через «,»: «cp N» / «w N» — машины с
 // ролью, «host cp|w» — сам хост как узел, «bridge ИМЯ» — мост этого
-// хоста в режиме моста, «endpoint АДРЕС» — адрес хоста для соседей по
-// туннелю WireGuard.
+// хоста в режиме моста, «nic ИМЯ» — устройство этого хоста для macvtap,
+// «endpoint АДРЕС» — адрес хоста для соседей по туннелю WireGuard.
 
 // PlacementRow — одна строка размещения.
 type PlacementRow struct {
@@ -25,6 +25,7 @@ type PlacementRow struct {
 	Kind     string // vm | host
 	Count    int
 	Bridge   string
+	Nic      string
 	Endpoint string
 }
 
@@ -44,7 +45,7 @@ func ParsePlacement(s string) ([]PlacementRow, error) {
 		if !ok || !nameRe.MatchString(host) {
 			return nil, msgs.Errorf("script.badPlacementHost", hostPart)
 		}
-		bridge, endpoint := "", ""
+		bridge, nic, endpoint := "", "", ""
 		var rows []PlacementRow
 		for _, item := range strings.Split(items, ",") {
 			f := strings.Fields(item)
@@ -68,6 +69,11 @@ func ParsePlacement(s string) ([]PlacementRow, error) {
 					return nil, msgs.Errorf("script.badPlacementItem", strings.TrimSpace(item))
 				}
 				bridge = f[1]
+			case "nic":
+				if !nameRe.MatchString(f[1]) {
+					return nil, msgs.Errorf("script.badPlacementItem", strings.TrimSpace(item))
+				}
+				nic = f[1]
 			case "endpoint":
 				if !addrRe.MatchString(f[1]) {
 					return nil, msgs.Errorf("script.badPlacementItem", strings.TrimSpace(item))
@@ -81,7 +87,7 @@ func ParsePlacement(s string) ([]PlacementRow, error) {
 			return nil, msgs.Errorf("script.badPlacementHost", hostPart)
 		}
 		for i := range rows {
-			rows[i].Bridge, rows[i].Endpoint = bridge, endpoint
+			rows[i].Bridge, rows[i].Nic, rows[i].Endpoint = bridge, nic, endpoint
 		}
 		out = append(out, rows...)
 	}

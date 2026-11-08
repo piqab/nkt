@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.18.0 — 2026-11-08
+
+- **A new machine network — macvtap: the machine is plugged straight into a host device, past the host's bridges and libvirt networks.** For the case where the machine needs an address in the hosts' own network and the host has no bridge — for example a kubeadm node that peers must reach by a real address.
+  - The machine dialog and every cluster placement row list the host's devices that are up, with their addresses (`eth0 — 192.168.1.5`): there can be two or more, and a bare “eth0” does not say which network the machine lands in. Service devices — tunnels, bridges, libvirt networks, `lo` — are not offered. On creation the host checks the device again and refuses it by name: missing, not up, a loopback, or already a macvlan/macvtap.
+  - The price of the mode: **a host cannot talk to its own macvtap machines** — a Linux limitation, not a setting. So port forwarding from the placement host into them is not offered, and when the shared address's gateway stands on such a host the hub skips the listener and says why in the job log.
+  - **The network administrator pins the machine's address** — a DHCP reservation by MAC or a static address on the node: there is no libvirt network with reservations here, and the next lease would move the address and drop the node out of the cluster. The hub reads the address from the guest agent, hands it to kubeadm as `--node-ip` and the advertise addresses, and writes its own line into the creation log.
+  - In scripts: `network macvtap` and `nic DEVICE` — as an argument or in a placement row; the Kubernetes clusters guide carries the details.
+
 ## v1.17.38 — 2026-11-08
 
 - **Retrying "install role" no longer sticks on a half-finished node.** When `kubeadm join --control-plane` broke at the etcd check (`error execution phase check-etcd`, `no route to host` to a peer's address), the node kept the control plane manifests on disk, and the second attempt refused: `[ERROR FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml] … already exists`. You had to log into the node and run `kubeadm reset` by hand.

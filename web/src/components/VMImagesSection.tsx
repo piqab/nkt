@@ -3,7 +3,8 @@ import { beginUploadJob, jobOutlivedTransfer, sendFile } from './uploadJob'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
-import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec, VMTool, VMHostImage, VMNetwork } from '../types'
+import type { Job, Me, NetworkInterface, VMImage, VMImageLocal, VMTemplate, VMSpec, VMTool, VMHostImage, VMNetwork } from '../types'
+import { nicLabel, nicSuitable, nicV4 } from '../nics'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from './ui'
 import { formatBytes } from './charts'
 import { DataTable } from './DataTable'
@@ -515,10 +516,18 @@ function CreateVMModal({
   // её само.
   const [network, setNetwork] = useState('')
   const [bridge, setBridge] = useState('')
+  // macvtap: машина включается в устройство хоста напрямую, мимо мостов и
+  // сетей libvirt. device — имя этого устройства.
+  const [device, setDevice] = useState('')
   // Сети хоста: выбирать из списка вернее, чем вписывать имя наугад —
   // ошибка в нём выясняется только при запуске машины.
   const nets = useApi<{ networks: VMNetwork[] }>('/vm/networks', 60_000)
   const known = nets.data?.networks ?? []
+  // Устройства хоста: их на хосте бывает два и больше, поэтому выбирать
+  // надо списком, а не вписывать имя вслепую. Пригодность устройства хост
+  // проверит сам при создании машины — здесь только то, что видно по снимку.
+  const ifs = useApi<{ interfaces?: NetworkInterface[] }>('/interfaces', 300_000)
+  const nics = (ifs.data?.interfaces ?? []).filter(nicSuitable)
   const chosenNetwork = network || known[0]?.name || 'default' 
   const [autostart, setAutostart] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -534,7 +543,16 @@ function CreateVMModal({
     if (spec.vcpus) setVCPUs(spec.vcpus)
     if (spec.user) setUser(spec.user)
     if (spec.ssh_key) setSSHKey(spec.ssh_key)
-    if (spec.bridge) setBridge(spec.bridge)
+    // Источник подключения — один: шаблон описывает машину, а не три
+    // сети сразу, и два названных вида был бы отказом хоста при создании.
+    if (spec.bridge) {
+      setBridge(spec.bridge)
+      setDevice('')
+    }
+    if (spec.direct) {
+      setDevice(spec.direct)
+      setBridge('')
+    }
     if (spec.network) setNetwork(spec.network)
   }
 
@@ -554,8 +572,9 @@ function CreateVMModal({
             vcpus,
             user,
             ssh_key: sshKey.trim(),
-            network: bridge.trim() ? '' : chosenNetwork,
+            network: bridge.trim() || device.trim() ? '' : chosenNetwork,
             bridge: bridge.trim(),
+            direct: device.trim(),
           },
         },
       })
@@ -578,8 +597,9 @@ function CreateVMModal({
           disk_gb: diskGB,
           memory_mb: memoryMB,
           vcpus,
-          network: bridge.trim() ? '' : network,
+          network: bridge.trim() || device.trim() ? '' : network,
           bridge: bridge.trim(),
+          direct: device.trim(),
           user,
           ssh_key: sshKey.trim(),
           password: vmGenerate ? generatePassword() : vmPassword || undefined,
@@ -630,13 +650,23 @@ function CreateVMModal({
         <label>
           {t('vmimages.network')}
           <Select
-            value={bridge ? '__bridge__' : chosenNetwork}
+            value={bridge ? '__bridge__' : device ? '__direct__' : chosenNetwork}
             onChange={(v: string) => {
               if (v === '__bridge__') {
+                setDevice('')
                 setBridge('br0')
                 return
               }
+              if (v === '__direct__') {
+                setBridge('')
+                setNetwork('')
+                // Первое пригодное устройство: на хосте их бывает два и
+                // больше, и выбирать всё равно отсюда.
+                setDevice(nics[0]?.name ?? 'eth0')
+                return
+              }
               setBridge('')
+              setDevice('')
               setNetwork(v)
             }}
             options={[
@@ -648,6 +678,7 @@ function CreateVMModal({
               // создаст её само при первом же запуске машины.
               ...(known.length === 0 ? [{ value: 'default', label: t('vmimages.networkWillCreate') }] : []),
               { value: '__bridge__', label: t('vmimages.bridgeOption') },
+              { value: '__direct__', label: t('vmimages.directOption') },
             ]}
           />
           {bridge !== '' && (
@@ -658,6 +689,26 @@ function CreateVMModal({
               style={{ marginTop: '0.25rem' }}
             />
           )}
+          {device !== '' && (
+            nics.length > 0 ? (
+              <Select
+                value={device}
+                onChange={(v: string) => setDevice(v)}
+                style={{ width: '100%', marginTop: '0.25rem' }}
+                options={nics.map((n) => ({ value: n.name, label: nicLabel(n.name, nicV4(n)) }))}
+              />
+            ) : (
+              // Снимок интерфейсов не отвечен — имя вписывают руками, хост
+              // проверит его при создании машины и откажет по имени.
+              <Input
+                value={device}
+                onChange={(e) => setDevice(e.target.value.trim())}
+                placeholder="eth0"
+                style={{ marginTop: '0.25rem' }}
+              />
+            )
+          )}
+          {device !== '' && <span className="small muted">{t('vmimages.directHint')}</span>}
         </label>
       </div>
 
