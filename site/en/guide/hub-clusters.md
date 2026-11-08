@@ -37,6 +37,45 @@ ports), **Cilium** by a checkbox (with kube-proxy replacement) and
 a node the API port is always 6443; the port in “publish outside” belongs
 to the host.
 
+## The creation steps window
+
+The main button of the form is **“Next: steps”**: before anything starts,
+a checklist of all the job's actions opens — the host checks, the tunnel
+between hosts (wireguard), **each machine as its own step**, the shared
+address listener, the first control plane (init + CNI), **each node join
+as its own step**, waiting for `Ready` with the port forward and the
+kubeconfig, the addons (Longhorn). Everything is ticked by default; an
+unticked step is not run, and the log carries a “skipped” line.
+
+The same window opens on retry — the **“Continue”** button on the card of
+a failed cluster, or “Try again” in the creation job log. In it **the
+completed steps are unticked**: what is already done (machines, the
+tunnel, the listener, installed roles, addons) the job remembers, and the
+operator edits the continuation — adding or removing steps. The resume
+state is not lost: the new job takes the addresses and machine ids from
+it.
+
+- **Dependency conflicts** are highlighted red on the spot, and
+  “Continue” stays disabled until they are gone: a ticked step must have
+  its hard dependencies ticked or already completed (a node join without
+  the first control plane, addons without `Ready`, a machine without the
+  tunnel in wireguard mode). The hub validates the choice on the receiving
+  side too — the window is not the only entry point (API, script): an
+  empty choice, an unknown step and a conflict are all rejected.
+- **Forced repeat**: re-ticking a *completed* destructive step (the first
+  control plane, a node join) runs it with a node reset — `kubeadm reset`
+  before init/join (for k3s — the k3s uninstall script), the role is
+  installed from scratch, and the “already initialized/joined” guards do
+  not fire. The window marks such a step “with a node reset”: this is the
+  operator's decision — for example when the node reported success last
+  time but never became an etcd member.
+- The “listener is deployed” mark is independent of “cp-1 is installed”:
+  init could have failed after the listener, and repeating cp1 does not
+  require re-deploying the route (and repeating the listener alone, with
+  no cp1 and no joins, expects nothing from the nodes).
+- Jobs created before the steps window existed (and “+ worker”) keep
+  working the old way: the resume state decides what to skip.
+
 ## The “Clusters” section: several hosts
 
 The “New cluster on several hosts” dialog is a placement table: host →
@@ -292,8 +331,10 @@ into the cache and brings up the libvirt network right away.
 - **kubectl** — a button on a ready cluster opens a terminal on the first
   control plane with `kubectl` ready (`KUBECONFIG`, completion, the `k`
   alias); no external API access needed.
-- **Try again** — a failed creation job resumes where it stopped: created
-  machines, the tunnel and installed roles are not redone.
+- **Try again / Continue** — a failed creation job opens the [steps
+  window](#the-creation-steps-window): the completed steps are unticked,
+  the continuation can be edited, and repeating a completed destructive
+  step resets the node.
 - Before a role is installed the node is updated to the hub's nkt
   version; on retry the leftovers of a failed `kubeadm init/join` are
   removed automatically — the node's state is judged by the control
@@ -427,5 +468,12 @@ hv3: host w"`, `network nat|bridge|macvtap|wireguard`, `nic DEVICE` (or
   cancelled.
 - The creation job is a hub job: machines are created the same way as
   "New machine", then the role install, the token, joining the other
-  nodes, waiting for `Ready`, the port forward and the kubeconfig. Retry
-  API: `POST /api/jobs/{id}/retry`, `POST /api/hub/clusters/{id}/retry`.
+  nodes, waiting for `Ready`, the port forward and the kubeconfig. Steps
+  window API: `POST /api/hub/clusters/steps-preview` — the checklist for
+  the creation form (the body is the cluster spec, no step completed),
+  `GET /api/hub/clusters/{id}/steps` — the checklist of the last job
+  (`job_id`, `can_retry`); retry: `POST /api/jobs/{id}/retry`, `POST
+  /api/hub/clusters/{id}/retry` with an optional
+  `{"steps":["cp1","join:k8s-cp-2",…]}` — without `steps` the retry works
+  as before, from the resume state; cluster creation accepts `steps` in
+  the same body as the spec.

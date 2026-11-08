@@ -92,6 +92,15 @@ type InstallSpec struct {
 	// образы контейнеров через зеркало registry на том же адресе. Пусто
 	// — всё напрямую из интернета.
 	HubCache string `json:"hub_cache,omitempty"`
+	// Force — принудительно пересобрать узел перед установкой роли:
+	// игнорировать признаки «уже вступил»/«уже инициализирован» и сначала
+	// сбросить состояние (kubeadm reset / скрипт удаления k3s), затем
+	// поставить роль заново. Нужно, когда оператор в окне шагов повторно
+	// отмечает уже выполненный шаг — например, «присоединить cp-2», которое
+	// в прошлый раз отчиталось успехом по локальному kubelet.conf, но узел
+	// так и не стал участником кластера. Без Force скрипт на таком узле
+	// снова сказал бы «already joined» и вышел 0, ничего не пересобрав.
+	Force bool `json:"force,omitempty"`
 }
 
 // Validate — базовая проверка формы: имена, роли, отсутствие shell-мусора.
@@ -698,10 +707,25 @@ func k3sSteps(s InstallSpec) []Step {
 		}, "\n")
 		installEnv += " INSTALL_K3S_SKIP_DOWNLOAD=true"
 	}
+	installScript := "set -e\n"
+	if s.Force {
+		// Принудительная переустановка: предыдущая установка k3s снимается
+		// её же скриптом удаления (он останавливает службу, чистит данные и
+		// CNI), иначе установщик встанет поверх старого состояния и узел
+		// сохранит прежнюю роль. Скрипт удаления может отсутствовать (узел
+		// ещё не ставили) — это не ошибка.
+		uninstall := "/usr/local/bin/k3s-uninstall.sh"
+		if s.Role == RoleAgent {
+			uninstall = "/usr/local/bin/k3s-agent-uninstall.sh"
+		}
+		installScript += "echo 'k3s: forced reinstall — removing the previous install first'\n" +
+			"if [ -x " + uninstall + " ]; then " + uninstall + "; fi\n"
+	}
+	installScript += installEnv + " INSTALL_K3S_EXEC=" + shq(strings.Join(exec, " ")) + " sh /var/lib/nkt-k3s/k3s-install.sh\nrm -f /var/lib/nkt-k3s/k3s-install.sh"
 	steps := []Step{
 		{"k8s.step.prepare", "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq curl ca-certificates\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true"},
 		{"k8s.step.download", download},
-		{"k8s.step.install", "set -e\n" + installEnv + " INSTALL_K3S_EXEC=" + shq(strings.Join(exec, " ")) + " sh /var/lib/nkt-k3s/k3s-install.sh\nrm -f /var/lib/nkt-k3s/k3s-install.sh"},
+		{"k8s.step.install", installScript},
 		{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet " + unit + " && break; sleep 2; done\nsystemctl is-active --quiet " + unit},
 	}
 	if s.Role == RoleServer {
@@ -868,17 +892,27 @@ func kubeadmSteps(s InstallSpec) []Step {
 		// отвечающий API: одного admin.conf мало (фаза [kubeconfig] пишет
 		// его раньше [etcd]), а недоделанный узел надо заметить, а не
 		// тащить его на следующий заход.
-		init := "set -e\n" + nktKubeDir + nktReset +
-			"if [ -f \"$K/admin.conf\" ] || [ -f \"$K/manifests/kube-apiserver.yaml\" ]; then\n" +
-			"if [ -f \"$K/manifests/kube-apiserver.yaml\" ] && [ -f \"$K/manifests/etcd.yaml\" ] && kubectl --kubeconfig \"$K/admin.conf\" get --raw=/healthz >/dev/null 2>&1; then\n" +
-			"echo 'kubeadm: control plane already initialized, skipping init'\n" +
-			"SKIP_INIT=1\n" +
-			"else\n" +
-			"echo 'kubeadm: leftovers of a failed init — resetting'\n" +
-			"kubeadm_nkt_reset\n" +
-			"fi\n" +
-			"fi\n" +
-			"[ -n \"$SKIP_INIT\" ] || kubeadm init --kubernetes-version=$(kubeadm version -o short) --pod-network-cidr=10.244.0.0/16"
+		init := "set -e\n" + nktKubeDir + nktReset
+		if s.Force {
+			// Принудительная переинициализация: живой control plane тоже
+			// сбрасывается. Это осознанный шаг оператора (он повторно
+			// отметил «control plane» в окне шагов), поэтому предупреждение
+			// пишется в журнал узла, а не глотается.
+			init += "echo 'kubeadm: forced re-init — resetting the node first'\n" +
+				"kubeadm_nkt_reset\n" +
+				"kubeadm init --kubernetes-version=$(kubeadm version -o short) --pod-network-cidr=10.244.0.0/16"
+		} else {
+			init += "if [ -f \"$K/admin.conf\" ] || [ -f \"$K/manifests/kube-apiserver.yaml\" ]; then\n" +
+				"if [ -f \"$K/manifests/kube-apiserver.yaml\" ] && [ -f \"$K/manifests/etcd.yaml\" ] && kubectl --kubeconfig \"$K/admin.conf\" get --raw=/healthz >/dev/null 2>&1; then\n" +
+				"echo 'kubeadm: control plane already initialized, skipping init'\n" +
+				"SKIP_INIT=1\n" +
+				"else\n" +
+				"echo 'kubeadm: leftovers of a failed init — resetting'\n" +
+				"kubeadm_nkt_reset\n" +
+				"fi\n" +
+				"fi\n" +
+				"[ -n \"$SKIP_INIT\" ] || kubeadm init --kubernetes-version=$(kubeadm version -o short) --pod-network-cidr=10.244.0.0/16"
+		}
 		if s.NodeIP != "" {
 			init += " --apiserver-advertise-address=" + s.NodeIP
 		}
@@ -927,19 +961,28 @@ func kubeadmSteps(s InstallSpec) []Step {
 	// живому kubelet на таком узеле проходила, и шаг зелёный оставлял
 	// нерабочий control plane). Рабочий узел — etcd.yaml на месте либо
 	// (для обычного работника) никаких манифестов control plane.
-	join := "set -e\n" + nktKubeDir + nktReset +
-		"if [ -f \"$K/manifests/kube-apiserver.yaml\" ] && [ ! -f \"$K/manifests/etcd.yaml\" ]; then\n" +
-		"echo 'kubeadm: control plane manifests without an etcd member — leftovers of a failed join, resetting'\n" +
-		"kubeadm_nkt_reset\n" +
-		"elif [ -f \"$K/kubelet.conf\" ]; then\n" +
-		"if systemctl is-active --quiet kubelet; then\n" +
-		"echo 'kubeadm: node already joined, skipping join'\n" +
-		"exit 0\n" +
-		"fi\n" +
-		"echo 'kubeadm: leftovers of a failed join — resetting'\n" +
-		"kubeadm_nkt_reset\n" +
-		"fi\n" +
-		"kubeadm join " + s.ServerURL + " --token " + s.Token + " --discovery-token-ca-cert-hash " + s.CAHash
+	join := "set -e\n" + nktKubeDir + nktReset
+	if s.Force {
+		// Принудительный повторный вход: узел сбрасывается всегда, признак
+		// «уже вступил» не проверяется. Это единственный способ реально
+		// пересобрать control plane, который в прошлый раз отчитался успехом
+		// по локальному kubelet.conf, но участником etcd так и не стал.
+		join += "echo 'kubeadm: forced re-join — resetting the node first'\n" +
+			"kubeadm_nkt_reset\n"
+	} else {
+		join += "if [ -f \"$K/manifests/kube-apiserver.yaml\" ] && [ ! -f \"$K/manifests/etcd.yaml\" ]; then\n" +
+			"echo 'kubeadm: control plane manifests without an etcd member — leftovers of a failed join, resetting'\n" +
+			"kubeadm_nkt_reset\n" +
+			"elif [ -f \"$K/kubelet.conf\" ]; then\n" +
+			"if systemctl is-active --quiet kubelet; then\n" +
+			"echo 'kubeadm: node already joined, skipping join'\n" +
+			"exit 0\n" +
+			"fi\n" +
+			"echo 'kubeadm: leftovers of a failed join — resetting'\n" +
+			"kubeadm_nkt_reset\n" +
+			"fi\n"
+	}
+	join += "kubeadm join " + s.ServerURL + " --token " + s.Token + " --discovery-token-ca-cert-hash " + s.CAHash
 	if s.Role == RoleServer {
 		join += " --control-plane --certificate-key " + s.CertKey
 		if s.NodeIP != "" {

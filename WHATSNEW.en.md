@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.19.0 — 2026-11-08
+
+- **The cluster creation plan is a checklist: “Create cluster” opens a second form step with the steps window.** Every action is visible per node before anything starts: the host checks, the tunnel between hosts, each node's machine, the shared address listener, the first control plane, each node's join, waiting for `Ready` with the port forward and the kubeconfig, the addons. Anything unneeded can be unticked — the job does not run an unticked step and writes “skipped” into the log.
+- **“Try again” opens the same window, with the completed steps unticked.** What an invisible job state used to decide, the operator now sees and edits: steps can be added or removed, and the continuation is not lost (the new job takes the addresses and machine ids from the old one's resume state). The “Continue” button on the card of a failed cluster goes through the same window.
+- **A node that “reported success but never joined the cluster” can be forced in again.** Re-ticking a completed destructive step (the first control plane, a node join) runs it with a node reset: `kubeadm reset` before init/join (for k3s — the uninstall script), the “already initialized/joined” guards do not fire, and the role is installed from scratch. The window marks such a step “with a node reset” — it is never repeated silently.
+- **Dependency conflicts are highlighted on the spot.** A join without the first control plane, addons without `Ready`, a machine without the tunnel in wireguard mode — such steps turn red and “Continue” stays disabled until the conflict is gone; the hub validates the choice on the receiving side too (API, script): an empty choice, an unknown step and a conflict are all rejected.
+- The “listener is deployed” mark became independent of “the first control plane is installed”: if init failed after the listener, repeating cp1 no longer requires re-deploying the route. Jobs created before the steps window existed, and “+ worker”, keep working the old way.
+
 ## v1.18.2 — 2026-11-08
 
 - **The listener for the shared address now leads macvtap nodes through their hosts, not their machines.** A placement host cannot be reached by network at its own macvtap machine — that is the macvlan limitation — yet a "machine" target made the gateway look up an address the host cannot see. A macvtap node is now a "the host itself" target: the gateway goes to the host's own record in its tunnel, and the hub writes in the log which targets it built and why. If no target serves through the listener, the job stops before the cluster addons (Cilium and the rest) instead of after them; some targets serving is a warning, not a failure.

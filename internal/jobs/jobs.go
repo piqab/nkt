@@ -232,6 +232,22 @@ func (m *Manager) IsResumable(kind string) bool {
 // упавшего (прерванного, отменённого): сделанное пропускается, упавший
 // шаг выполняется заново. Старое задание и его журнал остаются как есть.
 func (m *Manager) Retry(ctx context.Context, id int64) (int64, error) {
+	return m.retry(ctx, id, "")
+}
+
+// RetryWithParams — то же, что Retry, но параметры нового задания
+// заменяются переданными: так окно шагов передаёт продолжению явный выбор
+// оператора (Params.Steps), а состояние продолжения (Resume) остаётся от
+// упавшего задания — оно источник данных, а не решение о пропуске.
+func (m *Manager) RetryWithParams(ctx context.Context, id int64, params any) (int64, error) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return 0, err
+	}
+	return m.retry(ctx, id, string(raw))
+}
+
+func (m *Manager) retry(ctx context.Context, id int64, paramsJSON string) (int64, error) {
 	job, err := m.db.JobByID(ctx, id)
 	if err != nil {
 		return 0, err
@@ -245,10 +261,14 @@ func (m *Manager) Retry(ctx context.Context, id int64) (int64, error) {
 	if !m.IsResumable(job.Kind) {
 		return 0, msgs.Errorf("jobs.retryNotResumable")
 	}
+	params := job.Params
+	if paramsJSON != "" {
+		params = paramsJSON
+	}
 	lang := msgs.FromContext(ctx)
 	newID, err := m.db.CreateJob(ctx, store.Job{
 		Kind: job.Kind, Title: job.Title, Queue: job.Queue, Status: store.JobQueued,
-		Params: job.Params, Resume: job.Resume, Steps: job.Steps, Author: job.Author, Lang: string(lang),
+		Params: params, Resume: job.Resume, Steps: job.Steps, Author: job.Author, Lang: string(lang),
 		TitleKey: job.TitleKey, TitleArgs: job.TitleArgs,
 	})
 	if err != nil {

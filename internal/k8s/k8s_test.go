@@ -469,6 +469,97 @@ func TestKubeadmInstallStepGuardIsIdempotent(t *testing.T) {
 	}
 }
 
+// Force — принудительный повтор шага установки (окно шагов: оператор
+// отметил выполненный шаг заново): guard «уже вступил/уже инициализирован»
+// не спрашивается, узел сбрасывается и роль ставится заново. Без этого
+// повтор входа cp-2, который в прошлый раз отчитался успехом по локальному
+// kubelet.conf, снова вышел бы 0, ничего не пересобрав.
+func TestInstallForceResetsNode(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("нет bash")
+	}
+	initSpec := InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, Single: true, Force: true}
+	cpSpec := InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, ServerURL: "10.0.0.1:6443", Token: "t", CAHash: "h", CertKey: certKey, Force: true}
+	workerSpec := InstallSpec{Flavor: FlavorKubeadm, Role: RoleAgent, ServerURL: "10.0.0.1:6443", Token: "t", CAHash: "h", Force: true}
+	// У init хвост после «mkdir -p /root/.kube» режем, как в guard-тесте:
+	// в тестовой среде нет прав на /root, а force-повтор живёт до него.
+	initScript := guardCut(installStep(t, initSpec), "mkdir -p /root/.kube")
+	cpScript := installStep(t, cpSpec)
+	workerScript := installStep(t, workerSpec)
+	for _, s := range []InstallSpec{initSpec, cpSpec, workerSpec} {
+		checkBashSyntax(t, s.Flavor+" force install step", installStep(t, s))
+	}
+	// Скрипт принудительного повтора не содержит прежних guard'ов: их ветка
+	// «успех без действий» ровно то, что Force обязан обойти.
+	if strings.Contains(initScript, "already initialized") || strings.Contains(cpScript, "node already joined") || strings.Contains(workerScript, "node already joined") {
+		t.Error("force-скрипт оставил guard «уже сделано»")
+	}
+	if !strings.Contains(initScript, "forced re-init") || !strings.Contains(cpScript, "forced re-join") {
+		t.Error("force-скрипт не говорит, что повтор принудительный")
+	}
+	// Живой узел force-повтор не щадит: сброс и установка заново.
+	for _, tc := range []struct {
+		name   string
+		script string
+		st     nodeState
+		want   []string
+		none   []string
+	}{
+		{
+			name:   "force init на живом control plane",
+			script: initScript,
+			st:     nodeState{adminConf: true, apiserver: true, etcdMember: true, kubeletConf: true, healthzOK: true},
+			want:   []string{"forced re-init", "kubeadm reset -f\n", "kubeadm init "},
+			none:   []string{"already initialized", "SKIP_INIT"},
+		},
+		{
+			name:   "force вход control plane на «присоединённом» узле",
+			script: cpScript,
+			st:     nodeState{apiserver: true, etcdMember: true, kubeletConf: true, kubeletUp: true},
+			want:   []string{"forced re-join", "kubeadm reset -f\n", "kubeadm join 10.0.0.1:6443"},
+			none:   []string{"node already joined"},
+		},
+		{
+			name:   "force вход работника на готовом узле",
+			script: workerScript,
+			st:     nodeState{kubeletConf: true, kubeletUp: true},
+			want:   []string{"forced re-join", "kubeadm reset -f\n", "kubeadm join 10.0.0.1:6443"},
+			none:   []string{"node already joined"},
+		},
+	} {
+		log, err := runInstallGuard(t, tc.script, tc.st)
+		if err != nil {
+			t.Errorf("%s: %v\n%s", tc.name, err, log)
+		}
+		for _, w := range tc.want {
+			if !strings.Contains(log, w) {
+				t.Errorf("%s: в журнале нет %q:\n%s", tc.name, w, log)
+			}
+		}
+		for _, n := range tc.none {
+			if strings.Contains(log, n) {
+				t.Errorf("%s: в журнале лишнее %q:\n%s", tc.name, n, log)
+			}
+		}
+	}
+	// k3s: force снимает предыдущую установку её же скриптом удаления —
+	// server и agent своими. Без Force скриптов удаления в шаге нет.
+	k3sServer := installStep(t, InstallSpec{Flavor: FlavorK3s, Role: RoleServer, Force: true})
+	k3sAgent := installStep(t, InstallSpec{Flavor: FlavorK3s, Role: RoleAgent, Force: true})
+	plain := installStep(t, InstallSpec{Flavor: FlavorK3s, Role: RoleServer})
+	checkBashSyntax(t, "k3s force server", k3sServer)
+	checkBashSyntax(t, "k3s force agent", k3sAgent)
+	if !strings.Contains(k3sServer, "k3s-uninstall.sh") || strings.Contains(k3sServer, "k3s-agent-uninstall.sh") {
+		t.Errorf("force server k3s: не тот скрипт удаления:\n%s", k3sServer)
+	}
+	if !strings.Contains(k3sAgent, "k3s-agent-uninstall.sh") {
+		t.Errorf("force agent k3s: нет скрипта удаления agent:\n%s", k3sAgent)
+	}
+	if strings.Contains(plain, "uninstall") {
+		t.Errorf("без Force k3s всё равно удаляет старое:\n%s", plain)
+	}
+}
+
 // Провал apt объясняет строка «E: …» из stderr, а не последний
 // «Processing triggers…» из stdout.
 func TestFailureLine(t *testing.T) {

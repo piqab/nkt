@@ -408,6 +408,8 @@ func (s *Server) Handler() http.Handler {
 					r.Delete("/hub/cluster-presets/{id}", s.handleClusterPresetDelete)
 					r.Delete("/hub/cluster-images/{name}", s.handleClusterImageDelete)
 					r.Post("/hub/clusters/dry-run", s.handleClusterDryRun)
+					r.Post("/hub/clusters/steps-preview", s.handleClusterStepsPreview)
+					r.Get("/hub/clusters/{id}/steps", s.handleClusterSteps)
 					r.Get("/hub/clusters/{id}/kubeconfig", s.handleClusterKubeconfig)
 					r.Post("/hub/clusters/{id}/workers", s.handleClusterAddWorkers)
 					r.Post("/hub/clusters/{id}/retry", s.handleClusterRetry)

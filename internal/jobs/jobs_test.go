@@ -379,3 +379,44 @@ func TestResumeLoopStops(t *testing.T) {
 		t.Errorf("статус %q", got)
 	}
 }
+
+// RetryWithParams: состояние продолжения берётся от упавшего задания, а
+// параметры заменяются переданными — так окно шагов передаёт продолжению
+// явный выбор оператора, не трогая Resume.
+func TestRetryWithParamsReplacesParams(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+	type params struct {
+		ClusterID int64    `json:"cluster_id"`
+		Steps     []string `json:"steps,omitempty"`
+	}
+	var got params
+	var resumeSeen string
+	fail := true
+	m.Register("clusterish", runnerFunc{resumable: true, fn: func(_ context.Context, jc *Context) error {
+		if fail {
+			fail = false
+			jc.SaveResume(map[string]int{"done": 1})
+			return errors.New("boom")
+		}
+		_ = jc.Params(&got)
+		resumeSeen = jc.Job.Resume
+		return nil
+	}})
+	id, err := m.Start(ctx, Spec{Kind: "clusterish", Title: "t", Queue: "q", Params: params{ClusterID: 7}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "провал", func() bool { return jobStatus(t, db, id) == store.JobFailed })
+	newID, err := m.RetryWithParams(ctx, id, params{ClusterID: 7, Steps: []string{"join:cp-2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "успех повтора", func() bool { return jobStatus(t, db, newID) == store.JobSucceeded })
+	if got.ClusterID != 7 || len(got.Steps) != 1 || got.Steps[0] != "join:cp-2" {
+		t.Errorf("параметры нового задания: %+v", got)
+	}
+	if !strings.Contains(resumeSeen, `"done":1`) {
+		t.Errorf("состояние продолжения потеряно: %q", resumeSeen)
+	}
+}

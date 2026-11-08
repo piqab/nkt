@@ -12,6 +12,7 @@ import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { K8sUpgradeModal } from './K8sUpgrade'
 import { ClusterAddonsModal, LonghornField, addonsBody, type LonghornChoice } from './ClusterAddons'
+import { ClusterRetryModal, StepsChecklist, stepConflicts, stepsChosen, type ClusterStep, type StepSelection } from './ClusterSteps'
 import { confirmAction } from './confirm'
 import { tx, type Msg } from '../msg'
 
@@ -180,9 +181,15 @@ export function NewClusterModal({
   const [network, setNetwork] = useState('')
   const [cp, setCP] = useState({ vcpus: 2, mem: 4096, disk: 30 })
   const [w, setW] = useState({ vcpus: 2, mem: 4096, disk: 30 })
-  const [busy, setBusy] = useState<'create' | 'dry' | null>(null)
+  const [busy, setBusy] = useState<'create' | 'dry' | 'steps' | null>(null)
   const [prepare, setPrepare] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Второй шаг формы — чек-лист действий задания: что именно создаст
+  // «Создать кластер». Все шаги отмечены; снятый шаг не исполняется, и его
+  // можно доделать потом через «продолжить» на карточке кластера.
+  const [stage, setStage] = useState<'form' | 'steps'>('form')
+  const [stepsPreview, setStepsPreview] = useState<ClusterStep[] | null>(null)
+  const [stepsSel, setStepsSel] = useState<StepSelection>({})
   // Журнал сухого прогона открывается поверх формы: настройки остаются,
   // после проверок можно поправить и запустить создание.
   const [dryJob, setDryJob] = useState<Job | null>(null)
@@ -220,13 +227,30 @@ export function NewClusterModal({
           ...listenerBody(flavor, endpoint, gateway, allow),
   })
 
+  // Чек-лист создания приходит с хаба: имена узлов и порядок шагов знает
+  // исполнитель (internal/hub/cluster_steps.go), фронт их не угадывает.
+  async function toSteps() {
+    setBusy('steps')
+    setError(null)
+    try {
+      const res = await api<{ steps: ClusterStep[] }>('/hub/clusters/steps-preview', { method: 'POST', body: body() })
+      setStepsPreview(res.steps)
+      setStepsSel(Object.fromEntries(res.steps.map((s) => [s.id, true])))
+      setStage('steps')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function start(dry: boolean) {
     setBusy(dry ? 'dry' : 'create')
     setError(null)
     try {
       const res = await api<{ id?: number; job_id: number }>(dry ? '/hub/clusters/dry-run' : '/hub/clusters', {
         method: 'POST',
-        body: dry ? { ...body(), prepare } : body(),
+        body: dry ? { ...body(), prepare } : { ...body(), steps: stepsChosen(stepsPreview ?? [], stepsSel) },
       })
       if (dry) {
         setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
@@ -251,8 +275,34 @@ export function NewClusterModal({
     </div>
   )
 
+  const chosenCreate = stepsChosen(stepsPreview ?? [], stepsSel)
+  const createConflicts = stepConflicts(stepsPreview ?? [], stepsSel)
+
   return (
     <Modal title={<NamedTitle text={t('clusters.newTitle', { host: NAME_MARK })} name={host.name} icon={<OsIcon os={host.os_info} />} />} onClose={onClose} width={760}>
+      {stage === 'steps' && stepsPreview ? (
+        <>
+          <Banner kind="warn">{t('clusters.experimental')}</Banner>
+          <p className="small muted">{t('clusters.steps.about')}</p>
+          <ErrorNote error={error} />
+          <StepsChecklist steps={stepsPreview} sel={stepsSel} onToggle={(id, v) => setStepsSel({ ...stepsSel, [id]: v })} />
+          <div className="row" style={{ justifyContent: 'flex-end', gap: '0.5rem', alignItems: 'center', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+            <span className="small muted">{t('clusters.steps.chosen', { n: chosenCreate.length })}</span>
+            <Button onClick={() => setStage('form')} disabled={busy === 'create'}>
+              {t('clusters.steps.back')}
+            </Button>
+            <Button
+              type="primary"
+              loading={busy === 'create'}
+              disabled={chosenCreate.length === 0 || createConflicts.size > 0}
+              onClick={() => void start(false)}
+            >
+              {t('clusters.create')}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
       <Banner kind="warn">{t('clusters.experimental')}</Banner>
       <p className="small muted">{t('clusters.newBody')}</p>
       <ErrorNote error={error} />
@@ -386,10 +436,12 @@ export function NewClusterModal({
             {t('clusters.dryRun')}
           </Button>
         </Tooltip>
-        <Button type="primary" loading={busy === 'create'} disabled={!name || !effectiveImage || needEndpoint || busy === 'dry'} onClick={() => void start(false)}>
-          {t('clusters.create')}
+        <Button type="primary" loading={busy === 'steps'} disabled={!name || !effectiveImage || needEndpoint || busy === 'dry'} onClick={() => void toSteps()}>
+          {t('clusters.steps.next')}
         </Button>
       </div>
+        </>
+      )}
       {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
     </Modal>
   )
@@ -402,6 +454,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   const [pollMs, setPollMs] = useState(15_000)
   const list = useApi<Cluster[]>('/hub/clusters', pollMs)
   const [upgrade, setUpgrade] = useState<Cluster | null>(null)
+  const [retryOf, setRetryOf] = useState<Cluster | null>(null)
   const [ingressOf, setIngressOf] = useState<Cluster | null>(null)
   const [crdsOf, setCrdsOf] = useState<Cluster | null>(null)
   const [addonsOf, setAddonsOf] = useState<Cluster | null>(null)
@@ -438,6 +491,21 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   if (clusters.length === 0 && !showEmpty) return null
   return (
     <Card title={t('clusters.title')} subtitle={t('clusters.subtitle', { count: clusters.length })}>
+      {/* «Продолжить» — окно шагов: выполненные сняты, очередь можно
+          поправить, отмеченный заново выполненный шаг идёт принудительно. */}
+      {retryOf && (
+        <ClusterRetryModal
+          clusterID={retryOf.id}
+          title={t('clusters.steps.retryTitle', { name: retryOf.name })}
+          onClose={() => setRetryOf(null)}
+          onStarted={(jobID) => {
+            setRetryOf(null)
+            onOpenJob(jobID)
+            void list.reload()
+            onChanged()
+          }}
+        />
+      )}
       {ingressOf && <ClientIngressModal cluster={ingressOf} onClose={() => setIngressOf(null)} />}
       {crdsOf && <ClientCRDsModal cluster={crdsOf} onClose={() => setCrdsOf(null)} />}
       {addonsOf && <ClusterAddonsModal cluster={addonsOf} onClose={() => setAddonsOf(null)} onOpenJob={onOpenJob} />}
@@ -501,7 +569,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
               )}
               {c.status === 'failed' && (
                 <Tooltip title={t('clusters.retryHint')}>
-                  <Button size="small" type="primary" loading={busy === `retry:${c.id}`} onClick={() => void call(`retry:${c.id}`, `/hub/clusters/${c.id}/retry`, 'POST')}>
+                  <Button size="small" type="primary" onClick={() => setRetryOf(c)}>
                     {t('clusters.retry')}
                   </Button>
                 </Tooltip>

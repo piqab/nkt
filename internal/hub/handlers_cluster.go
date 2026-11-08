@@ -3,7 +3,9 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -84,14 +86,33 @@ func (s *Server) handleClusterGateways(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
-	var spec ClusterSpec
-	if err := decodeJSON(r, &spec); err != nil {
+	var req struct {
+		ClusterSpec
+		// Steps — явный выбор окна шагов (второй шаг формы создания).
+		// nil — прежний режим: исполняются все шаги, пропуск решает Resume.
+		Steps []string `json:"steps,omitempty"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	spec := req.ClusterSpec
 	if err := spec.Validate(); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
+	}
+	if req.Steps != nil {
+		// Выбор проверяется до записи кластера: неизвестный шаг или
+		// неудовлетворённая зависимость — отказ, запись не создаётся.
+		nodes, cp1Name, err := clusterResolveNodes(r.Context(), s.db, store.Cluster{}, spec, ClusterJobParams{})
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("hub.clusterNoNodes"))
+			return
+		}
+		if err := clusterCheckSelection(clusterStepList(spec, nodes, cp1Name, nil), req.Steps); err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
 	}
 	if s.jobs == nil {
 		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
@@ -114,7 +135,7 @@ func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: KindClusterCreate, TitleKey: "hub.clusterJobTitle", TitleArgs: []any{spec.Name, host.Name},
 		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: spec.jobSteps(),
-		Params: ClusterJobParams{ClusterID: id},
+		Params: ClusterJobParams{ClusterID: id, Steps: req.Steps},
 	})
 	if err != nil {
 		_ = s.db.DeleteCluster(r.Context(), id)
@@ -289,8 +310,125 @@ func (s *Server) handleK8sVersions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"stable": stable, "versions": versions})
 }
 
-// handleClusterRetry — «продолжить»: последнее упавшее задание кластера
-// заводится заново с его состоянием (машины и роли не пересоздаются).
+// clusterLastJob — последнее незавершённое сухим прогоном задание создания
+// кластера: именно оно несёт состояние продолжения (Resume) и параметры,
+// которыми окно шагов строит чек-лист, а «Продолжить» заводит новое задание.
+// Раньше задание искалось подстрокой `"cluster_id":N,` с обязательной запятой,
+// а маршалинг единственного поля даёт `{"cluster_id":7}` без запятой — поиск
+// почти всегда возвращал пусто, и «продолжить» находило не то задание или
+// никакое. Теперь Params разбираются по-настоящему.
+func clusterLastJob(ctx context.Context, db *store.DB, clusterID int64) (*store.Job, error) {
+	jobsList, err := db.ListJobs(ctx, 500)
+	if err != nil {
+		return nil, err
+	}
+	var last *store.Job
+	for i := range jobsList {
+		j := &jobsList[i]
+		if j.Kind != KindClusterCreate {
+			continue
+		}
+		var pj ClusterJobParams
+		if json.Unmarshal([]byte(j.Params), &pj) != nil || pj.ClusterID != clusterID || pj.DryRun {
+			continue
+		}
+		if last == nil || j.ID > last.ID {
+			last = j
+		}
+	}
+	return last, nil
+}
+
+// clusterStepsOfJob — чек-лист шагов по заданию: spec кластера, параметры
+// задания (в них AddWorkers пополнения) и состояние продолжения задания.
+func (s *Server) clusterStepsOfJob(ctx context.Context, cl store.Cluster, job *store.Job) ([]ClusterStep, error) {
+	var spec ClusterSpec
+	if err := json.Unmarshal([]byte(cl.SpecJSON), &spec); err != nil {
+		return nil, err
+	}
+	var pj ClusterJobParams
+	_ = json.Unmarshal([]byte(job.Params), &pj)
+	var done clusterResume
+	if job.Resume != "" {
+		_ = json.Unmarshal([]byte(job.Resume), &done)
+	}
+	nodes, cp1Name, err := clusterResolveNodes(ctx, s.db, cl, spec, pj)
+	if err != nil {
+		return nil, msgs.Errorf("hub.clusterNoNodes")
+	}
+	return clusterStepList(spec, nodes, cp1Name, &done), nil
+}
+
+// handleClusterSteps — GET /hub/clusters/{id}/steps: чек-лист шагов для окна
+// «Продолжить». Выполненные шаги (по состоянию продолжения последнего
+// задания) приходят с done=true — окно снимает с них галочки, а оператор
+// отмечает заново то, что хочет исполнить принудительно.
+func (s *Server) handleClusterSteps(w http.ResponseWriter, r *http.Request) {
+	id, err := clusterIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	cl, err := s.db.ClusterByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if !s.clusterInScope(r.Context(), id) {
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenHostDenied"))
+		return
+	}
+	last, err := clusterLastJob(r.Context(), s.db, cl.ID)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if last == nil {
+		writeError(w, http.StatusNotFound, msgs.Tc(r.Context(), "hub.clusterNoJob"))
+		return
+	}
+	steps, err := s.clusterStepsOfJob(r.Context(), cl, last)
+	if err != nil {
+		writeErr(w, r, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"job_id": last.ID,
+		"steps":  steps,
+		// Продолжать есть что, только если задание завершено и не успешно —
+		// те же условия, что у jobs.Retry: окно гасит кнопку заранее.
+		"can_retry": last.Done() && last.Status != store.JobSucceeded,
+	})
+}
+
+// handleClusterStepsPreview — POST /hub/clusters/steps-preview: чек-лист
+// шагов для второго шага формы создания (запись кластера ещё не создана,
+// выполненных шагов нет — все done=false).
+func (s *Server) handleClusterStepsPreview(w http.ResponseWriter, r *http.Request) {
+	var spec ClusterSpec
+	if err := decodeJSON(r, &spec); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := spec.Validate(); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	nodes, cp1Name, err := clusterResolveNodes(r.Context(), s.db, store.Cluster{}, spec, ClusterJobParams{})
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("hub.clusterNoNodes"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"steps": clusterStepList(spec, nodes, cp1Name, nil),
+	})
+}
+
+// handleClusterRetry — «продолжить»: последнее задание кластера заводится
+// заново с его состоянием продолжения. С пустым телом — прежний режим:
+// пропуск решает Resume. С телом {"steps":[…]} — выбор окна шагов: исполняются
+// ровно отмеченные шаги, а отмеченный И уже выполненный разрушительный шаг
+// (cp1, join) идёт с принудительным сбросом узла.
 func (s *Server) handleClusterRetry(w http.ResponseWriter, r *http.Request) {
 	id, err := clusterIDParam(r)
 	if err != nil {
@@ -306,28 +444,44 @@ func (s *Server) handleClusterRetry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
-	jobsList, err := s.db.ListJobs(r.Context(), 500)
+	var req struct {
+		Steps []string `json:"steps,omitempty"`
+	}
+	// Пустое тело — законный старый вызов (кнопка «Продолжить» без окна);
+	// битое тело с шагами молча прощать нельзя: выбор потерялся бы.
+	if err := decodeJSON(r, &req); err != nil && !errors.Is(err, io.EOF) {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	last, err := clusterLastJob(r.Context(), s.db, cl.ID)
 	if err != nil {
 		fail(w, r, err)
 		return
-	}
-	var last *store.Job
-	needle := fmt.Sprintf("\"cluster_id\":%d,", cl.ID)
-	for i := range jobsList {
-		j := &jobsList[i]
-		if j.Kind != KindClusterCreate || !strings.Contains(j.Params, needle) || strings.Contains(j.Params, "\"dry_run\":true") {
-			continue
-		}
-		if last == nil || j.ID > last.ID {
-			last = j
-		}
 	}
 	if last == nil {
 		writeError(w, http.StatusNotFound, msgs.Tc(r.Context(), "hub.clusterNoJob"))
 		return
 	}
 	user := auth.Username(r.Context())
-	newID, err := s.jobs.Retry(r.Context(), last.ID)
+	var newID int64
+	if req.Steps != nil {
+		steps, err := s.clusterStepsOfJob(r.Context(), cl, last)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		if err := clusterCheckSelection(steps, req.Steps); err != nil {
+			s.db.Audit(r.Context(), user, "cluster.retry", cl.Name, "error", err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		var pj ClusterJobParams
+		_ = json.Unmarshal([]byte(last.Params), &pj)
+		pj.Steps = req.Steps
+		newID, err = s.jobs.RetryWithParams(r.Context(), last.ID, pj)
+	} else {
+		newID, err = s.jobs.Retry(r.Context(), last.ID)
+	}
 	if err != nil {
 		s.db.Audit(r.Context(), user, "cluster.retry", cl.Name, "error", err.Error())
 		writeErr(w, r, http.StatusBadRequest, err)

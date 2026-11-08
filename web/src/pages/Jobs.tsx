@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { blurText } from '../privacy'
 import { Button, Input, Progress, Select, Spin, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { RedoOutlined } from '@ant-design/icons'
@@ -16,6 +16,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, formatDateTime } fro
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { confirmAction } from '../components/confirm'
+import { ClusterRetryModal } from '../components/ClusterSteps'
 import { TitleHelp } from '../components/Docs'
 
 /** Как часто перечитывать список. Задание может закончиться в любой
@@ -348,6 +349,18 @@ export function JobLogModal({
   const [retrying, setRetrying] = useState(false)
   const [canceling, setCanceling] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
+  // Задание создания кластера: «попробовать снова» открывает окно шагов
+  // (выполненные сняты, очередь можно поправить), а не слепой повтор —
+  // слепой продолжал бы с места, которое оператор как раз хочет переделать.
+  const [stepsFor, setStepsFor] = useState<number | null>(null)
+  const clusterID = useMemo(() => {
+    if (current.kind !== 'cluster.create' || !current.params || current.params.includes('"dry_run":true')) return 0
+    try {
+      return (JSON.parse(current.params) as { cluster_id?: number }).cluster_id ?? 0
+    } catch {
+      return 0
+    }
+  }, [current.kind, current.params])
   const lastSeq = useRef(0)
   const bodyRef = useRef<HTMLPreElement | null>(null)
 
@@ -435,16 +448,21 @@ export function JobLogModal({
     onDone(current)
   }, [current, onDone])
 
+  // Новое задание открывается в этом же окне: журнал с нуля.
+  async function openNext(jobID: number) {
+    const next = await api<Job>(`${scope}/jobs/${jobID}`)
+    lastSeq.current = 0
+    setLines([])
+    setCurrent(next)
+    setOpenJob(next)
+  }
+
   async function retry() {
     setRetrying(true)
     setRetryError(null)
     try {
       const res = await api<{ job_id: number }>(`${scope}/jobs/${openJob.id}/retry`, { method: 'POST' })
-      const next = await api<Job>(`${scope}/jobs/${res.job_id}`)
-      lastSeq.current = 0
-      setLines([])
-      setCurrent(next)
-      setOpenJob(next)
+      await openNext(res.job_id)
     } catch (err) {
       setRetryError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -488,8 +506,15 @@ export function JobLogModal({
           </Button>
         )}
         {canRetry && (
-          <Tooltip title={t('jobs.retryHint')}>
-            <Button size="small" type="primary" icon={<RedoOutlined />} loading={retrying} onClick={() => void retry()} style={{ marginLeft: 'auto' }}>
+          <Tooltip title={clusterID ? t('clusters.steps.jobRetryHint') : t('jobs.retryHint')}>
+            <Button
+              size="small"
+              type="primary"
+              icon={<RedoOutlined />}
+              loading={retrying}
+              onClick={() => (clusterID ? setStepsFor(clusterID) : void retry())}
+              style={{ marginLeft: 'auto' }}
+            >
               {t('jobs.retry')}
             </Button>
           </Tooltip>
@@ -529,6 +554,17 @@ export function JobLogModal({
       <pre ref={bodyRef} className="diff mono modal-fill" style={{ maxHeight: '26rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
         {lines.length === 0 ? t('jobs.noOutput') : lines.map((l, i) => <LogLine key={l.seq ?? i} text={l.text} last={i === lines.length - 1} />)}
       </pre>
+      {stepsFor !== null && (
+        <ClusterRetryModal
+          clusterID={stepsFor}
+          title={t('clusters.steps.retryJobTitle')}
+          onClose={() => setStepsFor(null)}
+          onStarted={(jobID) => {
+            setStepsFor(null)
+            openNext(jobID).catch((err) => setRetryError(err instanceof Error ? err.message : String(err)))
+          }}
+        />
+      )}
     </Modal>
   )
 }

@@ -14,6 +14,7 @@ import { nicLabel, nicService, nicSuitable, nicV4 } from '../nics'
 import { Banner, Card, ErrorNote, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
 import { ClustersCard, ListenerFields, listenerBody, type ClusterGateway } from '../components/Clusters'
+import { StepsChecklist, stepConflicts, stepsChosen, type ClusterStep, type StepSelection } from '../components/ClusterSteps'
 import { JobLogModal } from './Jobs'
 import { TitleHelp } from '../components/Docs'
 import { msg, tx, type Msg } from '../msg'
@@ -249,10 +250,15 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [expose, setExpose] = useState(true)
   const [ports, setPorts] = useState<{ api: number | null; http: number | null; https: number | null }>({ api: 6443, http: 80, https: 443 })
   const [prepare, setPrepare] = useState(true)
-  const [busy, setBusy] = useState<'create' | 'dry' | null>(null)
+  const [busy, setBusy] = useState<'create' | 'dry' | 'steps' | null>(null)
   const [error, setError] = useState<Msg | null>(null)
   // Журнал сухого прогона — поверх формы, настройки не теряются.
   const [dryJob, setDryJob] = useState<Job | null>(null)
+  // Второй шаг формы — чек-лист действий задания (тот же, что у диалога
+  // «новый кластер» у хоста): что именно создаст «Создать кластер».
+  const [stage, setStage] = useState<'form' | 'steps'>('form')
+  const [stepsPreview, setStepsPreview] = useState<ClusterStep[] | null>(null)
+  const [stepsSel, setStepsSel] = useState<StepSelection>({})
 
   // Сохранённые наборы: вся форма одним JSON на хабе; хосты в наборе —
   // по имени, чтобы набор пережил пересоздание хоста.
@@ -442,41 +448,61 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   }
   const valid = !!name && rows.length > 0 && rows.every((r) => r.host_id !== null && (r.kind === 'host' || (r.count > 0 && imageOf(r)))) && problems.length === 0
 
+  const buildBody = () => ({
+    name,
+    flavor,
+    k8s_version: k8sVersion,
+    cni: cilium ? 'cilium' : '',
+    kube_proxy_replacement: cilium && kpr,
+    addons: addonsBody(longhorn),
+    network_mode: effectiveNetwork,
+    placements: rows.map((r) => ({
+      host_id: r.host_id,
+      role: r.role,
+      kind: r.kind,
+      count: r.kind === 'host' ? 1 : r.count,
+      vcpus: r.vcpus,
+      memory_mb: r.memory_mb,
+      disk_gb: r.disk_gb,
+      image_id: r.kind === 'vm' ? imageOf(r) : '',
+      network: effectiveNetwork === 'nat' ? r.network : '',
+      bridge: effectiveNetwork === 'bridge' ? r.bridge : '',
+      nic: effectiveNetwork === 'macvtap' ? r.nic : '',
+      endpoint: effectiveNetwork === 'wireguard' && r.host_id !== null ? (endpoints[r.host_id] ?? '').trim() : '',
+    })),
+    expose,
+    expose_api: expose ? ports.api ?? 0 : 0,
+    expose_http: expose ? ports.http ?? 0 : 0,
+    expose_https: expose ? ports.https ?? 0 : 0,
+    image_id: imageOf(rows[0]) || 'ubuntu-24.04',
+    ...listenerBody(flavor, endpoint, gateway, allow),
+  })
+
+  // Чек-лист создания приходит с хаба: имена узлов и порядок шагов знает
+  // исполнитель (internal/hub/cluster_steps.go), фронт их не угадывает.
+  async function toSteps() {
+    setBusy('steps')
+    setError(null)
+    try {
+      const res = await api<{ steps: ClusterStep[] }>('/hub/clusters/steps-preview', { method: 'POST', body: buildBody() })
+      setStepsPreview(res.steps)
+      setStepsSel(Object.fromEntries(res.steps.map((s) => [s.id, true])))
+      setStage('steps')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function start(dry: boolean) {
     setBusy(dry ? 'dry' : 'create')
     setError(null)
     try {
-      const body = {
-        name,
-        flavor,
-        k8s_version: k8sVersion,
-        cni: cilium ? 'cilium' : '',
-        kube_proxy_replacement: cilium && kpr,
-        addons: addonsBody(longhorn),
-        network_mode: effectiveNetwork,
-        placements: rows.map((r) => ({
-          host_id: r.host_id,
-          role: r.role,
-          kind: r.kind,
-          count: r.kind === 'host' ? 1 : r.count,
-          vcpus: r.vcpus,
-          memory_mb: r.memory_mb,
-          disk_gb: r.disk_gb,
-          image_id: r.kind === 'vm' ? imageOf(r) : '',
-          network: effectiveNetwork === 'nat' ? r.network : '',
-          bridge: effectiveNetwork === 'bridge' ? r.bridge : '',
-          nic: effectiveNetwork === 'macvtap' ? r.nic : '',
-          endpoint: effectiveNetwork === 'wireguard' && r.host_id !== null ? (endpoints[r.host_id] ?? '').trim() : '',
-        })),
-        expose,
-        expose_api: expose ? ports.api ?? 0 : 0,
-        expose_http: expose ? ports.http ?? 0 : 0,
-        expose_https: expose ? ports.https ?? 0 : 0,
-        image_id: imageOf(rows[0]) || 'ubuntu-24.04',
-        ...listenerBody(flavor, endpoint, gateway, allow),
-        ...(dry ? { prepare } : {}),
-      }
-      const res = await api<{ job_id: number }>(dry ? '/hub/clusters/dry-run' : '/hub/clusters', { method: 'POST', body })
+      const res = await api<{ job_id: number }>(dry ? '/hub/clusters/dry-run' : '/hub/clusters', {
+        method: 'POST',
+        body: dry ? { ...buildBody(), prepare } : { ...buildBody(), steps: stepsChosen(stepsPreview ?? [], stepsSel) },
+      })
       if (dry) {
         setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
         return
@@ -492,8 +518,34 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const hostName = (id: number) => online.find((h) => h.id === id)?.name ?? `#${id}`
   const hostAddr = (id: number) => online.find((h) => h.id === id)?.addr ?? ''
 
+  const chosenMulti = stepsChosen(stepsPreview ?? [], stepsSel)
+  const multiConflicts = stepConflicts(stepsPreview ?? [], stepsSel)
+
   return (
     <Modal title={t('clusters.newMultiTitle')} onClose={onClose} width={1180}>
+      {stage === 'steps' && stepsPreview ? (
+        <>
+          <Banner kind="warn">{t('clusters.experimental')}</Banner>
+          <p className="small muted">{t('clusters.steps.about')}</p>
+          <ErrorNote error={msg(error)} />
+          <StepsChecklist steps={stepsPreview} sel={stepsSel} onToggle={(id, v) => setStepsSel({ ...stepsSel, [id]: v })} />
+          <div className="row" style={{ justifyContent: 'flex-end', gap: '0.5rem', alignItems: 'center', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+            <span className="small muted">{t('clusters.steps.chosen', { n: chosenMulti.length })}</span>
+            <Button onClick={() => setStage('form')} disabled={busy === 'create'}>
+              {t('clusters.steps.back')}
+            </Button>
+            <Button
+              type="primary"
+              loading={busy === 'create'}
+              disabled={chosenMulti.length === 0 || multiConflicts.size > 0}
+              onClick={() => void start(false)}
+            >
+              {t('clusters.create')}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
       <Banner kind="warn">{t('clusters.experimental')}</Banner>
       <p className="small muted">{t('clusters.newMultiBody')}</p>
       <ErrorNote error={msg(error)} />
@@ -783,11 +835,13 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
             {t('clusters.dryRun')}
           </Button>
         </Tooltip>
-        <Button type="primary" loading={busy === 'create'} disabled={!valid || busy === 'dry'} onClick={() => void start(false)}>
-          {t('clusters.create')}
+        <Button type="primary" loading={busy === 'steps'} disabled={!valid || busy === 'dry' || busy === 'create'} onClick={() => void toSteps()}>
+          {t('clusters.steps.next')}
         </Button>
       </div>
       {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
+        </>
+      )}
     </Modal>
   )
 }

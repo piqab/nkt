@@ -578,6 +578,11 @@ type ClusterJobParams struct {
 	DryRun  bool         `json:"dry_run,omitempty"`
 	Prepare bool         `json:"prepare,omitempty"`
 	Spec    *ClusterSpec `json:"spec,omitempty"`
+	// Steps — явный выбор оператора из окна шагов: исполнять ровно эти шаги
+	// (см. cluster_steps.go). nil — прежний режим, где пропуск решает Resume.
+	// Отмеченный и уже выполненный разрушительный шаг (cp1, join) идёт с
+	// принудительным сбросом узла.
+	Steps []string `json:"steps,omitempty"`
 }
 
 type clusterResume struct {
@@ -587,7 +592,12 @@ type clusterResume struct {
 	Hosts map[string]int64 `json:"hosts"`
 	// Installed — узлы, на которых роль уже стоит.
 	Installed map[string]bool `json:"installed"`
-	Exposed   bool            `json:"exposed"`
+	// Listener — слушатель общего адреса разложен хабом. Отдельная отметка
+	// нужна потому, что «cp-1 установлен» слушатель не доказывает в обратную
+	// сторону: init мог упасть после слушателя, и окно шагов обязано видеть,
+	// что повтор cp1 не требует разкладывать его заново.
+	Listener bool `json:"listener,omitempty"`
+	Exposed  bool `json:"exposed"`
 	// Addons — пройденные шаги дополнений: «имя:prepare:узел», «имя:install».
 	Addons map[string]bool `json:"addons,omitempty"`
 }
@@ -671,35 +681,14 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 }
 
 func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Cluster, spec ClusterSpec, p ClusterJobParams, done *clusterResume) error {
-	hostName := func(id int64) string {
-		if h, err := r.m.db.HostByID(ctx, id); err == nil {
-			return h.Name
-		}
-		return fmt.Sprintf("host-%d", id)
+	nodes, cp1Name, err := clusterResolveNodes(ctx, r.m.db, cl, spec, p)
+	if err != nil {
+		return msgs.Errorf("hub.clusterNoNodes")
 	}
-	nodes := spec.nodes(hostName)
 	if p.AddWorkers > 0 {
-		// Пополнение: новые worker'ы на хосте последнего worker'а (или
-		// первого control plane) с теми же размерами, номера — дальше.
+		// Пополнение: существующие узлы уже стоят — отметим их, чтобы шаги
+		// не пересоздавали их, а новые worker'ы прошли конвейер.
 		existing, _ := r.m.db.ClusterHosts(ctx, cl.ID)
-		n := 0
-		for _, h := range existing {
-			if h.K8sRole == RoleWorker {
-				n++
-			}
-		}
-		tmpl := nodes[0]
-		for _, nd := range nodes {
-			if nd.Role == RoleWorker && nd.Kind == KindVM {
-				tmpl = nd
-			}
-		}
-		nodes = nil
-		for i := n + 1; i <= n+p.AddWorkers; i++ {
-			nd := tmpl
-			nd.Name, nd.Role, nd.Kind = fmt.Sprintf("%s-w-%d", spec.Name, i), RoleWorker, KindVM
-			nodes = append(nodes, nd)
-		}
 		for _, h := range existing {
 			done.Hosts[h.Name] = h.ID
 			done.Installed[h.Name] = true
@@ -711,15 +700,10 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			cps = append(cps, nd)
 		}
 	}
-	// Первый control plane — из уже существующих при пополнении.
-	var cp1Name string
-	if len(cps) > 0 {
-		cp1Name = cps[0].Name
-	} else if existing, _ := r.m.db.ClusterHosts(ctx, cl.ID); len(existing) > 0 {
-		cp1Name = existing[0].Name
-	} else {
-		return msgs.Errorf("hub.clusterNoNodes")
-	}
+	// Гейт: какие шаги исполнять и какие принудительно. При явном выборе
+	// оператора (окно шагов) бежим ровно по отмеченным; иначе — как раньше,
+	// пропуск решает Resume.
+	gate := r.clusterBuildGate(ctx, spec, nodes, cp1Name, p, done)
 	total := len(nodes) + 4
 	if spec.NetworkMode == NetworkWireGuard {
 		total++
@@ -736,7 +720,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	// не повторяются: машины уже есть, и «имя занято» было бы ложью.
 	step++
 	jc.StepKey(step, total, "hub.clusterStepPreflight")
-	if len(done.Hosts) == 0 && p.AddWorkers == 0 {
+	if gate.run[stepPreflight] {
 		failed, err := r.runPreflight(ctx, jc, spec, false, cl.ID)
 		if err != nil {
 			return err
@@ -760,7 +744,13 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		step++
 		jc.StepKey(step, total, "hub.clusterStepMesh")
 		var err error
-		if done.MeshUp {
+		if gate.run[stepMesh] && !done.MeshUp {
+			if plan, err = r.setupMesh(ctx, jc, cl, spec, nodes); err != nil {
+				return err
+			}
+			done.MeshUp = true
+			jc.SaveResume(*done)
+		} else {
 			if plan, err = r.m.clusterWG(cl); err != nil {
 				return err
 			}
@@ -768,12 +758,6 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 				return msgs.Errorf("hub.clusterMeshMissing")
 			}
 			jc.Log("hub.clusterMeshExists", plan.Iface)
-		} else {
-			if plan, err = r.setupMesh(ctx, jc, cl, spec, nodes); err != nil {
-				return err
-			}
-			done.MeshUp = true
-			jc.SaveResume(*done)
 		}
 		for i := range nodes {
 			if nodes[i].Kind == KindVM {
@@ -805,11 +789,15 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	for _, nd := range nodes {
 		step++
 		jc.StepKey(step, total, "hub.clusterStepVM", nd.Name)
-		if id, ok := done.Hosts[nd.Name]; ok && id != 0 {
-			if _, err := r.m.db.HostByID(ctx, id); err == nil {
-				jc.Log("hub.clusterVMExists", nd.Name)
-				continue
+		if !gate.run[vmStepID(nd.Name)] {
+			// Шаг не выбран (или машина уже заведена в прежнем режиме) —
+			// не пересоздаём. Скажем, что машина есть, если запись жива.
+			if id := done.Hosts[nd.Name]; id != 0 {
+				if _, err := r.m.db.HostByID(ctx, id); err == nil {
+					jc.Log("hub.clusterVMExists", nd.Name)
+				}
 			}
+			continue
 		}
 		if nd.Kind == KindHost {
 			h, err := r.m.db.HostByID(ctx, nd.HostID)
@@ -837,10 +825,21 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	if spec.Endpoint != "" {
 		step++
 		jc.StepKey(step, total, "hub.clusterStepListener")
-		var err error
-		listener, err = r.clusterListenerStep(ctx, jc, cl, spec)
-		if err != nil {
-			return err
+		if gate.run[stepListener] {
+			var err error
+			listener, err = r.clusterListenerStep(ctx, jc, cl, spec)
+			if err != nil {
+				return err
+			}
+			if listener {
+				done.Listener = true
+				jc.SaveResume(*done)
+			}
+		} else {
+			// Шаг не выбран: слушатель уже разложен ранее. Живость адреса
+			// всё равно проверяется ниже (гейты перед входами и дополнениями).
+			listener = true
+			jc.Log("hub.clusterListenerExists")
 		}
 	}
 
@@ -879,7 +878,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	if spec.Expose && cpHost.Addr != "" && cpHost.ID != cp1.ID {
 		tlsSANs = append(tlsSANs, cpHost.Addr)
 	}
-	if !done.Installed[cp1Name] {
+	if gate.run[stepCP1] {
 		is := k8s.InstallSpec{
 			Flavor: spec.Flavor, Role: k8s.RoleServer, Single: len(nodes) == 1 && p.AddWorkers == 0,
 			ClusterInit: len(cps) == 3, TLSSANs: tlsSANs, NodeName: cp1Name,
@@ -887,47 +886,65 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			ControlPlaneEndpoint: spec.Endpoint,
 		}
 		is.NodeIP = nodeIPAdvertise(cp1, cp1Addr, macvtapOf[cp1Name])
+		is = gate.forceInstallSpec(stepCP1, is)
+		if gate.force[stepCP1] {
+			jc.Log("hub.clusterForceReinstall", cp1Name)
+		}
 		if err := r.installRole(ctx, jc, cp1, is); err != nil {
 			return err
 		}
 		done.Installed[cp1Name] = true
 		jc.SaveResume(*done)
 	}
-	// Узел входит по общему адресу, значит, адрес уже должен отвечать:
-	// первый control plane по сводке шлюза жив — можно входить. Проверку
-	// делает сам шлюз, со своего адреса, поэтому она не видит белого
-	// списка: «жива» означает «путь есть», а не «вход разрешён». Именно
-	// поэтому отказ разбирается по строкам журнала, а не по слову «не
-	// отвечает».
-	if listener && r.clusterListenerAlive(ctx, jc, clusterListenerID(spec.Name), []string{cp1Name}) == 0 {
-		return msgs.Errorf("hub.clusterListenerDead", spec.Endpoint, clusterListenerID(spec.Name))
-	}
 	// Узлы входят по общему адресу, когда он задан: у kubeadm это тот же
 	// --control-plane-endpoint, что у init, и сертификат API каждого
 	// control plane содержит его имя уже. control_plane=1 просит ключ
 	// сертификатов — он нужен, если в этом задании встанет ещё один
 	// control plane; ключ живёт два часа, поэтому берётся перед входом,
-	// а не один раз при создании.
-	joinAddr := cp1Addr
-	if spec.Endpoint != "" {
-		joinAddr = spec.Endpoint
+	// а не один раз при создании. Токен берётся только когда в этом прогоне
+	// действительно есть узлы для входа: иначе (например, повтор только
+	// дополнений) лишний поход к cp-1 мог бы уронить задание впустую.
+	needJoin := false
+	for _, nd := range nodes {
+		if nd.Name != cp1Name && gate.run[joinStepID(nd.Name)] {
+			needJoin = true
+			break
+		}
 	}
-	joinURL := "/api/k8s/join?server=" + url.QueryEscape(joinAddr)
-	if len(cps) > 1 {
-		joinURL += "&control_plane=1"
+	// Узел входит по общему адресу, значит, адрес уже должен отвечать:
+	// первый control plane по сводке шлюза жив — можно входить. Проверку
+	// делает сам шлюз, со своего адреса, поэтому она не видит белого
+	// списка: «жива» означает «путь есть», а не «вход разрешён». Именно
+	// поэтому отказ разбирается по строкам журнала, а не по слову «не
+	// отвечает». Ждём только когда в этом прогоне кто-то входит или ставится
+	// cp-1: у повтора одних дополнений своя проверка живости ниже.
+	if listener && (gate.run[stepCP1] || needJoin) &&
+		r.clusterListenerAlive(ctx, jc, clusterListenerID(spec.Name), []string{cp1Name}) == 0 {
+		return msgs.Errorf("hub.clusterListenerDead", spec.Endpoint, clusterListenerID(spec.Name))
 	}
 	var join k8s.JoinInfo
-	if _, err := r.m.HostAPI(ctx, cp1.ID, "GET", joinURL, nil, &join); err != nil {
-		return msgs.Errorf("hub.clusterJoinInfo", err)
+	if needJoin {
+		joinAddr := cp1Addr
+		if spec.Endpoint != "" {
+			joinAddr = spec.Endpoint
+		}
+		joinURL := "/api/k8s/join?server=" + url.QueryEscape(joinAddr)
+		if len(cps) > 1 {
+			joinURL += "&control_plane=1"
+		}
+		if _, err := r.m.HostAPI(ctx, cp1.ID, "GET", joinURL, nil, &join); err != nil {
+			return msgs.Errorf("hub.clusterJoinInfo", err)
+		}
+		jc.Log("hub.clusterJoinReady", cp1.Name)
 	}
-	jc.Log("hub.clusterJoinReady", cp1.Name)
 
 	// 3. Остальные узлы: сначала control plane, потом worker'ы (nodes уже
 	// в этом порядке).
 	step++
 	jc.StepKey(step, total, "hub.clusterStepJoin")
 	for _, nd := range nodes {
-		if nd.Name == cp1Name || done.Installed[nd.Name] {
+		id := joinStepID(nd.Name)
+		if nd.Name == cp1Name || !gate.run[id] {
 			continue
 		}
 		h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name])
@@ -940,6 +957,10 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		if nd.Role == RoleControlPlane {
 			is.Role, is.CertKey, is.TLSSANs = k8s.RoleServer, join.CertKey, tlsSANs
 		}
+		is = gate.forceInstallSpec(id, is)
+		if gate.force[id] {
+			jc.Log("hub.clusterForceReinstall", nd.Name)
+		}
 		if err := r.installRole(ctx, jc, h, is); err != nil {
 			return err
 		}
@@ -947,41 +968,46 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		jc.SaveResume(*done)
 	}
 
-	// 4. Ready, проброс, kubeconfig.
+	// 4. Ready, проброс, kubeconfig. Адрес API считается в любом случае —
+	// он нужен финальной строке журнала и не зависит от выбора шагов.
 	step++
-	jc.StepKey(step, total, "hub.clusterStepReady")
-	want := len(done.Hosts)
-	if err := r.waitNodesReady(ctx, jc, cp1, want); err != nil {
-		return err
-	}
-	if spec.Expose && !done.Exposed && cp1.ParentID != 0 {
-		if _, err := r.m.HostAPI(ctx, cpHost.ID, "POST", "/api/vm/portforward",
-			map[string]any{"name": cp1.Name, "ip": cp1.Addr, "rules": spec.exposeRules()}, nil); err != nil {
-			return msgs.Errorf("hub.clusterExpose", err)
-		}
-		done.Exposed = true
-		jc.SaveResume(*done)
-		jc.Log("hub.clusterExposed", cpHost.Addr, cp1.Addr, exposeSummary(spec))
-	}
 	serverAddr := spec.apiAddr(cpHost.Addr, cp1.Addr)
 	if cp1.ParentID == 0 && spec.Endpoint == "" {
 		// Узел-хост: kubeconfig — на его обычный адрес, он в SAN.
 		serverAddr = cp1.Addr + ":6443"
 	}
-	var kubeconfig string
-	code, err := r.m.HostAPI(ctx, cp1.ID, "GET", "/api/k8s/kubeconfig?server="+url.QueryEscape(serverAddr), nil, &kubeconfig)
-	if err != nil || code != 200 {
-		return msgs.Errorf("hub.clusterKubeconfig", err, code)
-	}
-	enc, err := secretbox.Encrypt(r.m.key, []byte(kubeconfig))
-	if err != nil {
-		return err
-	}
-	if err := r.m.db.SetClusterKubeconfig(ctx, cl.ID, serverAddr, enc); err != nil {
-		return err
-	}
-	if p.AddWorkers > 0 {
-		_ = r.m.db.SetClusterWorkers(ctx, cl.ID, cl.Workers+p.AddWorkers)
+	jc.StepKey(step, total, "hub.clusterStepReady")
+	if gate.run[stepReady] {
+		want := len(done.Hosts)
+		if err := r.waitNodesReady(ctx, jc, cp1, want); err != nil {
+			return err
+		}
+		if spec.Expose && !done.Exposed && cp1.ParentID != 0 {
+			if _, err := r.m.HostAPI(ctx, cpHost.ID, "POST", "/api/vm/portforward",
+				map[string]any{"name": cp1.Name, "ip": cp1.Addr, "rules": spec.exposeRules()}, nil); err != nil {
+				return msgs.Errorf("hub.clusterExpose", err)
+			}
+			done.Exposed = true
+			jc.SaveResume(*done)
+			jc.Log("hub.clusterExposed", cpHost.Addr, cp1.Addr, exposeSummary(spec))
+		}
+		var kubeconfig string
+		code, err := r.m.HostAPI(ctx, cp1.ID, "GET", "/api/k8s/kubeconfig?server="+url.QueryEscape(serverAddr), nil, &kubeconfig)
+		if err != nil || code != 200 {
+			return msgs.Errorf("hub.clusterKubeconfig", err, code)
+		}
+		enc, err := secretbox.Encrypt(r.m.key, []byte(kubeconfig))
+		if err != nil {
+			return err
+		}
+		if err := r.m.db.SetClusterKubeconfig(ctx, cl.ID, serverAddr, enc); err != nil {
+			return err
+		}
+		if p.AddWorkers > 0 {
+			_ = r.m.db.SetClusterWorkers(ctx, cl.ID, cl.Workers+p.AddWorkers)
+		}
+	} else {
+		jc.Log("hub.clusterReadySkipped")
 	}
 
 	// 5. Дополнения: подготовить узлы этого запуска (при пополнении —
@@ -990,25 +1016,29 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	if len(spec.Addons) > 0 {
 		step++
 		jc.StepKey(step, total, "hub.clusterStepAddons")
-		// Дополнения входят в кластер с узла и по общему адресу (kubeconfig
-		// и --apiserver-advertise-address указывают на него): к этому шагу
-		// адрес обязан отвечать не только первому control plane. Ждём все
-		// цели применённого слушателя и называем то, что не служит, — иначе
-		// Cilium падал бы с SSL_ERROR_SYSCALL, ничего не объясняя.
-		if listener {
-			route := clusterListenerID(spec.Name)
-			if r.clusterListenerAlive(ctx, jc, route, r.clusterListenerTargets(ctx, route)) == 0 {
-				return msgs.Errorf("hub.clusterListenerDead", spec.Endpoint, route)
+		if !gate.run[stepAddons] {
+			jc.Log("hub.clusterAddonsSkipped")
+		} else {
+			// Дополнения входят в кластер с узла и по общему адресу (kubeconfig
+			// и --apiserver-advertise-address указывают на него): к этому шагу
+			// адрес обязан отвечать не только первому control plane. Ждём все
+			// цели применённого слушателя и называем то, что не служит, — иначе
+			// Cilium падал бы с SSL_ERROR_SYSCALL, ничего не объясняя.
+			if listener {
+				route := clusterListenerID(spec.Name)
+				if r.clusterListenerAlive(ctx, jc, route, r.clusterListenerTargets(ctx, route)) == 0 {
+					return msgs.Errorf("hub.clusterListenerDead", spec.Endpoint, route)
+				}
 			}
-		}
-		var prepare []store.Host
-		for _, nd := range nodes {
-			if h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name]); err == nil {
-				prepare = append(prepare, h)
+			var prepare []store.Host
+			for _, nd := range nodes {
+				if h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name]); err == nil {
+					prepare = append(prepare, h)
+				}
 			}
-		}
-		if err := r.m.applyAddons(ctx, jc, spec, cp1, prepare, len(done.Hosts), p.AddWorkers == 0, done); err != nil {
-			return err
+			if err := r.m.applyAddons(ctx, jc, spec, cp1, prepare, len(done.Hosts), p.AddWorkers == 0, done); err != nil {
+				return err
+			}
 		}
 	}
 	// 6. Автомат целей Traffic Fly: маршруты, ведущие в этот кластер,
