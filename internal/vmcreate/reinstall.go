@@ -165,10 +165,6 @@ func (r *ReinstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return fmt.Errorf("virsh start: %s", commandError(res.Stderr, res.Stdout))
 	}
 	jc.Log("vmcreate.machineReinstalled", spec.Name)
-	if addr := c.waitAddress(ctx, jc, spec.Name); addr != "" {
-		jc.Log("vmcreate.machineAddress", addr)
-	} else {
-		jc.Log("vmcreate.addressKnownYetMachineStill")
-	}
+	c.waitAndLogAddress(ctx, jc, spec.Name)
 	return nil
 }

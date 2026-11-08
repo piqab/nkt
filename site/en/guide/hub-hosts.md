@@ -595,7 +595,11 @@ loopback, link-local and the guest's internal bridges), its own SSH
 credentials under the row and **"check access"** — route, ping, SSH port
 from the host and from the hub, with a one-line diagnosis. A machine on
 **macvtap** is marked: the host can't see its own macvtap guests, such a
-machine needs a direct connection.
+machine needs a direct connection. **"Detect address"** names the reason an
+address is missing: for macvtap it is "the guest agent does not answer", with
+virsh's reply next to it (there is no libvirt lease in this mode, and looking
+for one is pointless), for the others "no address yet". A machine created by
+this host starts its agent on the first boot by itself.
 
 **Port pool** (a button in the host row) — a range of host ports from
 which owners of this host's machines (an administrator or a token “by

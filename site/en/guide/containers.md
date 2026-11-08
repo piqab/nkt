@@ -238,7 +238,11 @@ live output) and **storage pools** (read-only).
   macvlan/macvtap. Such a machine really stands in the hosts' network, but the
   host itself cannot talk to it: its address comes from that network's DHCP and
   the network administrator has to pin it (a reservation by MAC or a static
-  address on the machine), otherwise the next lease moves it. Missing tools
+  address on the machine), otherwise the next lease moves it. The host cannot
+  reach the machine over the network, but the guest agent's channel is a virtio
+  port, not the network, so the hub still reads the address from the agent —
+  and since the package does not start its own service, the machine gets a
+  first-boot script that enables it. Missing tools
   (`virt-install`, `qemu-img`…) install themselves. Machine templates — to
   create identical ones again; the device is part of a template too.
 - **Images**: a catalogue of Ubuntu, Debian and other cloud images —

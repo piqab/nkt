@@ -1,6 +1,7 @@
 package vmcreate
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -48,5 +49,66 @@ func TestUserDataMerge(t *testing.T) {
 	s.UserData = "#cloud-config\nusers: []\n"
 	if s.Validate() == nil {
 		t.Fatal("reserved key accepted")
+	}
+}
+
+// paths пишет write_files merged-настроки как список путей: так видно,
+// что свой user-data не перезаписан и что скрипт агента на месте.
+func paths(t *testing.T, out string) []string {
+	t.Helper()
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("yaml: %v\n%s", err, out)
+	}
+	list, _ := doc["write_files"].([]any)
+	var got []string
+	for _, item := range list {
+		entry, _ := item.(map[string]any)
+		p, _ := entry["path"].(string)
+		got = append(got, p)
+	}
+	return got
+}
+
+// Гостевой агент: пакет сам службу не поднимает, поэтому скрипт
+// per-instance заводится только когда агент запрошен, лежит в каталоге
+// первого запуска и не затирает файлы владельца машины.
+func TestGuestAgentStartupScript(t *testing.T) {
+	s := createSpec()
+	s.Packages = []string{"qemu-guest-agent"}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	out := UserData(s)
+	if !slices.Contains(paths(t, out), guestAgentScript) {
+		t.Fatalf("агент запрошен, скрипта нет:\n%s", out)
+	}
+	if !strings.Contains(out, "systemctl enable --now qemu-guest-agent") ||
+		!strings.Contains(out, "permissions: '0755'") {
+		t.Fatalf("скрипт не запускает службу:\n%s", out)
+	}
+	// Скрипт per-instance выполняется один на instance-id: на второй
+	// загрузке он уже не нужен.
+	if !strings.Contains(guestAgentScript, "/scripts/per-instance/") {
+		t.Fatalf("не тот каталог: %s", guestAgentScript)
+	}
+
+	// Без запроса агента его быть не должно: у машины без него свои файлы.
+	plain := createSpec()
+	plain.Packages = []string{"nginx"}
+	if got := paths(t, UserData(plain)); len(got) != 0 {
+		t.Fatalf("write_files от nkt без запроса: %v", got)
+	}
+
+	// Свой user-data с файлами складывается, а не заменяется.
+	own := createSpec()
+	own.Packages = []string{"qemu-guest-agent"}
+	own.UserData = "#cloud-config\nwrite_files:\n  - path: /etc/motd\n    content: hi\n"
+	if err := own.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	got := paths(t, UserData(own))
+	if !slices.Contains(got, guestAgentScript) || !slices.Contains(got, "/etc/motd") {
+		t.Fatalf("файлы потеряны: %v", got)
 	}
 }

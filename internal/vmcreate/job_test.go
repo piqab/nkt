@@ -23,6 +23,9 @@ type fakeEscape struct {
 	// кодом, как это делает shell.
 	missing map[string]bool
 	fail    map[string]bool
+	// bad — команды, которые «не прошли»: текст ошибки по началу строки
+	// команды. Так выглядит ответ virsh, когда гостевой агент не отвечает.
+	bad map[string]string
 	// installs — что происходит с хостом после apt-get install. nil
 	// означает «пакеты не помогли»: так проверяется и этот случай.
 	installs func()
@@ -62,6 +65,15 @@ func betweenTags(doc, open, close string) string {
 func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResult, error) {
 	f.calls = append(f.calls, strings.Join(argv, " "))
 	res := collect.CommandResult{Argv: argv}
+	// Неудача проверяется раньше ответа: командe, которая «не прошла»,
+	// вывод фикстуры не помогает.
+	for prefix, stderr := range f.bad {
+		if strings.HasPrefix(strings.Join(argv, " "), prefix) {
+			res.ExitCode = 1
+			res.Stderr = stderr
+			return res, nil
+		}
+	}
 	for prefix, stdout := range f.out {
 		if strings.HasPrefix(strings.Join(argv, " "), prefix) {
 			res.Stdout = stdout
@@ -578,5 +590,65 @@ func TestFixAddress(t *testing.T) {
 	esc2 := &fakeEscape{out: map[string]string{"virsh domstate app1": "running\n", "virsh domiflist app1": esc.out["virsh domiflist app1"]}}
 	if _, err := testRunner(t, esc2).FixAddress(context.Background(), "app1"); err == nil || strings.Contains(strings.Join(esc2.calls, "\n"), "net-update") {
 		t.Fatalf("no address: %v", err)
+	}
+}
+
+// Причина неизвестного адреса machine в macvtap: аренды там нет по
+// устройству, и адрес сообщает только гостевой агент — «no-lease» туда
+// писать значит отправлять оператора искать DHCP-сервер.
+func TestAddressReasonMacvtap(t *testing.T) {
+	// Вывод virsh: ни аренды, ни ARP-строчки, агент не отвечает.
+	direct := map[string]string{
+		"virsh domstate w3":  "running\n",
+		"virsh domiflist w3": " Interface   Type    Source  Model   MAC\n macvtap100  direct  enp9s0  virtio  52:54:00:b3:24:30\n",
+	}
+	esc := &fakeEscape{
+		out: direct,
+		bad: map[string]string{
+			"virsh domifaddr w3 --source agent": "error: Guest agent is not responding: QEMU guest agent is not connected",
+		},
+	}
+	report := testRunner(t, esc).AddressReport(context.Background(), "w3")
+	if report.Reason != ReasonAgentOffline {
+		t.Fatalf("причина: %+v", report)
+	}
+	if !strings.Contains(report.Detail, "QEMU guest agent is not connected") {
+		t.Fatalf("ответ virsh потерян: %q", report.Detail)
+	}
+
+	// Тот же молчащий агент у машины в мосту — обычное «адреса ещё нет»:
+	// там ARP хоста остаётся вторым источником, и винить одного агента
+	// нельзя.
+	esc2 := &fakeEscape{
+		out: map[string]string{
+			"virsh domstate w3":  "running\n",
+			"virsh domiflist w3": " Interface   Type    Source   Model   MAC\n vnet5       bridge  br0      virtio  52:54:00:b3:24:30\n",
+		},
+		bad: esc.bad,
+	}
+	if report := testRunner(t, esc2).AddressReport(context.Background(), "w3"); report.Reason != ReasonNoLease {
+		t.Fatalf("машина в мосту: %+v", report)
+	}
+
+	// Агент отвечает, но адреса у гостя ещё нет — это «ещё поднимается», а
+	// не «агент офлайн».
+	esc3 := &fakeEscape{out: map[string]string{
+		"virsh domstate w3":           direct["virsh domstate w3"],
+		"virsh domiflist w3":          direct["virsh domiflist w3"],
+		"virsh domifaddr w3 --source": " Name   MAC address  Protocol  Address\n",
+	}}
+	if report := testRunner(t, esc3).AddressReport(context.Background(), "w3"); report.Reason != ReasonNoLease {
+		t.Fatalf("агент отвечает: %+v", report)
+	}
+
+	// Адрес от агента — причина не нужна вовсе.
+	esc4 := &fakeEscape{out: map[string]string{
+		"virsh domstate w3":           direct["virsh domstate w3"],
+		"virsh domiflist w3":          direct["virsh domiflist w3"],
+		"virsh domifaddr w3 --source": " Name   MAC address             Protocol  Address\n eth0   52:54:00:b3:24:30         ipv4      192.168.1.57/24\n",
+	}}
+	report = testRunner(t, esc4).AddressReport(context.Background(), "w3")
+	if report.Address != "192.168.1.57" || report.Reason != "" {
+		t.Fatalf("адрес от агента: %+v", report)
 	}
 }

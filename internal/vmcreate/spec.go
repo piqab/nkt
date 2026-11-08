@@ -13,6 +13,7 @@ import (
 	"github.com/piqab/nkt/internal/vmnet"
 	"html"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -236,6 +237,15 @@ func UserData(s Spec) string {
 	return base
 }
 
+// guestAgentService — пакет гостевого агента, который хаб просит для
+// машин вне сетей libvirt, и guestAgentScript — скрипт, поднимающий его
+// службу. Приставка «90-» держит скрипт в конце списка per-instance: если
+// их окажется несколько, агент должен вставать последним.
+const (
+	guestAgentService = "qemu-guest-agent"
+	guestAgentScript  = "/var/lib/cloud/scripts/per-instance/90-nkt-guest-agent.sh"
+)
+
 func baseUserData(s Spec) string {
 	var b strings.Builder
 	b.WriteString("#cloud-config\n")
@@ -270,6 +280,28 @@ func baseUserData(s Spec) string {
 		for _, p := range s.Packages {
 			fmt.Fprintf(&b, "  - %s\n", p)
 		}
+	}
+	// Гостевой агент ставится пакетом в финальной стадии cloud-init, а
+	// служба его не поднимается: при установке из cloud-init
+	// deb-systemd-invoke службу не запускает, и агент встанет только на
+	// следующей загрузке. Пока агент не работает, хаб не знает адреса
+	// машины — для macvtap это тупик, там агент единственный источник
+	// адреса. Скрипт per-instance закрывает разрыв: в списке финальных
+	// модулей он идёт после установки пакетов, а по instance-id
+	// повторяется только на первом запуске.
+	if slices.Contains(s.Packages, guestAgentService) {
+		b.WriteString("write_files:\n")
+		fmt.Fprintf(&b, "  - path: %s\n", guestAgentScript)
+		b.WriteString("    permissions: '0755'\n")
+		b.WriteString("    content: |\n")
+		b.WriteString("      #!/bin/sh\n")
+		b.WriteString("      # nkt: qemu-guest-agent arrives as a package, and cloud-init does not start\n")
+		b.WriteString("      # its service when it installs it. The hub learns this machine's address only\n")
+		b.WriteString("      # from the agent, so a machine in macvtap has no known address until the\n")
+		b.WriteString("      # service runs — which this script does, right after the packages.\n")
+		b.WriteString("      set -e\n")
+		b.WriteString("      systemctl enable --now qemu-guest-agent ||\n")
+		b.WriteString("        echo \"nkt: qemu-guest-agent did not start — the hub will not know this machine's address\"\n")
 	}
 	// Диск образа маленький (2–3 ГБ), а машине отдан больший: без этого
 	// файловая система осталась бы прежнего размера.

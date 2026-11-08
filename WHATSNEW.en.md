@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.18.1 — 2026-11-08
+
+- **A macvtap machine reports its address on its very first boot.** The address used to appear only after a manual reboot: cloud-init installs `qemu-guest-agent` as a package but never starts the service — installed under cloud-init it stays disabled, so the host could only ask for the address from the second boot on. Now the machine gets a first-boot script along with the package that enables the agent: the address is known right away and no reboot is needed.
+- **A silent agent is now named as a silent agent.** A machine in macvtap stands outside libvirt networks: there is no DHCP lease there and no row in a bridge's ARP table either — only the guest agent reports the address. "The network has no DHCP lease" sent the operator looking for a DHCP server that does not exist in this mode; now the job log and the host window say "the guest agent does not answer" and put virsh's own reply next to it. The change is visible once the host's agent is updated: a machine created by an older agent starts the agent on its next boot — right away if the service is already installed there (`systemctl enable --now qemu-guest-agent`), or after one reboot.
+
 ## v1.18.0 — 2026-11-08
 
 - **A new machine network — macvtap: the machine is plugged straight into a host device, past the host's bridges and libvirt networks.** For the case where the machine needs an address in the hosts' own network and the host has no bridge — for example a kubeadm node that peers must reach by a real address.

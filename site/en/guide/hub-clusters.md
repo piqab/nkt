@@ -177,6 +177,17 @@ reservation tables here.
   neither a DNS name the peers can resolve nor an address everyone sees
   the same way — without this, kubelet advertises an address the peers do
   not have, and the control plane join fails in the etcd check.
+- **The agent starts on the very first boot.** cloud-init installs the
+  guest agent package in its final stage and does not start the service —
+  the unit only comes up on the next boot, so a machine that already had
+  an address stayed address-less for the hub. Now the machine gets, along
+  with the package, a first-boot script that enables the agent: the
+  address is known right away and the machine does not need rebooting. If
+  the agent still keeps silent, the hub reports "the guest agent does not
+  answer" with virsh's own words, not "the network has no DHCP lease" — in
+  macvtap there is no lease to look for. Silence usually means a machine
+  created by an older host agent (before 1.18.1): start the service inside
+  the machine (`systemctl enable --now qemu-guest-agent`) or reboot it.
 - **The network administrator pins the address**: a DHCP reservation by
   the machine's MAC or a static address on the node. In the creation log
   this is its own line — the next DHCP lease would move the address and
@@ -377,7 +388,10 @@ hv3: host w"`, `network nat|bridge|macvtap|wireguard`, `nic DEVICE` (or
   `qemu-guest-agent`, which cloud-init installs on first boot — outside a
   libvirt network the host does not see its machine's address (on macvtap
   it cannot see it at all), and without the agent the hub would not know
-  where to reach the node.
+  where to reach the node. The package does not start the service itself,
+  so the machine also gets a script in that same first boot which enables
+  the agent: the address is known before the hub goes to join the node. A
+  silent agent is reported as a silent agent, not as a missing DHCP lease.
 - **macvtap**: there is nothing to pin the address with — the network
   here is the hosts' own, with its DHCP, not a libvirt network with
   reservation tables. The hub writes a line to the job log that the

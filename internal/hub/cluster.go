@@ -1078,9 +1078,10 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 	vm := vmcreate.Spec{Name: nd.Name, ImageID: imageID, Network: nd.Network, Bridge: nd.Bridge, Direct: nd.Nic,
 		User: spec.User, Autostart: true, VCPUs: nd.VCPUs, MemoryMB: nd.MemMB, DiskGB: nd.DiskGB}
 	if nd.Bridge != "" || nd.Nic != "" {
-		// Вне сети libvirt адрес машины узнаётся через гостевого агента —
-		// cloud-init ставит его при первом запуске. Без него хаб не узнал
-		// бы, куда ходить к узлу.
+		// Вне сети libvirt адрес машины узнаётся через гостевого агента:
+		// пакет ставит cloud-init, а службу поднимает скрипт первого
+		// запуска (vmcreate.baseUserData) — сам пакет адреса хаб бы не дал.
+		// Без агента хаб не узнал, куда ходить к узлу.
 		vm.Packages = append(vm.Packages, "qemu-guest-agent")
 	}
 	// Пакеты дополнений (Longhorn — open-iscsi и nfs-common) едут сюда же,

@@ -202,12 +202,24 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// Адрес нужен тому, кто будет к машине подключаться, — прежде всего
 	// хабу, если машину создают для него. Ждать до конца задания
 	// незачем: строка журнала с адресом видна сразу.
-	if addr := r.waitAddress(ctx, jc, spec.Name); addr != "" {
-		jc.Log("vmcreate.machineAddress", addr)
-	} else {
+	r.waitAndLogAddress(ctx, jc, spec.Name)
+	return nil
+}
+
+// waitAndLogAddress ждёт адреса машины и говорит в журнале, чем ожидание
+// кончилось. «Гостевой агент не отвечает» и «сеть без DHCP-аренды» —
+// разные причины, и совет из них разный: в первом случае адреса надо
+// добиваться внутри машины, во втором — у её сети.
+func (r *CreateRunner) waitAndLogAddress(ctx context.Context, jc *jobs.Context, name string) {
+	report := r.waitAddress(ctx, jc, name)
+	switch {
+	case report.Address != "":
+		jc.Log("vmcreate.machineAddress", report.Address)
+	case report.Reason == ReasonAgentOffline:
+		jc.Log("vmcreate.addressGuestAgentSilent", report.Detail)
+	default:
 		jc.Log("vmcreate.addressKnownYetMachineStill")
 	}
-	return nil
 }
 
 // defaultAddressWait — сколько ждать адреса. Первый запуск облачного
@@ -216,30 +228,41 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 // раньше, чем машина отвечала.
 const defaultAddressWait = 5 * time.Minute
 
-// waitAddress спрашивает у libvirt адрес машины, пока тот не появится.
-func (r *CreateRunner) waitAddress(ctx context.Context, jc *jobs.Context, name string) string {
+// waitAddress спрашивает у libvirt адрес машины, пока тот не появится, и
+// отдаёт последний ответ: вместе с адресом так приходит и причина, по
+// которой адреса нет, — журнал должен называть её, а не предполагать DHCP.
+func (r *CreateRunner) waitAddress(ctx context.Context, jc *jobs.Context, name string) AddressReport {
 	deadline := time.Now().Add(r.addressWait)
 	// Молчащий журнал в этом месте выглядит как зависшее задание, хотя
 	// ожидание тут нормальное: машина грузится.
 	told := time.Now()
+	report := AddressReport{}
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
-			return ""
+			return report
 		}
-		if addr := r.Address(ctx, name); addr != "" {
-			return addr
+		report = r.AddressReport(ctx, name)
+		if report.Address != "" {
+			return report
 		}
 		if time.Since(told) > 30*time.Second {
-			jc.Log("vmcreate.addressYetWaitingMachineStill")
+			// Ждём не всегда одного и того же: машине в macvtap адрес
+			// должен сообщить гостевой агент, и писать про DHCP здесь —
+			// водить оператора не туда.
+			if report.Reason == ReasonAgentOffline {
+				jc.Log("vmcreate.addressWaitingGuestAgent")
+			} else {
+				jc.Log("vmcreate.addressYetWaitingMachineStill")
+			}
 			told = time.Now()
 		}
 		select {
 		case <-ctx.Done():
-			return ""
+			return report
 		case <-time.After(3 * time.Second):
 		}
 	}
-	return ""
+	return report
 }
 
 // addressSources — откуда libvirt берёт адрес машины, в порядке
@@ -295,6 +318,10 @@ const (
 	ReasonNotRunning = "not-running" // машина не запущена
 	ReasonNoLease    = "no-lease"    // запущена, но адреса ещё нет
 	ReasonNoVirsh    = "no-virsh"    // virsh недоступен
+	// ReasonAgentOffline — машина в macvtap, где адрес сообщает только
+	// гостевой агент, и он не ответил. Сказать здесь «аренды нет» —
+	// послать оператора искать DHCP-сервер, которого в этом режиме нет.
+	ReasonAgentOffline = "agent-offline"
 )
 
 // Address спрашивает у libvirt адрес машины. Пустая строка — «пока не
@@ -333,10 +360,24 @@ func (r *CreateRunner) AddressReport(ctx context.Context, name string) AddressRe
 		}
 	}
 	seen := map[string]bool{}
+	// Молчание агента запоминается отдельно: в macvtap это и есть причина,
+	// а что именно ответил virsh — подсказка, агент ли не подключён или
+	// канал закрыт в описании домена.
+	agentFail, agentAnswered := "", false
 	for _, source := range addressSources {
 		res, err := r.run(ctx, "virsh", "domifaddr", name, "--source", source)
 		if err != nil || res.ExitCode != 0 {
+			if source == "agent" {
+				if err != nil {
+					agentFail = err.Error()
+				} else {
+					agentFail = commandError(res.Stderr, res.Stdout)
+				}
+			}
 			continue
+		}
+		if source == "agent" {
+			agentAnswered = true
 		}
 		for _, a := range parseDomifaddrAll(res.Output()) {
 			// Адреса чужих MAC — внутренние мосты гостя (docker0, cni0,
@@ -356,8 +397,27 @@ func (r *CreateRunner) AddressReport(ctx context.Context, name string) AddressRe
 		report.Address = report.Addresses[0].Addr
 		return report
 	}
+	// Машина в macvtap стоит вне сетей libvirt: аренды там нет и быть не
+	// может, ARP-таблица моста её тоже не касается — адрес сообщает только
+	// гостевой агент. Если он молчит, причина называется им, а не «аренды
+	// нет»: оператору надо поднимать службу в госте, а не искать DHCP.
+	if !agentAnswered && hasDirectIface(report.Ifaces) {
+		report.Reason = ReasonAgentOffline
+		report.Detail = agentFail
+		return report
+	}
 	report.Reason = ReasonNoLease
 	return report
+}
+
+// hasDirectIface — есть ли среди интерфейсов домена direct (macvtap).
+func hasDirectIface(ifaces []VMIface) bool {
+	for _, i := range ifaces {
+		if i.Type == "direct" {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseDomiflist разбирает virsh domiflist: интерфейс, тип, источник,
