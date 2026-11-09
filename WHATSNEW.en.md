@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.1 — 2026-11-09
+
+- Version bump: patch release.
+
 ## v1.20.0 — 2026-11-09
 
 - **Built-in cluster load balancer: 1–2 machines with HAProxy.** The cluster creation form now has a “Built-in load balancer” section: one or two machines (HA-pair) with HAProxy, and for HA — keepalived with a virtual IP (VIP). The cluster endpoint = VIP:6443 (HA) or lb-1 address:6443 (single machine); the Traffic Fly listener is not needed — the hub skips it.
