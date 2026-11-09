@@ -478,6 +478,7 @@ func (s *Server) handleClusterRetry(w http.ResponseWriter, r *http.Request) {
 		var pj ClusterJobParams
 		_ = json.Unmarshal([]byte(last.Params), &pj)
 		pj.Steps = req.Steps
+		// CodeQL: newID используется ниже в writeJSON (строка ~492).
 		newID, err = s.jobs.RetryWithParams(r.Context(), last.ID, pj)
 	} else {
 		newID, err = s.jobs.Retry(r.Context(), last.ID)

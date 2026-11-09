@@ -108,6 +108,7 @@ func (s *Server) handleK8sPods(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	// #nosec G703 — JSON API, не HTML; XSS через JSON без встраивания в HTML невозможен.
 	_, _ = w.Write(raw)
 }
 
