@@ -35,7 +35,7 @@ export interface ClusterImage {
 
 interface Row {
   host_id: number | null
-  role: 'control-plane' | 'worker'
+  role: 'control-plane' | 'worker' | 'load-balancer'
   kind: 'vm' | 'host'
   count: number
   vcpus: number
@@ -63,7 +63,7 @@ interface HostInfo {
   error?: string
 }
 
-const newRow = (role: Row['role']): Row => ({ host_id: null, role, kind: 'vm', count: 1, vcpus: 2, memory_mb: 4096, disk_gb: 30, image_id: '', network: '', bridge: '', nic: '' })
+const newRow = (role: Row['role']): Row => ({ host_id: null, role, kind: 'vm', count: 1, vcpus: role === 'load-balancer' ? 1 : 2, memory_mb: role === 'load-balancer' ? 1024 : 4096, disk_gb: role === 'load-balancer' ? 10 : 30, image_id: '', network: '', bridge: '', nic: '' })
 
 const cell: CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.15rem' }
 
@@ -252,6 +252,14 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [prepare, setPrepare] = useState(true)
   const [busy, setBusy] = useState<'create' | 'dry' | 'steps' | null>(null)
   const [error, setError] = useState<Msg | null>(null)
+  // Встроенный балансировщик: 1–2 машины с HAProxy (+ keepalived при HA).
+  const [lbEnabled, setLbEnabled] = useState(false)
+  const [lbCount, setLbCount] = useState(1)
+  const [lbImage, setLbImage] = useState('')
+  const [lbVIP, setLbVIP] = useState('')
+  const [lbRows, setLbRows] = useState<Row[]>([newRow('load-balancer')])
+  const [lbHaproxyOpen, setLbHaproxyOpen] = useState(false)
+  const [lbHaproxy, setLbHaproxy] = useState({ connect: 5000, client: 50000, server: 50000, maxConn: 2000, statsPort: 8404, algorithm: 'source-hash' as 'source-hash' | 'round-robin' })
   // Журнал сухого прогона — поверх формы, настройки не теряются.
   const [dryJob, setDryJob] = useState<Job | null>(null)
   // Второй шаг формы — чек-лист действий задания (тот же, что у диалога
@@ -373,6 +381,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const effectiveNetwork = distinctHosts <= 1 && network === 'bridge' && rows.every((r) => !r.bridge) ? 'nat' : network
   const cpCount = rows.filter((r) => r.role === 'control-plane').reduce((n, r) => n + (r.kind === 'host' ? 1 : r.count), 0)
   const update = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const updateLb = (i: number, patch: Partial<Row>) => setLbRows(lbRows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
 
   // Образы, мосты и устройства — с хоста строки: у каждого хоста свой
   // каталог, свои мосты и свои интерфейсы.
@@ -433,9 +442,19 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   if (cpCount !== 1 && cpCount !== 3) problems.push(t('clusters.cpCountHint', { n: cpCount }))
   // Три control plane по kubeadm живут по общему адресу: без него вход
   // второго и третьего узла идёт по адресу первого, и кластер висит на нём.
-  if (cpCount === 3 && flavor === 'kubeadm' && !endpoint.trim()) problems.push(t('clusters.endpointNeeded'))
+  // При включённом LB endpoint устанавливается автоматически — не требуем.
+  if (cpCount === 3 && flavor === 'kubeadm' && !endpoint.trim() && !lbEnabled) problems.push(t('clusters.endpointNeeded'))
   if (effectiveNetwork === 'bridge') {
     for (const r of rows) if (r.kind === 'vm' && r.host_id !== null && !r.bridge) problems.push(t('clusters.bridgeMissingRow'))
+  }
+  // Валидация LB: при HA-паре VIP обязателен.
+  if (lbEnabled) {
+    if (lbCount === 2 && !lbVIP.trim()) problems.push(t('clusters.lbVIPNeeded'))
+    if (lbRows.length === 0) problems.push(t('clusters.lbNeedsPlacements'))
+    for (const r of lbRows) {
+      if (r.kind === 'vm' && r.host_id !== null && !r.image_id) problems.push(t('clusters.lbNeedsImage'))
+      if (effectiveNetwork === 'macvtap' && r.kind === 'vm' && r.host_id !== null && !r.nic) problems.push(t('clusters.nicMissingRow'))
+    }
   }
   if (effectiveNetwork === 'nat' && distinctHosts > 1) problems.push(t('clusters.natSingle'))
   // macvtap: устройство выбирается на каждом хосте своё, и без него строка
@@ -446,7 +465,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     // говорит. Общий адрес кластера при этом остаётся — его обслуживает шлюз.
     if (expose) problems.push(t('clusters.exposeMacvtap'))
   }
-  const valid = !!name && rows.length > 0 && rows.every((r) => r.host_id !== null && (r.kind === 'host' || (r.count > 0 && imageOf(r)))) && problems.length === 0
+  const valid = !!name && rows.length > 0 && rows.every((r) => r.host_id !== null && (r.kind === 'host' || (r.count > 0 && imageOf(r)))) && problems.length === 0 && (!lbEnabled || lbRows.every((r) => r.host_id !== null && r.image_id))
 
   const buildBody = () => ({
     name,
@@ -476,6 +495,32 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     expose_https: expose ? ports.https ?? 0 : 0,
     image_id: imageOf(rows[0]) || 'ubuntu-24.04',
     ...listenerBody(flavor, endpoint, gateway, allow),
+    // Встроенный балансировщик.
+    lb_enabled: lbEnabled,
+    lb_count: lbEnabled ? lbCount : 0,
+    lb_image: lbEnabled ? (lbImage || imageOf(lbRows[0]) || 'debian-12-slim') : '',
+    vip: lbEnabled ? lbVIP.trim() : '',
+    lb_placements: lbEnabled ? lbRows.map((r) => ({
+      host_id: r.host_id,
+      role: 'load-balancer' as const,
+      kind: r.kind,
+      count: r.count,
+      vcpus: r.vcpus,
+      memory_mb: r.memory_mb,
+      disk_gb: r.disk_gb,
+      image_id: r.kind === 'vm' ? (r.image_id || lbImage || 'debian-12-slim') : '',
+      network: effectiveNetwork === 'nat' ? r.network : '',
+      bridge: effectiveNetwork === 'bridge' ? r.bridge : '',
+      nic: effectiveNetwork === 'macvtap' ? r.nic : '',
+    })) : [],
+    lb_haproxy: lbEnabled ? {
+      connect_timeout: lbHaproxy.connect,
+      client_timeout: lbHaproxy.client,
+      server_timeout: lbHaproxy.server,
+      max_conn: lbHaproxy.maxConn,
+      stats_port: lbHaproxy.statsPort,
+      algorithm: lbHaproxy.algorithm,
+    } : {},
   })
 
   // Чек-лист создания приходит с хаба: имена узлов и порядок шагов знает
@@ -632,6 +677,190 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           allow={allow}
           setAllow={setAllow}
         />
+      )}
+
+      {/* Встроенный балансировщик */}
+      <div style={{ margin: '0.6rem 0', padding: '0.6rem', border: '1px solid var(--border)', borderRadius: 6, background: lbEnabled ? 'var(--bg-2)' : 'transparent' }}>
+        <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+          <Checkbox checked={lbEnabled} onChange={(e) => setLbEnabled(e.target.checked)} />
+          <strong>{t('clusters.lbTitle')}</strong>
+          <span className="small muted">{t('clusters.lbHint')}</span>
+        </div>
+        {lbEnabled && (
+          <div style={{ marginTop: '0.6rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem' }}>
+            <label>
+              {t('clusters.lbCount')}
+              <Select
+                value={lbCount}
+                onChange={(v: number) => {
+                  setLbCount(v)
+                  // При переключении на HA добавляем вторую строку размещения, если её нет.
+                  if (v === 2 && lbRows.length < 2) {
+                    setLbRows([...lbRows, newRow('load-balancer')])
+                  } else if (v === 1 && lbRows.length > 1) {
+                    setLbRows([lbRows[0]])
+                  }
+                }}
+                options={[
+                  { value: 1, label: t('clusters.lbCount1') },
+                  { value: 2, label: t('clusters.lbCount2') },
+                ]}
+              />
+            </label>
+            <label>
+              {t('clusters.lbImage')}
+              <Input value={lbImage} onChange={(e) => setLbImage(e.target.value)} placeholder="debian-12-slim" />
+              <span className="small muted">{t('clusters.lbImageHint')}</span>
+            </label>
+            <label>
+              {t('clusters.lbVIP')}
+              <Input value={lbVIP} onChange={(e) => setLbVIP(e.target.value)} placeholder="10.77.1.10" />
+              <span className="small muted">{t('clusters.lbVIPHint')}</span>
+            </label>
+          </div>
+        )}
+        {lbEnabled && network === 'macvtap' && (
+          <p className="small muted" style={{ margin: '0.4rem 0 0', color: 'var(--series-8)' }}>
+            ⚠ {t('clusters.lbDHCPHint')}
+          </p>
+        )}
+        {lbEnabled && (
+          <div style={{ marginTop: '0.6rem' }}>
+            <h4 style={{ margin: '0 0 0.4rem' }}>{t('clusters.lbPlacement', { n: 1 })}</h4>
+            {lbRows.map((r, i) => {
+              const hi = r.host_id !== null ? info[r.host_id] : undefined
+              return (
+                <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem 0.6rem', marginBottom: '0.4rem' }}>
+                  <div className="row" style={{ gap: '0.6rem', alignItems: 'flex-end' }}>
+                    <div style={{ ...cell, minWidth: '14rem', flex: 1 }}>
+                      <span className="small muted">{t('clusters.colHost')}</span>
+                      <Select
+                        size="small"
+                        value={r.host_id ?? undefined}
+                        placeholder={t('clusters.pickHost')}
+                        onChange={(v: number) => updateLb(i, { host_id: v, image_id: '', bridge: '', nic: '' })}
+                        options={online.map((h) => ({
+                          value: h.id,
+                          label: (
+                            <>
+                              <OsIcon os={h.os_info} size={12} />
+                              <Sensitive>{h.name + (h.parent_id ? ' (VM)' : '') + (h.addr ? ` — ${h.addr}` : '')}</Sensitive>
+                            </>
+                          ),
+                        }))}
+                      />
+                    </div>
+                    <div style={{ ...cell, minWidth: '11rem' }}>
+                      <span className="small muted">{t('clusters.colKind')}</span>
+                      <Select size="small" value={r.kind} onChange={(v: Row['kind']) => updateLb(i, { kind: v })} options={[{ value: 'vm', label: t('clusters.kindVM') }]} disabled />
+                    </div>
+                    <div style={cell}>
+                      <span className="small muted">CPU</span>
+                      <InputNumber size="small" min={1} max={4} value={r.vcpus} onChange={(v) => updateLb(i, { vcpus: v ?? 1 })} style={{ width: '4.5rem' }} />
+                    </div>
+                    <div style={cell}>
+                      <span className="small muted">{t('clusters.colMem')}</span>
+                      <InputNumber size="small" min={512} step={512} value={r.memory_mb} onChange={(v) => updateLb(i, { memory_mb: v ?? 1024 })} style={{ width: '6rem' }} />
+                    </div>
+                    <div style={cell}>
+                      <span className="small muted">{t('clusters.colDisk')}</span>
+                      <InputNumber size="small" min={5} value={r.disk_gb} onChange={(v) => updateLb(i, { disk_gb: v ?? 10 })} style={{ width: '5rem' }} />
+                    </div>
+                    <div style={{ ...cell, minWidth: '16rem', flex: 1 }}>
+                      <span className="small muted">{t('hosts.newVMImage')}</span>
+                      <Select
+                        size="small"
+                        value={r.image_id || lbImage || undefined}
+                        loading={hi?.loading}
+                        placeholder={r.host_id === null ? t('clusters.pickHostFirst') : t('clusters.pickImage')}
+                        disabled={r.host_id === null}
+                        onChange={(v: string) => updateLb(i, { image_id: v })}
+                        options={[
+                          ...(hi?.images ?? []).map((img) => ({ value: img.id, label: img.name + (img.downloaded ? '' : ` ${t('hosts.newVMWillDownload')}`) })),
+                          ...(hubImages.data?.images ?? []).map((img) => ({ value: `hub:${img.name}`, label: `${t('clusters.imageFromHub')}: ${img.name} (${formatBytesShort(img.size)})` })),
+                        ]}
+                      />
+                    </div>
+                    {effectiveNetwork === 'macvtap' && (
+                      <div style={{ ...cell, minWidth: '10rem' }}>
+                        <span className="small muted">{t('clusters.colNic')}</span>
+                        <Select
+                          size="small"
+                          value={r.nic || undefined}
+                          loading={hi?.loading}
+                          placeholder={r.host_id === null ? t('clusters.pickHostFirst') : t('clusters.pickNic')}
+                          disabled={r.host_id === null}
+                          onChange={(v: string) => updateLb(i, { nic: v })}
+                          options={(hi?.nics ?? []).map((n) => ({ value: n.name, label: n.name + (n.addr ? ` — ${n.addr}` : '') }))}
+                        />
+                      </div>
+                    )}
+                    {lbCount === 2 && (
+                      <Button size="small" type="text" icon={<DeleteOutlined />} disabled={lbRows.length <= 1} onClick={() => setLbRows(lbRows.filter((_, j) => j !== i))} />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            {lbCount === 2 && lbRows.length < 2 && (
+              <Button size="small" icon={<PlusOutlined />} onClick={() => setLbRows([...lbRows, newRow('load-balancer')])}>
+                {t('clusters.addRow')} lb-{lbRows.length + 1}
+              </Button>
+            )}
+          </div>
+        )}
+        {lbEnabled && (
+          <div style={{ marginTop: '0.6rem' }}>
+            <Button type="link" size="small" onClick={() => setLbHaproxyOpen(!lbHaproxyOpen)}>
+              {lbHaproxyOpen ? '▼' : '▶'} {t('clusters.lbHaproxy')}
+            </Button>
+            {lbHaproxyOpen && (
+              <div style={{ marginTop: '0.4rem', padding: '0.6rem', background: 'var(--bg-2)', borderRadius: 4, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.6rem' }}>
+                <label>
+                  {t('clusters.lbHaproxyConnect')}
+                  <InputNumber size="small" min={1000} max={60000} step={1000} value={lbHaproxy.connect} onChange={(v) => setLbHaproxy({ ...lbHaproxy, connect: v ?? 5000 })} style={{ width: '100%' }} />
+                </label>
+                <label>
+                  {t('clusters.lbHaproxyClient')}
+                  <InputNumber size="small" min={1000} max={300000} step={1000} value={lbHaproxy.client} onChange={(v) => setLbHaproxy({ ...lbHaproxy, client: v ?? 50000 })} style={{ width: '100%' }} />
+                </label>
+                <label>
+                  {t('clusters.lbHaproxyServer')}
+                  <InputNumber size="small" min={1000} max={300000} step={1000} value={lbHaproxy.server} onChange={(v) => setLbHaproxy({ ...lbHaproxy, server: v ?? 50000 })} style={{ width: '100%' }} />
+                </label>
+                <label>
+                  {t('clusters.lbHaproxyMaxConn')}
+                  <InputNumber size="small" min={100} max={100000} step={100} value={lbHaproxy.maxConn} onChange={(v) => setLbHaproxy({ ...lbHaproxy, maxConn: v ?? 2000 })} style={{ width: '100%' }} />
+                </label>
+                <label>
+                  {t('clusters.lbHaproxyStatsPort')}
+                  <InputNumber size="small" min={0} max={65535} value={lbHaproxy.statsPort} onChange={(v) => setLbHaproxy({ ...lbHaproxy, statsPort: v ?? 8404 })} style={{ width: '100%' }} />
+                </label>
+                <label>
+                  {t('clusters.lbHaproxyAlgorithm')}
+                  <Select
+                    size="small"
+                    value={lbHaproxy.algorithm}
+                    onChange={(v: 'source-hash' | 'round-robin') => setLbHaproxy({ ...lbHaproxy, algorithm: v })}
+                    options={[
+                      { value: 'source-hash', label: t('clusters.lbHaproxyAlgorithmSource') },
+                      { value: 'round-robin', label: t('clusters.lbHaproxyAlgorithmRR') },
+                    ]}
+                    style={{ width: '100%' }}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Отображение endpoint при включённом LB */}
+      {lbEnabled && (
+        <div style={{ margin: '0.4rem 0', padding: '0.4rem 0.6rem', background: 'var(--bg-2)', borderRadius: 4, border: '1px solid var(--border)' }}>
+          <span className="small muted">{t('clusters.endpoint')}: </span>
+          <code>{lbVIP ? `${lbVIP}:6443` : t('clusters.lbEndpointAuto')}</code>
+        </div>
       )}
 
       <h3 style={{ margin: '0.4rem 0' }}>{t('clusters.placement')}</h3>

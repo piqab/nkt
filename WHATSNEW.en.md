@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.0 — 2026-11-09
+
+- **Built-in cluster load balancer: 1–2 machines with HAProxy.** The cluster creation form now has a “Built-in load balancer” section: one or two machines (HA-pair) with HAProxy, and for HA — keepalived with a virtual IP (VIP). The cluster endpoint = VIP:6443 (HA) or lb-1 address:6443 (single machine); the Traffic Fly listener is not needed — the hub skips it.
+- **HA-pair with keepalived: master and backup.** When two load balancer machines are selected, the hub generates keepalived configs with priorities (100/90); the VIP floats between them when HAProxy is down (checked via `killall -0 haproxy`). The first machine is master, the second is backup; re-running the balancer step regenerates the configs.
+- **HAProxy parameters are configurable.** Connect/client/server timeouts, max connections, stats web interface port, balancing algorithm (source-hash for API, round-robin for ingress) — all in a collapsible form section with sensible defaults.
+- **The pipeline accounts for the load balancer.** New steps `vm:lb-1`/`vm:lb-2` and `lb` (HAProxy/keepalived installation). The `lb` step depends on the control plane machines (their addresses are needed), and `cp1` depends on `lb` — kubeadm init cannot pass without a live endpoint. The balancer appears as a separate row in the steps window.
+- **DHCP reservation — a hint in the form.** In macvtap mode, the machine gets an address via DHCP; the form reminds the operator to reserve the address on the router by MAC, so VIP and lb-1 address do not change on reboot.
+
 ## v1.19.0 — 2026-11-08
 
 - **The cluster creation plan is a checklist: “Create cluster” opens a second form step with the steps window.** Every action is visible per node before anything starts: the host checks, the tunnel between hosts, each node's machine, the shared address listener, the first control plane, each node's join, waiting for `Ready` with the port forward and the kubeconfig, the addons. Anything unneeded can be unticked — the job does not run an unticked step and writes “skipped” into the log.

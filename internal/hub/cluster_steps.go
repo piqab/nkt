@@ -32,6 +32,7 @@ const (
 	stepPreflight = "preflight"
 	stepMesh      = "mesh"
 	stepListener  = "listener"
+	stepLB        = "lb"
 	stepCP1       = "cp1"
 	stepReady     = "ready"
 	stepAddons    = "addons"
@@ -154,11 +155,26 @@ func clusterStepList(spec ClusterSpec, nodes []clusterNode, cp1Name string, done
 	if spec.Endpoint != "" {
 		out = append(out, ClusterStep{ID: stepListener, Kind: "listener", Done: done.Listener || done.Installed[cp1Name]})
 	}
-	// Первый control plane: init + CNI. Зависит от своей машины и (при общем
-	// адресе) от слушателя. Повтор разрушителен — Force.
+	// Балансировщик — установка HAProxy (+ keepalived при HA-паре) на машинах
+	// lb-1, lb-2. Зависит от всех vm:cp-* (адреса cp нужны для HAProxy-конфига).
+	// Выполнен, если в Resume есть отметка LB.
+	if spec.LBEnabled {
+		var lbDeps []string
+		for _, nd := range nodes {
+			if nd.Role == RoleControlPlane {
+				lbDeps = append(lbDeps, vmStepID(nd.Name))
+			}
+		}
+		out = append(out, ClusterStep{ID: stepLB, Kind: "lb", Done: done.LB, Deps: lbDeps})
+	}
+	// Первый control plane: init + CNI. Зависит от своей машины, (при общем
+	// адресе) от слушателя, и (при LB) от шага lb. Повтор разрушителен — Force.
 	cp1Deps := []string{vmStepID(cp1Name)}
 	if spec.Endpoint != "" {
 		cp1Deps = append(cp1Deps, stepListener)
+	}
+	if spec.LBEnabled {
+		cp1Deps = append(cp1Deps, stepLB)
 	}
 	out = append(out, ClusterStep{
 		ID: stepCP1, Kind: "cp1", Node: cp1Name,
@@ -221,6 +237,8 @@ func clusterStepDone(id string, spec ClusterSpec, nodes []clusterNode, cp1Name s
 		return done.MeshUp
 	case id == stepListener:
 		return done.Listener || done.Installed[cp1Name]
+	case id == stepLB:
+		return done.LB
 	case id == stepCP1:
 		return done.Installed[cp1Name]
 	case id == stepReady:
@@ -295,6 +313,8 @@ func (r *ClusterRunner) clusterBuildGate(ctx context.Context, spec ClusterSpec, 
 			g.run[st.ID] = !exists
 		case st.ID == stepListener:
 			g.run[st.ID] = true
+		case st.ID == stepLB:
+			g.run[st.ID] = !done.LB
 		case st.ID == stepCP1:
 			g.run[st.ID] = !done.Installed[cp1Name]
 		case st.Kind == "join":

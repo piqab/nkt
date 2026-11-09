@@ -111,6 +111,39 @@ func (s *Server) handleK8sPods(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(raw)
 }
 
+// handleK8sLBInstall — POST /k8s/lb-install: поставить балансировщик
+// (HAProxy + keepalived) на машине кластера.
+func (s *Server) handleK8sLBInstall(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Mode == config.ModeFixtures {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "k8s.fixturesDisabled"))
+		return
+	}
+	var spec k8s.LBInstallSpec
+	if err := decodeJSON(r, &spec); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := spec.Validate(); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.T(msgs.LangFromRequest(r), "api.backgroundJobsAreUnavailable"))
+		return
+	}
+	user := auth.Username(r.Context())
+	id, err := s.jobs.Start(r.Context(), jobs.Spec{
+		Kind: k8s.KindLBInstall, TitleKey: "k8s.lbInstallJobTitle", TitleArgs: []any{spec.Endpoint},
+		Queue: "host", Author: user, Steps: len(k8s.LBSteps(spec)), Params: spec,
+	})
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "k8s.lb-install", spec.Endpoint, "ok", "")
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
+}
+
 func (s *Server) handleK8sUninstall(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Mode == config.ModeFixtures {
 		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "k8s.fixturesDisabled"))

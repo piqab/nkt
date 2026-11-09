@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
@@ -100,6 +101,39 @@ type ClusterSpec struct {
 	// Addons — дополнения поверх готового кластера (Longhorn): ставятся
 	// последним шагом создания и кнопкой «Дополнения» у кластера.
 	Addons []ClusterAddon `json:"addons,omitempty"`
+	// LBEnabled — встроенный балансировщик: 1–2 машины с HAProxy (+ keepalived
+	// при HA-паре). Endpoint кластера = VIP (HA) или адрес lb-1.
+	LBEnabled bool `json:"lb_enabled,omitempty"`
+	// LBCount — количество машин балансировщика (1 или 2).
+	LBCount int `json:"lb_count,omitempty"`
+	// LBImage — образ машин балансировщика (ID образа из библиотеки хаба
+	// или имя хостового образа с префиксом "host:").
+	LBImage string `json:"lb_image,omitempty"`
+	// VIP — виртуальный адрес HA-пары балансировщика (keepalived). Обязателен
+	// при LBCount=2, опционален при 1 (тогда endpoint = адрес lb-1).
+	VIP string `json:"vip,omitempty"`
+	// LBPlacements — размещение машин балансировщика по хостам.
+	LBPlacements []Placement `json:"lb_placements,omitempty"`
+	// LBHaproxy — параметры HAProxy (таймауты, maxconn, порт статистики,
+	// алгоритм балансировки). Пусто — значения по умолчанию.
+	LBHaproxy LBHaproxyConfig `json:"lb_haproxy,omitempty"`
+}
+
+// LBHaproxyConfig — параметры HAProxy для балансировщика кластера.
+type LBHaproxyConfig struct {
+	// ConnectTimeout — таймаут подключения к бэкенду (мс).
+	ConnectTimeout int `json:"connect_timeout,omitempty"`
+	// ClientTimeout — таймаут клиента (мс).
+	ClientTimeout int `json:"client_timeout,omitempty"`
+	// ServerTimeout — таймаут сервера (мс).
+	ServerTimeout int `json:"server_timeout,omitempty"`
+	// MaxConn — максимальное число соединений.
+	MaxConn int `json:"max_conn,omitempty"`
+	// StatsPort — порт веб-интерфейса статистики HAProxy (0 = отключить).
+	StatsPort int `json:"stats_port,omitempty"`
+	// Algorithm — алгоритм балансировки: "source-hash" (API) или
+	// "round-robin" (ingress).
+	Algorithm string `json:"algorithm,omitempty"`
 }
 
 // ClusterAddon — дополнение и версия его чарта (пусто — версия nkt по
@@ -139,6 +173,7 @@ const (
 
 	RoleControlPlane = "control-plane"
 	RoleWorker       = "worker"
+	RoleLoadBalancer = "load-balancer"
 	KindVM           = "vm"
 	KindHost         = "host"
 )
@@ -201,7 +236,8 @@ func (s *ClusterSpec) Validate() error {
 				return msgs.Errorf("hub.clusterNeedsWorkers")
 			}
 		case TopologyCP3:
-			if s.Flavor == k8s.FlavorKubeadm && s.Endpoint == "" {
+			// При LB endpoint будет установлен после шага lb — не требуем его здесь.
+			if s.Flavor == k8s.FlavorKubeadm && s.Endpoint == "" && !s.LBEnabled {
 				return msgs.Errorf("hub.clusterEndpointNeeded")
 			}
 		default:
@@ -228,6 +264,11 @@ func (s *ClusterSpec) Validate() error {
 	}
 	if err := validateAddons(s.Addons); err != nil {
 		return err
+	}
+	if s.LBEnabled {
+		if err := s.validateLB(); err != nil {
+			return err
+		}
 	}
 	if s.CNI != "cilium" {
 		s.KubeProxyReplacement = false
@@ -374,7 +415,8 @@ func (s *ClusterSpec) validatePlacements() error {
 	if cps != 1 && cps != 3 {
 		return msgs.Errorf("hub.clusterCPCount", cps)
 	}
-	if cps == 3 && s.Flavor == k8s.FlavorKubeadm && s.Endpoint == "" {
+	// При LB endpoint будет установлен после шага lb — не требуем его здесь.
+	if cps == 3 && s.Flavor == k8s.FlavorKubeadm && s.Endpoint == "" && !s.LBEnabled {
 		return msgs.Errorf("hub.clusterEndpointNeeded")
 	}
 	if total < 1 {
@@ -447,8 +489,81 @@ func (s *ClusterSpec) validatePlacements() error {
 	return nil
 }
 
-// nodes разворачивает размещение в узлы с именами <кластер>-cp-N /
-// <кластер>-w-N; узел-хост носит имя самого хоста.
+// validateLB проверяет размещение машин балансировщика.
+func (s *ClusterSpec) validateLB() error {
+	if s.LBCount != 1 && s.LBCount != 2 {
+		return msgs.Errorf("hub.clusterLBCount", s.LBCount)
+	}
+	if s.LBCount == 2 && s.VIP == "" {
+		return msgs.Errorf("hub.clusterLBNeedsVIP")
+	}
+	if len(s.LBPlacements) == 0 {
+		return msgs.Errorf("hub.clusterLBNeedsPlacements")
+	}
+	for i := range s.LBPlacements {
+		pl := &s.LBPlacements[i]
+		if pl.HostID <= 0 {
+			return msgs.Errorf("hub.clusterPlacementHost")
+		}
+		if pl.Kind != KindVM {
+			return msgs.Errorf("hub.clusterLBKind", pl.Kind)
+		}
+		if pl.Count < 1 || pl.Count > 2 {
+			return msgs.Errorf("hub.clusterLBCountRange", pl.Count)
+		}
+		if pl.ImageID == "" {
+			pl.ImageID = s.LBImage
+		}
+		if pl.ImageID == "" {
+			return msgs.Errorf("hub.clusterLBNeedsImage")
+		}
+		if pl.VCPUs == 0 {
+			pl.VCPUs = 1
+		}
+		if pl.MemMB == 0 {
+			pl.MemMB = 1024
+		}
+		if pl.DiskGB == 0 {
+			pl.DiskGB = 10
+		}
+		// В режиме macvtap устройство обязательно (как у cp/w).
+		if s.NetworkMode == NetworkMacvtap && pl.Nic == "" {
+			return msgs.Errorf("hub.clusterNicNeeded")
+		}
+		if s.NetworkMode == NetworkMacvtap && !nicNameRe.MatchString(pl.Nic) {
+			return msgs.Errorf("hub.clusterBadNic", pl.Nic)
+		}
+	}
+	// VIP должен быть валидным IP.
+	if s.VIP != "" {
+		if _, err := netip.ParseAddr(s.VIP); err != nil {
+			return msgs.Errorf("hub.clusterBadVIP", s.VIP)
+		}
+	}
+	// Параметры HAProxy — проверка диапазонов.
+	if s.LBHaproxy.ConnectTimeout < 0 || s.LBHaproxy.ConnectTimeout > 60000 {
+		return msgs.Errorf("hub.clusterLBHaproxyTimeout", "connect", s.LBHaproxy.ConnectTimeout)
+	}
+	if s.LBHaproxy.ClientTimeout < 0 || s.LBHaproxy.ClientTimeout > 300000 {
+		return msgs.Errorf("hub.clusterLBHaproxyTimeout", "client", s.LBHaproxy.ClientTimeout)
+	}
+	if s.LBHaproxy.ServerTimeout < 0 || s.LBHaproxy.ServerTimeout > 300000 {
+		return msgs.Errorf("hub.clusterLBHaproxyTimeout", "server", s.LBHaproxy.ServerTimeout)
+	}
+	if s.LBHaproxy.MaxConn < 0 || s.LBHaproxy.MaxConn > 100000 {
+		return msgs.Errorf("hub.clusterLBHaproxyMaxConn", s.LBHaproxy.MaxConn)
+	}
+	if s.LBHaproxy.StatsPort < 0 || s.LBHaproxy.StatsPort > 65535 {
+		return msgs.Errorf("hub.clusterLBHaproxyStatsPort", s.LBHaproxy.StatsPort)
+	}
+	if s.LBHaproxy.Algorithm != "" && s.LBHaproxy.Algorithm != "source-hash" && s.LBHaproxy.Algorithm != "round-robin" {
+		return msgs.Errorf("hub.clusterLBHaproxyAlgorithm", s.LBHaproxy.Algorithm)
+	}
+	return nil
+}
+
+// nodes разворачивает размещение в узлы с именами <кластер>-lb-N,
+// <кластер>-cp-N, <кластер>-w-N; узел-хост носит имя самого хоста.
 func (s ClusterSpec) nodes(hostName func(int64) string) []clusterNode {
 	pls := s.Placements
 	if len(pls) == 0 {
@@ -458,10 +573,18 @@ func (s ClusterSpec) nodes(hostName func(int64) string) []clusterNode {
 		}
 	}
 	var out []clusterNode
-	cp, w := 0, 0
-	// Сначала все control plane, потом worker'ы — порядок установки.
-	for _, role := range []string{RoleControlPlane, RoleWorker} {
-		for _, pl := range pls {
+	lb, cp, w := 0, 0, 0
+	// Сначала балансировщики, потом control plane, потом worker'ы — порядок
+	// установки: LB должны быть готовы до cp1 (endpoint).
+	for _, role := range []string{RoleLoadBalancer, RoleControlPlane, RoleWorker} {
+		// Для LB используем отдельное размещение LBPlacements.
+		var rolePlacements []Placement
+		if role == RoleLoadBalancer {
+			rolePlacements = s.LBPlacements
+		} else {
+			rolePlacements = pls
+		}
+		for _, pl := range rolePlacements {
 			if pl.Role != role {
 				continue
 			}
@@ -470,6 +593,9 @@ func (s ClusterSpec) nodes(hostName func(int64) string) []clusterNode {
 					ImageID: pl.ImageID, Network: pl.Network, Bridge: pl.Bridge, Nic: pl.Nic}
 				if pl.Kind == KindHost {
 					n.Name = hostName(pl.HostID)
+				} else if role == RoleLoadBalancer {
+					lb++
+					n.Name = fmt.Sprintf("%s-lb-%d", s.Name, lb)
 				} else if role == RoleControlPlane {
 					cp++
 					n.Name = fmt.Sprintf("%s-cp-%d", s.Name, cp)
@@ -597,6 +723,8 @@ type clusterResume struct {
 	// сторону: init мог упасть после слушателя, и окно шагов обязано видеть,
 	// что повтор cp1 не требует разкладывать его заново.
 	Listener bool `json:"listener,omitempty"`
+	// LB — балансировщик (HAProxy + keepalived) установлен на машинах lb-*.
+	LB bool `json:"lb,omitempty"`
 	Exposed  bool `json:"exposed"`
 	// Addons — пройденные шаги дополнений: «имя:prepare:узел», «имя:install».
 	Addons map[string]bool `json:"addons,omitempty"`
@@ -709,6 +837,9 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		total++
 	}
 	if spec.Endpoint != "" {
+		total++
+	}
+	if spec.LBEnabled {
 		total++
 	}
 	if len(spec.Addons) > 0 {
@@ -840,6 +971,29 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			// всё равно проверяется ниже (гейты перед входами и дополнениями).
 			listener = true
 			jc.Log("hub.clusterListenerExists")
+		}
+	}
+
+	// 1.6. Балансировщик — установка HAProxy (+ keepalived при HA-паре) на
+	// машинах lb-*. Зависит от vm:cp-* (адреса cp нужны для HAProxy-конфига).
+	// Endpoint кластера = VIP (HA) или адрес lb-1 — без живого адреса cp1
+	// init не пройдёт (apicheck).
+	if spec.LBEnabled {
+		step++
+		jc.StepKey(step, total, "hub.clusterStepLB")
+		if gate.run[stepLB] {
+			if err := r.installLB(ctx, jc, spec, nodes, done); err != nil {
+				return err
+			}
+			done.LB = true
+			jc.SaveResume(*done)
+			// Endpoint кластера теперь известен: VIP или адрес lb-1.
+			// Записываем в spec, чтобы cp1 использовал его.
+			if spec.Endpoint == "" {
+				spec.Endpoint = r.lbEndpoint(spec, done)
+			}
+		} else {
+			jc.Log("hub.clusterLBExists")
 		}
 	}
 
@@ -1218,6 +1372,95 @@ func (r *ClusterRunner) installRole(ctx context.Context, jc *jobs.Context, h sto
 	}
 	g := &GroupApplyRunner{m: r.m}
 	return g.waitHostJob(ctx, jc, h, started.JobID)
+}
+
+// installLB ставит балансировщик (HAProxy + keepalived) на машинах lb-*.
+// Скрипт генерирует конфиги по адресам cp-узлов и параметрам HAProxy,
+// устанавливает пакеты, запускает службы.
+func (r *ClusterRunner) installLB(ctx context.Context, jc *jobs.Context, spec ClusterSpec, nodes []clusterNode, done *clusterResume) error {
+	// Собираем адреса cp-узлов для HAProxy-конфига.
+	var cpAddrs []string
+	for _, nd := range nodes {
+		if nd.Role == RoleControlPlane {
+			if h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name]); err == nil {
+				cpAddrs = append(cpAddrs, h.Addr+":6443")
+			}
+		}
+	}
+	if len(cpAddrs) == 0 {
+		return msgs.Errorf("hub.clusterLBNoCP")
+	}
+
+	// Определяем адрес endpoint'а: VIP (HA) или адрес lb-1.
+	endpoint := r.lbEndpoint(spec, done)
+	if endpoint == "" {
+		return msgs.Errorf("hub.clusterLBNoEndpoint")
+	}
+
+	// Параметры HAProxy со значениями по умолчанию.
+	haproxy := spec.LBHaproxy
+	if haproxy.ConnectTimeout == 0 {
+		haproxy.ConnectTimeout = 5000
+	}
+	if haproxy.ClientTimeout == 0 {
+		haproxy.ClientTimeout = 50000
+	}
+	if haproxy.ServerTimeout == 0 {
+		haproxy.ServerTimeout = 50000
+	}
+	if haproxy.MaxConn == 0 {
+		haproxy.MaxConn = 2000
+	}
+	if haproxy.Algorithm == "" {
+		haproxy.Algorithm = "source-hash"
+	}
+
+	// Собираем параметры для скрипта.
+	var params struct {
+		Endpoint      string          `json:"endpoint"`
+		CPAddrs       []string        `json:"cp_addrs"`
+		VIP           string          `json:"vip,omitempty"`
+		IsMaster      bool            `json:"is_master,omitempty"`
+		Haproxy       LBHaproxyConfig `json:"haproxy"`
+	}
+	params.Endpoint = endpoint
+	params.CPAddrs = cpAddrs
+	params.VIP = spec.VIP
+	params.Haproxy = haproxy
+
+	// Устанавливаем на каждой lb-машине.
+	for _, nd := range nodes {
+		if nd.Role != RoleLoadBalancer {
+			continue
+		}
+		h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name])
+		if err != nil {
+			return err
+		}
+		jc.Log("hub.clusterLBInstalling", nd.Name)
+		// Определяем, master ли эта машина (для keepalived).
+		// Первая lb-машина — master, вторая — backup.
+		params.IsMaster = (nd.Name == spec.Name+"-lb-1")
+		if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/k8s/lb-install", params, nil); err != nil {
+			return msgs.Errorf("hub.clusterLBInstallFailed", nd.Name, err)
+		}
+	}
+	jc.Log("hub.clusterLBInstalled", endpoint)
+	return nil
+}
+
+// lbEndpoint возвращает адрес API кластера при включённом LB: VIP (HA) или
+// адрес lb-1 (один LB). Адрес lb-1 берётся из записи хоста.
+func (r *ClusterRunner) lbEndpoint(spec ClusterSpec, done *clusterResume) string {
+	if spec.VIP != "" {
+		return spec.VIP + ":6443"
+	}
+	// Один LB — адрес lb-1.
+	lb1Name := spec.Name + "-lb-1"
+	if h, err := r.m.db.HostByID(context.Background(), done.Hosts[lb1Name]); err == nil {
+		return h.Addr + ":6443"
+	}
+	return ""
 }
 
 // waitNodesReady опрашивает control plane, пока все узлы не станут Ready.
