@@ -58,7 +58,7 @@ func (s *LBInstallSpec) Validate() error {
 		s.Haproxy.MaxConn = 2000
 	}
 	if s.Haproxy.Algorithm == "" {
-		s.Haproxy.Algorithm = "source-hash"
+		s.Haproxy.Algorithm = "source"
 	}
 	return nil
 }

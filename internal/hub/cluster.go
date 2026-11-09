@@ -556,7 +556,7 @@ func (s *ClusterSpec) validateLB() error {
 	if s.LBHaproxy.StatsPort < 0 || s.LBHaproxy.StatsPort > 65535 {
 		return msgs.Errorf("hub.clusterLBHaproxyStatsPort", s.LBHaproxy.StatsPort)
 	}
-	if s.LBHaproxy.Algorithm != "" && s.LBHaproxy.Algorithm != "source-hash" && s.LBHaproxy.Algorithm != "round-robin" {
+	if s.LBHaproxy.Algorithm != "" && s.LBHaproxy.Algorithm != "source" && s.LBHaproxy.Algorithm != "roundrobin" {
 		return msgs.Errorf("hub.clusterLBHaproxyAlgorithm", s.LBHaproxy.Algorithm)
 	}
 	return nil

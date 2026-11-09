@@ -259,7 +259,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [lbVIP, setLbVIP] = useState('')
   const [lbRows, setLbRows] = useState<Row[]>([newRow('load-balancer')])
   const [lbHaproxyOpen, setLbHaproxyOpen] = useState(false)
-  const [lbHaproxy, setLbHaproxy] = useState({ connect: 5000, client: 50000, server: 50000, maxConn: 2000, statsPort: 8404, algorithm: 'source-hash' as 'source-hash' | 'round-robin' })
+  const [lbHaproxy, setLbHaproxy] = useState({ connect: 5000, client: 50000, server: 50000, maxConn: 2000, statsPort: 8404, algorithm: 'source' as 'source' | 'roundrobin' })
   // Журнал сухого прогона — поверх формы, настройки не теряются.
   const [dryJob, setDryJob] = useState<Job | null>(null)
   // Второй шаг формы — чек-лист действий задания (тот же, что у диалога
@@ -841,10 +841,10 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                   <Select
                     size="small"
                     value={lbHaproxy.algorithm}
-                    onChange={(v: 'source-hash' | 'round-robin') => setLbHaproxy({ ...lbHaproxy, algorithm: v })}
+                    onChange={(v: 'source' | 'roundrobin') => setLbHaproxy({ ...lbHaproxy, algorithm: v })}
                     options={[
-                      { value: 'source-hash', label: t('clusters.lbHaproxyAlgorithmSource') },
-                      { value: 'round-robin', label: t('clusters.lbHaproxyAlgorithmRR') },
+                      { value: 'source', label: t('clusters.lbHaproxyAlgorithmSource') },
+                      { value: 'roundrobin', label: t('clusters.lbHaproxyAlgorithmRR') },
                     ]}
                     style={{ width: '100%' }}
                   />

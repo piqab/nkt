@@ -18,7 +18,7 @@ func TestLBInstallSpecValidate(t *testing.T) {
 				CPAddrs:  []string{"10.77.1.2:6443", "10.77.1.6:6443", "10.77.1.7:6443"},
 				VIP:      "10.77.1.10",
 				IsMaster: true,
-				Haproxy:  LBHaproxyConfig{ConnectTimeout: 5000, ClientTimeout: 50000, ServerTimeout: 50000, MaxConn: 2000, StatsPort: 8404, Algorithm: "source-hash"},
+				Haproxy:  LBHaproxyConfig{ConnectTimeout: 5000, ClientTimeout: 50000, ServerTimeout: 50000, MaxConn: 2000, StatsPort: 8404, Algorithm: "source"},
 			},
 			wantErr: false,
 		},
@@ -65,8 +65,8 @@ func TestLBInstallSpecValidate(t *testing.T) {
 				if tt.spec.Haproxy.MaxConn != 2000 {
 					t.Errorf("MaxConn = %d, want 2000", tt.spec.Haproxy.MaxConn)
 				}
-				if tt.spec.Haproxy.Algorithm != "source-hash" {
-					t.Errorf("Algorithm = %q, want source-hash", tt.spec.Haproxy.Algorithm)
+				if tt.spec.Haproxy.Algorithm != "source" {
+					t.Errorf("Algorithm = %q, want source", tt.spec.Haproxy.Algorithm)
 				}
 			}
 		})
