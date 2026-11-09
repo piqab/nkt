@@ -255,7 +255,6 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   // Встроенный балансировщик: 1–2 машины с HAProxy (+ keepalived при HA).
   const [lbEnabled, setLbEnabled] = useState(false)
   const [lbCount, setLbCount] = useState(1)
-  const [lbImage, setLbImage] = useState('')
   const [lbVIP, setLbVIP] = useState('')
   const [lbRows, setLbRows] = useState<Row[]>([newRow('load-balancer')])
   const [lbHaproxyOpen, setLbHaproxyOpen] = useState(false)
@@ -290,6 +289,12 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     endpoint?: string
     gateway_addr?: string
     allow?: string
+    // Встроенный балансировщик.
+    lb_enabled?: boolean
+    lb_count?: number
+    lb_vip?: string
+    lb_rows?: (Omit<Row, 'host_id'> & { host: string })[]
+    lb_haproxy?: { connect: number; client: number; server: number; maxConn: number; statsPort: number; algorithm: 'source' | 'roundrobin' }
   }
   const presets = useApi<{ presets: { id: number; name: string; form: string }[] }>('/hub/cluster-presets')
   const [presetName, setPresetName] = useState('')
@@ -310,6 +315,11 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         endpoint,
         gateway_addr: (gws.data?.gateways ?? []).find((g) => g.edge_id === gateway)?.address ?? '',
         allow,
+        lb_enabled: lbEnabled,
+        lb_count: lbEnabled ? lbCount : undefined,
+        lb_vip: lbEnabled ? lbVIP.trim() : undefined,
+        lb_rows: lbEnabled ? lbRows.map(({ host_id, ...r }) => ({ ...r, host: hostNameOf(host_id) })) : undefined,
+        lb_haproxy: lbEnabled ? lbHaproxy : undefined,
       }
       await api('/hub/cluster-presets', { method: 'POST', body: { name: pname, form } })
       await presets.reload()
@@ -355,6 +365,20 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     const gwAddr = form.gateway_addr ?? ''
     const gw = (gws.data?.gateways ?? []).find((g) => g.address === gwAddr)
     setGateway(gw?.edge_id ?? 0)
+    // Встроенный балансировщик.
+    setLbEnabled(form.lb_enabled ?? false)
+    setLbCount(form.lb_count ?? 1)
+    setLbVIP(form.lb_vip ?? '')
+    if (form.lb_rows) {
+      setLbRows(form.lb_rows.map(({ host, ...r }) => {
+        const hid = byName.get(host)
+        if (host && hid === undefined) missing.push(host)
+        return { ...newRow(r.role), ...r, host_id: hid ?? null }
+      }))
+    }
+    if (form.lb_haproxy) {
+      setLbHaproxy(form.lb_haproxy)
+    }
     setPresetName(p.name)
     const notes: string[] = []
     if (missing.length) notes.push(t('clusters.presetHostsMissing', { hosts: [...new Set(missing)].join(', ') }))
@@ -498,7 +522,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     // Встроенный балансировщик.
     lb_enabled: lbEnabled,
     lb_count: lbEnabled ? lbCount : 0,
-    lb_image: lbEnabled ? (lbImage || imageOf(lbRows[0]) || 'debian-12-slim') : '',
+    lb_image: '',
     vip: lbEnabled ? lbVIP.trim() : '',
     lb_placements: lbEnabled ? lbRows.map((r) => ({
       host_id: r.host_id,
@@ -508,7 +532,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
       vcpus: r.vcpus,
       memory_mb: r.memory_mb,
       disk_gb: r.disk_gb,
-      image_id: r.kind === 'vm' ? (r.image_id || lbImage || 'debian-12-slim') : '',
+      image_id: r.kind === 'vm' ? r.image_id : '',
       network: effectiveNetwork === 'nat' ? r.network : '',
       bridge: effectiveNetwork === 'bridge' ? r.bridge : '',
       nic: effectiveNetwork === 'macvtap' ? r.nic : '',
@@ -708,11 +732,6 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
               />
             </label>
             <label>
-              {t('clusters.lbImage')}
-              <Input value={lbImage} onChange={(e) => setLbImage(e.target.value)} placeholder="debian-12-slim" />
-              <span className="small muted">{t('clusters.lbImageHint')}</span>
-            </label>
-            <label>
               {t('clusters.lbVIP')}
               <Input value={lbVIP} onChange={(e) => setLbVIP(e.target.value)} placeholder="10.77.1.10" />
               <span className="small muted">{t('clusters.lbVIPHint')}</span>
@@ -770,7 +789,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                       <span className="small muted">{t('hosts.newVMImage')}</span>
                       <Select
                         size="small"
-                        value={r.image_id || lbImage || undefined}
+                        value={r.image_id || undefined}
                         loading={hi?.loading}
                         placeholder={r.host_id === null ? t('clusters.pickHostFirst') : t('clusters.pickImage')}
                         disabled={r.host_id === null}
