@@ -784,6 +784,11 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 		// Ready.
 		"if " + kubectl + " -n kube-system get ds cilium >/dev/null 2>&1; then echo 'cilium: already installed, skipping cilium install'; else " + install + "; fi",
 		"cilium status --wait --wait-duration 10m",
+		// Cilium chart монтирует CNI бинарники в /opt/cni/bin, но kubelet на
+		// Debian/Ubuntu ищет их в /usr/lib/cni — создаём symlink, иначе поды
+		// висят в ContainerCreating (failed to find plugin "cilium-cni" in
+		// path [/usr/lib/cni]).
+		"mkdir -p /usr/lib/cni && ln -sf /opt/cni/bin/cilium-cni /usr/lib/cni/cilium-cni && echo 'cilium: symlink /usr/lib/cni/cilium-cni -> /opt/cni/bin/cilium-cni created'",
 	}, "\n")
 	return Step{"k8s.step.cilium", script}
 }
