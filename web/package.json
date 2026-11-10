@@ -18,7 +18,7 @@
     "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^5.5.0",
-    "antd": "^6.6.4",
+    "antd": "^6.7.0",
     "i18next": "^26.4.2",
     "js-yaml": "^5.5.0",
     "react": "^18.3.1",
@@ -29,9 +29,9 @@
     "@types/js-yaml": "^4.0.9",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^6.1.1",
-    "react-router-dom": "^7.18.4",
+    "@vitejs/plugin-react": "^6.2.1",
+    "react-router-dom": "^7.18.5",
     "typescript": "^5.6.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.6"
   }
 }
