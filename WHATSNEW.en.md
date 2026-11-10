@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.5 — 2026-11-10
+
+- **Cilium: fixed re-installation.** Helm release check (`helm status cilium`) instead of DaemonSet: if release exists — `cilium upgrade`, otherwise — `cilium install`. Fixes "cannot reuse a name that is still in use" error on re-run after failed installation.
+
 ## v1.20.4 — 2026-11-10
 
 - **Cilium: Helm values configuration via UI.** In the cluster creation form (next to the Cilium checkbox), a "Configure Cilium Helm values" button opens a YAML editor with validation. Default values: `cni.binPath=/usr/lib/cni` (fixes `ContainerCreating` pods on Debian/Ubuntu), `kubeProxyReplacement: true`, `gatewayAPI.enabled: true`, and other recommended settings. Values are passed to `cilium install` via `--values`.

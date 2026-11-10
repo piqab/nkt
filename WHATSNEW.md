@@ -12,9 +12,13 @@ Release из разделов, накопившихся с прошлого те
 тем же коммитом: workflow приклеивает её к описанию релиза после
 маркера `<!-- en -->`, и хаб показывает читающему его язык.
 
+## v1.20.5 — 2026-11-10
+
+- **Cilium: исправлена повторная установка.** Проверка релиза Helm (`helm status cilium`) вместо DaemonSet: если релиз существует — `cilium upgrade`, иначе — `cilium install`. Решает ошибку «cannot reuse a name that is still in use» при повторном запуске после упавшей установки.
+
 ## v1.20.4 — 2026-11-10
 
-- **Cilium: настройка Helm values через UI.** В форме создания кластера (рядом с галочкой Cilium) добавлена кнопка «Настроить Cilium Helm values» — открывает окно редактора YAML с валидацией. По умолчанию: `cni.binPath=/usr/lib/cni` (решает проблему с `ContainerCreating` подов на Debian/Ubuntu), `kubeProxyReplacement: true`, `gatewayAPI.enabled: true`, и другие推荐的 настройки. Values передаются в `cilium install` через `--values`.
+- **Cilium: настройка Helm values через UI.** В форме создания кластера (рядом с галочкой Cilium) добавлена кнопка «Настроить Cilium Helm values» — открывает окно редактора YAML с валидацией. По умолчанию: `cni.binPath=/usr/lib/cni` (решает проблему с `ContainerCreating` подов на Debian/Ubuntu), `kubeProxyReplacement: true`, `gatewayAPI.enabled: true`, и другие рекомендуемые настройки. Values передаются в `cilium install` через `--values`.
 
 ## v1.20.3 — 2026-11-10
 
