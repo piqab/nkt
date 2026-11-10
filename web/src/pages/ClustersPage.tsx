@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import * as yaml from 'js-yaml'
 import { LonghornField, addonsBody, type LonghornChoice } from '../components/ClusterAddons'
 import { OsIcon, OsIconOf } from '../components/OsIcon'
 import { guardUnload } from '../components/uploadJob'
@@ -15,6 +16,7 @@ import { Banner, Card, ErrorNote, Modal, formatBytesShort, formatRelative } from
 import { confirmAction } from '../components/confirm'
 import { ClustersCard, ListenerFields, listenerBody, type ClusterGateway } from '../components/Clusters'
 import { StepsChecklist, stepConflicts, stepsChosen, type ClusterStep, type StepSelection } from '../components/ClusterSteps'
+import { EditTextModal } from '../components/EditTextModal'
 import { JobLogModal } from './Jobs'
 import { TitleHelp } from '../components/Docs'
 import { msg, tx, type Msg } from '../msg'
@@ -25,6 +27,34 @@ import { msg, tx, type Msg } from '../msg'
  * сам хост → размеры), сеть между хостами, Cilium, проброс. Задание и
  * проверки те же, что у диалога «новый кластер» у хоста.
  */
+
+// Дефолтные Helm values для Cilium: cni.binPath=/usr/lib/cni решает проблему
+// с поиском плагина CNI на Debian/Ubuntu (kubelet ищет в /usr/lib/cni,
+// Cilium chart по умолчанию монтирует в /opt/cni/bin).
+const CILIUM_DEFAULT_VALUES = `cni:
+  binPath: /usr/lib/cni
+kubeProxyReplacement: true
+ipv4:
+  enabled: true
+ipv6:
+  enabled: false
+bpf:
+  masquerade: true
+
+gatewayAPI:
+  enabled: true
+  hostNetwork:
+    enabled: true
+
+l7Proxy: true
+
+nodePort:
+  enabled: true
+externalIPs:
+  enabled: true
+hostServices:
+  enabled: true
+`
 
 /** Образ из библиотеки хаба: загружен один раз, заливается на хосты. */
 export interface ClusterImage {
@@ -259,6 +289,10 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [lbRows, setLbRows] = useState<Row[]>([newRow('load-balancer')])
   const [lbHaproxyOpen, setLbHaproxyOpen] = useState(false)
   const [lbHaproxy, setLbHaproxy] = useState({ connect: 5000, client: 50000, server: 50000, maxConn: 2000, statsPort: 8404, algorithm: 'source' as 'source' | 'roundrobin' })
+  // Helm values для Cilium (редактор YAML).
+  const [ciliumValuesOpen, setCiliumValuesOpen] = useState(false)
+  const [ciliumValuesDraft, setCiliumValuesDraft] = useState('')
+  const [ciliumValuesError, setCiliumValuesError] = useState<string | null>(null)
   // Журнал сухого прогона — поверх формы, настройки не теряются.
   const [dryJob, setDryJob] = useState<Job | null>(null)
   // Второй шаг формы — чек-лист действий задания (тот же, что у диалога
@@ -497,6 +531,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     k8s_version: k8sVersion,
     cni: cilium ? 'cilium' : '',
     kube_proxy_replacement: cilium && kpr,
+    cilium_values: cilium ? ciliumValuesDraft : '',
     addons: addonsBody(longhorn),
     network_mode: effectiveNetwork,
     placements: rows.map((r) => ({
@@ -1060,6 +1095,15 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           <Checkbox checked={cilium && kpr} disabled={!cilium} onChange={(e) => setKPR(e.target.checked)} />
           <span>{t('clusters.kpr')} <span className="small muted">{t('clusters.kprHint')}</span></span>
         </label>
+        {cilium && (
+          <Button size="small" style={{ marginLeft: '1.6rem' }} onClick={() => {
+            setCiliumValuesDraft(CILIUM_DEFAULT_VALUES)
+            setCiliumValuesError(null)
+            setCiliumValuesOpen(true)
+          }}>
+            {t('clusters.ciliumValues')}
+          </Button>
+        )}
         <LonghornField value={longhorn} onChange={setLonghorn} k8s={k8sVersion || versions.data?.stable || ''} />
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
           <Checkbox checked={expose} onChange={(e) => setExpose(e.target.checked)} />
@@ -1088,6 +1132,31 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         </Button>
       </div>
       {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
+      {ciliumValuesOpen && (
+        <EditTextModal
+          title={t('clusters.ciliumValuesTitle')}
+          saved=""
+          draft={ciliumValuesDraft}
+          onDraft={(v) => {
+            setCiliumValuesDraft(v)
+            // Валидация YAML.
+            try {
+              yaml.load(v)
+              setCiliumValuesError(null)
+            } catch (e) {
+              setCiliumValuesError(e instanceof Error ? e.message : String(e))
+            }
+          }}
+          onSave={async () => {
+            setCiliumValuesOpen(false)
+            return true
+          }}
+          onClose={() => setCiliumValuesOpen(false)}
+          rows={20}
+          below={ciliumValuesError ? <Banner kind="error">{t('yamlBlocks.parseError', { error: ciliumValuesError })}</Banner> : <span className="small muted">{t('clusters.ciliumValuesHint')}</span>}
+          saveBlocked={ciliumValuesError ? t('yamlBlocks.parseErrorShort') : undefined}
+        />
+      )}
         </>
       )}
     </Modal>

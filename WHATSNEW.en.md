@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.4 — 2026-11-10
+
+- **Cilium: Helm values configuration via UI.** In the cluster creation form (next to the Cilium checkbox), a "Configure Cilium Helm values" button opens a YAML editor with validation. Default values: `cni.binPath=/usr/lib/cni` (fixes `ContainerCreating` pods on Debian/Ubuntu), `kubeProxyReplacement: true`, `gatewayAPI.enabled: true`, and other recommended settings. Values are passed to `cilium install` via `--values`.
+
 ## v1.20.3 — 2026-11-10
 
 - **Cilium: CNI plugin symlink.** After Cilium installation, a symlink `/usr/lib/cni/cilium-cni` → `/opt/cni/bin/cilium-cni` is created. Without it, kubelet on Debian/Ubuntu cannot find the CNI plugin (looks in `/usr/lib/cni`, but Cilium mounts binaries in `/opt/cni/bin`), and pods (longhorn, coredns) hang in `ContainerCreating`.

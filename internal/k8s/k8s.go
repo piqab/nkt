@@ -75,6 +75,10 @@ type InstallSpec struct {
 	CNI string `json:"cni,omitempty"`
 	// KubeProxyReplacement — Cilium вместо kube-proxy (eBPF).
 	KubeProxyReplacement bool `json:"kube_proxy_replacement,omitempty"`
+	// CiliumValues — Helm values для Cilium (YAML). Пусто — значения
+	// по умолчанию (cni.binPath=/usr/lib/cni). Передаётся в cilium install
+	// через --values.
+	CiliumValues string `json:"cilium_values,omitempty"`
 	// APIAddr — адрес control plane для Cilium при замене kube-proxy: без
 	// kube-proxy агенту нужен прямой адрес API, а не ClusterIP.
 	APIAddr string `json:"api_addr,omitempty"`
@@ -751,7 +755,7 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 	if s.Flavor == FlavorK3s {
 		kubectl = "k3s kubectl"
 	}
-	install := "cilium install"
+	install := "cilium install --set cni.binPath=/usr/lib/cni"
 	if s.KubeProxyReplacement {
 		install += " --set kubeProxyReplacement=true"
 		// Без kube-proxy агенту нужен прямой адрес API: балансировщик,
@@ -784,12 +788,16 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 		// Ready.
 		"if " + kubectl + " -n kube-system get ds cilium >/dev/null 2>&1; then echo 'cilium: already installed, skipping cilium install'; else " + install + "; fi",
 		"cilium status --wait --wait-duration 10m",
-		// Cilium chart монтирует CNI бинарники в /opt/cni/bin, но kubelet на
-		// Debian/Ubuntu ищет их в /usr/lib/cni — создаём symlink, иначе поды
-		// висят в ContainerCreating (failed to find plugin "cilium-cni" in
-		// path [/usr/lib/cni]).
-		"mkdir -p /usr/lib/cni && ln -sf /opt/cni/bin/cilium-cni /usr/lib/cni/cilium-cni && echo 'cilium: symlink /usr/lib/cni/cilium-cni -> /opt/cni/bin/cilium-cni created'",
 	}, "\n")
+	// Если заданы кастомные Helm values — записываем в файл и передаём через --values.
+	// cni.binPath=/usr/lib/cni уже установлен по умолчанию выше, но values
+	// могут его переопределить.
+	if s.CiliumValues != "" {
+		script += "\n" + `cat > /tmp/cilium-values.yaml << 'CILium_VALUES_EOF'` + "\n" + s.CiliumValues + "\n" + `CILium_VALUES_EOF` + "\n"
+		script += install + " --values /tmp/cilium-values.yaml\n"
+		// Повторная проверка статуса после применения values.
+		script += "cilium status --wait --wait-duration 10m\n"
+	}
 	return Step{"k8s.step.cilium", script}
 }
 

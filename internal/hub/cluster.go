@@ -76,6 +76,10 @@ type ClusterSpec struct {
 	// вместо kube-proxy.
 	CNI                  string `json:"cni,omitempty"`
 	KubeProxyReplacement bool   `json:"kube_proxy_replacement,omitempty"`
+	// CiliumValues — Helm values для Cilium (YAML). Пусто — значения
+	// по умолчанию: cni.binPath=/usr/lib/cni, kubeProxyReplacement=true
+	// (если включён в форме). Передаётся в cilium install через --values.
+	CiliumValues string `json:"cilium_values,omitempty"`
 	// K8sVersion — kubeadm: минорная версия («1.34»). Пусто — хаб
 	// подбирает актуальную stable при создании и записывает сюда, чтобы
 	// все узлы (и добавленные потом worker'ы) были одной версии.
@@ -1036,8 +1040,8 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		is := k8s.InstallSpec{
 			Flavor: spec.Flavor, Role: k8s.RoleServer, Single: len(nodes) == 1 && p.AddWorkers == 0,
 			ClusterInit: len(cps) == 3, TLSSANs: tlsSANs, NodeName: cp1Name,
-			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr, Version: spec.K8sVersion,
-			ControlPlaneEndpoint: spec.Endpoint,
+			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, CiliumValues: spec.CiliumValues,
+			APIAddr: cp1Addr, Version: spec.K8sVersion, ControlPlaneEndpoint: spec.Endpoint,
 		}
 		is.NodeIP = nodeIPAdvertise(cp1, cp1Addr, macvtapOf[cp1Name])
 		is = gate.forceInstallSpec(stepCP1, is)

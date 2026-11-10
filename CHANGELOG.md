@@ -1004,3 +1004,4 @@
 - `3a3457ad` Version bump to 1.20.1; 1.20.1
 - `761d9570` Version bump to 1.20.2; 1.20.2
 - `f2a75b5d` Cilium: создать symlink /usr/lib/cni/cilium-cni -> /opt/cni/bin/cilium-cni после установки; 1.20.3
+- `58973077` Cilium: добавить настройку Helm values через UI; cni.binPath=/usr/lib/cni по умолчанию; 1.20.4
