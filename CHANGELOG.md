@@ -1003,3 +1003,4 @@
 - `01303e78` Встроенный балансировщик кластера: 1–2 машины с HAProxy (+ keepalived при HA-паре), endpoint = VIP или адрес lb-1, слушатель Traffic Fly не нужен, параметры HAProxy настраиваются, конвейер учитывает балансировщик, frontend — секция «Встроенный балансировщик», ключи msgs и i18n ru+en, тесты LB, справка FEATURES×2, WHATSNEW×2, пересобран dist; 1.20.0
 - `3a3457ad` Version bump to 1.20.1; 1.20.1
 - `761d9570` Version bump to 1.20.2; 1.20.2
+- `f2a75b5d` Cilium: создать symlink /usr/lib/cni/cilium-cni -> /opt/cni/bin/cilium-cni после установки; 1.20.3
