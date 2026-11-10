@@ -729,6 +729,8 @@ type clusterResume struct {
 	Listener bool `json:"listener,omitempty"`
 	// LB — балансировщик (HAProxy + keepalived) установлен на машинах lb-*.
 	LB bool `json:"lb,omitempty"`
+	// Cilium — CNI установлен на cp-1 и раскатан по узлам.
+	Cilium bool `json:"cilium,omitempty"`
 	Exposed  bool `json:"exposed"`
 	// Addons — пройденные шаги дополнений: «имя:prepare:узел», «имя:install».
 	Addons map[string]bool `json:"addons,omitempty"`
@@ -838,6 +840,9 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	gate := r.clusterBuildGate(ctx, spec, nodes, cp1Name, p, done)
 	total := len(nodes) + 4
 	if spec.NetworkMode == NetworkWireGuard {
+		total++
+	}
+	if spec.CNI == "cilium" {
 		total++
 	}
 	if spec.Endpoint != "" {
@@ -1168,6 +1173,30 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		jc.Log("hub.clusterReadySkipped")
 	}
 
+	// 4.5. Cilium — отдельный шаг после ready (все ноды присоединены).
+	// Ставится только если выбран в форме (spec.CNI == "cilium").
+	if spec.CNI == "cilium" {
+		step++
+		jc.StepKey(step, total, "hub.clusterStepCilium")
+		if gate.run[stepCilium] {
+			// ciliumStep вызывается на cp1: install или upgrade в зависимости
+			// от существования релиза Helm. Values передаются из spec.CiliumValues.
+			is := k8s.InstallSpec{
+				Flavor: spec.Flavor, Role: k8s.RoleServer,
+				CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement,
+				CiliumValues: spec.CiliumValues,
+				Version: spec.K8sVersion,
+			}
+			if err := r.installCilium(ctx, jc, cp1, is); err != nil {
+				return err
+			}
+			done.Cilium = true
+			jc.SaveResume(*done)
+		} else {
+			jc.Log("hub.clusterCiliumSkipped")
+		}
+	}
+
 	// 5. Дополнения: подготовить узлы этого запуска (при пополнении —
 	// только новые worker'ы: чарт уже стоит, его DaemonSet придёт на них
 	// сам) и поставить чарт на cp1.
@@ -1451,6 +1480,20 @@ func (r *ClusterRunner) installLB(ctx context.Context, jc *jobs.Context, spec Cl
 	}
 	jc.Log("hub.clusterLBInstalled", endpoint)
 	return nil
+}
+
+// installCilium устанавливает Cilium на cp-1 через HostAPI.
+// Использует install или upgrade в зависимости от существования релиза Helm.
+func (r *ClusterRunner) installCilium(ctx context.Context, jc *jobs.Context, h store.Host, spec k8s.InstallSpec) error {
+	jc.Log("hub.clusterCiliumInstalling", h.Name)
+	var started struct {
+		JobID int64 `json:"job_id"`
+	}
+	if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/k8s/cilium-install", spec, &started); err != nil {
+		return msgs.Errorf("hub.clusterCiliumInstallFailed", h.Name, err)
+	}
+	g := &GroupApplyRunner{m: r.m}
+	return g.waitHostJob(ctx, jc, h, started.JobID)
 }
 
 // lbEndpoint возвращает адрес API кластера при включённом LB: VIP (HA) или

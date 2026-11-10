@@ -2857,9 +2857,11 @@
         "mesh": "Tunnel between hosts (WireGuard)",
         "vm": "Machine {{node}}",
         "listener": "Shared address listener (Traffic Fly)",
+        "lb": "Load balancer (HAProxy + keepalived)",
         "cp1": "First control plane {{node}}: init + CNI",
         "join": "Join {{node}}",
         "ready": "Wait for Ready, port forward, kubeconfig",
+        "cilium": "Cilium (CNI)",
         "addons": "Add-ons (Longhorn)"
       }
     },

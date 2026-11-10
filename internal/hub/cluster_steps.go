@@ -35,6 +35,7 @@ const (
 	stepLB        = "lb"
 	stepCP1       = "cp1"
 	stepReady     = "ready"
+	stepCilium    = "cilium"
 	stepAddons    = "addons"
 )
 
@@ -204,6 +205,14 @@ func clusterStepList(spec ClusterSpec, nodes []clusterNode, cp1Name string, done
 		}
 	}
 	out = append(out, ClusterStep{ID: stepReady, Kind: "ready", Done: allInstalled, Deps: readyDeps})
+	// Cilium — отдельный шаг после ready (все ноды присоединены). Ставится
+	// только если выбран в форме (spec.CNI == "cilium"). Зависит от ready.
+	if spec.CNI == "cilium" {
+		out = append(out, ClusterStep{
+			ID: stepCilium, Kind: "cilium", Done: done.Cilium,
+			Deps: []string{stepReady},
+		})
+	}
 	// Дополнения (Longhorn) — только если они заданы.
 	if len(spec.Addons) > 0 {
 		out = append(out, ClusterStep{
@@ -251,6 +260,8 @@ func clusterStepDone(id string, spec ClusterSpec, nodes []clusterNode, cp1Name s
 			}
 		}
 		return true
+	case id == stepCilium:
+		return done.Cilium
 	case id == stepAddons:
 		return clusterAddonsDone(spec, done)
 	}
@@ -321,6 +332,8 @@ func (r *ClusterRunner) clusterBuildGate(ctx context.Context, spec ClusterSpec, 
 			g.run[st.ID] = !done.Installed[st.Node]
 		case st.ID == stepReady:
 			g.run[st.ID] = true
+		case st.ID == stepCilium:
+			g.run[st.ID] = !done.Cilium
 		case st.ID == stepAddons:
 			g.run[st.ID] = true
 		}

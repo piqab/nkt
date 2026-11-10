@@ -1006,3 +1006,4 @@
 - `f2a75b5d` Cilium: создать symlink /usr/lib/cni/cilium-cni -> /opt/cni/bin/cilium-cni после установки; 1.20.3
 - `58973077` Cilium: добавить настройку Helm values через UI; cni.binPath=/usr/lib/cni по умолчанию; 1.20.4
 - `64fd35e1` Cilium: helm status вместо проверки DaemonSet; upgrade если релиз существует — решает ошибку «cannot reuse a name» при повторной установке; 1.20.5
+- `37d33278` Cilium: вынесен в отдельный шаг конвейера (после ready); flannel ставится при снятой галочке Cilium; 1.20.6

@@ -24,7 +24,7 @@ import { Banner, ErrorNote, Modal } from './ui'
 export interface ClusterStep {
   /** Идентификатор шага: «preflight», «vm:k8s-cp-1», «join:k8s-cp-2», … */
   id: string
-  kind: 'preflight' | 'mesh' | 'vm' | 'listener' | 'cp1' | 'join' | 'ready' | 'addons'
+  kind: 'preflight' | 'mesh' | 'vm' | 'listener' | 'lb' | 'cp1' | 'join' | 'ready' | 'cilium' | 'addons'
   /** Имя узла для по-узловых шагов. */
   node?: string
   /** Шаг уже выполнен по состоянию кластера — в окне повтора он снят. */

@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.6 — 2026-11-10
+
+- **Cilium moved to a separate pipeline step.** Cilium installation now runs after the `ready` step (all nodes joined), not as part of the first control plane setup. If the Cilium checkbox is unchecked, flannel is installed instead. This reduces risk: if Cilium installation fails, the cluster remains connected and only the Cilium step can be retried.
+
 ## v1.20.5 — 2026-11-10
 
 - **Cilium: fixed re-installation.** Helm release check (`helm status cilium`) instead of DaemonSet: if release exists — `cilium upgrade`, otherwise — `cilium install`. Fixes "cannot reuse a name that is still in use" error on re-run after failed installation.

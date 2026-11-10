@@ -444,6 +444,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vulnerabilities/scan-images", s.handleVulnScanImages)
 				r.Post("/k8s/install", s.handleK8sInstall)
 				r.Post("/k8s/lb-install", s.handleK8sLBInstall)
+				r.Post("/k8s/cilium-install", s.handleK8sCiliumInstall)
 				r.Post("/k8s/uninstall", s.handleK8sUninstall)
 				r.Post("/k8s/objects/action", s.handleK8sAction)
 				r.Post("/k8s/namespaces", s.handleK8sNamespaceCreate)

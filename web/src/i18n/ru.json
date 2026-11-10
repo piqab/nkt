@@ -2869,6 +2869,7 @@
         "cp1": "Первый control plane {{node}}: init + CNI",
         "join": "Присоединение {{node}}",
         "ready": "Ожидание Ready, проброс портов, kubeconfig",
+        "cilium": "Cilium (CNI)",
         "addons": "Дополнения (Longhorn)"
       }
     },

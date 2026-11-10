@@ -733,10 +733,7 @@ func k3sSteps(s InstallSpec) []Step {
 		{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet " + unit + " && break; sleep 2; done\nsystemctl is-active --quiet " + unit},
 	}
 	if s.Role == RoleServer {
-		if s.CNI == "cilium" && s.ServerURL == "" {
-			// Без CNI узел не станет Ready — Cilium раньше ожидания.
-			steps = append(steps, ciliumStep(s, "/etc/rancher/k3s/k3s.yaml"))
-		}
+		// Cilium вынесен в отдельный шаг конвейера кластера (после ready).
 		steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do k3s kubectl get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nk3s kubectl get nodes\nexit 1"})
 	}
 	return steps
@@ -952,9 +949,7 @@ func kubeadmSteps(s InstallSpec) []Step {
 			init += "\nkubectl --kubeconfig /etc/kubernetes/admin.conf taint nodes --all node-role.kubernetes.io/control-plane- || true"
 		}
 		steps = append(steps, Step{"k8s.step.install", init})
-		if s.CNI == "cilium" {
-			steps = append(steps, ciliumStep(s, "/etc/kubernetes/admin.conf"))
-		}
+		// Cilium вынесен в отдельный шаг конвейера кластера (после ready).
 		steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nexit 1"})
 		return steps
 	}
