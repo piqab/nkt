@@ -746,23 +746,17 @@ func k3sSteps(s InstallSpec) []Step {
 // версия, архив с GitHub с проверкой суммы, затем cilium install — если
 // Cilium ещё не поставлен — и ожидание готовности.
 func ciliumStep(s InstallSpec, kubeconfig string) Step {
-	// Команда проверки — как у Manager.kubectl: у k3s встроенная
-	// подкоманда «k3s kubectl»; симлинк /usr/local/bin/kubectl делает
-	// установщик, но пропускает его при INSTALL_K3S_SYMLINK=skip и на
-	// read-only каталоге бинарников — в шаге от этого лучше не зависеть.
-	// У kubeadm kubectl приезжает пакетом рядом с kubeadm.
-	kubectl := "kubectl"
-	if s.Flavor == FlavorK3s {
-		kubectl = "k3s kubectl"
-	}
 	install := "cilium install --set cni.binPath=/usr/lib/cni"
+	upgrade := "cilium upgrade --set cni.binPath=/usr/lib/cni"
 	if s.KubeProxyReplacement {
 		install += " --set kubeProxyReplacement=true"
+		upgrade += " --set kubeProxyReplacement=true"
 		// Без kube-proxy агенту нужен прямой адрес API: балансировщик,
 		// если он есть, иначе первый control plane. Порт — тот же, что у
 		// endpoint'а: 7443 вместо 6443 агенту чужд.
 		if host, port := s.apiEndpoint(); host != "" {
 			install += " --set k8sServiceHost=" + host + " --set k8sServicePort=" + strconv.Itoa(port)
+			upgrade += " --set k8sServiceHost=" + host + " --set k8sServicePort=" + strconv.Itoa(port)
 		}
 	}
 	script := strings.Join([]string{
@@ -774,29 +768,28 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 		"  sha256sum --check cilium-linux-$ARCH.tar.gz.sha256sum",
 		"  tar -C /usr/local/bin -xzf cilium-linux-$ARCH.tar.gz && rm -f cilium-linux-$ARCH.tar.gz*",
 		"fi",
-		// Уже поставленный Cilium не переставляется. Прежняя проверка
-		// «cilium status --brief» не работала: флаг --brief есть у
-		// cilium-dbg — отладочной утилиты агента, а у cilium-cli его нет
-		// (проверено на v0.20.2: «unknown flag: --brief», код 1),
-		// команда падала всегда, и ветка «|| cilium install» бегала при
-		// каждом проходе задания. Там, где Cilium уже стоит, install не
-		// обновлял его, а падал: это helm install с занятым именем релиза
-		// — «cannot reuse a name that is still in use», — то есть повтор
-		// упавшего задания умирал на этом шаге, не дойдя до ожидания
-		// готовности. Смотрим на DaemonSet в kube-system: его создаёт
-		// именно cilium-cli, и проверка не ждёт, пока кластер станет
-		// Ready.
-		"if " + kubectl + " -n kube-system get ds cilium >/dev/null 2>&1; then echo 'cilium: already installed, skipping cilium install'; else " + install + "; fi",
+		// Проверка релиза Helm, а не DaemonSet: если релиз существует, но
+		// DaemonSet удалён (упавший install, ручное удаление), install
+		// падал с «cannot reuse a name that is still in use». Теперь
+		// при существующем релизе — upgrade, иначе — install.
+		"if helm status cilium -n kube-system >/dev/null 2>&1; then echo 'cilium: release exists, running upgrade'; " + upgrade + "; else echo 'cilium: installing fresh'; " + install + "; fi",
 		"cilium status --wait --wait-duration 10m",
 	}, "\n")
 	// Если заданы кастомные Helm values — записываем в файл и передаём через --values.
 	// cni.binPath=/usr/lib/cni уже установлен по умолчанию выше, но values
 	// могут его переопределить.
 	if s.CiliumValues != "" {
-		script += "\n" + `cat > /tmp/cilium-values.yaml << 'CILium_VALUES_EOF'` + "\n" + s.CiliumValues + "\n" + `CILium_VALUES_EOF` + "\n"
-		script += install + " --values /tmp/cilium-values.yaml\n"
-		// Повторная проверка статуса после применения values.
-		script += "cilium status --wait --wait-duration 10m\n"
+		// Записываем values в файл и добавляем --values к обеим командам
+		// (install и upgrade), чтобы конфиг был одинаковым.
+		script += "\n" + `cat > /tmp/cilium-values.yaml << 'CILIUM_VALUES_EOF'` + "\n" + s.CiliumValues + "\n" + `CILIUM_VALUES_EOF` + "\n"
+		// Переписываем финальную проверку: если релиз есть — upgrade с values,
+		// иначе — install с values.
+		script = strings.Replace(script,
+			"if helm status cilium -n kube-system >/dev/null 2>&1; then echo 'cilium: release exists, running upgrade'; "+upgrade+"; else echo 'cilium: installing fresh'; "+install+"; fi",
+			"if helm status cilium -n kube-system >/dev/null 2>&1; then echo 'cilium: release exists, running upgrade with values'; "+upgrade+" --values /tmp/cilium-values.yaml; else echo 'cilium: installing fresh with values'; "+install+" --values /tmp/cilium-values.yaml; fi",
+			1)
+		// Удаляем дублирующую проверку статуса — она уже есть выше.
+		script = strings.Replace(script, "cilium status --wait --wait-duration 10m\n", "", 1)
 	}
 	return Step{"k8s.step.cilium", script}
 }
