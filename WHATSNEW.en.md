@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.3 — 2026-11-10
+
+- **Cilium: CNI plugin symlink.** After Cilium installation, a symlink `/usr/lib/cni/cilium-cni` → `/opt/cni/bin/cilium-cni` is created. Without it, kubelet on Debian/Ubuntu cannot find the CNI plugin (looks in `/usr/lib/cni`, but Cilium mounts binaries in `/opt/cni/bin`), and pods (longhorn, coredns) hang in `ContainerCreating`.
+
 ## v1.20.2 — 2026-11-09
 
 - Version bump: patch release.

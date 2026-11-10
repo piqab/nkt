@@ -12,6 +12,10 @@ Release из разделов, накопившихся с прошлого те
 тем же коммитом: workflow приклеивает её к описанию релиза после
 маркера `<!-- en -->`, и хаб показывает читающему его язык.
 
+## v1.20.3 — 2026-11-10
+
+- **Cilium: symlink для CNI плагина.** После установки Cilium создаётся symlink `/usr/lib/cni/cilium-cni` → `/opt/cni/bin/cilium-cni`. Без него kubelet на Debian/Ubuntu не находит плагин CNI (ищет в `/usr/lib/cni`, а Cilium монтирует бинарники в `/opt/cni/bin`), и поды (longhorn, coredns) висят в `ContainerCreating`.
+
 ## v1.20.2 — 2026-11-09
 
 - Version bump: patch release.
