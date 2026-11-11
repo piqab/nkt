@@ -1231,12 +1231,13 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 				}
 			}
 			var prepare []store.Host
-			for _, nd := range nodes {
+			k8sNodes := addonPrepareNodes(nodes)
+			for _, nd := range k8sNodes {
 				if h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name]); err == nil {
 					prepare = append(prepare, h)
 				}
 			}
-			if err := r.m.applyAddons(ctx, jc, spec, cp1, prepare, len(done.Hosts), p.AddWorkers == 0, done); err != nil {
+			if err := r.m.applyAddons(ctx, jc, spec, cp1, prepare, len(k8sNodes), p.AddWorkers == 0, done); err != nil {
 				return err
 			}
 		}
@@ -1331,8 +1332,12 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 	// в первый запуск машины: шагом подготовки apt попал бы уже на узел с
 	// Cilium вместо kube-proxy, где исходящий TCP в NAT-сети хоста может не
 	// работать.
-	for _, a := range spec.Addons {
-		vm.Packages = append(vm.Packages, k8s.AddonPackages(a.Name)...)
+	// Load-balancer machines never run Longhorn, so they get no addon
+	// packages: the trimmed LB image does not need iSCSI or NFS client.
+	if nd.Role != RoleLoadBalancer {
+		for _, a := range spec.Addons {
+			vm.Packages = append(vm.Packages, k8s.AddonPackages(a.Name)...)
+		}
 	}
 	if r.s.jobs == nil {
 		return msgs.Errorf("api.backgroundJobsAreUnavailable")

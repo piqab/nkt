@@ -246,6 +246,34 @@ func (m *Manager) addonInstalled(ctx context.Context, cp store.Host, name string
 	return "", nil
 }
 
+// addonPrepareNodes returns the cluster machines that addons may be
+// prepared on. Load-balancer machines belong to the cluster record but
+// are not Kubernetes nodes: their agent has no k8s flavor and rejects
+// /api/k8s/addon with 400, and volume replicas must be sized after real
+// nodes only.
+func addonPrepareNodes(nodes []clusterNode) []clusterNode {
+	out := make([]clusterNode, 0, len(nodes))
+	for _, nd := range nodes {
+		if nd.Role != RoleLoadBalancer {
+			out = append(out, nd)
+		}
+	}
+	return out
+}
+
+// addonNodeHosts is addonPrepareNodes for hosts already attached to the
+// cluster (ClusterHosts): load-balancer machines are filtered out by
+// their k8s_role. Control-plane stays first — ClusterHosts sorts it so.
+func addonNodeHosts(hosts []store.Host) []store.Host {
+	out := make([]store.Host, 0, len(hosts))
+	for _, h := range hosts {
+		if h.K8sRole != RoleLoadBalancer {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
 // applyAddons — шаг создания кластера: подготовить узлы prepare и, если
 // install, поставить дополнения на cp1. Пройденное — в done.
 func (m *Manager) applyAddons(ctx context.Context, jc *jobs.Context, spec ClusterSpec, cp1 store.Host, prepare []store.Host, nodes int, install bool, done *clusterResume) error {
@@ -374,7 +402,11 @@ func (r *ClusterAddonRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil || len(hosts) == 0 {
 		return msgs.Errorf("hub.clusterNoNodes")
 	}
-	cp := hosts[0]
+	nodes := addonNodeHosts(hosts)
+	if len(nodes) == 0 {
+		return msgs.Errorf("hub.clusterNoNodes")
+	}
+	cp := nodes[0]
 	cur, err := r.m.addonInstalled(ctx, cp, p.Name)
 	if err != nil {
 		return err
@@ -385,11 +417,11 @@ func (r *ClusterAddonRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if cur != "" {
 		jc.Log("hub.addonUpgrading", p.Name, cur, p.Version)
 	}
-	total := len(hosts) + 1
+	total := len(nodes) + 1
 	if done.Addons == nil {
 		done.Addons = map[string]bool{}
 	}
-	for i, h := range hosts {
+	for i, h := range nodes {
 		jc.StepKey(i+1, total, "hub.addonStepPrepare", h.Name)
 		key := p.Name + ":prepare:" + h.Name
 		if done.Addons[key] {
@@ -402,7 +434,7 @@ func (r *ClusterAddonRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		jc.SaveResume(done)
 	}
 	jc.StepKey(total, total, "hub.addonStepInstall", p.Name, p.Version)
-	req := k8s.AddonRequest{Action: k8s.AddonInstall, Name: p.Name, Version: p.Version, Replicas: addonReplicas(len(hosts)), Default: cur == "", Upgrade: cur != ""}
+	req := k8s.AddonRequest{Action: k8s.AddonInstall, Name: p.Name, Version: p.Version, Replicas: addonReplicas(len(nodes)), Default: cur == "", Upgrade: cur != ""}
 	jc.Log("hub.addonInstalling", p.Name, p.Version, cp.Name)
 	if err := r.m.addonHostJob(ctx, jc, cp, req); err != nil {
 		return err

@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.9 — 2026-11-11
+
+- **Load balancer machines are no longer prepared for addons (Longhorn).** The cluster creation addon step sent node preparation to every machine, including lb-*, and the load balancer agent (which has no Kubernetes) rejected the job with “Kubernetes is not installed on the host” — creation failed. LB machines are now skipped both during creation and when installing an addon onto a ready cluster; volume replica counts are sized after real nodes only; the LB machine cloud-init no longer receives iSCSI/NFS packages.
+
 ## v1.20.8 — 2026-11-11
 
 - **Go toolchain raised to 1.26.11:** fixes standard library vulnerability GO-2026-6859 (HTTP/1 server crash due to a MaxBytesReader header race), which was failing the blocking govulncheck CI step. No changes to our code. Also restored the missing UI key `yamlBlocks.parseErrorShort`, so the Cilium values editor now shows why saving is blocked.
