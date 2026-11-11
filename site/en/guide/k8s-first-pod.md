@@ -345,6 +345,67 @@ tunnel and the machine network leave the hosts; host nodes (if any) stay. The
 deletion job also takes the cluster's bound routes off the map — there is
 nowhere left to lead the traffic.
 
+## Variation: macvtap and the built-in load balancer
+
+The same scenario on a cluster whose machines take addresses directly from
+the hosts' network (**macvtap**), with the **built-in load balancer** holding
+the shared control plane address instead of a Traffic Fly listener. The pod
+and the Ingress are no different; the variance is in the creation form and in
+how the Traffic Fly route is assembled.
+
+### Creation form
+
+| Field | Value | Why |
+|---|---|---|
+| Network between hosts | **macvtap** | the machine attaches to the host's NIC directly; the device is named in every placement row (e.g. `eth0`) |
+| Machine addresses | reservation on the router | addresses come from the network DHCP; pin them with a MAC reservation (or static config) — routes, kubeconfig and Traffic Fly all hold these addresses |
+| **Built-in load balancer** | enabled, 1 machine (or 2 for HA) | an HAProxy machine holding the shared API address; a pair needs a **VIP** — pin it on the router too (keepalived moves it between the machines) |
+| Endpoint | fills itself in | `VIP:6443` or `lb-1 address:6443`; the shared-address listener is not needed |
+
+The `lb-*` machines are not Kubernetes nodes: they never appear in
+`kubectl get nodes`, get no join steps and take no part in pod traffic — they
+serve 6443 only. Host port forwarding does not work with macvtap and is not
+needed: machines (the lb ones included) are reachable at their network
+addresses directly.
+
+### Ingress and the pod
+
+Steps 5 and 6 — no differences: Cilium Ingress on **8080** of every node
+(host network), the same YAML with `ingressClassName: cilium`. Run the
+internal check from a node itself or **from another machine of the network**:
+the placement host does not talk to its own macvtap machines (a Linux
+limitation, not a setting).
+
+### Traffic Fly route: manual “host itself” targets
+
+The automaton of a cluster-bound route builds targets in the “machine on its
+host” form: the gateway comes to the placement host, and that host cannot
+reach its own macvtap machine. The working form for macvtap is **“host
+itself”**: the gateway enters the machine's own tunnel (its record in the hub
+host list).
+
+“Traffic Fly” → **“New route”**:
+
+| Field | Value |
+|---|---|
+| Kind | **HTTPS by name (443)** |
+| Names | `hello.example.com` |
+| Certificate on the gateway (Let's Encrypt) | enabled |
+| Target check | **TCP connect** |
+| Cluster | **empty** — targets are manual |
+| Targets | every cluster node as **host** (the node's machine record), port **8080** |
+
+Without the binding the automaton leaves the route alone: when a node is
+added or removed, edit the target list by hand (“edit” on the route). DNS —
+the same A record of the name to the gateway address; the outside check —
+step 8.
+
+For clusters on **NAT or bridge** networks the binding, on the contrary,
+works and is recommended: **Cluster** + **Port on node 8080** (or an empty
+port plus “Client ingress” in the cluster card) — the automaton builds the
+targets and follows the membership. A bound route is saved with an empty
+pool: the automaton fills it right after the save (hub 1.21.1+).
+
 ## Through the API and n8n
 
 Steps 6–7 also work without the UI: a manifest into clusters with an API

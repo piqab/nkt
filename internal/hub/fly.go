@@ -261,6 +261,15 @@ func (d FlyDoc) gatewayConfig(g FlyGateway, keys map[int64]string, names map[int
 		if r.Gateway != g.EdgeID {
 			continue
 		}
+		// A cluster-bound route with an empty pool is pending the automaton
+		// (it fills targets right after the save): the gateway config must
+		// not carry it — there is nothing to serve yet, and the gateway's
+		// own validation rejects target-less routes, which would block
+		// saving the map at all. The route joins the config as soon as the
+		// pool is built.
+		if r.Cluster != "" && len(r.Targets) == 0 {
+			continue
+		}
 		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, PortTo: r.PortTo, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Allow: r.Allow, MaxConns: r.MaxConns, Rate: r.Rate, Algorithm: r.Algorithm, Check: r.Check}
 		for _, t := range r.Targets {
 			if !seen[t.HostID] {

@@ -714,3 +714,62 @@ func waitFlyClusterDone(t *testing.T, c string) {
 	}
 	t.Fatalf("задание fly.cluster по кластеру %q не закончилось", c)
 }
+
+// A cluster-bound route is saved by the editor with an empty pool — the
+// automaton fills it right after. Saving must pass validation, and the
+// gateway config must not carry the target-less route until the pool is
+// built; otherwise the map deadlocks: validation rejects the route before
+// the automaton ever gets to fill it.
+func TestFlySaveClusterRouteWithEmptyPool(t *testing.T) {
+	e := flyClusterEnvNew(t)
+	ctx := context.Background()
+	route := flyHTTPSRoute(e.gw, "fresh", "lab", 0)
+
+	doc := e.s.flyDoc(ctx)
+	doc.Routes = append(doc.Routes, route)
+	saved, err := e.s.flySave(ctx, doc, "admin", "bound route, empty pool")
+	if err != nil {
+		t.Fatalf("bound route with an empty pool was not saved: %v", err)
+	}
+	for _, g := range saved.Gateways {
+		cfg := saved.gatewayConfig(g, nil, map[int64]string{})
+		for _, r := range cfg.Routes {
+			if r.ID == "fresh" {
+				t.Error("target-less bound route leaked into the gateway config")
+			}
+		}
+	}
+
+	// The automaton fills the pool (the apply itself fails without a live
+	// gateway — the map is still written, as in the reconcile tests above).
+	want, why := e.s.clusterFlyTargets(ctx, route)
+	if why != flyClusterOK {
+		t.Fatal(why)
+	}
+	lg := &testFlyLog{}
+	if err := e.s.flyClusterReconcile(ctx, lg, "admin", "lab"); err == nil {
+		t.Fatal("reconcile without a live gateway succeeded")
+	}
+	r := e.route(t, "fresh")
+	if len(r.Targets) != len(want) {
+		t.Fatalf("pool after reconcile: %+v, want %d targets", r.Targets, len(want))
+	}
+
+	// With the pool in place the route joins the gateway config.
+	cur := e.s.flyDoc(ctx)
+	for _, g := range cur.Gateways {
+		cfg := cur.gatewayConfig(g, nil, map[int64]string{})
+		found := false
+		for _, cr := range cfg.Routes {
+			if cr.ID == "fresh" {
+				found = true
+				if len(cr.Targets) != len(want) {
+					t.Errorf("route in config: %d targets, want %d", len(cr.Targets), len(want))
+				}
+			}
+		}
+		if !found {
+			t.Error("route with a built pool never reached the gateway config")
+		}
+	}
+}
