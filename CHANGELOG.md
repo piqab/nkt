@@ -1009,3 +1009,4 @@
 - `37d33278` Cilium: вынесен в отдельный шаг конвейера (после ready); flannel ставится при снятой галочке Cilium; 1.20.6
 - `62b80343` Cilium ставится между входами узлов и ожиданием Ready (задание узла с Cilium не ждёт Ready и не ставит CNI, flannel — при снятой галочке; отдельный род задания k8s.cilium; values пишутся в файл до helm; машины LB не входят в кластер и не считаются в ожидании Ready); 1.20.7
 - `1f0497e3` Тулчейн Go поднят до 1.26.11 (GO-2026-6859, govulncheck в CI зелёный), восстановлен ключ yamlBlocks.parseErrorShort; 1.20.8
+- `d12de35c` Машины балансировщика исключены из подготовки дополнений: шаг addons при создании и ClusterAddonRunner больше не отправляют /api/k8s/addon на LB (400 «Kubernetes на хосте не установлен»), реплики Longhorn считаются только по узлам Kubernetes, пакеты дополнений не кладутся в cloud-init LB-машины; хелперы addonPrepareNodes и addonNodeHosts, тест TestAddonPrepareNodesSkipLB; 1.20.9
