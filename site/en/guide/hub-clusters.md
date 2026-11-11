@@ -269,6 +269,14 @@ into the cache and brings up the libvirt network right away.
 
 ## What else the section does
 
+- **Kubernetes in the cluster card** — the “Kubernetes” button of a ready
+  cluster opens the same object view as the host's Kubernetes tab: pods,
+  workloads, network, configuration, secrets (values — to the
+  administrator, audited), Custom Resources, Helm, port-forward, YAML
+  with diff and history. Requests go through the hub proxy
+  (`/hub/clusters/{id}/agent/…`) to the cluster's first control plane —
+  no need to open the node machine itself as a host. Built-in load
+  balancer machines don't count: they run no Kubernetes.
 - **Kubernetes findings across clusters** — a summary from every control
   plane.
 - **Client ingress** — a cluster node and the HTTP port of the ingress

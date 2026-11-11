@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.21.0 — 2026-11-11
+
+- **“Clusters”: a Kubernetes view per cluster.** The card of a ready cluster got a “Kubernetes” button — the same full object view as the host's Kubernetes tab: pods, workloads, network, configuration, secrets (values — to the administrator, audited), Custom Resources, Helm (releases, rollback, values with diff), port-forward, YAML with diff and history, object creation. Requests go through the new hub proxy `/hub/clusters/{id}/agent/…` to the first control plane: a cluster may span several hosts, and opening a node machine as a separate host is no longer needed. Built-in load balancer machines take no part in the proxy — they run no Kubernetes; API tokens are denied this route by default.
+
 ## v1.20.11 — 2026-11-11
 
 - **The Traffic Fly auto-target no longer adds load balancer machines to the pool.** The pool of routes leading into the cluster was built from every machine of the cluster record; an lb machine answers only HAProxy on 6443, so nodePort/ingress targets on it would stay permanently dead. Now the pool holds real nodes only — the same filter as addons and upgrades (1.20.9/1.20.10).

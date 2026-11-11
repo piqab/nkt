@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Dropdown, Input, InputNumber, Select, Space } from 'antd'
 import { CopyOutlined, MoreOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { LOCAL_HOST_ID, api, hostScope, qs, useApi } from '../api'
+import { LOCAL_HOST_ID, api, apiURL, clusterAgentScope, hostScope, qs, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, CodeEditor, Loading, Modal, formatRelative } from './ui'
 import { confirmAction } from './confirm'
@@ -415,16 +415,12 @@ function BoundsModal({ row, id, onClose, onSave }: { row: K8sRow; id: string; on
   )
 }
 
-/** Адрес API с учётом хоста за хабом (как у WebSocket). */
-function apiHref(path: string): string {
-  const prefix = hostScope.id !== null ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
-  return `/api${prefix}${path}`
-}
-
 /** Ссылка на проброс: с отдельного адреса пробросов (свой origin — без
- * песочницы), если сервер его держит; иначе — по пути /api в песочнице. */
+ * песочницы), если сервер его держит; иначе — по пути /api в песочнице.
+ * В кластерной области — всегда по пути /api: отдельный адрес маршрутизует
+ * по id хоста, а id control plane кластера браузеру неизвестен. */
 function forwardHref(token: string, base?: string): string {
-  if (!base) return apiHref(`/k8s/pf/${token}/`)
+  if (!base || clusterAgentScope.id !== null) return apiURL(`/k8s/pf/${token}/`)
   const origin = base.startsWith(':') ? `${location.protocol}//${location.hostname}${base}` : base
   const path = hostScope.id !== null ? `/f/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}/${token}/` : `/f/${token}/`
   return origin + path

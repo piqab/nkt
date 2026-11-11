@@ -43,6 +43,16 @@ export const onUnauthorized: { handler: (() => void) | null } = { handler: null 
  */
 export const hostScope: { id: number | null } = { id: null }
 
+/**
+ * Set while a cluster-scoped Kubernetes view is open (Clusters section):
+ * host-agent paths (/k8s/..., /jobs/...) are routed through the hub's
+ * cluster agent proxy — /hub/clusters/{id}/agent/... — which resolves to
+ * the cluster's first control plane (internal/hub/cluster_agent.go).
+ * Takes precedence over hostScope: the Clusters section is hub-level and
+ * a stale selected host must not hijack the calls.
+ */
+export const clusterAgentScope: { id: number | null } = { id: null }
+
 /** Sentinel hostScope.id for the pinned "localhost" row — the machine the
  * hub itself runs on (internal/hub/handlers.go's localHostID). Real hosts
  * autoincrement from 1 in the hub's own db, so -1 never collides; routed
@@ -90,17 +100,25 @@ function unscoped(path: string): boolean {
   return path.startsWith('/auth/') || path.startsWith('/hub/') || path.startsWith('/hosts/')
 }
 
+/** Общий префикс области: кластерный агент важнее выбранного хоста.
+ * Используется и api()/apiURL, и wsURL, и ссылками мимо api() — иначе
+ * каждая копия этого выбора расходилась бы молча. */
+export function scopePrefix(path: string): string {
+  if (unscoped(path)) return ''
+  if (clusterAgentScope.id !== null) return `/hub/clusters/${clusterAgentScope.id}/agent`
+  if (hostScope.id !== null) return `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}`
+  return ''
+}
+
 export function apiURL(path: string): string {
-  const scoped = hostScope.id !== null && !unscoped(path)
-  const prefix = scoped ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
-  return `/api${prefix}${path}`
+  return `/api${scopePrefix(path)}${path}`
 }
 
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   // Authentication always targets the hub itself — the operator only ever
   // logs in once, never per host (see internal/hub's design notes).
-  const scoped = hostScope.id !== null && !unscoped(path)
-  const prefix = scoped ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
+  const prefix = scopePrefix(path)
+  const scoped = prefix !== ''
 
   // Свой контроллер поверх переданного сигнала: отменить запрос может и
   // вызывающая сторона (уход со страницы), и таймер.

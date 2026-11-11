@@ -12,6 +12,7 @@ import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { K8sUpgradeModal } from './K8sUpgrade'
 import { ClusterAddonsModal, LonghornField, addonsBody, type LonghornChoice } from './ClusterAddons'
+import { ClusterK8sModal } from './ClusterK8s'
 import { ClusterRetryModal, StepsChecklist, stepConflicts, stepsChosen, type ClusterStep, type StepSelection } from './ClusterSteps'
 import { confirmAction } from './confirm'
 import { tx, type Msg } from '../msg'
@@ -458,6 +459,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   const [ingressOf, setIngressOf] = useState<Cluster | null>(null)
   const [crdsOf, setCrdsOf] = useState<Cluster | null>(null)
   const [addonsOf, setAddonsOf] = useState<Cluster | null>(null)
+  const [k8sOf, setK8sOf] = useState<Cluster | null>(null)
   const clusters = list.data ?? []
   const anyBusy = clusters.some((c) => c.status === 'creating' || c.status === 'deleting')
   if (anyBusy && pollMs !== 4_000) setPollMs(4_000)
@@ -509,6 +511,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
       {ingressOf && <ClientIngressModal cluster={ingressOf} onClose={() => setIngressOf(null)} />}
       {crdsOf && <ClientCRDsModal cluster={crdsOf} onClose={() => setCrdsOf(null)} />}
       {addonsOf && <ClusterAddonsModal cluster={addonsOf} onClose={() => setAddonsOf(null)} onOpenJob={onOpenJob} />}
+      {k8sOf && <ClusterK8sModal cluster={k8sOf} onClose={() => setK8sOf(null)} />}
       {upgrade && (
         <K8sUpgradeModal
           title={t('k8s.upgrade.clusterTitle', { name: upgrade.name })}
@@ -564,6 +567,13 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                 <Tooltip title={t('clusters.kubectlHint')}>
                   <Button size="small" icon={<CodeOutlined />} onClick={() => openKubectl(c)}>
                     kubectl
+                  </Button>
+                </Tooltip>
+              )}
+              {c.status === 'ready' && c.nodes.some((n) => n.role === 'control-plane') && (
+                <Tooltip title={t('clusters.k8sHint')}>
+                  <Button size="small" onClick={() => setK8sOf(c)}>
+                    {t('clusters.k8s')}
                   </Button>
                 </Tooltip>
               )}

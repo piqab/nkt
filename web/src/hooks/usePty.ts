@@ -6,7 +6,7 @@ import { SearchAddon } from '@xterm/addon-search'
 import { CanvasAddon } from '@xterm/addon-canvas'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import '@xterm/xterm/css/xterm.css'
-import { hostScope, LOCAL_HOST_ID } from '../api'
+import { scopePrefix } from '../api'
 import i18n from '../i18n'
 
 export type PtyStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error'
@@ -463,7 +463,7 @@ export function usePty(wsUrl: string, idleTimeoutMs?: number) {
  * JS cannot set custom headers on a WebSocket handshake (see
  * internal/msgs's own doc comment on the backend side of this). */
 export function wsURL(path: string): string {
-  const prefix = hostScope.id !== null ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
+  const prefix = scopePrefix(path)
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const sep = path.includes('?') ? '&' : '?'
   return `${proto}//${location.host}/api${prefix}${path}${sep}lang=${i18n.language}`

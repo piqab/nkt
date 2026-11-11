@@ -185,6 +185,10 @@ func (s *Server) Handler() http.Handler {
 		r.HandleFunc("/hosts/local/k8s/pf/{token}/*", s.proxyLocal)
 		r.HandleFunc("/hosts/{id}/k8s/pf/{token}", s.proxyHost)
 		r.HandleFunc("/hosts/{id}/k8s/pf/{token}/*", s.proxyHost)
+		// Cluster-scoped agent proxy (cluster_agent.go): port forwards are
+		// token-authenticated on the host, same as the host-scoped ones.
+		r.HandleFunc("/hub/clusters/{id}/agent/k8s/pf/{token}", s.proxyClusterAgent)
+		r.HandleFunc("/hub/clusters/{id}/agent/k8s/pf/{token}/*", s.proxyClusterAgent)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.RequireAuth)
 			for _, p := range hubWSPaths {
@@ -194,6 +198,11 @@ func (s *Server) Handler() http.Handler {
 				r.Use(s.auth.RequireAdmin)
 				for _, p := range hubWSPaths {
 					r.Get("/hosts/{id}"+p, s.proxyHost)
+				}
+				// Cluster agent WebSockets (pod logs/exec, job log) must not
+				// inherit the Timeout group either — see hubWSPaths comment.
+				for _, p := range hubWSPaths {
+					r.Get("/hub/clusters/{id}/agent"+p, s.proxyClusterAgent)
 				}
 			})
 		})
@@ -583,6 +592,10 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/clusters/{id}/addons", s.handleClusterAddons)
 					r.Post("/hub/clusters/{id}/addons", s.handleClusterAddons)
 					r.Put("/hub/clusters/{id}/client-ingress", s.handleClientIngress)
+					// Everything else of the cluster's control-plane agent:
+					// the Kubernetes view of the Clusters section
+					// (cluster_agent.go).
+					r.HandleFunc("/hub/clusters/{id}/agent/*", s.proxyClusterAgent)
 					r.Get("/hub/vm/limit-defaults", s.handleVMLimitDefaults)
 					r.Put("/hub/vm/limit-defaults", s.handleVMLimitDefaults)
 					r.Get("/hub/k8s/clusters/own", s.handleOwnClusters)
