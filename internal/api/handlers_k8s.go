@@ -167,8 +167,8 @@ func (s *Server) handleK8sCiliumInstall(w http.ResponseWriter, r *http.Request) 
 	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: k8s.KindInstall, TitleKey: "k8s.ciliumInstallJobTitle",
-		Queue: "host", Author: user, Steps: len(k8s.Steps(spec)), Params: spec,
+		Kind: k8s.KindCilium, TitleKey: "k8s.ciliumInstallJobTitle",
+		Queue: "host", Author: user, Steps: 1, Params: spec,
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)

@@ -216,6 +216,62 @@ func TestClusterGateSelection(t *testing.T) {
 	}
 }
 
+// Cilium и балансировщик в списке шагов: CNI ставится между входами и
+// готовностью (без CNI узлы легально NotReady), машины балансировщика не
+// входят в кластер — у них нет шагов входа, и готовность их не ждёт.
+func TestClusterStepListCiliumAndLB(t *testing.T) {
+	spec := stepsSpec()
+	spec.CNI = "cilium"
+	spec.LBEnabled = true
+	spec.LBCount = 1
+	spec.LBPlacements = []Placement{{HostID: 9, Role: RoleLoadBalancer, Kind: KindVM, Count: 1}}
+	nodes, cp1 := stepsNodes(spec)
+
+	steps := clusterStepList(spec, nodes, cp1, nil)
+	var ids []string
+	for _, st := range steps {
+		ids = append(ids, st.ID)
+	}
+	want := []string{"preflight", "mesh",
+		"vm:k8s-lb-1", "vm:k8s-cp-1", "vm:k8s-cp-2", "vm:k8s-cp-3", "vm:k8s-w-1",
+		"listener", "lb", "cp1", "join:k8s-cp-2", "join:k8s-cp-3", "join:k8s-w-1",
+		"cilium", "ready", "addons"}
+	if !slices.Equal(ids, want) {
+		t.Fatalf("порядок шагов:\n got %v\nwant %v", ids, want)
+	}
+	// Машина балансировщика не входит в кластер: шага входа у неё нет.
+	for _, id := range ids {
+		if id == "join:k8s-lb-1" {
+			t.Fatalf("у машины балансировщика есть шаг входа: %v", ids)
+		}
+	}
+	byID := map[string]ClusterStep{}
+	for _, st := range steps {
+		byID[st.ID] = st
+	}
+	// Cilium зависит от cp1 и всех входов; готовность — ещё и от cilium.
+	wantCiliumDeps := []string{"cp1", "join:k8s-cp-2", "join:k8s-cp-3", "join:k8s-w-1"}
+	if !slices.Equal(byID["cilium"].Deps, wantCiliumDeps) {
+		t.Errorf("cilium: зависимости %v, надо %v", byID["cilium"].Deps, wantCiliumDeps)
+	}
+	wantReadyDeps := []string{"cp1", "join:k8s-cp-2", "join:k8s-cp-3", "join:k8s-w-1", "cilium"}
+	if !slices.Equal(byID["ready"].Deps, wantReadyDeps) {
+		t.Errorf("ready: зависимости %v, надо %v", byID["ready"].Deps, wantReadyDeps)
+	}
+	// Без отметок ничего не выполнено, в том числе cilium и lb.
+	if byID["cilium"].Done || byID["lb"].Done {
+		t.Errorf("cilium/lb выполнены в новом кластере")
+	}
+	// Отметка Resume: cilium выполнен — шаг снят в окне повтора.
+	done := &clusterResume{Hosts: map[string]int64{}, Installed: map[string]bool{}, Cilium: true}
+	steps = clusterStepList(spec, nodes, cp1, done)
+	for _, st := range steps {
+		if st.ID == "cilium" && !st.Done {
+			t.Errorf("cilium не выполнен при отметке Resume")
+		}
+	}
+}
+
 // Прежний режим (Steps == nil): пропуск решает Resume — старые задания,
 // пополнение worker'ами и сухой прогон продолжают работать как раньше.
 func TestClusterGateLegacy(t *testing.T) {

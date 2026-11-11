@@ -730,8 +730,8 @@ type clusterResume struct {
 	// LB — балансировщик (HAProxy + keepalived) установлен на машинах lb-*.
 	LB bool `json:"lb,omitempty"`
 	// Cilium — CNI установлен на cp-1 и раскатан по узлам.
-	Cilium bool `json:"cilium,omitempty"`
-	Exposed  bool `json:"exposed"`
+	Cilium  bool `json:"cilium,omitempty"`
+	Exposed bool `json:"exposed"`
 	// Addons — пройденные шаги дополнений: «имя:prepare:узел», «имя:install».
 	Addons map[string]bool `json:"addons,omitempty"`
 }
@@ -1107,7 +1107,8 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	jc.StepKey(step, total, "hub.clusterStepJoin")
 	for _, nd := range nodes {
 		id := joinStepID(nd.Name)
-		if nd.Name == cp1Name || !gate.run[id] {
+		// Машины балансировщика в кластер не входят — они не узлы Kubernetes.
+		if nd.Name == cp1Name || nd.Role == RoleLoadBalancer || !gate.run[id] {
 			continue
 		}
 		h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name])
@@ -1131,7 +1132,36 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		jc.SaveResume(*done)
 	}
 
-	// 4. Ready, проброс, kubeconfig. Адрес API считается в любом случае —
+	// 4. Cilium — отдельный шаг: все узлы уже связаны (зарегистрированы в
+	// API, пусть и NotReady без CNI), теперь ставится CNI. Идёт ДО ожидания
+	// Ready: без CNI узел легально NotReady, и ждать Ready раньше CNI
+	// бессмысленно. Ставится только если выбран в форме (spec.CNI == "cilium").
+	if spec.CNI == "cilium" {
+		step++
+		jc.StepKey(step, total, "hub.clusterStepCilium")
+		if gate.run[stepCilium] {
+			// Установка на cp1: install или upgrade в зависимости от
+			// существования релиза Helm. Values — из spec.CiliumValues.
+			// Адрес API — как у cp1: при замене kube-proxy агенту нужен
+			// прямой адрес, а не ClusterIP.
+			is := k8s.InstallSpec{
+				Flavor: spec.Flavor, Role: k8s.RoleServer,
+				CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement,
+				CiliumValues: spec.CiliumValues,
+				APIAddr:      cp1Addr, Version: spec.K8sVersion,
+				ControlPlaneEndpoint: spec.Endpoint,
+			}
+			if err := r.installCilium(ctx, jc, cp1, is); err != nil {
+				return err
+			}
+			done.Cilium = true
+			jc.SaveResume(*done)
+		} else {
+			jc.Log("hub.clusterCiliumSkipped")
+		}
+	}
+
+	// 5. Ready, проброс, kubeconfig. Адрес API считается в любом случае —
 	// он нужен финальной строке журнала и не зависит от выбора шагов.
 	step++
 	serverAddr := spec.apiAddr(cpHost.Addr, cp1.Addr)
@@ -1141,7 +1171,14 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	}
 	jc.StepKey(step, total, "hub.clusterStepReady")
 	if gate.run[stepReady] {
-		want := len(done.Hosts)
+		// Ждём только узлы Kubernetes: машины балансировщика в кластер не
+		// входят и в списке узлов API не появятся никогда.
+		want := 0
+		for _, nd := range nodes {
+			if nd.Role != RoleLoadBalancer && done.Hosts[nd.Name] != 0 {
+				want++
+			}
+		}
 		if err := r.waitNodesReady(ctx, jc, cp1, want); err != nil {
 			return err
 		}
@@ -1173,31 +1210,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		jc.Log("hub.clusterReadySkipped")
 	}
 
-	// 4.5. Cilium — отдельный шаг после ready (все ноды присоединены).
-	// Ставится только если выбран в форме (spec.CNI == "cilium").
-	if spec.CNI == "cilium" {
-		step++
-		jc.StepKey(step, total, "hub.clusterStepCilium")
-		if gate.run[stepCilium] {
-			// ciliumStep вызывается на cp1: install или upgrade в зависимости
-			// от существования релиза Helm. Values передаются из spec.CiliumValues.
-			is := k8s.InstallSpec{
-				Flavor: spec.Flavor, Role: k8s.RoleServer,
-				CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement,
-				CiliumValues: spec.CiliumValues,
-				Version: spec.K8sVersion,
-			}
-			if err := r.installCilium(ctx, jc, cp1, is); err != nil {
-				return err
-			}
-			done.Cilium = true
-			jc.SaveResume(*done)
-		} else {
-			jc.Log("hub.clusterCiliumSkipped")
-		}
-	}
-
-	// 5. Дополнения: подготовить узлы этого запуска (при пополнении —
+	// 6. Дополнения: подготовить узлы этого запуска (при пополнении —
 	// только новые worker'ы: чарт уже стоит, его DaemonSet придёт на них
 	// сам) и поставить чарт на cp1.
 	if len(spec.Addons) > 0 {
@@ -1450,11 +1463,11 @@ func (r *ClusterRunner) installLB(ctx context.Context, jc *jobs.Context, spec Cl
 
 	// Собираем параметры для скрипта.
 	var params struct {
-		Endpoint      string          `json:"endpoint"`
-		CPAddrs       []string        `json:"cp_addrs"`
-		VIP           string          `json:"vip,omitempty"`
-		IsMaster      bool            `json:"is_master,omitempty"`
-		Haproxy       LBHaproxyConfig `json:"haproxy"`
+		Endpoint string          `json:"endpoint"`
+		CPAddrs  []string        `json:"cp_addrs"`
+		VIP      string          `json:"vip,omitempty"`
+		IsMaster bool            `json:"is_master,omitempty"`
+		Haproxy  LBHaproxyConfig `json:"haproxy"`
 	}
 	params.Endpoint = endpoint
 	params.CPAddrs = cpAddrs

@@ -97,29 +97,32 @@ func TestParseNodes(t *testing.T) {
 // Flannel и с пропуском kube-proxy; шаг с CLI и cilium install до
 // ожидания Ready.
 func TestStepsCilium(t *testing.T) {
+	// Задание узла с Cilium НЕ ставит CNI и НЕ ждёт Ready: без CNI узел
+	// легально NotReady, готовность проверит конвейер кластера после
+	// отдельного шага cilium. k3s при этом отключает свой flannel.
 	k := joinScripts(Steps(InstallSpec{Flavor: FlavorK3s, Role: RoleServer, Single: true, CNI: "cilium", KubeProxyReplacement: true, APIAddr: "192.168.122.10"}))
-	for _, want := range []string{"--flannel-backend=none", "--disable-network-policy", "--disable-kube-proxy", "cilium-cli/releases/latest", "sha256sum --check", "cilium install --set kubeProxyReplacement=true --set k8sServiceHost=192.168.122.10 --set k8sServicePort=6443", "cilium status --wait"} {
+	for _, want := range []string{"--flannel-backend=none", "--disable-network-policy", "--disable-kube-proxy"} {
 		if !strings.Contains(k, want) {
 			t.Errorf("k3s cilium: нет %q", want)
 		}
 	}
-	// Guard уже поставленного Cilium: по DaemonSet, а не по «cilium status
-	// --brief» — такого флага у cilium-cli нет, и проверка всегда падала.
-	if strings.Contains(k, "--brief") {
-		t.Error("cilium: --brief у cilium-cli нет, guard должен смотреть на DaemonSet")
+	if strings.Contains(k, "cilium install") || strings.Contains(k, "cilium-cli/releases") {
+		t.Error("k3s: задание узла не должно ставить Cilium — это шаг конвейера кластера")
 	}
-	if !strings.Contains(k, "kubectl -n kube-system get ds cilium") {
-		t.Error("cilium: нет проверки DaemonSet перед install")
-	}
-	if strings.Index(k, "cilium install") > strings.Index(k, "grep -q ' Ready'") {
-		t.Error("Cilium должен ставиться до ожидания Ready")
+	if strings.Contains(k, "grep -q ' Ready'") {
+		t.Error("k3s cilium: задание узла не должно ждать Ready до установки CNI")
 	}
 	ka := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, Single: true, CNI: "cilium"}))
-	// Проверяется именно пропуск addon/kube-proxy: у каскада сброса состояния
-	// тоже есть свой --skip-phases, и по одному лишь слову не отличить.
-	if strings.Contains(ka, "kube-flannel") || strings.Contains(ka, "skip-phases=addon/kube-proxy") ||
-		!strings.Contains(ka, "else cilium install; fi") {
-		t.Errorf("kubeadm cilium без замены kube-proxy: %s", ka)
+	if strings.Contains(ka, "kube-flannel") {
+		t.Errorf("kubeadm cilium: flannel ставиться не должен: %s", ka)
+	}
+	if strings.Contains(ka, "grep -q ' Ready'") {
+		t.Error("kubeadm cilium: задание узла не должно ждать Ready до установки CNI")
+	}
+	// Без Cilium flannel ставится в задании узла и Ready ждётся там же.
+	kf := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, Single: true}))
+	if !strings.Contains(kf, "kube-flannel.yml") || !strings.Contains(kf, "grep -q ' Ready'") {
+		t.Error("kubeadm без Cilium: flannel и ожидание Ready остаются в задании узла")
 	}
 	kb := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, CNI: "cilium", KubeProxyReplacement: true}))
 	if !strings.Contains(kb, "--skip-phases=addon/kube-proxy") {
@@ -127,6 +130,36 @@ func TestStepsCilium(t *testing.T) {
 	}
 	if (InstallSpec{Flavor: FlavorK3s, Role: RoleServer, CNI: "calico"}).Validate() == nil {
 		t.Error("неизвестный CNI прошёл проверку")
+	}
+}
+
+// Шаг cilium (задание KindCilium): guard по релизу Helm, а не по DaemonSet
+// («cannot reuse a name that is still in use» на повторе), install и
+// upgrade с одним набором флагов, путь CNI — тот, что ищет kubelet Debian.
+func TestCiliumStepScript(t *testing.T) {
+	st := ciliumStep(InstallSpec{Flavor: FlavorKubeadm, CNI: "cilium", KubeProxyReplacement: true, APIAddr: "192.168.122.10"}, "/etc/kubernetes/admin.conf")
+	checkBashSyntax(t, "cilium", st.Script)
+	for _, want := range []string{
+		"helm status cilium -n kube-system",
+		"cilium upgrade --set cni.binPath=/usr/lib/cni --set kubeProxyReplacement=true --set k8sServiceHost=192.168.122.10 --set k8sServicePort=6443",
+		"cilium install --set cni.binPath=/usr/lib/cni --set kubeProxyReplacement=true --set k8sServiceHost=192.168.122.10 --set k8sServicePort=6443",
+		"cilium status --wait",
+		"cilium-linux-$ARCH.tar.gz.sha256sum",
+	} {
+		if !strings.Contains(st.Script, want) {
+			t.Errorf("cilium step: нет %q", want)
+		}
+	}
+	if strings.Contains(st.Script, "get ds cilium") {
+		t.Error("cilium step: guard по DaemonSet заменён на helm status")
+	}
+	// Кастомные values уходят в файл и достаются обеим веткам.
+	sv := ciliumStep(InstallSpec{Flavor: FlavorKubeadm, CNI: "cilium", CiliumValues: "cni:\n  binPath: /usr/lib/cni\n"}, "/etc/kubernetes/admin.conf")
+	checkBashSyntax(t, "cilium values", sv.Script)
+	for _, want := range []string{"/tmp/cilium-values.yaml", "upgrade --set cni.binPath=/usr/lib/cni --values /tmp/cilium-values.yaml", "install --set cni.binPath=/usr/lib/cni --values /tmp/cilium-values.yaml"} {
+		if !strings.Contains(sv.Script, want) {
+			t.Errorf("cilium step с values: нет %q", want)
+		}
 	}
 }
 
@@ -153,77 +186,72 @@ func TestCiliumStepGuardSkipsInstalled(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("нет bash")
 	}
-	for _, s := range []InstallSpec{
-		{Flavor: FlavorK3s, Role: RoleServer, Single: true, CNI: "cilium", KubeProxyReplacement: true, APIAddr: "192.168.122.10"},
-		{Flavor: FlavorKubeadm, Role: RoleServer, Single: true, CNI: "cilium"},
-	} {
-		var guard, wait, full string
-		for _, st := range Steps(s) {
-			if st.Title != "k8s.step.cilium" {
-				continue
-			}
-			full = st.Script
-			for _, line := range strings.Split(st.Script, "\n") {
-				if strings.Contains(line, "get ds cilium") {
-					guard = line
-				}
-				if strings.Contains(line, "cilium status --wait") {
-					wait = line
-				}
-			}
+	s := InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, Single: true, CNI: "cilium"}
+	full := ciliumStep(s, "/etc/kubernetes/admin.conf").Script
+	var guard, wait string
+	for _, line := range strings.Split(full, "\n") {
+		if strings.Contains(line, "helm status cilium") {
+			guard = line
 		}
-		if guard == "" || wait == "" {
-			t.Fatalf("%s: в шаге cilium нет строк guard/ожидания", s.Flavor)
+		if strings.Contains(line, "cilium status --wait") {
+			wait = line
 		}
-		checkBashSyntax(t, s.Flavor+" cilium step", full)
-		// Подставные kubectl и cilium записывают вызовы в файл: по нему и
-		// проверяется, звался ли install.
-		for _, ds := range []bool{true, false} {
-			dir := t.TempDir()
-			log := filepath.Join(dir, "calls")
-			kubectlExit := "1"
-			if ds {
-				kubectlExit = "0"
-			}
-			for _, stub := range []struct{ name, body string }{
-				{"kubectl", "#!/bin/sh\necho \"kubectl $*\" >>" + log + "\nexit " + kubectlExit + "\n"},
-				// У k3s guard зовёт «k3s kubectl» — подставку и под него.
-				{"k3s", "#!/bin/sh\necho \"k3s $*\" >>" + log + "\nexit " + kubectlExit + "\n"},
-				{"cilium", "#!/bin/sh\necho \"cilium $*\" >>" + log + "\nexit 0\n"},
-			} {
-				p := filepath.Join(dir, stub.name)
-				if err := os.WriteFile(p, []byte(stub.body), 0o755); err != nil {
-					t.Fatal(err)
-				}
-			}
-			script := filepath.Join(dir, "step.sh")
-			if err := os.WriteFile(script, []byte("set -e\n"+guard+"\n"+wait+"\n"), 0o600); err != nil {
+	}
+	if guard == "" || wait == "" {
+		t.Fatalf("в шаге cilium нет строк guard/ожидания")
+	}
+	checkBashSyntax(t, "cilium step", full)
+	// Подставные helm и cilium записывают вызовы в файл: по нему и
+	// проверяется, какая ветка guard'а сработала. Релиз есть (helm exit 0)
+	// — upgrade, релиза нет (exit 1) — install: повтор упавшей установки
+	// с залипшим релизом не должен падать «cannot reuse a name».
+	for _, release := range []bool{true, false} {
+		dir := t.TempDir()
+		log := filepath.Join(dir, "calls")
+		helmExit := "1"
+		if release {
+			helmExit = "0"
+		}
+		for _, stub := range []struct{ name, body string }{
+			{"helm", "#!/bin/sh\necho \"helm $*\" >>" + log + "\nexit " + helmExit + "\n"},
+			{"cilium", "#!/bin/sh\necho \"cilium $*\" >>" + log + "\nexit 0\n"},
+		} {
+			p := filepath.Join(dir, stub.name)
+			if err := os.WriteFile(p, []byte(stub.body), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command("bash", script)
-			cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"))
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("%s, ds=%v: %v\n%s", s.Flavor, ds, err, out)
-			}
-			raw, err := os.ReadFile(log)
-			if err != nil {
-				t.Fatal(err)
-			}
-			calls := string(raw)
-			if !strings.Contains(calls, "kubectl -n kube-system get ds cilium") {
-				t.Errorf("%s: guard не спросил DaemonSet:\n%s", s.Flavor, calls)
-			}
-			if !strings.Contains(calls, "cilium status --wait") {
-				t.Errorf("%s: нет ожидания готовности:\n%s", s.Flavor, calls)
-			}
-			if installed := strings.Contains(calls, "cilium install"); installed != !ds {
-				if ds {
-					t.Errorf("%s: переставил уже стоящий Cilium:\n%s", s.Flavor, calls)
-				} else {
-					t.Errorf("%s: не поставил Cilium, которого нет:\n%s", s.Flavor, calls)
-				}
-			}
+		}
+		script := filepath.Join(dir, "step.sh")
+		if err := os.WriteFile(script, []byte("set -e\n"+guard+"\n"+wait+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("bash", script)
+		cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"))
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("release=%v: %v\n%s", release, err, out)
+		}
+		raw, err := os.ReadFile(log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		calls := string(raw)
+		if !strings.Contains(calls, "helm status cilium -n kube-system") {
+			t.Errorf("guard не спросил релиз Helm:\n%s", calls)
+		}
+		if !strings.Contains(calls, "cilium status --wait") {
+			t.Errorf("нет ожидания готовности:\n%s", calls)
+		}
+		upgraded := strings.Contains(calls, "cilium upgrade")
+		installed := strings.Contains(calls, "cilium install")
+		if release && !upgraded {
+			t.Errorf("при живом релизе нужен upgrade:\n%s", calls)
+		}
+		if !release && !installed {
+			t.Errorf("без релиза нужен install:\n%s", calls)
+		}
+		if upgraded && installed {
+			t.Errorf("сработали обе ветки guard'а:\n%s", calls)
 		}
 	}
 }
@@ -706,9 +734,10 @@ func TestStepsKubeadmHA(t *testing.T) {
 		t.Errorf("kubeadm без endpoint: %s", bare)
 	}
 	// Cilium при замене kube-proxy смотрит на API по общему адресу и его
-	// порту — 7443 вместо 6443 агенту чужд.
-	cil := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, CNI: "cilium", KubeProxyReplacement: true,
-		ControlPlaneEndpoint: "k8s.example.com:7443", APIAddr: "10.0.0.5"}))
+	// порту — 7443 вместо 6443 агенту чужд. Шаг cilium живёт в задании
+	// KindCilium, а не в задании узла — проверяется сам шаг.
+	cil := ciliumStep(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, CNI: "cilium", KubeProxyReplacement: true,
+		ControlPlaneEndpoint: "k8s.example.com:7443", APIAddr: "10.0.0.5"}, "/etc/kubernetes/admin.conf").Script
 	if !strings.Contains(cil, "--set k8sServiceHost=k8s.example.com --set k8sServicePort=7443") {
 		t.Errorf("cilium с endpoint: %s", cil)
 	}

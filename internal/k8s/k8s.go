@@ -732,11 +732,57 @@ func k3sSteps(s InstallSpec) []Step {
 		{"k8s.step.install", installScript},
 		{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet " + unit + " && break; sleep 2; done\nsystemctl is-active --quiet " + unit},
 	}
-	if s.Role == RoleServer {
-		// Cilium вынесен в отдельный шаг конвейера кластера (после ready).
+	if s.Role == RoleServer && s.CNI != "cilium" {
+		// При Cilium CNI ставится отдельным шагом конвейера кластера после
+		// входов всех узлов: до него узел легально NotReady, и ждать Ready
+		// внутри задания узла бессмысленно — готовность проверит конвейер.
 		steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do k3s kubectl get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nk3s kubectl get nodes\nexit 1"})
 	}
 	return steps
+}
+
+// KindCilium — задание хоста: только установка Cilium (без переустановки
+// роли и контейнерного рантайма). Конвейер кластера вызывает его отдельным
+// шагом после входов всех узлов.
+const KindCilium = "k8s.cilium"
+
+// CiliumRunner — задание хоста: один шаг ciliumStep.
+type CiliumRunner struct{ m *Manager }
+
+func NewCiliumRunner(m *Manager) *CiliumRunner { return &CiliumRunner{m: m} }
+
+// Resumable — да: шаг идемпотентен (install/upgrade по релизу Helm).
+func (r *CiliumRunner) Resumable() bool { return true }
+
+// Run выполняет единственный шаг установки Cilium.
+func (r *CiliumRunner) Run(ctx context.Context, jc *jobs.Context) error {
+	var spec InstallSpec
+	if err := jc.Params(&spec); err != nil {
+		return err
+	}
+	if r.m.run == nil {
+		return msgs.Errorf("control.installationUnavailableMode")
+	}
+	kubeconfig := "/etc/kubernetes/admin.conf"
+	if spec.Flavor == FlavorK3s {
+		kubeconfig = "/etc/rancher/k3s/k3s.yaml"
+	}
+	st := ciliumStep(spec, kubeconfig)
+	jc.StepKey(1, 1, st.Title)
+	out, err := r.m.run(ctx, "sh", "-c", st.Script)
+	if err != nil {
+		return msgs.Errorf("k8s.stepFailed", msgs.T(jc.Lang(), st.Title), err)
+	}
+	for _, line := range tail(out.Stdout, 8) {
+		jc.Logf("      %s", line)
+	}
+	if out.ExitCode != 0 {
+		for _, line := range tail(out.Stderr, 12) {
+			jc.Logf("      ! %s", line)
+		}
+		return msgs.Errorf("k8s.stepFailed", msgs.T(jc.Lang(), st.Title), fmt.Sprintf("exit %d: %s", out.ExitCode, failureLine(out)))
+	}
+	return nil
 }
 
 // ciliumStep — установка Cilium официальным CLI: последняя стабильная
@@ -756,7 +802,7 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 			upgrade += " --set k8sServiceHost=" + host + " --set k8sServicePort=" + strconv.Itoa(port)
 		}
 	}
-	script := strings.Join([]string{
+	lines := []string{
 		strings.TrimRight(fetchPrelude(s), "\n"),
 		"export KUBECONFIG=" + kubeconfig,
 		"if ! command -v cilium >/dev/null; then",
@@ -765,30 +811,28 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 		"  sha256sum --check cilium-linux-$ARCH.tar.gz.sha256sum",
 		"  tar -C /usr/local/bin -xzf cilium-linux-$ARCH.tar.gz && rm -f cilium-linux-$ARCH.tar.gz*",
 		"fi",
-		// Проверка релиза Helm, а не DaemonSet: если релиз существует, но
-		// DaemonSet удалён (упавший install, ручное удаление), install
-		// падал с «cannot reuse a name that is still in use». Теперь
-		// при существующем релизе — upgrade, иначе — install.
-		"if helm status cilium -n kube-system >/dev/null 2>&1; then echo 'cilium: release exists, running upgrade'; " + upgrade + "; else echo 'cilium: installing fresh'; " + install + "; fi",
-		"cilium status --wait --wait-duration 10m",
-	}, "\n")
-	// Если заданы кастомные Helm values — записываем в файл и передаём через --values.
-	// cni.binPath=/usr/lib/cni уже установлен по умолчанию выше, но values
-	// могут его переопределить.
-	if s.CiliumValues != "" {
-		// Записываем values в файл и добавляем --values к обеим командам
-		// (install и upgrade), чтобы конфиг был одинаковым.
-		script += "\n" + `cat > /tmp/cilium-values.yaml << 'CILIUM_VALUES_EOF'` + "\n" + s.CiliumValues + "\n" + `CILIUM_VALUES_EOF` + "\n"
-		// Переписываем финальную проверку: если релиз есть — upgrade с values,
-		// иначе — install с values.
-		script = strings.Replace(script,
-			"if helm status cilium -n kube-system >/dev/null 2>&1; then echo 'cilium: release exists, running upgrade'; "+upgrade+"; else echo 'cilium: installing fresh'; "+install+"; fi",
-			"if helm status cilium -n kube-system >/dev/null 2>&1; then echo 'cilium: release exists, running upgrade with values'; "+upgrade+" --values /tmp/cilium-values.yaml; else echo 'cilium: installing fresh with values'; "+install+" --values /tmp/cilium-values.yaml; fi",
-			1)
-		// Удаляем дублирующую проверку статуса — она уже есть выше.
-		script = strings.Replace(script, "cilium status --wait --wait-duration 10m\n", "", 1)
 	}
-	return Step{"k8s.step.cilium", script}
+	// Кастомные Helm values: файл пишется ДО команды, которая его читает,
+	// и --values достаётся обеим веткам — install и upgrade, чтобы конфиг
+	// не зависел от того, впервые ставится Cilium или повторно.
+	if s.CiliumValues != "" {
+		lines = append(lines,
+			"cat > /tmp/cilium-values.yaml << 'CILIUM_VALUES_EOF'",
+			s.CiliumValues,
+			"CILIUM_VALUES_EOF",
+		)
+		install += " --values /tmp/cilium-values.yaml"
+		upgrade += " --values /tmp/cilium-values.yaml"
+	}
+	// Проверка релиза Helm, а не DaemonSet: если релиз существует, но
+	// DaemonSet удалён (упавший install, ручное удаление), install падал с
+	// «cannot reuse a name that is still in use». Теперь при существующем
+	// релизе — upgrade, иначе — install.
+	lines = append(lines,
+		"if helm status cilium -n kube-system >/dev/null 2>&1; then echo 'cilium: release exists, running upgrade'; "+upgrade+"; else echo 'cilium: installing fresh'; "+install+"; fi",
+		"cilium status --wait --wait-duration 10m",
+	)
+	return Step{"k8s.step.cilium", strings.Join(lines, "\n")}
 }
 
 // containerdStep ставит и настраивает containerd под kubeadm с оглядкой
@@ -949,8 +993,12 @@ func kubeadmSteps(s InstallSpec) []Step {
 			init += "\nkubectl --kubeconfig /etc/kubernetes/admin.conf taint nodes --all node-role.kubernetes.io/control-plane- || true"
 		}
 		steps = append(steps, Step{"k8s.step.install", init})
-		// Cilium вынесен в отдельный шаг конвейера кластера (после ready).
-		steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nexit 1"})
+		// При Cilium CNI ставится отдельным шагом конвейера кластера после
+		// входов всех узлов: до него узел легально NotReady, и ждать Ready
+		// внутри задания узла бессмысленно — готовность проверит конвейер.
+		if s.CNI != "cilium" {
+			steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nexit 1"})
+		}
 		return steps
 	}
 	// Признак узла — манифесты, а не kubelet.conf: вход control plane

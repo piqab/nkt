@@ -794,6 +794,7 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 	m.Register(vmcreate.KindReinstall, vmcreate.NewReinstallRunner(createRunner))
 	m.Register(k8s.KindInstall, k8s.NewInstallRunner(k8s.New(collector, privilegedRunner(cfg))))
 	m.Register(k8s.KindLBInstall, k8s.NewLBInstallRunner(k8s.New(collector, privilegedRunner(cfg))))
+	m.Register(k8s.KindCilium, k8s.NewCiliumRunner(k8s.New(collector, privilegedRunner(cfg))))
 	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(api.RunTooling))
 	// Бэкапы: в режиме fixtures выполнять нечего — исполнитель без exec
 	// отвечает понятным отказом.

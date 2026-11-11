@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.7 — 2026-11-11
+
+- **Cilium is installed between node joins and the Ready wait — cluster creation no longer dies on “waiting for the node to be Ready”.** Without a CNI a node is legitimately NotReady, while the Ready wait stood before any CNI existed — both in the node job and in the pipeline — so creation died with exit 1. Now a node job with the Cilium checkbox neither waits for Ready nor installs a CNI (flannel is still installed in the node job when the checkbox is off); nodes register in the API, then a separate host job installs Cilium (install or upgrade by the Helm release, custom values written to a file before the helm command), and only then the pipeline waits for Ready. Load balancer machines get no join steps and are not counted in the Ready wait — they are not Kubernetes nodes.
+
 ## v1.20.6 — 2026-11-10
 
 - **Cilium moved to a separate pipeline step.** Cilium installation now runs after the `ready` step (all nodes joined), not as part of the first control plane setup. If the Cilium checkbox is unchecked, flannel is installed instead. This reduces risk: if Cilium installation fails, the cluster remains connected and only the Cilium step can be retried.

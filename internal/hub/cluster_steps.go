@@ -183,8 +183,9 @@ func clusterStepList(spec ClusterSpec, nodes []clusterNode, cp1Name string, done
 	})
 	// Присоединение остальных узлов: сначала control plane, потом worker'ы
 	// (nodes уже в этом порядке). Каждый зависит от cp1 и от своей машины.
+	// Машины балансировщика в кластер не входят — они не узлы Kubernetes.
 	for _, nd := range nodes {
-		if nd.Name == cp1Name {
+		if nd.Name == cp1Name || nd.Role == RoleLoadBalancer {
 			continue
 		}
 		out = append(out, ClusterStep{
@@ -192,11 +193,12 @@ func clusterStepList(spec ClusterSpec, nodes []clusterNode, cp1Name string, done
 			Done: done.Installed[nd.Name], Deps: []string{stepCP1, vmStepID(nd.Name)}, Force: true,
 		})
 	}
-	// Готовность, проброс, kubeconfig. Зависит от cp1 и всех входов.
+	// Готовность, проброс, kubeconfig. Зависит от cp1, всех входов и (при
+	// Cilium) от шага cilium: без CNI узлы легально NotReady.
 	readyDeps := []string{stepCP1}
 	allInstalled := done.Installed[cp1Name]
 	for _, nd := range nodes {
-		if nd.Name == cp1Name {
+		if nd.Name == cp1Name || nd.Role == RoleLoadBalancer {
 			continue
 		}
 		readyDeps = append(readyDeps, joinStepID(nd.Name))
@@ -204,15 +206,23 @@ func clusterStepList(spec ClusterSpec, nodes []clusterNode, cp1Name string, done
 			allInstalled = false
 		}
 	}
-	out = append(out, ClusterStep{ID: stepReady, Kind: "ready", Done: allInstalled, Deps: readyDeps})
-	// Cilium — отдельный шаг после ready (все ноды присоединены). Ставится
-	// только если выбран в форме (spec.CNI == "cilium"). Зависит от ready.
+	// Cilium — отдельный шаг между входами и готовностью: все узлы уже
+	// связаны (зарегистрированы в API, NotReady без CNI), теперь ставится
+	// CNI, и только затем ждём Ready. Ставится только если выбран в форме.
 	if spec.CNI == "cilium" {
+		ciliumDeps := []string{stepCP1}
+		for _, nd := range nodes {
+			if nd.Name != cp1Name && nd.Role != RoleLoadBalancer {
+				ciliumDeps = append(ciliumDeps, joinStepID(nd.Name))
+			}
+		}
 		out = append(out, ClusterStep{
 			ID: stepCilium, Kind: "cilium", Done: done.Cilium,
-			Deps: []string{stepReady},
+			Deps: ciliumDeps,
 		})
+		readyDeps = append(readyDeps, stepCilium)
 	}
+	out = append(out, ClusterStep{ID: stepReady, Kind: "ready", Done: allInstalled, Deps: readyDeps})
 	// Дополнения (Longhorn) — только если они заданы.
 	if len(spec.Addons) > 0 {
 		out = append(out, ClusterStep{
@@ -255,7 +265,7 @@ func clusterStepDone(id string, spec ClusterSpec, nodes []clusterNode, cp1Name s
 			return false
 		}
 		for _, nd := range nodes {
-			if nd.Name != cp1Name && !done.Installed[nd.Name] {
+			if nd.Name != cp1Name && nd.Role != RoleLoadBalancer && !done.Installed[nd.Name] {
 				return false
 			}
 		}
