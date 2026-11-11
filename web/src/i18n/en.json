@@ -3506,6 +3506,7 @@
     "addObject": "Object",
     "deleteConfirm": "Remove block {{name}} from the draft?",
     "parseError": "Could not split into blocks — fix the text: {{error}}",
+    "parseErrorShort": "YAML does not parse — fix the text",
     "editTitle": "Block {{name}}",
     "addTitle": "New item: {{kind}}",
     "editHint": "Edits change the draft only — writing happens with the window's “Save”, through the diff and kubectl diff.",
