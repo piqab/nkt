@@ -207,6 +207,16 @@ func TestClusterFlyTargets(t *testing.T) {
 	if !ok || vm.ID != fmt.Sprintf("n%d", e.vm) || vm.Label != "lab-w-1" {
 		t.Errorf("узел-машина: %+v", vm)
 	}
+	// A load-balancer machine must not become a target: HAProxy serves
+	// 6443 only, so nodePort/ingress traffic would hit a dead port.
+	e.machine(t, "lab-lb-1", e.host, RoleLoadBalancer)
+	got, why = e.s.clusterFlyTargets(ctx, flyHTTPSRoute(e.gw, "shop", "lab", 0))
+	if why != flyClusterOK || len(got) != 2 {
+		t.Fatalf("пул с балансировщиком: %+v, %v", got, why)
+	}
+	if _, ok := hasTarget(got, FlyTarget{HostID: e.host, Kind: "vm", Ref: "lab-lb-1", Port: 8080}); ok {
+		t.Error("lb-машина не должна быть целью")
+	}
 	// Кластера нет — это не «пустой пул», а нечего вести.
 	if _, why := e.s.clusterFlyTargets(ctx, flyHTTPSRoute(e.gw, "shop", "ghost", 0)); why != flyClusterNoCluster {
 		t.Errorf("чужой кластер: %v", why)

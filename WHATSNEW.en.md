@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.20.11 — 2026-11-11
+
+- **The Traffic Fly auto-target no longer adds load balancer machines to the pool.** The pool of routes leading into the cluster was built from every machine of the cluster record; an lb machine answers only HAProxy on 6443, so nodePort/ingress targets on it would stay permanently dead. Now the pool holds real nodes only — the same filter as addons and upgrades (1.20.9/1.20.10).
+
 ## v1.20.10 — 2026-11-11
 
 - **Cluster upgrades and monitoring no longer take load balancer machines for Kubernetes nodes.** The “upgrade version” job walked every host of the cluster record and died on the lb machine: it has no node object to drain and its agent rejects the upgrade job; the job step count included load balancers too. Now only real nodes are walked (the filter is shared with addons — 1.20.9). In “Monitoring”, lb machines no longer get signed as k8s cluster members.

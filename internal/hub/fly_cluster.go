@@ -110,8 +110,12 @@ func (s *Server) clusterFlyTargets(ctx context.Context, r FlyRoute) ([]FlyTarget
 	if err != nil {
 		return nil, flyClusterHostsErr
 	}
-	out := make([]FlyTarget, 0, len(hosts))
-	for _, h := range hosts {
+	// Load-balancer machines only serve the API endpoint (HAProxy on 6443):
+	// they run no kube-proxy or ingress controller, so a route target on
+	// them would be permanently dead. Real nodes only.
+	nodes := k8sNodeHosts(hosts)
+	out := make([]FlyTarget, 0, len(nodes))
+	for _, h := range nodes {
 		t := FlyTarget{ID: fmt.Sprintf("n%d", h.ID), Label: h.Name, HostID: h.ID, Kind: "host", Port: port}
 		if h.ParentID != 0 {
 			t.HostID, t.Kind, t.Ref = h.ParentID, "vm", h.Name
