@@ -142,7 +142,9 @@ func (s *Server) monClusters(ctx context.Context, hosts []store.Host) ([]monClus
 		out = append(out, c)
 	}
 	for _, h := range hosts {
-		if _, ok := tags[h.ID]; ok || h.ClusterID == 0 || h.K8sRole == "" {
+		// Load-balancer machines belong to the cluster record but run no
+		// Kubernetes: signing them as k8s members would be a lie.
+		if _, ok := tags[h.ID]; ok || h.ClusterID == 0 || h.K8sRole == "" || h.K8sRole == RoleLoadBalancer {
 			continue
 		}
 		tags[h.ID] = monK8sTag{Cluster: names[h.ClusterID], Role: h.K8sRole}

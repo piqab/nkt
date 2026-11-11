@@ -55,20 +55,26 @@ func (r *ClusterUpgradeRunner) Run(ctx context.Context, jc *jobs.Context) error 
 	if err != nil || len(hosts) == 0 {
 		return msgs.Errorf("hub.clusterNoNodes")
 	}
-	cp := hosts[0]
+	// Load-balancer machines are cluster members on record only: they have
+	// no node object to drain and their agent rejects /api/k8s/upgrade/node.
+	nodes := k8sNodeHosts(hosts)
+	if len(nodes) == 0 {
+		return msgs.Errorf("hub.clusterNoNodes")
+	}
+	cp := nodes[0]
 	var done clusterUpgradeResume
 	if err := jc.LoadResume(&done); err != nil {
 		return msgs.Errorf("hub.parsingResumeState", err)
 	}
-	multi := len(hosts) > 1
+	multi := len(nodes) > 1
 	waiter := &GroupApplyRunner{m: r.m}
-	for i := done.Done; i < len(hosts); i++ {
+	for i := done.Done; i < len(nodes); i++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		h := hosts[i]
-		jc.Step(i+1, len(hosts), h.Name)
-		jc.Log("hub.upgradeNode", i+1, len(hosts), h.Name, p.Version)
+		h := nodes[i]
+		jc.Step(i+1, len(nodes), h.Name)
+		jc.Log("hub.upgradeNode", i+1, len(nodes), h.Name, p.Version)
 		node, err := r.nodeName(ctx, cp, h)
 		if err != nil {
 			return fmt.Errorf("%s: %w", h.Name, err)
@@ -110,7 +116,7 @@ func (r *ClusterUpgradeRunner) Run(ctx context.Context, jc *jobs.Context) error 
 		done.Done = i + 1
 		jc.SaveResume(done)
 	}
-	jc.Log("hub.upgradeDone", len(hosts), p.Version)
+	jc.Log("hub.upgradeDone", len(nodes), p.Version)
 	return nil
 }
 
@@ -181,14 +187,17 @@ func (s *Server) handleClusterUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hosts, _ := s.db.ClusterHosts(r.Context(), id)
-	if len(hosts) == 0 {
+	// Job steps are counted after Kubernetes nodes: the runner does not
+	// walk load-balancer machines.
+	nodes := k8sNodeHosts(hosts)
+	if len(nodes) == 0 {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.clusterNoNodes"))
 		return
 	}
 	// Версия и шаг проверяются по control plane — та же проверка, что
 	// сделает каждый узел перед своим обновлением.
 	var info k8s.UpgradeInfo
-	if _, err := s.hub.HostAPI(r.Context(), hosts[0].ID, "GET", "/api/k8s/upgrade", nil, &info); err != nil {
+	if _, err := s.hub.HostAPI(r.Context(), nodes[0].ID, "GET", "/api/k8s/upgrade", nil, &info); err != nil {
 		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
@@ -199,7 +208,7 @@ func (s *Server) handleClusterUpgrade(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: KindClusterUpgrade, TitleKey: "hub.upgradeJobTitle", TitleArgs: []any{cl.Name, req.Version},
-		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: len(hosts),
+		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: len(nodes),
 		Params: ClusterUpgradeParams{ClusterID: id, Version: req.Version},
 	})
 	if err != nil {
@@ -219,12 +228,13 @@ func (s *Server) handleClusterUpgradeInfo(w http.ResponseWriter, r *http.Request
 		return
 	}
 	hosts, _ := s.db.ClusterHosts(r.Context(), id)
-	if len(hosts) == 0 {
+	nodes := k8sNodeHosts(hosts)
+	if len(nodes) == 0 {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.clusterNoNodes"))
 		return
 	}
 	var info k8s.UpgradeInfo
-	if _, err := s.hub.HostAPI(r.Context(), hosts[0].ID, "GET", "/api/k8s/upgrade", nil, &info); err != nil {
+	if _, err := s.hub.HostAPI(r.Context(), nodes[0].ID, "GET", "/api/k8s/upgrade", nil, &info); err != nil {
 		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}

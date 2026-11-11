@@ -199,6 +199,22 @@ type clusterNode struct {
 	Nic string
 }
 
+// k8sNodeHosts filters cluster host records down to actual Kubernetes
+// nodes. Load-balancer machines are attached to the cluster record
+// (k8s_role = load-balancer) but run no k8s flavor: their agents reject
+// node jobs (addon prepare, upgrade) and they must not be counted when
+// sizing replicas or steps. ClusterHosts sorts control-plane first and
+// the filter preserves order, so nodes[0] stays the control plane.
+func k8sNodeHosts(hosts []store.Host) []store.Host {
+	out := make([]store.Host, 0, len(hosts))
+	for _, h := range hosts {
+		if h.K8sRole != RoleLoadBalancer {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
 var k8sMinorRe = regexp.MustCompile(`^\d+\.\d+$`)
 
 // nicNameRe — имя устройства хоста: форма та же, что у моста и сети

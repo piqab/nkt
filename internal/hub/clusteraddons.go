@@ -261,19 +261,6 @@ func addonPrepareNodes(nodes []clusterNode) []clusterNode {
 	return out
 }
 
-// addonNodeHosts is addonPrepareNodes for hosts already attached to the
-// cluster (ClusterHosts): load-balancer machines are filtered out by
-// their k8s_role. Control-plane stays first — ClusterHosts sorts it so.
-func addonNodeHosts(hosts []store.Host) []store.Host {
-	out := make([]store.Host, 0, len(hosts))
-	for _, h := range hosts {
-		if h.K8sRole != RoleLoadBalancer {
-			out = append(out, h)
-		}
-	}
-	return out
-}
-
 // applyAddons — шаг создания кластера: подготовить узлы prepare и, если
 // install, поставить дополнения на cp1. Пройденное — в done.
 func (m *Manager) applyAddons(ctx context.Context, jc *jobs.Context, spec ClusterSpec, cp1 store.Host, prepare []store.Host, nodes int, install bool, done *clusterResume) error {
@@ -402,7 +389,7 @@ func (r *ClusterAddonRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil || len(hosts) == 0 {
 		return msgs.Errorf("hub.clusterNoNodes")
 	}
-	nodes := addonNodeHosts(hosts)
+	nodes := k8sNodeHosts(hosts)
 	if len(nodes) == 0 {
 		return msgs.Errorf("hub.clusterNoNodes")
 	}

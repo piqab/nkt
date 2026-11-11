@@ -97,9 +97,9 @@ func TestAddonPrepareNodesSkipLB(t *testing.T) {
 		{Name: "k8s-lb-1", K8sRole: RoleLoadBalancer},
 		{Name: "k8s-w-1", K8sRole: RoleWorker},
 	}
-	gotH := addonNodeHosts(hosts)
+	gotH := k8sNodeHosts(hosts)
 	if len(gotH) != 2 || gotH[0].Name != "k8s-cp-1" || gotH[1].Name != "k8s-w-1" {
-		t.Fatalf("addonNodeHosts = %+v, want cp-1 and w-1 only", gotH)
+		t.Fatalf("k8sNodeHosts = %+v, want cp-1 and w-1 only", gotH)
 	}
 	// ClusterHosts sorts control-plane first; the filter keeps that order,
 	// so nodes[0] remains the control plane for the install step.
