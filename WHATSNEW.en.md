@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.22.4 — 2026-11-12
+
+- **Creating a VM on the hub machine itself no longer hits “Read-only file system”.** The hub's virtualization (its localhost host) ran `qemu-img` and `virsh` inside its own unit's sandbox: the sandbox escape was given only to the single-host mode, while the hub runs in hub mode, and `ProtectSystem=strict` mounted `/var/lib/libvirt` read-only for it — the rejection did not depend on the machine name and looked like a qemu-img error. The escape is now enabled in every mode except fixtures: it detects the sandbox at runtime, and outside a systemd unit the behaviour is unchanged. The “machine from an image” job never lacked the escape — it receives it directly, which is why on the hub exactly that flow worked.
+
 ## v1.22.3 — 2026-11-12
 
 - **The VM creation wizard now shows the real cause of a disk creation failure.** When `qemu-img create` failed, the banner and the `vm.create_disk` audit entry received only the informational “Formatting …” report (stdout): the actual rejection (“Could not create image: …”) went to stderr and was dropped while the text was composed — people saw the report's header instead of the cause. On a non-zero exit, stderr now takes priority in the message, and the audit keeps both streams in full. Pre-checks run before the command: an existing disk file gets a hint about leftovers of an earlier attempt (remove it or pick another name), and a missing `/var/lib/libvirt/images` directory gets a hint about installing libvirt.

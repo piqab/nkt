@@ -845,8 +845,16 @@ func privilegedRunner(cfg *config.Config) control.PrivilegedRunner {
 // toolingRunner — то же, но с предсказуемым языком вывода: virsh и
 // qemu-img переводят и таблицы, и ошибки, а разбирать их приходится по
 // английским словам.
+//
+// Выход из песочницы нужен каждому режиму, кроме fixtures: хаб-машина
+// тоже хост (её «Виртуализация» создаёт диски и определяет домены), а
+// юнит хаба сидит под тем же ProtectSystem=strict, что и юнит хоста, —
+// без escape qemu-img create отвечал там EROFS на любое имя файла.
+// Сам escape определяет песочницу в рантайме (INVOCATION_ID, досягаемость
+// systemd-run, запасной nsenter): вне systemd-юнита он исполняет команду
+// напрямую, как прежде.
 func toolingRunner(cfg *config.Config) control.PrivilegedRunner {
-	if cfg.Mode != config.ModeLocal {
+	if cfg.Mode == config.ModeFixtures {
 		return nil
 	}
 	return api.RunTooling
