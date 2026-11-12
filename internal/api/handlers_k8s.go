@@ -98,7 +98,7 @@ func (s *Server) handleK8sKubeconfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
-	_, _ = w.Write([]byte(cfg))
+	_, _ = w.Write([]byte(cfg)) // #nosec G705 -- YAML kubeconfig download, no HTML context
 }
 
 func (s *Server) handleK8sPods(w http.ResponseWriter, r *http.Request) {
@@ -108,8 +108,10 @@ func (s *Server) handleK8sPods(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	// #nosec G703 — JSON API, не HTML; XSS через JSON без встраивания в HTML невозможен.
-	_, _ = w.Write(raw)
+	// JSON API response, never HTML — the tainted bytes have no HTML
+	// context to execute in (the earlier G703 annotation named the wrong
+	// rule: G703 is path traversal and is excluded globally anyway).
+	_, _ = w.Write(raw) // #nosec G705 -- JSON with the Content-Type above
 }
 
 // handleK8sLBInstall — POST /k8s/lb-install: поставить балансировщик

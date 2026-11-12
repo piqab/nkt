@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.22.1 — 2026-11-12
+
+- **“Continue” with a step selection no longer loses the job error.** The `RetryWithParams` error landed in a shadowed variable and never reached the check: the hub answered 200 with `job_id: 0` and switched the cluster to “creating” although no job had been started (that was the CodeQL “useless assignment” — a real defect, not noise). The error is now returned to the client. The gosec “XSS via taint analysis” finding on Kubernetes API responses (JSON pods, YAML kubeconfig) is suppressed with the correct rule **G705** — the earlier annotation named G703 (a different rule, already excluded globally), which is why the alert stayed open.
+
 ## v1.22.0 — 2026-11-12
 
 - **Cluster add-ons: a registry of eight.** Besides Longhorn, a cluster can now get **ingress-nginx** (the HTTP/HTTPS entry, a NodePort service on the nodes), **cert-manager** (Let's Encrypt certificates for Ingress, CRDs installed right away), **metrics-server** (`kubectl top` and HPA; built into k3s — rejected there), **MetalLB** (LoadBalancer services on the local network), **kube-prometheus-stack** (Prometheus, Grafana, Alertmanager), **Kyverno** (admission policies) and **Argo CD** (GitOps deployments). Checkboxes in the creation form — each with its own nkt default version; the “Add-ons” window of a ready cluster shows every add-on with its installed version and install/upgrade buttons. Versions come from each add-on's repository `index.yaml` with the `kubeVersion` constraint, the chart tarball is downloaded through the hub cache; node preparation remains only where needed (Longhorn). Host agents need this version: older ones do not know the new add-on names.

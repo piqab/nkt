@@ -204,7 +204,7 @@ func (s *Server) handleClusterKubeconfig(w http.ResponseWriter, r *http.Request)
 	cl, _ := s.db.ClusterByID(r.Context(), id)
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-kubeconfig.yaml\"", cl.Name))
-	_, _ = w.Write([]byte(cfg))
+	_, _ = w.Write([]byte(cfg)) // #nosec G705 -- attachment download, no HTML context
 }
 
 // handleClusterNodes — узлы по мнению самого кластера (kubectl на первом
@@ -465,9 +465,12 @@ func (s *Server) handleClusterRetry(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	var newID int64
 	if req.Steps != nil {
-		steps, err := s.clusterStepsOfJob(r.Context(), cl, last)
-		if err != nil {
-			writeErr(w, r, http.StatusBadRequest, err)
+		// stepsErr, не «:= err»: затенённый err умирал бы в конце блока, и
+		// ошибка RetryWithParams ниже не доходила до общей проверки —
+		// повтор с шагами отвечал 200 и job_id:0 (CodeQL #362).
+		steps, stepsErr := s.clusterStepsOfJob(r.Context(), cl, last)
+		if stepsErr != nil {
+			writeErr(w, r, http.StatusBadRequest, stepsErr)
 			return
 		}
 		if err := clusterCheckSelection(steps, req.Steps); err != nil {
@@ -478,7 +481,6 @@ func (s *Server) handleClusterRetry(w http.ResponseWriter, r *http.Request) {
 		var pj ClusterJobParams
 		_ = json.Unmarshal([]byte(last.Params), &pj)
 		pj.Steps = req.Steps
-		//nolint:ineffassign // newID используется ниже в writeJSON (строка ~492).
 		newID, err = s.jobs.RetryWithParams(r.Context(), last.ID, pj)
 	} else {
 		newID, err = s.jobs.Retry(r.Context(), last.ID)
