@@ -312,6 +312,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/cluster-images", s.handleClusterImages)
 				r.Get("/hub/k8s-versions", s.handleK8sVersions)
 				r.Get("/hub/k8s-addon-versions", s.handleAddonVersions)
+				r.Get("/hub/k8s-addons", s.handleAddonsRegistry)
 				r.Get("/hub/cluster-presets", s.handleClusterPresets)
 				// Шлюзы для поля «общий адрес control plane»: где слушатель
 				// может встать.

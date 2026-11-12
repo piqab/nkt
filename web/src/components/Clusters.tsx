@@ -11,7 +11,7 @@ import { Banner, Card, DiffView, ErrorNote, Modal, formatBytesShort, formatRelat
 import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { K8sUpgradeModal } from './K8sUpgrade'
-import { ClusterAddonsModal, LonghornField, addonsBody, type LonghornChoice } from './ClusterAddons'
+import { AddonsField, ClusterAddonsModal, addonsBody, type AddonsChoice } from './ClusterAddons'
 import { ClusterK8sModal } from './ClusterK8s'
 import { ClusterRetryModal, StepsChecklist, stepConflicts, stepsChosen, type ClusterStep, type StepSelection } from './ClusterSteps'
 import { confirmAction } from './confirm'
@@ -177,7 +177,7 @@ export function NewClusterModal({
   const [ports, setPorts] = useState<{ api: number | null; http: number | null; https: number | null }>({ api: 6443, http: 80, https: 443 })
   const [cilium, setCilium] = useState(true)
   const [kpr, setKPR] = useState(false)
-  const [longhorn, setLonghorn] = useState<LonghornChoice>({ on: false, version: '' })
+  const [addons, setAddons] = useState<AddonsChoice>({})
   const [imageID, setImageID] = useState('')
   const [network, setNetwork] = useState('')
   const [cp, setCP] = useState({ vcpus: 2, mem: 4096, disk: 30 })
@@ -224,7 +224,7 @@ export function NewClusterModal({
           w_vcpus: w.vcpus,
           w_memory_mb: w.mem,
           w_disk_gb: w.disk,
-          addons: addonsBody(longhorn),
+          addons: addonsBody(addons),
           ...listenerBody(flavor, endpoint, gateway, allow),
   })
 
@@ -410,7 +410,7 @@ export function NewClusterModal({
             {t('clusters.kpr')} <span className="small muted">{t('clusters.kprHint')}</span>
           </span>
         </label>
-        <LonghornField value={longhorn} onChange={setLonghorn} k8s={k8sVersion || versions.data?.stable || ''} />
+        <AddonsField value={addons} onChange={setAddons} k8s={k8sVersion || versions.data?.stable || ''} flavor={flavor} />
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
           <Checkbox checked={expose} onChange={(e) => setExpose(e.target.checked)} />
           <span>

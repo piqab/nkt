@@ -367,8 +367,15 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 			urls = append(urls, "https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz.sha256sum")
 		}
 		if len(spec.Addons) > 0 {
-			// Чарт Longhorn берёт helm на control plane — тот же интернет хоста.
-			urls = append(urls, k8s.LonghornRepoURL+"/index.yaml")
+			// Чарты берёт helm на control plane — тот же интернет хоста;
+			// репозиторий у каждого дополнения свой.
+			seenRepo := map[string]bool{}
+			for _, a := range spec.Addons {
+				if def, ok := k8s.AddonDefOf(a.Name); ok && !seenRepo[def.Repo] {
+					seenRepo[def.Repo] = true
+					urls = append(urls, def.Repo+"/index.yaml")
+				}
+			}
 		}
 		var toDownload []string
 		for id := range images {
@@ -564,21 +571,32 @@ func (r *ClusterRunner) prepareArtifacts(ctx context.Context, spec ClusterSpec, 
 	if spec.CNI == "cilium" {
 		out = append(out, "https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-"+arch+".tar.gz")
 	}
-	// Дополнения: helm и чарт тоже качает хаб. Без этого узел без выхода
+	// Дополнения: helm и чарты тоже качает хаб. Без этого узел без выхода
 	// наружу падал на шаге установки helm — единственный, который ещё
-	// умел просить интернет только напрямую с себя.
+	// умел просить интернет только напрямую с себя. URL чарта — из
+	// index.yaml репозитория (у Longhorn шаблон вывода из версии).
+	if len(spec.Addons) > 0 {
+		out = append(out, "https://get.helm.sh/helm-"+k8s.HelmVersion+"-linux-"+arch+".tar.gz")
+	}
 	for _, a := range spec.Addons {
-		if a.Name != k8s.AddonLonghorn {
+		def, ok := k8s.AddonDefOf(a.Name)
+		if !ok {
 			continue
 		}
 		ver := a.Version
 		if ver == "" {
-			ver = k8s.LonghornDefaultVersion
+			ver = def.Default
 		}
 		if !k8s.ValidAddonVersion(ver) {
 			continue
 		}
-		out = append(out, "https://get.helm.sh/helm-"+k8s.HelmVersion+"-linux-"+arch+".tar.gz", k8s.LonghornChartURL(ver))
+		if def.Name == k8s.AddonLonghorn {
+			out = append(out, k8s.LonghornChartURL(ver))
+			continue
+		}
+		if u := r.m.addonChartURL(ctx, a.Name, ver); u != "" {
+			out = append(out, u)
+		}
 	}
 	return out
 }

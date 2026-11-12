@@ -171,3 +171,190 @@ func TestKubeVersionOK(t *testing.T) {
 		}
 	}
 }
+
+// Реестр дополнений: имена уникальны, значения по умолчанию — вида X.Y.Z,
+// репозитории — https, у каждого есть release/namespace/chart.
+func TestAddonRegistry(t *testing.T) {
+	seen := map[string]bool{}
+	for _, name := range Addons {
+		def, ok := AddonDefOf(name)
+		if !ok || def.Name != name {
+			t.Fatalf("no def for %q", name)
+		}
+		if seen[name] {
+			t.Errorf("addon %s twice in the registry", name)
+		}
+		seen[name] = true
+		if !ValidAddonVersion(def.Default) {
+			t.Errorf("%s: default version %q is not X.Y.Z", name, def.Default)
+		}
+		if !strings.HasPrefix(def.Repo, "https://") || def.Chart == "" || def.Release == "" || def.Namespace == "" || def.RepoName == "" {
+			t.Errorf("%s: incomplete def %+v", name, def)
+		}
+		if !ValidAddon(name) {
+			t.Errorf("%s: ValidAddon is false", name)
+		}
+	}
+	for _, want := range []string{AddonLonghorn, AddonIngressNginx, AddonCertManager, AddonMetricsServer, AddonMetallb, AddonKubePrometheusStack, AddonKyverno, AddonArgoCD} {
+		if !seen[want] {
+			t.Errorf("registry lacks %s", want)
+		}
+	}
+	// Longhorn — единственное с подготовкой узлов, репликами и минимумом диска.
+	if !AddonNeedsPrepare(AddonLonghorn) {
+		t.Error("longhorn must require prepare")
+	}
+	for _, name := range Addons {
+		def, _ := AddonDefOf(name)
+		if name != AddonLonghorn && (def.NodePrepare || def.Storage || len(def.Packages) != 0) {
+			t.Errorf("%s: storage/prepare flags leaked past longhorn: %+v", name, def)
+		}
+	}
+	if AddonFlavorConflict(AddonMetricsServer) != FlavorK3s {
+		t.Errorf("metrics-server flavor conflict: %q", AddonFlavorConflict(AddonMetricsServer))
+	}
+	if AddonFlavorConflict(AddonLonghorn) != "" {
+		t.Error("longhorn has no flavor conflict")
+	}
+}
+
+// Validate: реплики обязательны только Longhorn, prepare — только
+// дополнениям с подготовкой, ChartURL — только https.
+func TestAddonRequestValidateRegistry(t *testing.T) {
+	ok := []AddonRequest{
+		{Action: AddonInstall, Name: AddonIngressNginx, Version: "4.15.1"},
+		{Action: AddonInstall, Name: AddonCertManager, Version: "1.21.3", ChartURL: "https://charts.jetstack.io/charts/cert-manager-v1.21.3.tgz"},
+		{Action: AddonInstall, Name: AddonArgoCD, Version: "10.18.0", Upgrade: true},
+	}
+	for _, r := range ok {
+		if err := r.Validate(); err != nil {
+			t.Errorf("%+v: %v", r, err)
+		}
+	}
+	bad := []AddonRequest{
+		{Action: AddonPrepare, Name: AddonIngressNginx}, // no node preparation
+		{Action: AddonInstall, Name: AddonMetallb, Version: "0.16"},
+		{Action: AddonInstall, Name: AddonKyverno, Version: "3.10.0", ChartURL: "http://kyverno.github.io/kyverno/kyverno-3.10.0.tgz"},
+		{Action: AddonInstall, Name: AddonKyverno, Version: "3.10.0", ChartURL: "kyverno-3.10.0.tgz"},
+		{Action: AddonInstall, Name: "rook", Version: "1.2.3"},
+	}
+	for _, r := range bad {
+		if r.Validate() == nil {
+			t.Errorf("%+v: accepted", r)
+		}
+	}
+}
+
+// Общий скрипт установки: helm upgrade --install из репозитория (без кэша)
+// и из tarball кэша (с кэшем), флаги --set свежей установки, --reuse-values
+// на обновлении, статус релиза в конце.
+func TestAddonChartInstallScript(t *testing.T) {
+	helm := []string{"helm", "--kubeconfig", "/etc/kubernetes/admin.conf"}
+	s := AddonInstallScript(FlavorKubeadm, helm, AddonRequest{Name: AddonCertManager, Version: "1.21.3"}, "")
+	for _, want := range []string{
+		"export KUBECONFIG=/etc/kubernetes/admin.conf",
+		"'helm' repo add jetstack https://charts.jetstack.io --force-update",
+		"'helm' repo update jetstack",
+		"'helm' upgrade --install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --version 1.21.3 --wait --timeout 15m",
+		"--set 'crds.enabled=true'",
+		"--set 'installCRDs=true'",
+		"'helm' status cert-manager -n cert-manager",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("install script lacks %q:\n%s", want, s)
+		}
+	}
+	checkBashSyntax(t, "cert-manager install", s)
+
+	// Upgrade keeps previous values and adds no --set of its own.
+	up := AddonInstallScript(FlavorKubeadm, helm, AddonRequest{Name: AddonCertManager, Version: "1.21.3", Upgrade: true}, "")
+	if !strings.Contains(up, "--reuse-values") || strings.Contains(up, "crds.enabled") {
+		t.Errorf("upgrade script:\n%s", up)
+	}
+	checkBashSyntax(t, "cert-manager upgrade", up)
+
+	// ingress-nginx serves NodePort on bare metal.
+	ing := AddonInstallScript(FlavorKubeadm, helm, AddonRequest{Name: AddonIngressNginx, Version: "4.15.1"}, "")
+	if !strings.Contains(ing, "--set 'controller.service.type=NodePort'") || !strings.Contains(ing, "-n ingress-nginx") {
+		t.Errorf("ingress-nginx script:\n%s", ing)
+	}
+	checkBashSyntax(t, "ingress-nginx install", ing)
+
+	// metrics-server: the full args list survives shell quoting with the
+	// helm comma escapes intact.
+	ms := AddonInstallScript(FlavorK3s, helm, AddonRequest{Name: AddonMetricsServer, Version: "3.14.0"}, "")
+	if !strings.Contains(ms, `--set 'args[5]=--kubelet-insecure-tls'`) ||
+		!strings.Contains(ms, `--set 'args[2]=--kubelet-preferred-address-types=InternalIP\,ExternalIP\,Hostname'`) ||
+		!strings.Contains(ms, "-n kube-system") {
+		t.Errorf("metrics-server script:\n%s", ms)
+	}
+	checkBashSyntax(t, "metrics-server install", ms)
+
+	// Through the hub cache: the downloaded tarball wins, the repository
+	// stays the fallback under the proxy.
+	const cache = "http://127.0.0.1:3142"
+	c := AddonInstallScript(FlavorKubeadm, helm, AddonRequest{Name: AddonKyverno, Version: "3.10.0"}, cache)
+	tgz := shq(AddonChartPath(AddonKyverno, "3.10.0"))
+	if !strings.Contains(c, "[ -s "+tgz+" ]") || !strings.Contains(c, "chart="+tgz) {
+		t.Errorf("install must prefer the cached chart:\n%s", c)
+	}
+	if !strings.Contains(c, "upgrade --install kyverno \"$chart\"") || !strings.Contains(c, "vflags='--version 3.10.0'") {
+		t.Errorf("cached install script:\n%s", c)
+	}
+	for _, line := range strings.Split(c, "\n") {
+		if strings.Contains(line, "HTTPS_PROXY") && !strings.Contains(line, "repo add kyverno") && !strings.Contains(line, "repo update kyverno") {
+			t.Errorf("proxy outside repository commands: %q", line)
+		}
+	}
+	checkBashSyntax(t, "kyverno install with cache", c)
+
+	// Longhorn keeps its own script through the dispatcher.
+	lh := AddonInstallScript(FlavorKubeadm, helm, AddonRequest{Name: AddonLonghorn, Version: "1.12.1", Replicas: 2, Default: true}, "")
+	if lh != LonghornInstallScript(FlavorKubeadm, helm, AddonRequest{Name: AddonLonghorn, Version: "1.12.1", Replicas: 2, Default: true}, "") {
+		t.Error("dispatcher changed the longhorn script")
+	}
+}
+
+// Загрузка чарта через кэш: URL из запроса, проверка tar, пустой URL —
+// честный выход без скачивания.
+func TestAddonChartFetchScriptGeneric(t *testing.T) {
+	const cache = "http://127.0.0.1:3142"
+	f := AddonChartFetchScript(cache, AddonCertManager, "1.21.3", "https://charts.jetstack.io/charts/cert-manager-v1.21.3.tgz")
+	for _, want := range []string{
+		"art 'https://charts.jetstack.io/charts/cert-manager-v1.21.3.tgz'",
+		"'/var/lib/nkt/addons/cert-manager-1.21.3.tgz.part'",
+		"tar -tzf",
+	} {
+		if !strings.Contains(f, want) {
+			t.Errorf("fetch script lacks %q:\n%s", want, f)
+		}
+	}
+	checkBashSyntax(t, "addon chart fetch", f)
+
+	empty := AddonChartFetchScript(cache, AddonCertManager, "1.21.3", "")
+	if strings.Contains(empty, "art '") || !strings.Contains(empty, "repository") {
+		t.Errorf("empty URL must not download:\n%s", empty)
+	}
+	checkBashSyntax(t, "addon chart fetch without url", empty)
+
+	if LonghornChartFetchScript(cache, "1.12.1") != AddonChartFetchScript(cache, AddonLonghorn, "1.12.1", LonghornChartURL("1.12.1")) {
+		t.Error("longhorn fetch script changed meaning")
+	}
+}
+
+// Правила обновления: Longhorn строгий (ветка), остальные — только запрет
+// отката.
+func TestCheckAddonUpgradeRegistry(t *testing.T) {
+	if err := CheckAddonUpgrade(AddonCertManager, "1.19.0", "1.21.3"); err != nil {
+		t.Errorf("cert-manager two minors forward: %v", err)
+	}
+	if err := CheckAddonUpgrade(AddonArgoCD, "10.18.0", "9.0.0"); err == nil {
+		t.Error("argo-cd downgrade accepted")
+	}
+	if err := CheckAddonUpgrade(AddonLonghorn, "1.10.2", "1.12.1"); err == nil {
+		t.Error("longhorn two minors forward must be rejected")
+	}
+	if err := CheckAddonUpgrade(AddonMetallb, "", "0.16.2"); err != nil {
+		t.Errorf("fresh install: %v", err)
+	}
+}

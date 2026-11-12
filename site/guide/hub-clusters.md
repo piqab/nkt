@@ -31,7 +31,9 @@ Traffic Fly, — [Кластер: от нуля до первого пода](/g
 3 control plane + N worker (у kubeadm — с **общим адресом control plane**,
 ниже), размеры машин, образ, сеть, **проброс
 портов** с хоста (API 6443 и порты приложений), **Cilium** по галочке
-(с заменой kube-proxy) и тома **Longhorn** с выбором версии (ниже). Внутри узла порт API всегда 6443; порт в
+(с заменой kube-proxy) и **дополнения** — Longhorn с выбором версии,
+ingress-nginx, cert-manager, metrics-server, MetalLB,
+kube-prometheus-stack, Kyverno, Argo CD (ниже). Внутри узла порт API всегда 6443; порт в
 «пробросить наружу» относится к хосту.
 
 ## Окно шагов создания
@@ -41,7 +43,7 @@ Traffic Fly, — [Кластер: от нуля до первого пода](/g
 (wireguard), **машина каждого узла отдельным шагом**, слушатель общего
 адреса, первый control plane (init + CNI), **вход каждого узла отдельным
 шагом**, ожидание `Ready` с пробросом портов и kubeconfig, дополнения
-(Longhorn). По умолчанию отмечено всё; снятый шаг задание не выполняет и
+(Longhorn и другие выбранные). По умолчанию отмечено всё; снятый шаг задание не выполняет и
 пишет в журнал строку «пропущено».
 
 То же окно открывается и при повторе — кнопкой **«Продолжить»** в карточке
@@ -355,6 +357,37 @@ hv3: host w"`, `network nat|bridge|macvtap|wireguard`, `nic УСТРОЙСТВО
   такой проверки повтор упавшего задания спотыкался о рабочий Cilium;
   «заменить kube-proxy» — `--disable-kube-proxy` у k3s,
   `--skip-phases=addon/kube-proxy` у kubeadm.
+- **Дополнения** — галочки в форме создания, у каждой своя версия по
+  умолчанию (закреплена nkt, список — `GET /api/hub/k8s-addons`):
+  - **Longhorn** — блочные тома (ниже подробно);
+  - **ingress-nginx** — HTTP/HTTPS-вход в кластер: контроллер ставится с
+    Service типа **NodePort**, порт узла видно в `kubectl -n ingress-nginx
+    get svc` — его и указывают в «Ingress для клиентов» или «Порт на узле»
+    маршрута Traffic Fly. Не нужен, если включён Cilium Ingress (шаг 5
+    руководства «от нуля до первого пода»);
+  - **cert-manager** — сертификаты Let's Encrypt для Ingress; CRD ставятся
+    сразу (`crds.enabled`), после установки создайте ClusterIssuer (окно
+    «Kubernetes» карточки кластера → «новый объект»);
+  - **metrics-server** — `kubectl top` и HPA. В **k3s** уже встроен —
+    галочка недоступна, а установка отклоняется; на kubeadm ставится с
+    `--kubelet-insecure-tls` (kubelet отдаёт самоподписанный сертификат);
+  - **MetalLB** — сервисы типа LoadBalancer в локальной сети: после
+    установки создайте `IPAddressPool` (диапазон свободных адресов сети) и
+    `L2Advertisement` — без них LoadBalancer останется в `<pending>`;
+  - **kube-prometheus-stack** — Prometheus, Grafana, Alertmanager;
+    требователен к ресурсам (память узлов), вход в Grafana — port-forward
+    из окна «Kubernetes» (пароль admin — в секрете);
+  - **Kyverno** — политики допуска кластера;
+  - **Argo CD** — GitOps-выкатки (пароль admin — в секрете
+    `argocd-initial-admin-secret`).
+
+  Механика у всех одна: хаб ставит чарт helm на первом control plane
+  заданием (`helm upgrade --install … --wait`), tarball чарта предварительно
+  скачивается **через кэш хаба** по URL из `index.yaml` репозитория (не
+  приехал — helm берёт чарт из репозитория через прокси хаба); версии в
+  форме — из `index.yaml` с ограничением `kubeVersion`. Обновление — только
+  вперёд, прежние values сохраняются (`--reuse-values`). Узлы готовятся
+  (пакеты, службы) только там, где это нужно — у Longhorn.
 - **Longhorn** (галочка «Longhorn» и версия чарта; в сценарии — `addon
   longhorn[=1.12.1]`, в API и MCP — `"addons":[{"name":"longhorn",
   "version":"1.12.1"}]`) — блочные тома с репликами по узлам. Ставится
@@ -392,13 +425,14 @@ hv3: host w"`, `network nat|bridge|macvtap|wireguard`, `nic УСТРОЙСТВО
   Добавленные потом worker'ы готовятся тем же шагом. Группа `longhorn.io`
   клиентам не отдаётся («Ресурсы для клиентов») — они пользуются
   Longhorn только через PVC.
-- **Дополнения у готового кластера** — кнопка «Дополнения»: какая версия
-  Longhorn стоит (по `helm` на control plane), установка или обновление
-  заданием (`POST /api/hub/clusters/{id}/addons {"name":"longhorn",
-  "version":"1.12.1"}`, MCP `cluster_addons`, `cluster_addon_install`).
-  Обновление — только вперёд и не дальше следующей минорной ветки за раз
-  (1.11 → 1.12), как требует Longhorn; прежние values сохраняются
-  (`--reuse-values`).
+- **Дополнения у готового кластера** — кнопка «Дополнения»: по каждому
+  дополнению реестра видно, какая версия стоит (по `helm` на control
+  plane) и какая записана в описании; установка или обновление заданием
+  (`POST /api/hub/clusters/{id}/addons {"name":"cert-manager",
+  "version":"1.21.3"}`, MCP `cluster_addons`, `cluster_addon_install`).
+  Обновление — только вперёд; Longhorn сверх того — не дальше следующей
+  минорной ветки за раз (1.11 → 1.12), как требует Longhorn; прежние
+  values сохраняются (`--reuse-values`).
 - **Пробросить наружу** — DNAT с портов хоста (`6443`, `80`, `443`, любой
   можно заменить или обнулить) на control plane: свои цепочки `NKT-PF`,
   юнит `nkt-portforward.service` восстанавливает их при загрузке.

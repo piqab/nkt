@@ -149,9 +149,11 @@ kubectl get ingressclass
 ### kubeadm: включить Ingress в Cilium
 
 Своего ingress-контроллера у kubeadm нет — дальше считается Ingress Cilium;
-свой контроллер (Traefik, NGINX) — та же схема, только свой порт. Ingress
-Cilium в режиме **host network** слушает порт **8080** прямо на каждом узле,
-LoadBalancer не нужен.
+свой контроллер (Traefik, NGINX) — та же схема, только свой порт: например,
+**ingress-nginx** ставится галочкой в форме создания или в «Дополнениях»
+карточки кластера (Service типа NodePort, порт — в `kubectl -n ingress-nginx
+get svc`). Ingress Cilium в режиме **host network** слушает порт **8080**
+прямо на каждом узле, LoadBalancer не нужен.
 
 ```sh
 # Версия работающего Cilium: без --version «cilium upgrade» обновил бы

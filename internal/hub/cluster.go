@@ -282,7 +282,7 @@ func (s *ClusterSpec) Validate() error {
 	if s.CNI != "" && s.CNI != "cilium" {
 		return msgs.Errorf("k8s.badCNI", s.CNI)
 	}
-	if err := validateAddons(s.Addons); err != nil {
+	if err := validateAddons(s.Addons, s.Flavor); err != nil {
 		return err
 	}
 	if s.LBEnabled {

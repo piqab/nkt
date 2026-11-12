@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import * as yaml from 'js-yaml'
-import { LonghornField, addonsBody, type LonghornChoice } from '../components/ClusterAddons'
+import { AddonsField, addonsBody, type AddonsChoice, type LonghornChoice } from '../components/ClusterAddons'
 import { OsIcon, OsIconOf } from '../components/OsIcon'
 import { guardUnload } from '../components/uploadJob'
 import { Sensitive } from '../privacy'
@@ -267,7 +267,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const versions = useApi<{ stable: string; versions: string[] }>('/hub/k8s-versions', 600_000)
   const [cilium, setCilium] = useState(true)
   const [kpr, setKPR] = useState(false)
-  const [longhorn, setLonghorn] = useState<LonghornChoice>({ on: false, version: '' })
+  const [addons, setAddons] = useState<AddonsChoice>({})
   const [network, setNetwork] = useState<'nat' | 'bridge' | 'macvtap' | 'wireguard'>('bridge')
   // Общий адрес control plane и всё, что вокруг него (см. ListenerFields).
   const gws = useApi<{ gateways: ClusterGateway[] }>('/hub/cluster/gateways', 60_000)
@@ -309,6 +309,8 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     k8s_version: string
     cilium: boolean
     kpr: boolean
+    addons?: AddonsChoice
+    /** Прежние наборы помнят только Longhorn — переносится при открытии. */
     longhorn?: LonghornChoice
     network: 'nat' | 'bridge' | 'macvtap' | 'wireguard'
     rows: (Omit<Row, 'host_id'> & { host: string })[]
@@ -343,7 +345,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     setPresetBusy(true)
     try {
       const form: PresetForm = {
-        name, flavor, k8s_version: k8sVersion, cilium, kpr, longhorn, network, expose, ports,
+        name, flavor, k8s_version: k8sVersion, cilium, kpr, addons, network, expose, ports,
         rows: rows.map(({ host_id, ...r }) => ({ ...r, host: hostNameOf(host_id) })),
         endpoints: Object.fromEntries(Object.entries(endpoints).map(([id, v]) => [hostNameOf(Number(id)), v]).filter(([h]) => h)),
         endpoint,
@@ -382,7 +384,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     setK8sVersion(form.k8s_version ?? '')
     setCilium(form.cilium ?? true)
     setKPR(form.kpr ?? false)
-    setLonghorn(form.longhorn ?? { on: false, version: '' })
+    setAddons(form.addons ?? (form.longhorn ? { longhorn: { on: form.longhorn.on, version: form.longhorn.version } } : {}))
     setNetwork(form.network ?? 'bridge')
     setExpose(form.expose ?? true)
     setPorts(form.ports ?? { api: 6443, http: 80, https: 443 })
@@ -532,7 +534,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     cni: cilium ? 'cilium' : '',
     kube_proxy_replacement: cilium && kpr,
     cilium_values: cilium ? ciliumValuesDraft : '',
-    addons: addonsBody(longhorn),
+    addons: addonsBody(addons),
     network_mode: effectiveNetwork,
     placements: rows.map((r) => ({
       host_id: r.host_id,
@@ -1104,7 +1106,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
             {t('clusters.ciliumValues')}
           </Button>
         )}
-        <LonghornField value={longhorn} onChange={setLonghorn} k8s={k8sVersion || versions.data?.stable || ''} />
+        <AddonsField value={addons} onChange={setAddons} k8s={k8sVersion || versions.data?.stable || ''} flavor={flavor} />
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
           <Checkbox checked={expose} onChange={(e) => setExpose(e.target.checked)} />
           <span>{t('clusters.expose')} <span className="small muted">{t('clusters.exposeMultiHint')}</span></span>

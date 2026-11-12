@@ -150,8 +150,11 @@ kubectl get ingressclass
 
 kubeadm ships no ingress controller — this branch assumes Cilium Ingress; your
 own controller (Traefik, NGINX) follows the same scheme, only with its own
-port. Cilium Ingress in **host network** mode listens on port **8080** right
-on every node, no LoadBalancer needed.
+port: for example, **ingress-nginx** is installed by a checkbox in the
+creation form or in the cluster card's “Add-ons” (a NodePort service, the
+port — in `kubectl -n ingress-nginx get svc`). Cilium Ingress in **host
+network** mode listens on port **8080** right on every node, no LoadBalancer
+needed.
 
 ```sh
 # The running Cilium version: without --version "cilium upgrade" would also

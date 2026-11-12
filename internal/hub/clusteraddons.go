@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -26,22 +27,28 @@ import (
 // кластера с дополнением готовятся при пополнении.
 
 // validateAddons проверяет список и заполняет версию по умолчанию —
-// в описании хранится та, что поставлена.
-func validateAddons(list []ClusterAddon) error {
+// в описании хранится та, что поставлена. flavor — вариант Kubernetes
+// кластера: есть дополнения, встроенные в один из вариантов (metrics-server
+// в k3s).
+func validateAddons(list []ClusterAddon, flavor string) error {
 	seen := map[string]bool{}
 	for i := range list {
 		a := &list[i]
 		a.Name = strings.TrimSpace(a.Name)
 		a.Version = strings.TrimPrefix(strings.TrimSpace(a.Version), "v")
-		if !k8s.ValidAddon(a.Name) {
+		def, ok := k8s.AddonDefOf(a.Name)
+		if !ok {
 			return msgs.Errorf("k8s.addonUnknown", a.Name)
+		}
+		if def.NoFlavor != "" && def.NoFlavor == flavor {
+			return msgs.Errorf("k8s.addonFlavorConflict", a.Name, flavor)
 		}
 		if seen[a.Name] {
 			return msgs.Errorf("hub.clusterAddonDup", a.Name)
 		}
 		seen[a.Name] = true
 		if a.Version == "" {
-			a.Version = k8s.LonghornDefaultVersion
+			a.Version = def.Default
 		}
 		if !k8s.ValidAddonVersion(a.Version) {
 			return msgs.Errorf("k8s.addonBadVersion", a.Version)
@@ -55,10 +62,13 @@ func addonReplicas(nodes int) int {
 	return max(1, min(3, nodes))
 }
 
-// AddonVersion — версия чарта и ограничение на версию Kubernetes.
+// AddonVersion — версия чарта, ограничение на версию Kubernetes и адрес
+// tarball (из urls: записи index.yaml, относительный разрешён против
+// репозитория): по нему кэш хаба скачивает чарт для установки.
 type AddonVersion struct {
 	Version     string `json:"version"`
 	KubeVersion string `json:"kube_version,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // AddonVersions — ответ /hub/k8s-addon-versions.
@@ -88,7 +98,13 @@ func (m *Manager) addonIndexAll(ctx context.Context, name string) ([]AddonVersio
 			return c.all, c.err
 		}
 	}
-	all, err := fetchAddonIndex(ctx, k8s.LonghornRepoURL+"/index.yaml", name)
+	def, ok := k8s.AddonDefOf(name)
+	if !ok {
+		// Защитная ветка: снаружи имя проверен (handleAddonVersions,
+		// validateAddons) — сюда чужой не доходит.
+		return nil, "unknown add-on: " + name
+	}
+	all, err := fetchAddonIndex(ctx, def.Repo+"/index.yaml", def.Chart, def.Repo)
 	c := addonIndex{at: time.Now(), all: all}
 	if err != nil {
 		c.err = err.Error()
@@ -103,7 +119,7 @@ func (m *Manager) addonIndexAll(ctx context.Context, name string) ([]AddonVersio
 // maxAddonIndex — index.yaml Longhorn сейчас ~65 КБ; с запасом.
 const maxAddonIndex = 8 << 20
 
-func fetchAddonIndex(ctx context.Context, url, chart string) ([]AddonVersion, error) {
+func fetchAddonIndex(ctx context.Context, url, chart, repoBase string) ([]AddonVersion, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -119,21 +135,25 @@ func fetchAddonIndex(ctx context.Context, url, chart string) ([]AddonVersion, er
 	if err != nil {
 		return nil, err
 	}
-	return parseAddonIndex(raw, chart)
+	return parseAddonIndex(raw, chart, repoBase)
 }
 
 // parseAddonIndex — версии чарта из index.yaml: только вида 1.2.3 (без
-// -rc и -dev), новые первыми.
-func parseAddonIndex(raw []byte, chart string) ([]AddonVersion, error) {
+// -rc и -dev), новые первыми. urls[0] записи — адрес tarball: у части
+// репозиториев он относительный (charts.jetstack.io) и разрешается против
+// repoBase.
+func parseAddonIndex(raw []byte, chart, repoBase string) ([]AddonVersion, error) {
 	var idx struct {
 		Entries map[string][]struct {
-			Version     string `yaml:"version"`
-			KubeVersion string `yaml:"kubeVersion"`
+			Version     string   `yaml:"version"`
+			KubeVersion string   `yaml:"kubeVersion"`
+			URLs        []string `yaml:"urls"`
 		} `yaml:"entries"`
 	}
 	if err := yaml.Unmarshal(raw, &idx); err != nil {
 		return nil, err
 	}
+	base, _ := url.Parse(strings.TrimSuffix(repoBase, "/") + "/")
 	var out []AddonVersion
 	seen := map[string]bool{}
 	for _, e := range idx.Entries[chart] {
@@ -146,7 +166,13 @@ func parseAddonIndex(raw []byte, chart string) ([]AddonVersion, error) {
 		if len(kv) > 64 {
 			kv = kv[:64]
 		}
-		out = append(out, AddonVersion{Version: v, KubeVersion: kv})
+		chartURL := ""
+		if len(e.URLs) > 0 && base != nil {
+			if u, err := base.Parse(strings.TrimSpace(e.URLs[0])); err == nil && u.Scheme == "https" && u.Host != "" {
+				chartURL = u.String()
+			}
+		}
+		out = append(out, AddonVersion{Version: v, KubeVersion: kv, URL: chartURL})
 	}
 	if len(out) == 0 {
 		return nil, msgs.Errorf("hub.addonIndexEmpty", chart)
@@ -177,12 +203,29 @@ func addonLatestPatches(all []AddonVersion, minors int) []AddonVersion {
 
 // AddonVersions — версии дополнения для формы.
 func (m *Manager) AddonVersions(ctx context.Context, name string) AddonVersions {
+	def, _ := k8s.AddonDefOf(name)
 	all, errText := m.addonIndexAll(ctx, name)
-	out := AddonVersions{Default: k8s.LonghornDefaultVersion, Versions: addonLatestPatches(all, 4), Error: errText}
+	out := AddonVersions{Default: def.Default, Versions: addonLatestPatches(all, 4), Error: errText}
 	if out.Versions == nil {
 		out.Versions = []AddonVersion{}
 	}
 	return out
+}
+
+// addonChartURL — адрес tarball чарта этой версии из index.yaml (пусто —
+// индекс недоступен или версии в нём нет: установка возьмёт чарт из
+// репозитория напрямую).
+func (m *Manager) addonChartURL(ctx context.Context, name, version string) string {
+	all, errText := m.addonIndexAll(ctx, name)
+	if errText != "" {
+		return ""
+	}
+	for _, v := range all {
+		if v.Version == version {
+			return v.URL
+		}
+	}
+	return ""
 }
 
 // addonKubeConstraint — ограничение kubeVersion версии чарта; known —
@@ -210,6 +253,26 @@ func (s *Server) handleAddonVersions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.hub.AddonVersions(r.Context(), name))
 }
 
+// handleAddonsRegistry — GET /hub/k8s-addons: реестр дополнений для форм
+// (имена, версии по умолчанию и признаки — от хранилища до несовместимого
+// flavor), чтобы интерфейс не держал свой список.
+func (s *Server) handleAddonsRegistry(w http.ResponseWriter, r *http.Request) {
+	type row struct {
+		Name      string `json:"name"`
+		Default   string `json:"default"`
+		Storage   bool   `json:"storage,omitempty"`
+		NoFlavor  string `json:"no_flavor,omitempty"`
+		MinDiskGB int    `json:"min_disk_gb,omitempty"`
+		Prepare   bool   `json:"prepare,omitempty"`
+	}
+	out := make([]row, 0, len(k8s.Addons))
+	for _, name := range k8s.Addons {
+		def, _ := k8s.AddonDefOf(name)
+		out = append(out, row{Name: def.Name, Default: def.Default, Storage: def.Storage, NoFlavor: def.NoFlavor, MinDiskGB: def.MinDiskGB, Prepare: def.NodePrepare})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"addons": out})
+}
+
 // addonPrepare — подготовить узел заданием на нём и дождаться.
 func (m *Manager) addonPrepare(ctx context.Context, jc *jobs.Context, h store.Host, name string, skipLocalPath bool) error {
 	jc.Log("hub.addonPreparing", name, h.Name)
@@ -231,19 +294,36 @@ func (m *Manager) addonHostJob(ctx context.Context, jc *jobs.Context, h store.Ho
 	return g.waitHostJob(ctx, jc, h, started.JobID)
 }
 
+// addonInstalledAll — установленные версии каждого дополнения реестра
+// (один helm-запрос на control plane): релиз ищется по паре release +
+// namespace записи реестра, версия приводится к форме index.yaml (без
+// префикса «v»).
+func (m *Manager) addonInstalledAll(ctx context.Context, cp store.Host) (map[string]string, error) {
+	var st k8s.HelmStatus
+	if _, err := m.HostAPI(ctx, cp.ID, "GET", "/api/k8s/helm", nil, &st); err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, name := range k8s.Addons {
+		def, _ := k8s.AddonDefOf(name)
+		for _, rel := range st.Releases {
+			if rel.Name == def.Release && rel.Namespace == def.Namespace {
+				out[name] = strings.TrimPrefix(strings.TrimPrefix(rel.Chart, def.Chart+"-"), "v")
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 // addonInstalled — установленная версия дополнения на кластере (пусто —
 // не стоит): релиз helm на control plane.
 func (m *Manager) addonInstalled(ctx context.Context, cp store.Host, name string) (string, error) {
-	var st k8s.HelmStatus
-	if _, err := m.HostAPI(ctx, cp.ID, "GET", "/api/k8s/helm", nil, &st); err != nil {
+	all, err := m.addonInstalledAll(ctx, cp)
+	if err != nil {
 		return "", err
 	}
-	for _, rel := range st.Releases {
-		if rel.Name == name && rel.Namespace == k8s.LonghornNamespace {
-			return strings.TrimPrefix(rel.Chart, name+"-"), nil
-		}
-	}
-	return "", nil
+	return all[name], nil
 }
 
 // addonPrepareNodes returns the cluster machines that addons may be
@@ -268,27 +348,30 @@ func (m *Manager) applyAddons(ctx context.Context, jc *jobs.Context, spec Cluste
 		done.Addons = map[string]bool{}
 	}
 	for _, a := range spec.Addons {
-		for _, h := range prepare {
-			key := a.Name + ":prepare:" + h.Name
-			if done.Addons[key] {
-				continue
+		def, _ := k8s.AddonDefOf(a.Name)
+		if def.NodePrepare {
+			for _, h := range prepare {
+				key := a.Name + ":prepare:" + h.Name
+				if done.Addons[key] {
+					continue
+				}
+				if err := m.addonPrepare(ctx, jc, h, a.Name, spec.Flavor == k8s.FlavorK3s); err != nil {
+					// Подсказка в журнал: чаще всего это не «apt медленный», а
+					// узел без исходящего TCP после установки Cilium — пакеты при
+					// этом уже должны приехать с машиной из cloud-init.
+					jc.Log("hub.addonPrepareFailed", a.Name, h.Name)
+					return err
+				}
+				done.Addons[key] = true
+				jc.SaveResume(*done)
 			}
-			if err := m.addonPrepare(ctx, jc, h, a.Name, spec.Flavor == k8s.FlavorK3s); err != nil {
-				// Подсказка в журнал: чаще всего это не «apt медленный», а
-				// узел без исходящего TCP после установки Cilium — пакеты при
-				// этом уже должны приехать с машиной из cloud-init.
-				jc.Log("hub.addonPrepareFailed", a.Name, h.Name)
-				return err
-			}
-			done.Addons[key] = true
-			jc.SaveResume(*done)
 		}
 		key := a.Name + ":install"
 		if !install || done.Addons[key] {
 			continue
 		}
 		jc.Log("hub.addonInstalling", a.Name, a.Version, cp1.Name)
-		req := k8s.AddonRequest{Action: k8s.AddonInstall, Name: a.Name, Version: a.Version, Replicas: addonReplicas(nodes), Default: true}
+		req := addonInstallRequest(ctx, m, a.Name, a.Version, nodes, true, false)
 		if err := m.addonHostJob(ctx, jc, cp1, req); err != nil {
 			return err
 		}
@@ -299,6 +382,19 @@ func (m *Manager) applyAddons(ctx context.Context, jc *jobs.Context, spec Cluste
 	return nil
 }
 
+// addonInstallRequest — запрос установки дополнения: реплики томов и
+// StorageClass по умолчанию — только Longhorn, адрес tarball чарта — из
+// index.yaml репозитория (пусто — индекс недоступен, агент возьмёт чарт
+// из репозитория напрямую).
+func addonInstallRequest(ctx context.Context, m *Manager, name, version string, nodes int, setDefault, upgrade bool) k8s.AddonRequest {
+	req := k8s.AddonRequest{Action: k8s.AddonInstall, Name: name, Version: version, Upgrade: upgrade, ChartURL: m.addonChartURL(ctx, name, version)}
+	if d, ok := k8s.AddonDefOf(name); ok && d.Storage {
+		req.Replicas = addonReplicas(nodes)
+		req.Default = setDefault
+	}
+	return req
+}
+
 // addonPreflight — пункты сухого прогона: версия есть в репозитории и
 // подходит к Kubernetes кластера, диск узлов не меньше разумного.
 func (r *ClusterRunner) addonPreflight(ctx context.Context, spec ClusterSpec, add func(ok, warn bool, key string, args ...any)) {
@@ -307,10 +403,11 @@ func (r *ClusterRunner) addonPreflight(ctx context.Context, spec ClusterSpec, ad
 		k8sVer = r.m.k8sStableMinor(ctx)
 	}
 	for _, a := range spec.Addons {
+		def, _ := k8s.AddonDefOf(a.Name)
 		constraint, known, reachable := r.m.addonKubeConstraint(ctx, a.Name, a.Version)
 		switch {
 		case !reachable:
-			add(true, true, "hub.preflightAddonIndexDown", a.Name, k8s.LonghornRepoURL)
+			add(true, true, "hub.preflightAddonIndexDown", a.Name, def.Repo)
 		case !known:
 			add(false, false, "hub.preflightAddonNoVersion", a.Name, a.Version)
 		case !k8s.KubeVersionOK(constraint, k8sVer):
@@ -318,8 +415,10 @@ func (r *ClusterRunner) addonPreflight(ctx context.Context, spec ClusterSpec, ad
 		default:
 			add(true, false, "hub.preflightAddonOK", a.Name, a.Version, k8sVer)
 		}
-		if disk := spec.addonMinDisk(); disk > 0 && disk < k8s.LonghornMinDiskGB {
-			add(true, true, "hub.preflightAddonDisk", a.Name, disk, k8s.LonghornMinDiskGB)
+		if def.MinDiskGB > 0 {
+			if disk := spec.addonMinDisk(); disk > 0 && disk < def.MinDiskGB {
+				add(true, true, "hub.preflightAddonDisk", a.Name, disk, def.MinDiskGB)
+			}
 		}
 	}
 }
@@ -398,30 +497,38 @@ func (r *ClusterAddonRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := k8s.CheckLonghornUpgrade(cur, p.Version); err != nil {
+	if err := k8s.CheckAddonUpgrade(p.Name, cur, p.Version); err != nil {
 		return err
 	}
 	if cur != "" {
 		jc.Log("hub.addonUpgrading", p.Name, cur, p.Version)
 	}
-	total := len(nodes) + 1
+	// Подготовка узлов нужна только Longhorn (iSCSI, NFS-клиент): прочие
+	// дополнения ставятся одним helm-ходом на control plane.
+	needsPrepare := k8s.AddonNeedsPrepare(p.Name)
+	total := 1
+	if needsPrepare {
+		total += len(nodes)
+	}
 	if done.Addons == nil {
 		done.Addons = map[string]bool{}
 	}
-	for i, h := range nodes {
-		jc.StepKey(i+1, total, "hub.addonStepPrepare", h.Name)
-		key := p.Name + ":prepare:" + h.Name
-		if done.Addons[key] {
-			continue
+	if needsPrepare {
+		for i, h := range nodes {
+			jc.StepKey(i+1, total, "hub.addonStepPrepare", h.Name)
+			key := p.Name + ":prepare:" + h.Name
+			if done.Addons[key] {
+				continue
+			}
+			if err := r.m.addonPrepare(ctx, jc, h, p.Name, cur == "" && spec.Flavor == k8s.FlavorK3s); err != nil {
+				return err
+			}
+			done.Addons[key] = true
+			jc.SaveResume(done)
 		}
-		if err := r.m.addonPrepare(ctx, jc, h, p.Name, cur == "" && spec.Flavor == k8s.FlavorK3s); err != nil {
-			return err
-		}
-		done.Addons[key] = true
-		jc.SaveResume(done)
 	}
 	jc.StepKey(total, total, "hub.addonStepInstall", p.Name, p.Version)
-	req := k8s.AddonRequest{Action: k8s.AddonInstall, Name: p.Name, Version: p.Version, Replicas: addonReplicas(len(nodes)), Default: cur == "", Upgrade: cur != ""}
+	req := addonInstallRequest(ctx, r.m, p.Name, p.Version, len(nodes), cur == "", cur != "")
 	jc.Log("hub.addonInstalling", p.Name, p.Version, cp.Name)
 	if err := r.m.addonHostJob(ctx, jc, cp, req); err != nil {
 		return err
@@ -474,8 +581,15 @@ func (s *Server) handleClusterAddons(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("hub.clusterNoNodes"))
 		return
 	}
+	// Машины балансировщика не узлы: helm-статус и подготовка идут мимо них.
+	nodes := k8sNodeHosts(hosts)
+	if len(nodes) == 0 {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("hub.clusterNoNodes"))
+		return
+	}
 	if r.Method == http.MethodGet {
 		out := []ClusterAddonState{}
+		installed, instErr := s.hub.addonInstalledAll(r.Context(), nodes[0])
 		for _, name := range k8s.Addons {
 			st := ClusterAddonState{Name: name}
 			for _, a := range spec.Addons {
@@ -483,12 +597,14 @@ func (s *Server) handleClusterAddons(w http.ResponseWriter, r *http.Request) {
 					st.Spec = a.Version
 				}
 			}
-			if st.Installed, err = s.hub.addonInstalled(r.Context(), hosts[0], name); err != nil {
-				st.Error = msgs.Localize(msgs.LangFromRequest(r), err)
+			if instErr != nil {
+				st.Error = msgs.Localize(msgs.LangFromRequest(r), instErr)
+			} else {
+				st.Installed = installed[name]
 			}
 			out = append(out, st)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"addons": out, "nodes": len(hosts)})
+		writeJSON(w, http.StatusOK, map[string]any{"addons": out, "nodes": len(nodes), "flavor": spec.Flavor})
 		return
 	}
 	if cl.Status != store.ClusterReady {
@@ -504,25 +620,29 @@ func (s *Server) handleClusterAddons(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	list := []ClusterAddon{{Name: req.Name, Version: req.Version}}
-	if err := validateAddons(list); err != nil {
+	if err := validateAddons(list, spec.Flavor); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	a := list[0]
 	// Правило обновления — сразу, понятным отказом, а не упавшим заданием.
-	cur, err := s.hub.addonInstalled(r.Context(), hosts[0], a.Name)
+	cur, err := s.hub.addonInstalled(r.Context(), nodes[0], a.Name)
 	if err != nil {
 		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
-	if err := k8s.CheckLonghornUpgrade(cur, a.Version); err != nil {
+	if err := k8s.CheckAddonUpgrade(a.Name, cur, a.Version); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
+	steps := 1
+	if k8s.AddonNeedsPrepare(a.Name) {
+		steps += len(nodes)
+	}
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: KindClusterAddon, TitleKey: "hub.addonJobTitle", TitleArgs: []any{a.Name, a.Version, cl.Name},
-		Queue: fmt.Sprintf("cluster:%d", cl.ID), Author: user, Steps: len(hosts) + 1,
+		Queue: fmt.Sprintf("cluster:%d", cl.ID), Author: user, Steps: steps,
 		Params: ClusterAddonParams{ClusterID: cl.ID, Name: a.Name, Version: a.Version},
 	})
 	if err != nil {

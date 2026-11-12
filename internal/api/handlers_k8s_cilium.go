@@ -38,10 +38,10 @@ func (s *Server) handleK8sCiliumIngress(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleK8sAddon — POST /k8s/addon {action, name, …}: подготовить узел
-// под дополнение (prepare — на любом узле кластера) или поставить и
-// обновить его чарт (install — на control plane), заданием. Текст команд
-// фиксированный (k8s.AddonPrepareScript, k8s.LonghornInstallScript),
-// снаружи — только проверенные значения.
+// под дополнение (prepare — на любом узле кластера; нужен не всем
+// дополнениям) или поставить и обновить его чарт (install — на control
+// plane), заданием. Текст команд фиксированный (k8s.AddonPrepareScript,
+// k8s.AddonInstallScript), снаружи — только проверенные значения.
 func (s *Server) handleK8sAddon(w http.ResponseWriter, r *http.Request) {
 	var req k8s.AddonRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -67,6 +67,11 @@ func (s *Server) handleK8sAddon(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("k8s.addonNotCP"))
 		return
 	}
+	// metrics-server уже встроен в k3s — второй экземпляр сломал бы APIService.
+	if no := k8s.AddonFlavorConflict(req.Name); no != "" && no == st.Flavor {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("k8s.addonFlavorConflict", req.Name, st.Flavor))
+		return
+	}
 	helm, err := m.HelmArgv(r.Context())
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -80,15 +85,21 @@ func (s *Server) handleK8sAddon(w http.ResponseWriter, r *http.Request) {
 // хаба (когда кэш на узле есть; шаг опциональный — не приехал, установка
 // сама возьмёт чарт из репозитория через прокси), установка helm, если его
 // ещё нет, и сам чарт. Без кэша — прежние два шага, напрямую с узла.
+// ChartURL запроса — адрес tarball из index.yaml репозитория (хаб берёт
+// его там же, где версии); у Longhorn URL выводится из версии и без него.
 func addonInstallCommands(hubCache string, needHelm bool, flavor string, helm []string, req k8s.AddonRequest) []cmdjob.Command {
 	var cmds []cmdjob.Command
 	if hubCache != "" {
+		chartURL := req.ChartURL
+		if chartURL == "" && req.Name == k8s.AddonLonghorn {
+			chartURL = k8s.LonghornChartURL(req.Version)
+		}
 		cmds = append(cmds, cmdjob.Command{
-			Script: k8s.LonghornChartFetchScript(hubCache, req.Version), StepKey: "k8s.addonChartStep",
+			Script: k8s.AddonChartFetchScript(hubCache, req.Name, req.Version, chartURL), StepKey: "k8s.addonChartStep",
 			StepArgs: []any{req.Name, req.Version}, Optional: true})
 	}
 	if needHelm {
 		cmds = append(cmds, cmdjob.Command{Script: k8s.HelmSetupScript(hubCache), StepKey: "k8s.helmStep.setup"})
 	}
-	return append(cmds, cmdjob.Command{Script: k8s.LonghornInstallScript(flavor, helm, req, hubCache), StepKey: "k8s.addonInstallStep", StepArgs: []any{req.Name, req.Version}})
+	return append(cmds, cmdjob.Command{Script: k8s.AddonInstallScript(flavor, helm, req, hubCache), StepKey: "k8s.addonInstallStep", StepArgs: []any{req.Name, req.Version}})
 }

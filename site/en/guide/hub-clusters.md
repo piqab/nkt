@@ -33,9 +33,10 @@ plane + N workers / 3 control planes + N workers (for kubeadm — with a
 **shared control plane address**, below), machine sizes, image,
 network, **port publishing** from the host (API 6443 and application
 ports), **Cilium** by a checkbox (with kube-proxy replacement) and
-**Longhorn** volumes with a chart version (below). Inside
-a node the API port is always 6443; the port in “publish outside” belongs
-to the host.
+**add-ons** — Longhorn with a chart version, ingress-nginx, cert-manager,
+metrics-server, MetalLB, kube-prometheus-stack, Kyverno, Argo CD (below).
+Inside a node the API port is always 6443; the port in “publish outside”
+belongs to the host.
 
 ## The creation steps window
 
@@ -44,7 +45,7 @@ a checklist of all the job's actions opens — the host checks, the tunnel
 between hosts (wireguard), **each machine as its own step**, the shared
 address listener, the first control plane (init + CNI), **each node join
 as its own step**, waiting for `Ready` with the port forward and the
-kubeconfig, the addons (Longhorn). Everything is ticked by default; an
+kubeconfig, the addons (Longhorn and the others chosen). Everything is ticked by default; an
 unticked step is not run, and the log carries a “skipped” line.
 
 The same window opens on retry — the **“Continue”** button on the card of
@@ -390,6 +391,42 @@ hv3: host w"`, `network nat|bridge|macvtap|wireguard`, `nic DEVICE` (or
   use"), so without that check a retried failed job tripped over the
   working Cilium; "replace kube-proxy" — `--disable-kube-proxy` for k3s,
   `--skip-phases=addon/kube-proxy` for kubeadm.
+- **Add-ons** — checkboxes in the creation form, each with its own default
+  version (pinned by nkt, the list — `GET /api/hub/k8s-addons`):
+  - **Longhorn** — block volumes (in detail below);
+  - **ingress-nginx** — the HTTP/HTTPS entry into the cluster: the
+    controller is installed with a **NodePort** service; the node port is
+    visible in `kubectl -n ingress-nginx get svc` — that is the port for
+    “Client ingress” or the “Port on node” of a Traffic Fly route. Not
+    needed when Cilium Ingress is on (step 5 of the “from zero to first
+    pod” guide);
+  - **cert-manager** — Let's Encrypt certificates for Ingress; the CRDs
+    are installed right away (`crds.enabled`), create a ClusterIssuer
+    after the install (the cluster card's “Kubernetes” window → “new
+    object”);
+  - **metrics-server** — `kubectl top` and HPA. **k3s** has it built in —
+    the checkbox is disabled there and the install is rejected; on
+    kubeadm it is installed with `--kubelet-insecure-tls` (the kubelet
+    serves a self-signed certificate);
+  - **MetalLB** — LoadBalancer services on the local network: after the
+    install create an `IPAddressPool` (a range of free network addresses)
+    and an `L2Advertisement` — without them a LoadBalancer stays
+    `<pending>`;
+  - **kube-prometheus-stack** — Prometheus, Grafana, Alertmanager; heavy
+    on resources (node memory), the Grafana entry is a port-forward from
+    the “Kubernetes” window (the admin password is in a secret);
+  - **Kyverno** — admission policies for the cluster;
+  - **Argo CD** — GitOps deployments (the admin password is in the
+    `argocd-initial-admin-secret` secret).
+
+  The mechanics are the same for all: the hub installs the helm chart on
+  the first control plane as a job (`helm upgrade --install … --wait`),
+  the chart tarball is downloaded **through the hub cache** beforehand by
+  the URL from the repository's `index.yaml` (did not arrive — helm takes
+  the chart from the repository through the hub proxy); versions in the
+  form come from `index.yaml` with the `kubeVersion` constraint. Upgrades
+  go forward only and keep the previous values (`--reuse-values`). Nodes
+  are prepared (packages, services) only where needed — by Longhorn.
 - **Longhorn** (the "Longhorn" checkbox and a chart version; in a script —
   `addon longhorn[=1.12.1]`, in the API and MCP —
   `"addons":[{"name":"longhorn","version":"1.12.1"}]`) — block volumes
@@ -430,12 +467,14 @@ hv3: host w"`, `network nat|bridge|macvtap|wireguard`, `nic DEVICE` (or
   in `/var/lib/longhorn` on the same disk. Workers added later are
   prepared by the same step. The `longhorn.io` group is never given to
   clients ("Client resources") — they use Longhorn only through PVCs.
-- **Add-ons of a ready cluster** — the "Add-ons" button: which Longhorn
-  version is installed (by `helm` on the control plane), install or upgrade
-  as a job (`POST /api/hub/clusters/{id}/addons {"name":"longhorn",
-  "version":"1.12.1"}`, MCP `cluster_addons`, `cluster_addon_install`).
-  Upgrades go forward only and no further than the next minor branch at a
-  time (1.11 → 1.12), as Longhorn requires; the previous values are kept
+- **Add-ons of a ready cluster** — the "Add-ons" button: for every add-on
+  of the registry it shows which version is installed (by `helm` on the
+  control plane) and which one is written in the cluster spec; install or
+  upgrade as a job (`POST /api/hub/clusters/{id}/addons
+  {"name":"cert-manager","version":"1.21.3"}`, MCP `cluster_addons`,
+  `cluster_addon_install`). Upgrades go forward only; Longhorn
+  additionally no further than the next minor branch at a time (1.11 →
+  1.12), as Longhorn requires; the previous values are kept
   (`--reuse-values`).
 - **Expose** — DNAT from host ports (`6443`, `80`, `443`, any can be
   changed or cleared) to the control plane: its own `NKT-PF` chains, the
