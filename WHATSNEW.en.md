@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.22.8 — 2026-11-12
+
+- **The built-in load balancer pair no longer holds the VIP twice on macvtap, and the join token survives the API start-up window.** keepalived on the `lb-*` machines exchanges VRRP advertisements by unicast (each machine is given its peer's address): over macvtap, machines on the same host do not deliver each other's multicast, and with multicast VRRP both machines of the pair considered themselves master and held the VIP at the same time — the address jumped between them together with the ARP answers, and nodes landed on an LB with no live backends. The hub retries the join-token request up to three times with a 10 s pause, and the agent's kubeadm commands got their own deadline shorter than the hub client's timeout: instead of hanging until the timeout, the agent answers with an error, and the retries cover the window right after init while the balancer's backends are still DOWN.
+
 ## v1.22.7 — 2026-11-12
 
 - **Deleting a VM with “delete the disks too” now really deletes the disks.** `virsh undefine --remove-all-storage` only removes volumes of active libvirt storage pools, while nkt's disks are plain files in `/var/lib/libvirt/images`: without a `default` pool (minimal libvirt installs) virsh silently left them in place while the machine was removed successfully. Now the disk file paths are taken from the domain XML before the undefine, and afterwards nkt removes whatever files remain itself (one `vm.delete_disk` journal entry per file); paths outside the image directory are left untouched and marked as skipped — the checkbox does not become a right to erase arbitrary host files.

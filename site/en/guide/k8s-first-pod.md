@@ -369,7 +369,12 @@ The `lb-*` machines are not Kubernetes nodes: they never appear in
 `kubectl get nodes`, get no join steps and take no part in pod traffic — they
 serve 6443 only. Host port forwarding does not work with macvtap and is not
 needed: machines (the lb ones included) are reachable at their network
-addresses directly.
+addresses directly. keepalived on the pair exchanges VRRP advertisements by
+**unicast** (each machine is given its peer's address): over macvtap, machines
+on the same host do not deliver each other's multicast, and with multicast
+VRRP both machines of the pair would consider themselves master and hold the
+VIP at the same time — the address would jump between them together with the
+ARP answers.
 
 ### Ingress and the pod
 

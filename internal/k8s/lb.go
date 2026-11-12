@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/piqab/nkt/internal/jobs"
@@ -23,6 +24,10 @@ type LBInstallSpec struct {
 	VIP string `json:"vip,omitempty"`
 	// IsMaster — эта машина — master в HA-паре (приоритет keepalived выше).
 	IsMaster bool `json:"is_master,omitempty"`
+	// PeerAddr — адрес соседней машины HA-пары: VRRP идёт к ней unicast'ом.
+	// Мультикаст-анонсы машины в macvtap на одном хосте друг другу не
+	// доставляют, и пара без unicast держала бы VIP вдвоём.
+	PeerAddr string `json:"peer_addr,omitempty"`
 	// Haproxy — параметры HAProxy.
 	Haproxy LBHaproxyConfig `json:"haproxy"`
 }
@@ -59,6 +64,9 @@ func (s *LBInstallSpec) Validate() error {
 	}
 	if s.Haproxy.Algorithm == "" {
 		s.Haproxy.Algorithm = "source"
+	}
+	if s.PeerAddr != "" && net.ParseIP(s.PeerAddr) == nil {
+		return msgs.Errorf("k8s.lbBadPeerAddr", s.PeerAddr)
 	}
 	return nil
 }
@@ -217,8 +225,17 @@ func lbKeepalivedConfigScript(spec LBInstallSpec) string {
 	if !spec.IsMaster {
 		priority = 90
 	}
+	// VRRP по умолчанию разносится мультикастом: машины в macvtap на одном
+	// хосте анонсы друг друга не получают и держат VIP вдвоём. С адресом
+	// соседа анонсы ходят unicast'ом — peer видит peer независимо от L2.
+	unicast := ""
+	ownIP := ""
+	if spec.PeerAddr != "" {
+		unicast = "    unicast_src_ip $OWNIP\n    unicast_peer {\n        " + spec.PeerAddr + "\n    }\n"
+		ownIP = "OWNIP=$(ip -4 -o addr show dev \"$IFACE\" | awk '{print $4}' | cut -d/ -f1 | head -1)\n"
+	}
 	return fmt.Sprintf(`IFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -v lo | head -1)
-cat > /etc/keepalived/keepalived.conf << EOF
+%scat > /etc/keepalived/keepalived.conf << EOF
 vrrp_script check_haproxy {
     script "killall -0 haproxy"
     interval 2
@@ -228,7 +245,7 @@ vrrp_script check_haproxy {
 vrrp_instance VI_1 {
     state %s
     interface $IFACE
-    virtual_router_id 51
+%s    virtual_router_id 51
     priority %d
     advert_int 1
     authentication {
@@ -242,7 +259,7 @@ vrrp_instance VI_1 {
         check_haproxy
     }
 }
-EOF`, masterState(spec.IsMaster), priority, spec.VIP)
+EOF`, ownIP, masterState(spec.IsMaster), unicast, priority, spec.VIP)
 }
 
 func masterState(isMaster bool) string {

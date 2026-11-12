@@ -142,3 +142,42 @@ func TestMasterState(t *testing.T) {
 		t.Errorf("masterState(false) = %q, want BACKUP", got)
 	}
 }
+
+// VRRP unicast'ом при заданном соседе: мультикаст-анонсы машины в macvtap
+// на одном хосте друг другу не доставляют и держали бы VIP вдвоём.
+func TestKeepalivedUnicastPeer(t *testing.T) {
+	spec := LBInstallSpec{
+		Endpoint: "10.77.1.10:6443",
+		CPAddrs:  []string{"10.77.1.2:6443"},
+		VIP:      "10.77.1.10",
+		IsMaster: true,
+		PeerAddr: "10.77.1.6",
+	}
+	s := lbKeepalivedConfigScript(spec)
+	for _, want := range []string{
+		"unicast_src_ip $OWNIP",
+		"unicast_peer {\n        10.77.1.6\n    }",
+		"OWNIP=$(ip -4 -o addr show dev \"$IFACE\"",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("keepalived config lacks %q:\n%s", want, s)
+		}
+	}
+	// Скрипт должен остаться валидным shell'ом: heredoc не поломан вставкой.
+	checkBashSyntax(t, "keepalived config with unicast", s)
+
+	// Без соседа (одиночный LB без HA или старый хаб) — прежний мультикаст.
+	alone := lbKeepalivedConfigScript(LBInstallSpec{
+		Endpoint: "10.77.1.10:6443", CPAddrs: []string{"10.77.1.2:6443"}, VIP: "10.77.1.10",
+	})
+	if strings.Contains(alone, "unicast") {
+		t.Errorf("без соседа unicast быть не должен:\n%s", alone)
+	}
+	checkBashSyntax(t, "keepalived config without unicast", alone)
+
+	// Адрес соседа проверяется до установки, а не в конфиге keepalived.
+	bad := LBInstallSpec{Endpoint: "e:6443", CPAddrs: []string{"c:6443"}, PeerAddr: "не-адрес"}
+	if err := bad.Validate(); err == nil {
+		t.Error("кривой адрес соседа принят")
+	}
+}

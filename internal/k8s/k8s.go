@@ -385,6 +385,10 @@ func ParseNodes(raw []byte) ([]Node, error) {
 	return nodes, nil
 }
 
+// joinCommandTimeout — потолок kubeadm-команд внутри Join: короче
+// клиентского таймаута хаба, чтобы агент отвечал ошибкой, а не молчанием.
+const joinCommandTimeout = 20 * time.Second
+
 // Join — токен и адрес для присоединения новых узлов. serverAddr — адрес
 // API, который увидит узел: первый control plane или балансировщик.
 // controlPlane — true, когда по этому токену войдёт ещё и control plane:
@@ -405,6 +409,13 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		}
 		return JoinInfo{Flavor: FlavorK3s, ServerURL: "https://" + JoinServer(serverAddr), Token: strings.TrimSpace(string(raw))}, nil
 	case FlavorKubeadm:
+		// kubeadm при недоступном API (бэкенды балансировщика ещё DOWN
+		// сразу после init) крутит собственные повторы минутами, а клиент
+		// хаба ждёт ответа меньше: без своего срока агент оставил бы запрос
+		// висеть до таймаута без ответа вместо быстрой ошибки, после
+		// которой хаб повторит запрос.
+		ctx, cancel := context.WithTimeout(ctx, joinCommandTimeout)
+		defer cancel()
 		out, err := m.run(ctx, "kubeadm", "token", "create", "--print-join-command")
 		if err != nil {
 			return JoinInfo{}, err

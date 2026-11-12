@@ -1111,7 +1111,28 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		if len(cps) > 1 {
 			joinURL += "&control_plane=1"
 		}
-		if _, err := r.m.HostAPI(ctx, cp1.ID, "GET", joinURL, nil, &join); err != nil {
+		// Сразу после init API за общим адресом устанавливается не мгновенно:
+		// бэкенды балансировщика ещё DOWN, kubeadm внутри агента крутит свои
+		// повторы, и одна попытка хаба ловила это окно вплоть до таймаута
+		// клиента. Три попытки с паузой окно переживают; старый агент
+		// (404/405) не повторяется — там повтор ничего не исправит.
+		var err error
+		for attempt := 1; ; attempt++ {
+			code, callErr := r.m.HostAPI(ctx, cp1.ID, "GET", joinURL, nil, &join)
+			if callErr == nil {
+				err = nil
+				break
+			}
+			err = callErr
+			if attempt >= 3 || code == http.StatusNotFound || code == http.StatusMethodNotAllowed {
+				break
+			}
+			jc.Log("hub.clusterJoinRetry", attempt, msgs.Localize(jc.Lang(), callErr))
+			if !sleepCtx(ctx, 10*time.Second) {
+				return ctx.Err()
+			}
+		}
+		if err != nil {
 			return msgs.Errorf("hub.clusterJoinInfo", err)
 		}
 		jc.Log("hub.clusterJoinReady", cp1.Name)
@@ -1482,20 +1503,10 @@ func (r *ClusterRunner) installLB(ctx context.Context, jc *jobs.Context, spec Cl
 		haproxy.Algorithm = "source-hash"
 	}
 
-	// Собираем параметры для скрипта.
-	var params struct {
-		Endpoint string          `json:"endpoint"`
-		CPAddrs  []string        `json:"cp_addrs"`
-		VIP      string          `json:"vip,omitempty"`
-		IsMaster bool            `json:"is_master,omitempty"`
-		Haproxy  LBHaproxyConfig `json:"haproxy"`
-	}
-	params.Endpoint = endpoint
-	params.CPAddrs = cpAddrs
-	params.VIP = spec.VIP
-	params.Haproxy = haproxy
-
-	// Устанавливаем на каждой lb-машине.
+	// Машины HA-пары: каждой нужен адрес соседки — keepalived шлёт ей
+	// анонсы unicast'ом (мультикаст в macvtap на одном хосте не ходит, и
+	// пара держала бы VIP вдвоём).
+	var lbs []store.Host
 	for _, nd := range nodes {
 		if nd.Role != RoleLoadBalancer {
 			continue
@@ -1504,12 +1515,34 @@ func (r *ClusterRunner) installLB(ctx context.Context, jc *jobs.Context, spec Cl
 		if err != nil {
 			return err
 		}
-		jc.Log("hub.clusterLBInstalling", nd.Name)
+		lbs = append(lbs, h)
+	}
+
+	// Собираем параметры для скрипта.
+	var params struct {
+		Endpoint string          `json:"endpoint"`
+		CPAddrs  []string        `json:"cp_addrs"`
+		VIP      string          `json:"vip,omitempty"`
+		IsMaster bool            `json:"is_master,omitempty"`
+		PeerAddr string          `json:"peer_addr,omitempty"`
+		Haproxy  LBHaproxyConfig `json:"haproxy"`
+	}
+	params.Endpoint = endpoint
+	params.CPAddrs = cpAddrs
+	params.VIP = spec.VIP
+	params.Haproxy = haproxy
+
+	// Устанавливаем на каждой lb-машине.
+	for i := range lbs {
+		jc.Log("hub.clusterLBInstalling", lbs[i].Name)
 		// Определяем, master ли эта машина (для keepalived).
 		// Первая lb-машина — master, вторая — backup.
-		params.IsMaster = (nd.Name == spec.Name+"-lb-1")
-		if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/k8s/lb-install", params, nil); err != nil {
-			return msgs.Errorf("hub.clusterLBInstallFailed", nd.Name, err)
+		params.IsMaster = (lbs[i].Name == spec.Name+"-lb-1")
+		if len(lbs) == 2 {
+			params.PeerAddr = lbs[1-i].Addr
+		}
+		if _, err := r.m.HostAPI(ctx, lbs[i].ID, "POST", "/api/k8s/lb-install", params, nil); err != nil {
+			return msgs.Errorf("hub.clusterLBInstallFailed", lbs[i].Name, err)
 		}
 	}
 	jc.Log("hub.clusterLBInstalled", endpoint)
