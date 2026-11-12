@@ -2329,6 +2329,8 @@
     "createTitle": "New machine from image \"{{image}}\"",
     "imageChoice": "Image",
     "imageChoiceEmpty": "pick a downloaded image",
+    "viaHubCache": "downloads go through the hub cache",
+    "downloadDirect": "download bypassing the hub",
     "name": "Machine name",
     "user": "User inside the machine",
     "sshKey": "Your SSH public key",

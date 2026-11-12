@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -347,7 +348,75 @@ func (s *Store) expectedChecksum(ctx context.Context, img Image) (string, error)
 	if img.ChecksumURL == "" {
 		return "", nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.via(img.ChecksumURL), nil)
+	body, err := s.fetchSums(ctx, img)
+	if err != nil {
+		return "", err
+	}
+	return parseChecksums(body, img.FileName)
+}
+
+// via — ссылка через кэш хаба, если он есть и образ не помечен «мимо хаба».
+func (s *Store) via(img Image, u string) string {
+	if img.Direct || s.Proxy == nil {
+		return u
+	}
+	p := s.Proxy()
+	if p == "" {
+		return u
+	}
+	return p + "/nkt/artifact?url=" + url.QueryEscape(u)
+}
+
+// Resolve закрепляет имя образа и его сумму по файлу сумм зеркала: файл
+// перечисляет то, что в каталоге лежит на самом деле, поэтому имя из него
+// переживает переименования на зеркале (Debian: genericcloud → generic),
+// а ссылка собирается как каталог файла сумм плюс найденное имя. Свои
+// образы (без файла сумм) и образы с заданной суммой возвращаются как есть.
+// Вторым результатом отдаёт разрешённое имя (пусто — не разрешалось).
+func (s *Store) Resolve(ctx context.Context, img Image) (Image, string, error) {
+	if img.ChecksumURL == "" || img.Checksum != "" {
+		return img, "", nil
+	}
+	body, err := s.fetchSums(ctx, img)
+	if err != nil {
+		return img, "", err
+	}
+	name, sum, err := resolveFromSums(body, img)
+	if err != nil {
+		return img, "", err
+	}
+	img.Checksum = sum
+	if name != img.FileName {
+		base, err := sumsDir(img.ChecksumURL)
+		if err != nil {
+			return img, "", err
+		}
+		img.FileName = name
+		img.URL = base + name
+	}
+	return img, name, nil
+}
+
+// sumsDir — каталог файла сумм: образ лежит рядом с ним.
+func sumsDir(checksumURL string) (string, error) {
+	u, err := url.Parse(checksumURL)
+	if err != nil {
+		return "", err
+	}
+	u.Path = path.Dir(u.Path)
+	if !strings.HasSuffix(u.Path, "/") {
+		u.Path += "/"
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
+// fetchSums качает файл сумм (через кэш хаба, если он есть и не выбран
+// обход): он маленький, но без него каталожный образ неотличим от
+// подменённого.
+func (s *Store) fetchSums(ctx context.Context, img Image) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.via(img, img.ChecksumURL), nil)
 	if err != nil {
 		return "", err
 	}
@@ -363,19 +432,7 @@ func (s *Store) expectedChecksum(ctx context.Context, img Image) (string, error)
 	if err != nil {
 		return "", err
 	}
-	return parseChecksums(string(body), img.FileName)
-}
-
-// via — ссылка через кэш хаба, если он есть.
-func (s *Store) via(u string) string {
-	if s.Proxy == nil {
-		return u
-	}
-	p := s.Proxy()
-	if p == "" {
-		return u
-	}
-	return p + "/nkt/artifact?url=" + url.QueryEscape(u)
+	return string(body), nil
 }
 
 // fetch качает файл, продолжая с того места, где остановились.
@@ -385,7 +442,7 @@ func (s *Store) fetch(ctx context.Context, img Image, part string, report func(P
 		have = st.Size()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.via(img.URL), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.via(img, img.URL), nil)
 	if err != nil {
 		return err
 	}

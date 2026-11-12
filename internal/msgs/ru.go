@@ -1451,6 +1451,8 @@ var ruCatalog = map[string]string{
 	"vmimage.checksumFile":                                "файл сумм: %v",
 	"vmimage.checksumFileCode":                            "файл сумм: код %d",
 	"vmimage.checksumFileHasLine":                         "в файле сумм нет строки для %s",
+	"vmimage.checksumFileNoMatch":                         "в файле сумм нет ни одной строки, подходящей под шаблоны имён образа %s — зеркало переименовало образ, а каталог nkt за этим не успел",
+	"vmimage.resolvedName":                                "имя образа в каталоге зеркала: %s",
 	"vmimage.checksumGivenImageTakenAs":                   "Контрольная сумма не задана — образ будет взят как есть, без проверки.",
 	"vmimage.checksumMismatchGotExpected":                 "контрольная сумма не сошлась: получено %s, ожидалось %s",
 	"vmimage.creatingImageDirectory":                      "создание каталога образов: %v",

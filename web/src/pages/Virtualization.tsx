@@ -12,7 +12,8 @@ import { ConsoleModal } from '../components/ConsoleModal'
 import { VMScreenModal, addVNCGraphics } from '../components/VMScreenModal'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
-import type { FileContent, Job, Me, VMImage, VMImageLocal, VMTemplate, VMTool, VirtualMachine, WriteResult } from '../types'
+import type { FileContent, Job, Me, VMHostImage, VMImage, VMImageLocal, VMTemplate, VMTool, VirtualMachine, WriteResult } from '../types'
+import type { VMImageChoice } from '../components/VMCreateImageForm'
 import { Banner, Card, CodeEditor, DiffView, ErrorNote, formatBytesShort, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
 import i18n from '../i18n'
 import { confirmAction, confirmWithOption } from '../components/confirm'
@@ -544,15 +545,25 @@ function VMCreateChooser({
     local: VMImageLocal[]
     custom: VMImage[] | null
     custom_local: VMImageLocal[] | null
+    host_images: VMHostImage[] | null
     missing: VMTool[] | null
   }>('/vm/images', 60_000)
   const templates = useApi<{ templates: VMTemplate[] }>('/vm/templates', 60_000)
   const local = new Map(
     [...(images.data?.local ?? []), ...(images.data?.custom_local ?? [])].map((l) => [l.id, l]),
   )
-  const downloaded = [...(images.data?.catalog ?? []), ...(images.data?.custom ?? [])].filter((img) =>
-    local.get(img.id)?.downloaded,
-  )
+  // В выборку входят и скачанные образы каталога, и файлы каталога дисков
+  // libvirt: раздел «Образы» создавать машину из них умеет, значит и окно
+  // создания не должно их прятать.
+  const choices: VMImageChoice[] = [
+    ...[...(images.data?.catalog ?? []), ...(images.data?.custom ?? [])]
+      .filter((img) => local.get(img.id)?.downloaded)
+      .map((img) => ({ image: img })),
+    ...(images.data?.host_images ?? []).map((h) => ({
+      image: { id: 'host:' + h.name, name: h.name, os: '', arch: '', file_name: h.name, custom: true },
+      warning: h.used_by ? t(h.running ? 'vmimages.hostBusyRunning' : 'vmimages.hostBusy', { vm: h.used_by }) : undefined,
+    })),
+  ]
 
   const diskPath = defaultDiskPath(name || 'new-vm')
 
@@ -606,10 +617,10 @@ function VMCreateChooser({
       {mode === 'image' && (
         <div className="col" style={{ gap: '0.5rem' }}>
           {(images.data?.missing?.length ?? 0) > 0 && <Banner kind="warn">{t('vmimages.toolsMissing')}</Banner>}
-          {downloaded.length === 0 && <Banner kind="info">{t('virt.noImagesYet')}</Banner>}
+          {choices.length === 0 && <Banner kind="info">{t('virt.noImagesYet')}</Banner>}
           <VMCreateImageForm
             image={null}
-            choices={downloaded}
+            choices={choices}
             templates={templates.data?.templates ?? []}
             onSaved={() => void templates.reload()}
             onClose={onClose}

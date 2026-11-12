@@ -18,6 +18,13 @@ import { msg, type Msg } from '../msg'
  * машина без ключа окажется недоступной — о чём здесь и сказано прямо, а
  * не выяснится после первого запуска.
  */
+/** Пункт выбора образа: сама запись и предупреждение про неё (файл
+ * каталога дисков может быть диском работающей машины). */
+export interface VMImageChoice {
+  image: VMImage
+  warning?: string
+}
+
 export function VMCreateImageForm({
   image,
   choices,
@@ -31,7 +38,7 @@ export function VMCreateImageForm({
   /** Образ, выбранный заранее (строка каталога или диск хоста). */
   image: VMImage | null
   /** Когда образа нет заранее — выбрать из скачанных на хосте. */
-  choices?: VMImage[]
+  choices?: VMImageChoice[]
   /** Предупреждение о самом образе: например, что это диск работающей
    * машины и копия получится снятой на ходу. */
   warning?: string
@@ -43,7 +50,9 @@ export function VMCreateImageForm({
 }) {
   const { t } = useTranslation()
   const [picked, setPicked] = useState('')
-  const chosen = image ?? choices?.find((c) => c.id === picked) ?? null
+  const choice = choices?.find((c) => c.image.id === picked)
+  const chosen = image ?? choice?.image ?? null
+  const shownWarning = warning ?? choice?.warning
   const [name, setName] = useState('')
   const [user, setUser] = useState('deploy')
   const [sshKey, setSSHKey] = useState('')
@@ -169,7 +178,7 @@ export function VMCreateImageForm({
   return (
     <>
       <ErrorNote error={msg(error)} />
-      {warning && <Banner kind="warn">{warning}</Banner>}
+      {shownWarning && <Banner kind="warn">{shownWarning}</Banner>}
       {!sshKey.trim() && <Banner kind="info">{t('vmimages.keyWillBeGenerated')}</Banner>}
 
       {!image && (
@@ -180,7 +189,10 @@ export function VMCreateImageForm({
             onChange={(v: string) => setPicked(v)}
             placeholder={t('vmimages.imageChoiceEmpty')}
             style={{ width: '100%' }}
-            options={(choices ?? []).map((c) => ({ value: c.id, label: `${c.name}${c.custom ? ` — ${t('vmimages.customBadge')}` : ''}` }))}
+            options={(choices ?? []).map((c) => ({
+              value: c.image.id,
+              label: `${c.image.name}${c.image.custom ? ` — ${t('vmimages.customBadge')}` : ''}`,
+            }))}
           />
         </label>
       )}

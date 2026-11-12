@@ -44,6 +44,7 @@ export default function VMImagesSection({ me, reloadKey = 0 }: { me: Me; reloadK
     dir: string
     tools: VMTool[]
     missing: VMTool[] | null
+    hub_cache?: boolean
   }>('/vm/images', POLL_MS)
   // Машину удалили вместе с дисками — список файлов перестроить.
   useEffect(() => {
@@ -168,6 +169,15 @@ export default function VMImagesSection({ me, reloadKey = 0 }: { me: Me; reloadK
                 onClick={() => void startJob('/vm/images/download', { image_id: img.id })}
               />
             )}
+            {/* Обход кэша хаба: копия в кэше могла протухнуть или побиться,
+                а оператору нужен заведомо свежий файл с зеркала. */}
+            {canEdit && !l?.downloaded && !img.custom && images.data?.hub_cache && (
+              <RowAction
+                action="download"
+                label={t('vmimages.downloadDirect')}
+                onClick={() => void startJob('/vm/images/download', { image_id: img.id, direct: true })}
+              />
+            )}
             {canEdit && l?.downloaded && (
               <RowAction action="create" label={t('vmimages.createVM')} onClick={() => setCreating(img)} />
             )}
@@ -247,7 +257,13 @@ export default function VMImagesSection({ me, reloadKey = 0 }: { me: Me; reloadK
         </Banner>
       )}
 
-      <Card title={t('vmimages.catalogTitle')} subtitle={images.data?.dir}>
+      <Card
+        title={t('vmimages.catalogTitle')}
+        subtitle={images.data?.dir}
+        // Источник скачивания виден до нажатия: через кэш хаба образ
+        // качается один раз на все хосты, напрямую — каждый сам.
+        actions={images.data?.hub_cache ? <Tag color="success">{t('vmimages.viaHubCache')}</Tag> : undefined}
+      >
         {images.loading && !images.data ? (
           <Loading what={t('vmimages.loading')} />
         ) : (

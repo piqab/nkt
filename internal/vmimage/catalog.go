@@ -32,9 +32,17 @@ type Image struct {
 	// сборке, превратив проверку в помеху.
 	ChecksumURL  string `json:"-"`
 	ChecksumKind string `json:"-"`
-	// FileName — имя внутри файла сумм и имя, под которым образ ложится
-	// в кэш.
+	// FileName — имя, под которым образ ложится в кэш, и имя для списка.
+	// У записей с FilePatterns — лишь ориентир: настоящее имя
+	// разрешается из файла сумм при скачивании.
 	FileName string `json:"file_name"`
+	// FilePatterns — упорядоченные шаблоны имени образа в файле сумм
+	// зеркала (порядок = предпочтение). Зеркала переименовывают образы
+	// (Debian: genericcloud → generic), а файл сумм всегда перечисляет
+	// то, что лежит в каталоге на самом деле, — разрешение имени по нему
+	// переживает переименование без релиза nkt. Пусто — имя берётся
+	// точно из FileName, как у своих образов.
+	FilePatterns []string `json:"-"`
 	// Checksum — сумма, заданная прямо здесь. Для каталога пусто (её
 	// берут из ChecksumURL), для своего образа по ссылке — то, что ввёл
 	// оператор. Пустая и то, и другое означает, что проверять нечем:
@@ -42,6 +50,10 @@ type Image struct {
 	Checksum string `json:"-"`
 	// Custom — образ добавлен оператором, а не из каталога.
 	Custom bool `json:"custom,omitempty"`
+	// Direct — качать минуя кэш хаба, прямо с зеркала: копия в кэше
+	// могла протухнуть или побиться, а оператору нужен заведомо свежий
+	// файл.
+	Direct bool `json:"-"`
 }
 
 // Catalog — образы, которые nkt умеет качать.
@@ -52,17 +64,21 @@ type Image struct {
 var Catalog = []Image{
 	{
 		ID: "debian-13", Name: "Debian 13 (trixie)", OS: "debian", Arch: "amd64",
-		URL:          "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2",
+		URL:          "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2",
 		ChecksumURL:  "https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS",
 		ChecksumKind: SHA512,
-		FileName:     "debian-13-genericcloud-amd64.qcow2",
+		FileName:     "debian-13-generic-amd64.qcow2",
+		// trixie переименовала genericcloud в generic; старое имя —
+		// запасное, пока зеркало ещё отдаёт оба.
+		FilePatterns: []string{`^debian-13-generic-amd64\.qcow2$`, `^debian-13-genericcloud-amd64\.qcow2$`},
 	},
 	{
 		ID: "debian-12", Name: "Debian 12 (bookworm)", OS: "debian", Arch: "amd64",
-		URL:          "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2",
+		URL:          "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2",
 		ChecksumURL:  "https://cloud.debian.org/images/cloud/bookworm/latest/SHA512SUMS",
 		ChecksumKind: SHA512,
-		FileName:     "debian-12-genericcloud-amd64.qcow2",
+		FileName:     "debian-12-generic-amd64.qcow2",
+		FilePatterns: []string{`^debian-12-generic-amd64\.qcow2$`, `^debian-12-genericcloud-amd64\.qcow2$`},
 	},
 	{
 		ID: "ubuntu-24.04", Name: "Ubuntu 24.04 LTS (noble)", OS: "ubuntu", Arch: "amd64",
@@ -70,6 +86,7 @@ var Catalog = []Image{
 		ChecksumURL:  "https://cloud-images.ubuntu.com/noble/current/SHA256SUMS",
 		ChecksumKind: SHA256,
 		FileName:     "noble-server-cloudimg-amd64.img",
+		FilePatterns: []string{`^noble-server-cloudimg-amd64\.img$`, `^noble-server-cloudimg-amd64\.qcow2$`},
 	},
 	{
 		ID: "ubuntu-22.04", Name: "Ubuntu 22.04 LTS (jammy)", OS: "ubuntu", Arch: "amd64",
@@ -77,6 +94,7 @@ var Catalog = []Image{
 		ChecksumURL:  "https://cloud-images.ubuntu.com/jammy/current/SHA256SUMS",
 		ChecksumKind: SHA256,
 		FileName:     "jammy-server-cloudimg-amd64.img",
+		FilePatterns: []string{`^jammy-server-cloudimg-amd64\.img$`, `^jammy-server-cloudimg-amd64\.qcow2$`},
 	},
 }
 
@@ -133,4 +151,47 @@ func parseChecksums(body, fileName string) (string, error) {
 		}
 	}
 	return "", msgs.Errorf("vmimage.checksumFileHasLine", fileName)
+}
+
+// sumLines — строки файла сумм парами «имя, сумма» в порядке файла.
+func sumLines(body string) [][2]string {
+	var out [][2]string
+	for _, line := range strings.Split(body, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		out = append(out, [2]string{strings.TrimPrefix(fields[len(fields)-1], "*"), strings.ToLower(fields[0])})
+	}
+	return out
+}
+
+// resolveFromSums берёт из файла сумм имя образа и его сумму: по
+// упорядоченным шаблонам записи (первый шаблон, под который попала
+// строка, выигрывает), а без шаблонов — точным именем FileName. Файл
+// сумм перечисляет то, что лежит в каталоге зеркала на самом деле,
+// поэтому переименование образа на зеркале не ломает скачивание: имя
+// приезжает оттуда, а не из кода.
+func resolveFromSums(body string, img Image) (name, sum string, err error) {
+	lines := sumLines(body)
+	if len(img.FilePatterns) == 0 {
+		for _, l := range lines {
+			if l[0] == img.FileName {
+				return l[0], l[1], nil
+			}
+		}
+		return "", "", msgs.Errorf("vmimage.checksumFileHasLine", img.FileName)
+	}
+	for _, pat := range img.FilePatterns {
+		re, err := regexp.Compile(pat)
+		if err != nil {
+			return "", "", err
+		}
+		for _, l := range lines {
+			if re.MatchString(l[0]) {
+				return l[0], l[1], nil
+			}
+		}
+	}
+	return "", "", msgs.Errorf("vmimage.checksumFileNoMatch", img.Name)
 }

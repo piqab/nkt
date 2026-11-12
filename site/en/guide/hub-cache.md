@@ -72,7 +72,11 @@ archive and the Longhorn chart tarball are fetched. URLs with a version
 in the path and `.deb` files are kept indefinitely, the rest
 (`get.k3s.io`, `…/latest/…`, the "current" Ubuntu image) is
 re-downloaded when older than 6 hours; if the source is unavailable, the
-copy is served.
+copy is served. Machine images in the “Images” section go through the
+cache too while its port is open: the catalogue carries the label
+“downloads go through the hub cache”, and next to the download button
+there is “download bypassing the hub” for the case when a guaranteed
+fresh copy from the mirror is needed instead of the cached one.
 
 An add-on chart is installed in two steps: first the chart tarball
 arrives through `/nkt/artifact` and lands on the control plane at

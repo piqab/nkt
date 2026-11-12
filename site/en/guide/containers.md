@@ -256,8 +256,16 @@ live output) and **storage pools** (read-only).
   “from image” form is opened by the “create VM” button on an image row in the
   “Images” section.
 - **Images**: a catalogue of Ubuntu, Debian and other cloud images —
-  downloaded with a checksum check; your own images — upload a file, move
-  it into the disk directory.
+  downloaded with a checksum check; the image name and the checksum are
+  taken from the mirror's checksum file at download time, so renames on
+  the mirror (Debian: `genericcloud` → `generic`) do not break downloads;
+  your own images — upload a file or a link. While the hub cache port is
+  open, host downloads go through the cache (the catalogue carries the
+  label “downloads go through the hub cache”), with “download bypassing
+  the hub” next to it for a guaranteed fresh copy from the mirror. The
+  “Image” row of the “New VM” window offers both downloaded images and the
+  files of the libvirt disk directory (a file of a busy machine comes with
+  a warning).
 - **libvirt networks**: list, a NAT network with DHCP and autostart (the
   subnet is checked against the host's networks and interfaces), a bridge
   onto a host interface.

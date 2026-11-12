@@ -46,6 +46,10 @@ func (s *Server) handleVMImages(w http.ResponseWriter, r *http.Request) {
 		"host_images": vmcreate.HostImages(r.Context(), RunTooling),
 		"tools":       tools,
 		"missing":     vmcreate.MissingTools(tools),
+		// Открыт ли порт кэша хаба: с ним скачивания образов идут через
+		// хаб и оседают там, интерфейс подписывает источник и предлагает
+		// явный обход.
+		"hub_cache": s.hubCacheURL() != "",
 	})
 }
 
@@ -164,6 +168,8 @@ func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
 		FileName     string `json:"file_name"`
 		Checksum     string `json:"checksum"`
 		ChecksumKind string `json:"checksum_kind"`
+		// Direct — качать минуя кэш хаба, прямо с зеркала.
+		Direct bool `json:"direct"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -179,6 +185,7 @@ func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
 		ImageID: req.ImageID, URL: strings.TrimSpace(req.URL),
 		FileName: strings.TrimSpace(req.FileName),
 		Checksum: strings.TrimSpace(req.Checksum), ChecksumKind: req.ChecksumKind,
+		Direct: req.Direct,
 		// Свой образ по ссылке кладётся туда же, куда и загруженный
 		// файлом, — в каталог дисков libvirt. Каталожные остаются в
 		// кэше nkt: он сам их скачал, сам и чистит.

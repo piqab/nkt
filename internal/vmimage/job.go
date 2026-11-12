@@ -28,6 +28,8 @@ type DownloadParams struct {
 	// ToHost — положить скачанное в каталог дисков libvirt, а не в кэш
 	// nkt. Так добавляют свои образы: там их ждут и qemu, и оператор.
 	ToHost bool `json:"to_host,omitempty"`
+	// Direct — качать минуя кэш хаба, прямо с зеркала.
+	Direct bool `json:"direct,omitempty"`
 }
 
 // DownloadRunner качает образ в фоне.
@@ -62,7 +64,18 @@ func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	jc.StepKey(1, 3, "vmimage.stepChecksum")
+	// Имя и сумма каталожного образа закрепляются по файлу сумм зеркала:
+	// зеркало могло переименовать образ (Debian: genericcloud → generic),
+	// а файл сумм перечисляет то, что лежит в каталоге на самом деле.
+	resolved, resolvedName, err := r.store.Resolve(ctx, img)
+	if err != nil {
+		return err
+	}
+	img = resolved
 	jc.Log("vmimage.image", img.Name)
+	if resolvedName != "" {
+		jc.Log("vmimage.resolvedName", resolvedName)
+	}
 	jc.Log("vmimage.source", img.URL)
 	if img.Custom && img.Checksum == "" {
 		// Сказать вслух: образ из каталога проверяется всегда, а свой по
@@ -107,6 +120,7 @@ func resolveDownload(p DownloadParams) (Image, error) {
 		if !ok {
 			return Image{}, msgs.Errorf("vmimage.suchImageCatalog", p.ImageID)
 		}
+		img.Direct = p.Direct
 		return img, nil
 	}
 	name := strings.TrimSpace(p.FileName)
@@ -124,6 +138,7 @@ func resolveDownload(p DownloadParams) (Image, error) {
 	img.URL = p.URL
 	img.Checksum = strings.TrimSpace(p.Checksum)
 	img.ChecksumKind = kind
+	img.Direct = p.Direct
 	return img, nil
 }
 

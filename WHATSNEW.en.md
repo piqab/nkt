@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.22.6 — 2026-11-12
+
+- **Image downloads survive mirror renames, and the “New VM” window sees every file.** The image name and its checksum are now resolved from the mirror's checksum file at download time by ordered patterns (Debian renamed `genericcloud` to `generic` — the nkt catalog had not caught up and downloading Debian 13 failed with “the checksum file has no line”); the resolved name goes into the job log. The “Image” row of the “New VM” window offers not only downloaded catalog images but also the files of the libvirt disk directory (a file of a busy machine comes with a warning). Image downloads got a visible source: while the hub cache port is open the catalogue is labelled “downloads go through the hub cache”, with a “download bypassing the hub” button next to it — for a guaranteed fresh copy from the mirror.
+
 ## v1.22.5 — 2026-11-12
 
 - **The “+ New” button now creates a ready machine from an image by default.** The libvirt VM creation window got three tabs: **“From image”** (the default) — the same form as “create VM” in the “Images” section (an image downloaded on the host, hardware, network up to macvtap, cloud-init user and key, an optional password, templates): the host job prepares the disk from the image, applies cloud-init, defines the domain and **starts the machine**, and the generated private key is shown once; **“Empty disk”** and **“Raw XML”** remain the special-case paths, with an empty qcow2 and the XML review before saving. The form is now shared application-wide: the “Images” section opens the very same one, with no second copy; on the hub the window of every host works through the scope, and creation still runs as a job on the host's agent.

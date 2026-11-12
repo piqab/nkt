@@ -1452,6 +1452,8 @@ var enCatalog = map[string]string{
 	"vmimage.checksumFile":                                "checksum file: %v",
 	"vmimage.checksumFileCode":                            "checksum file: code %d",
 	"vmimage.checksumFileHasLine":                         "the checksum file has no line for %s",
+	"vmimage.checksumFileNoMatch":                         "the checksum file has no line matching the name patterns of the image %s — the mirror renamed the image and the nkt catalog has not caught up yet",
+	"vmimage.resolvedName":                                "image name in the mirror directory: %s",
 	"vmimage.checksumGivenImageTakenAs":                   "No checksum given — the image is taken as is, without verification.",
 	"vmimage.checksumMismatchGotExpected":                 "checksum mismatch: got %s, expected %s",
 	"vmimage.creatingImageDirectory":                      "creating the image directory: %v",
