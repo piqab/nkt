@@ -247,6 +247,18 @@ func (m *LibvirtManager) UndefineVM(ctx context.Context, user, name string, remo
 		}
 	}
 
+	// Файлы дисков снимаем ДО undefine: после него домен уже ничего не
+	// расскажет. --remove-all-storage удаляет только тома активных storage
+	// pool'ов, а диски nkt — обычные файлы в /var/lib/libvirt/images: без
+	// pool'а default (минимальные установки libvirt) virsh молча оставил бы
+	// их на диске, поэтому недостающее добираем сами ниже.
+	var diskFiles []string
+	if removeStorage {
+		if res, err := m.run(ctx, "virsh", "-c", m.cfg.LibvirtURI, "dumpxml", name); err == nil && res.OK() {
+			diskFiles = diskSourceFiles(res.Output())
+		}
+	}
+
 	// Снимки (метаданные) мешают undefine; сами снимки внутри qcow2 и
 	// уходят вместе с диском.
 	args := []string{"-c", m.cfg.LibvirtURI, "undefine", name, "--snapshots-metadata"}
@@ -268,5 +280,61 @@ func (m *LibvirtManager) UndefineVM(ctx context.Context, user, name string, remo
 	if !res.OK() {
 		return fmt.Errorf("virsh undefine %s: %s", name, virshFailure(res))
 	}
+	// Тома pool'ов virsh уже убрал сам; обычные файлы добиваем сами —
+	// rm -f идемпотентен, отсутствующий файл не ошибка. Путь вне каталога
+	// образов не трогаем: галочка «удалить диски» не должна становиться
+	// правом стирать произвольные файлы хоста.
+	for _, path := range diskFiles {
+		if !strings.HasPrefix(path, libvirtImagesRoot+"/") || strings.Contains(path, "..") {
+			m.db.Audit(ctx, user, "vm.delete_disk", path, "skipped", map[string]any{
+				"reason": "outside " + libvirtImagesRoot,
+			})
+			continue
+		}
+		rm, err := m.run(ctx, "sh", "-c", `rm -f -- "$1"`, "_", path)
+		outcome := "ok"
+		if err != nil || !rm.OK() {
+			outcome = "error"
+		}
+		m.db.Audit(ctx, user, "vm.delete_disk", path, outcome, map[string]any{
+			"exit_code": rm.ExitCode, "output": strings.TrimSpace(rm.Output()), "simulated": rm.Simulated,
+		})
+		if err != nil {
+			return fmt.Errorf("rm %s: %w", path, err)
+		}
+		if !rm.OK() {
+			return fmt.Errorf("rm %s: %s", path, virshFailure(rm))
+		}
+	}
 	return nil
+}
+
+// diskSourceRe — источник файлового диска домена; libvirt пишет имена
+// атрибутов в одинарных кавычках, но чужой XML мог прийти и в двойных.
+var diskSourceRe = regexp.MustCompile(`<source[^>]*file=('([^']+)'|"([^"]+)")`)
+
+// diskSourceFiles — пути файлов дисков домена из его XML. Только
+// device='disk': cdrom с ISO — носитель установки, а не диск машины, и
+// стирать его галочка «удалить диски» не должна.
+func diskSourceFiles(xml string) []string {
+	var out []string
+	for _, block := range strings.Split(xml, "<disk ") {
+		if !strings.Contains(block, "type='file'") && !strings.Contains(block, `type="file"`) {
+			continue
+		}
+		if !strings.Contains(block, "device='disk'") && !strings.Contains(block, `device="disk"`) {
+			continue
+		}
+		if end := strings.Index(block, "</disk>"); end >= 0 {
+			block = block[:end]
+		}
+		if m := diskSourceRe.FindStringSubmatch(block); m != nil {
+			if m[2] != "" {
+				out = append(out, m[2])
+			} else {
+				out = append(out, m[3])
+			}
+		}
+	}
+	return out
 }

@@ -2010,6 +2010,16 @@
         "fail2ban-regex"
       ],
       "stdout": "Running tests\n=============\n\nResults\n=======\n\nLines: 1204 lines, 0 ignored, 37 matched, 1167 missed\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "rm -f -- \"$1\"",
+        "_",
+        "/var/lib/libvirt/images/web-vm.qcow2"
+      ],
+      "stdout": ""
     }
   ]
 }

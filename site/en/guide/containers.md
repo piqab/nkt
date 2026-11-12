@@ -217,7 +217,12 @@ live output) and **storage pools** (read-only).
   **Logs** — an icon in the row: live `docker logs`, tail 200/1000/5000
   lines, "follow", "timestamps". Same for Podman.
 - **Deleting a machine** is one button; "delete the machine's disks too"
-  is a checkbox in the confirmation window, off by default.
+  is a checkbox in the confirmation window, off by default. The disks go
+  away even when libvirt has no storage pools: `virsh undefine
+  --remove-all-storage` only removes pool volumes, so file-backed disks
+  from the image directory are removed by nkt itself (one journal entry
+  per file); paths outside `/var/lib/libvirt/images` are left untouched
+  and marked as skipped in the journal.
 - **Machine configuration (XML)** — the pencil in the row: "text",
   "history" and
   **"blocks"** tabs (domain elements and devices one by one: disk,

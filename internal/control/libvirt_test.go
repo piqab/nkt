@@ -183,3 +183,42 @@ func TestLibvirtUndefineForceRemovesRunningDomain(t *testing.T) {
 		t.Fatalf("удаление запущенного домена с force: %v", err)
 	}
 }
+
+// diskSourceFiles берёт только файловые диски (device='disk'): cdrom с ISO
+// и диски не-файлового типа стираться галочкой «удалить диски» не должны;
+// кавычки атрибутов бывают и двойными.
+func TestDiskSourceFiles(t *testing.T) {
+	xml := `<domain type='kvm'>
+  <devices>
+    <disk type='file' device='disk'>
+      <source file='/var/lib/libvirt/images/web-vm.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <source file='/var/lib/libvirt/images/debian.iso'/>
+      <target dev='sda' bus='sata'/>
+    </disk>
+    <disk type='block' device='disk'>
+      <source dev='/dev/sdb'/>
+      <target dev='vdb' bus='virtio'/>
+    </disk>
+    <disk type="file" device="disk">
+      <source file="/var/lib/libvirt/images/second.qcow2"/>
+      <target dev='vdc' bus='virtio'/>
+    </disk>
+  </devices>
+</domain>`
+	got := diskSourceFiles(xml)
+	want := []string{"/var/lib/libvirt/images/web-vm.qcow2", "/var/lib/libvirt/images/second.qcow2"}
+	if len(got) != len(want) {
+		t.Fatalf("диски: %v, хочу %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("диск %d: %q, хочу %q", i, got[i], want[i])
+		}
+	}
+	if len(diskSourceFiles("")) != 0 {
+		t.Error("пустой XML дал диски")
+	}
+}

@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.22.7 — 2026-11-12
+
+- **Deleting a VM with “delete the disks too” now really deletes the disks.** `virsh undefine --remove-all-storage` only removes volumes of active libvirt storage pools, while nkt's disks are plain files in `/var/lib/libvirt/images`: without a `default` pool (minimal libvirt installs) virsh silently left them in place while the machine was removed successfully. Now the disk file paths are taken from the domain XML before the undefine, and afterwards nkt removes whatever files remain itself (one `vm.delete_disk` journal entry per file); paths outside the image directory are left untouched and marked as skipped — the checkbox does not become a right to erase arbitrary host files.
+
 ## v1.22.6 — 2026-11-12
 
 - **Image downloads survive mirror renames, and the “New VM” window sees every file.** The image name and its checksum are now resolved from the mirror's checksum file at download time by ordered patterns (Debian renamed `genericcloud` to `generic` — the nkt catalog had not caught up and downloading Debian 13 failed with “the checksum file has no line”); the resolved name goes into the job log. The “Image” row of the “New VM” window offers not only downloaded catalog images but also the files of the libvirt disk directory (a file of a busy machine comes with a warning). Image downloads got a visible source: while the hub cache port is open the catalogue is labelled “downloads go through the hub cache”, with a “download bypassing the hub” button next to it — for a guaranteed fresh copy from the mirror.
