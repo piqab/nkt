@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
+import { confirmAction } from './confirm'
 import { Banner, ErrorNote, Modal } from './ui'
 
 /**
@@ -29,6 +30,7 @@ export interface AddonInfo {
   no_flavor?: string
   min_disk_gb?: number
   prepare?: boolean
+  docs?: string
 }
 
 /** Выбор формы создания: по дополнению — включено ли и версия (пусто — хаб подставит свою по умолчанию). */
@@ -119,6 +121,14 @@ function AddonCheckRow({ info, value, onChange, k8s, flavor }: { info: AddonInfo
           <span className="small muted">
             {conflict ? t('clusters.addonBuiltin') : hint}
           </span>
+          {info.docs && (
+            <>
+              {' · '}
+              <a className="small" href={info.docs} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                {t('clusters.addonDocs')}
+              </a>
+            </>
+          )}
         </span>
       </label>
       {value.on && info.storage && (
@@ -191,6 +201,20 @@ function AddonRow({ clusterID, info, state, nodes, flavor, clusterReady, onStart
     }
   }
 
+  async function uninstall() {
+    if (!(await confirmAction(t('clusters.addonConfirmUninstall', { name: title }), { okText: t('clusters.addonUninstall') }))) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ job_id: number }>(`/hub/clusters/${clusterID}/addons`, { method: 'POST', body: { name: info.name, action: 'uninstall' } })
+      onStarted(res.job_id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="col" style={{ gap: '0.3rem' }}>
       <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -198,6 +222,11 @@ function AddonRow({ clusterID, info, state, nodes, flavor, clusterReady, onStart
         {state && (cur ? <Tag color="success">{t('clusters.addonInstalled', { v: cur })}</Tag> : <Tag>{t('clusters.addonNotInstalled')}</Tag>)}
         {state?.spec && state.spec !== cur && <Tag color="warning">{t('clusters.addonSpec', { v: state.spec })}</Tag>}
         {conflict && <Tag>{t('clusters.addonBuiltin')}</Tag>}
+        {info.docs && (
+          <a className="small" href={info.docs} target="_blank" rel="noreferrer">
+            {t('clusters.addonDocs')}
+          </a>
+        )}
       </div>
       {hint && <span className="small muted">{hint}</span>}
       {error && <Banner kind="error">{error}</Banner>}
@@ -212,6 +241,11 @@ function AddonRow({ clusterID, info, state, nodes, flavor, clusterReady, onStart
             <Button type="primary" loading={busy} disabled={!state || !effective || !allowed(effective) || !clusterReady} onClick={() => void start()}>
               {cur ? t('clusters.addonUpgrade') : t('clusters.addonInstall')}
             </Button>
+            {cur && (
+              <Button danger loading={busy} disabled={!clusterReady} onClick={() => void uninstall()}>
+                {t('clusters.addonUninstall')}
+              </Button>
+            )}
           </div>
           {versions.data?.error && <span className="small muted">{t('clusters.addonIndexDown')}</span>}
         </>

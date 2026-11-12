@@ -39,9 +39,11 @@ func (s *Server) handleK8sCiliumIngress(w http.ResponseWriter, r *http.Request) 
 
 // handleK8sAddon — POST /k8s/addon {action, name, …}: подготовить узел
 // под дополнение (prepare — на любом узле кластера; нужен не всем
-// дополнениям) или поставить и обновить его чарт (install — на control
-// plane), заданием. Текст команд фиксированный (k8s.AddonPrepareScript,
-// k8s.AddonInstallScript), снаружи — только проверенные значения.
+// дополнениям), поставить и обновить его чарт (install — на control
+// plane) или удалить релиз (uninstall — на control plane), заданием.
+// Текст команд фиксированный (k8s.AddonPrepareScript,
+// k8s.AddonInstallScript, k8s.AddonUninstallScript), снаружи — только
+// проверенные значения.
 func (s *Server) handleK8sAddon(w http.ResponseWriter, r *http.Request) {
 	var req k8s.AddonRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -67,14 +69,20 @@ func (s *Server) handleK8sAddon(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("k8s.addonNotCP"))
 		return
 	}
-	// metrics-server уже встроен в k3s — второй экземпляр сломал бы APIService.
-	if no := k8s.AddonFlavorConflict(req.Name); no != "" && no == st.Flavor {
-		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("k8s.addonFlavorConflict", req.Name, st.Flavor))
-		return
-	}
 	helm, err := m.HelmArgv(r.Context())
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if req.Action == k8s.AddonUninstall {
+		// Удаление — один шаг на control plane: helm uninstall релиза.
+		cmd := cmdjob.Command{Script: k8s.AddonUninstallScript(st.Flavor, helm, req), StepKey: "k8s.addonUninstallStep", StepArgs: []any{req.Name}}
+		s.startCmdJob(w, r, "k8s.addonUninstallJob", []any{req.Name}, "k8s:addon", cmdjob.Params{Commands: []cmdjob.Command{cmd}, Refresh: true}, "k8s.addon.uninstall", req.Name)
+		return
+	}
+	// metrics-server уже встроен в k3s — второй экземпляр сломал бы APIService.
+	if no := k8s.AddonFlavorConflict(req.Name); no != "" && no == st.Flavor {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("k8s.addonFlavorConflict", req.Name, st.Flavor))
 		return
 	}
 	cmds := addonInstallCommands(s.hubCacheURL(), !m.Helm(r.Context()).Installed, st.Flavor, helm, req)

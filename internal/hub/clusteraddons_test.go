@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/k8s"
@@ -170,6 +173,7 @@ func TestHandleAddonsRegistry(t *testing.T) {
 			Storage  bool   `json:"storage"`
 			NoFlavor string `json:"no_flavor"`
 			Prepare  bool   `json:"prepare"`
+			Docs     string `json:"docs"`
 		} `json:"addons"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
@@ -183,6 +187,9 @@ func TestHandleAddonsRegistry(t *testing.T) {
 		byName[a.Name]++
 		if a.Default == "" {
 			t.Errorf("%s: no default version", a.Name)
+		}
+		if !strings.HasPrefix(a.Docs, "https://") {
+			t.Errorf("%s: no docs link in the registry answer", a.Name)
 		}
 	}
 	for _, want := range []string{"longhorn", "ingress-nginx", "cert-manager", "metrics-server", "metallb", "kube-prometheus-stack", "kyverno", "argo-cd"} {
@@ -205,5 +212,45 @@ func TestHandleAddonsRegistry(t *testing.T) {
 				t.Errorf("%s: unexpected flags %+v", a.Name, a)
 			}
 		}
+	}
+}
+
+// POST /hub/clusters/{id}/addons с действием uninstall: неизвестное
+// действие и неизвестное дополнение отклоняются сразу, на неготовый
+// кластер удаление не пускается, а известное дополнение доходит до
+// проверки «действительно установлено» (агента в фикстуре нет — 502).
+func TestHandleClusterAddonsUninstall(t *testing.T) {
+	s, _, hosts := listenerFixture(t, "203.0.113.21")
+	ctx := context.Background()
+	clID := listenerNodes(t, s, hosts, []string{"host"}, []string{"control-plane"})
+
+	post := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/hub/clusters/"+itoa64(clID)+"/addons", strings.NewReader(body))
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", itoa64(clID))
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		s.handleClusterAddons(rec, req)
+		return rec
+	}
+
+	// Кластер ещё не готов — удаление, как и установка, отклоняется.
+	if rec := post(`{"name":"cert-manager","action":"uninstall"}`); rec.Code != http.StatusConflict {
+		t.Errorf("неготовый кластер: код %d, хочу 409: %s", rec.Code, rec.Body.String())
+	}
+	if err := s.db.SetClusterStatus(ctx, clID, store.ClusterReady, ""); err != nil {
+		t.Fatal(err)
+	}
+	if rec := post(`{"name":"cert-manager","action":"reboot"}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("неизвестное действие: код %d, хочу 400: %s", rec.Code, rec.Body.String())
+	}
+	if rec := post(`{"name":"rook","action":"uninstall"}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("неизвестное дополнение: код %d, хочу 400: %s", rec.Code, rec.Body.String())
+	}
+	// Известное дополнение: обработчик доходит до helm-запроса на control
+	// plane — агента в фикстуре нет, это честный 502, а не 400.
+	if rec := post(`{"name":"cert-manager","action":"uninstall"}`); rec.Code != http.StatusBadGateway {
+		t.Errorf("удаление без агента: код %d, хочу 502: %s", rec.Code, rec.Body.String())
 	}
 }

@@ -264,11 +264,12 @@ func (s *Server) handleAddonsRegistry(w http.ResponseWriter, r *http.Request) {
 		NoFlavor  string `json:"no_flavor,omitempty"`
 		MinDiskGB int    `json:"min_disk_gb,omitempty"`
 		Prepare   bool   `json:"prepare,omitempty"`
+		Docs      string `json:"docs,omitempty"`
 	}
 	out := make([]row, 0, len(k8s.Addons))
 	for _, name := range k8s.Addons {
 		def, _ := k8s.AddonDefOf(name)
-		out = append(out, row{Name: def.Name, Default: def.Default, Storage: def.Storage, NoFlavor: def.NoFlavor, MinDiskGB: def.MinDiskGB, Prepare: def.NodePrepare})
+		out = append(out, row{Name: def.Name, Default: def.Default, Storage: def.Storage, NoFlavor: def.NoFlavor, MinDiskGB: def.MinDiskGB, Prepare: def.NodePrepare, Docs: def.Docs})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"addons": out})
 }
@@ -449,14 +450,17 @@ func (s ClusterSpec) addonMinDisk() int {
 // KindClusterAddon — задание «дополнение на готовый кластер».
 const KindClusterAddon = "k8s.cluster.addon"
 
-// ClusterAddonParams — вход задания.
+// ClusterAddonParams — вход задания. Action пустой или «install» —
+// установка/обновление, «uninstall» — удаление релиза.
 type ClusterAddonParams struct {
 	ClusterID int64  `json:"cluster_id"`
 	Name      string `json:"name"`
 	Version   string `json:"version"`
+	Action    string `json:"action,omitempty"`
 }
 
-// ClusterAddonRunner ставит или обновляет дополнение на готовом кластере.
+// ClusterAddonRunner ставит, обновляет или удаляет дополнение на готовом
+// кластере.
 type ClusterAddonRunner struct{ m *Manager }
 
 // NewClusterAddonRunner строит исполнителя.
@@ -465,8 +469,9 @@ func NewClusterAddonRunner(m *Manager) *ClusterAddonRunner { return &ClusterAddo
 // Resumable — да: подготовленные узлы сохранены.
 func (r *ClusterAddonRunner) Resumable() bool { return true }
 
-// Run — подготовка всех узлов, затем установка (или обновление) на
-// control plane, затем версия — в описание кластера.
+// Run — установка/обновление: подготовка нужных узлов, затем helm на
+// control plane, затем версия — в описание кластера. Удаление: один шаг
+// helm uninstall на control plane, затем запись убирается из описания.
 func (r *ClusterAddonRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p ClusterAddonParams
 	if err := jc.Params(&p); err != nil {
@@ -496,6 +501,35 @@ func (r *ClusterAddonRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	cur, err := r.m.addonInstalled(ctx, cp, p.Name)
 	if err != nil {
 		return err
+	}
+	if p.Action == k8s.AddonUninstall {
+		// Обработчик уже проверил установленность, но между постановкой
+		// задания и его исполнением релиз могли снять — лучше честный
+		// отказ здесь, чем «успешное» удаление ничего.
+		if cur == "" {
+			return msgs.Errorf("hub.addonNotInstalled", p.Name)
+		}
+		jc.StepKey(1, 1, "hub.addonStepUninstall", p.Name)
+		jc.Log("hub.addonUninstalling", p.Name, cp.Name)
+		if err := r.m.addonHostJob(ctx, jc, cp, k8s.AddonRequest{Action: k8s.AddonUninstall, Name: p.Name}); err != nil {
+			return err
+		}
+		// Запись — из описания: иначе пополнение кластера готовило бы
+		// узлы под удалённое дополнение, а форма показывала бы его выбранным.
+		if cl, err = r.m.db.ClusterByID(ctx, p.ClusterID); err == nil && json.Unmarshal([]byte(cl.SpecJSON), &spec) == nil {
+			kept := make([]ClusterAddon, 0, len(spec.Addons))
+			for _, a := range spec.Addons {
+				if a.Name != p.Name {
+					kept = append(kept, a)
+				}
+			}
+			spec.Addons = kept
+			if raw, err := json.Marshal(spec); err == nil {
+				_ = r.m.db.SetClusterSpec(ctx, cl.ID, string(raw))
+			}
+		}
+		jc.Log("hub.addonUninstalled", p.Name)
+		return nil
 	}
 	if err := k8s.CheckAddonUpgrade(p.Name, cur, p.Version); err != nil {
 		return err
@@ -562,7 +596,8 @@ type ClusterAddonState struct {
 
 // handleClusterAddons — GET /hub/clusters/{id}/addons: что стоит (по
 // helm на control plane) и что записано в описании; POST {name, version}
-// — поставить или обновить заданием.
+// — поставить или обновить заданием, {name, action: "uninstall"} —
+// удалить релиз заданием.
 func (s *Server) handleClusterAddons(w http.ResponseWriter, r *http.Request) {
 	id, err := clusterIDParam(r)
 	if err != nil {
@@ -614,41 +649,71 @@ func (s *Server) handleClusterAddons(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name    string `json:"name"`
 		Version string `json:"version"`
+		Action  string `json:"action"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	list := []ClusterAddon{{Name: req.Name, Version: req.Version}}
-	if err := validateAddons(list, spec.Flavor); err != nil {
-		writeErr(w, r, http.StatusBadRequest, err)
+	if req.Action != "" && req.Action != k8s.AddonInstall && req.Action != k8s.AddonUninstall {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("k8s.addonBadAction", req.Action))
 		return
 	}
-	a := list[0]
+	uninstall := req.Action == k8s.AddonUninstall
+	var a ClusterAddon
+	if uninstall {
+		// Удалению не нужны ни версия, ни проверка flavor: снимаем то,
+		// что уже стоит, каким бы способом оно ни было поставлено.
+		if _, ok := k8s.AddonDefOf(req.Name); !ok {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("k8s.addonUnknown", req.Name))
+			return
+		}
+		a = ClusterAddon{Name: req.Name}
+	} else {
+		list := []ClusterAddon{{Name: req.Name, Version: req.Version}}
+		if err := validateAddons(list, spec.Flavor); err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		a = list[0]
+	}
 	// Правило обновления — сразу, понятным отказом, а не упавшим заданием.
 	cur, err := s.hub.addonInstalled(r.Context(), nodes[0], a.Name)
 	if err != nil {
 		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
-	if err := k8s.CheckAddonUpgrade(a.Name, cur, a.Version); err != nil {
+	if uninstall {
+		if cur == "" {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("hub.addonNotInstalled", a.Name))
+			return
+		}
+	} else if err := k8s.CheckAddonUpgrade(a.Name, cur, a.Version); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 	steps := 1
-	if k8s.AddonNeedsPrepare(a.Name) {
+	if !uninstall && k8s.AddonNeedsPrepare(a.Name) {
 		steps += len(nodes)
 	}
+	titleKey, titleArgs := "hub.addonJobTitle", []any{a.Name, a.Version, cl.Name}
+	if uninstall {
+		titleKey, titleArgs = "hub.addonUninstallJobTitle", []any{a.Name, cl.Name}
+	}
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: KindClusterAddon, TitleKey: "hub.addonJobTitle", TitleArgs: []any{a.Name, a.Version, cl.Name},
+		Kind: KindClusterAddon, TitleKey: titleKey, TitleArgs: titleArgs,
 		Queue: fmt.Sprintf("cluster:%d", cl.ID), Author: user, Steps: steps,
-		Params: ClusterAddonParams{ClusterID: cl.ID, Name: a.Name, Version: a.Version},
+		Params: ClusterAddonParams{ClusterID: cl.ID, Name: a.Name, Version: a.Version, Action: req.Action},
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	s.db.Audit(r.Context(), user, "hub.cluster.addon", cl.Name+" "+a.Name+" "+cur+"→"+a.Version, "ok", "")
+	auditAction, auditDetail := "hub.cluster.addon", cl.Name+" "+a.Name+" "+cur+"→"+a.Version
+	if uninstall {
+		auditAction, auditDetail = "hub.cluster.addon.uninstall", cl.Name+" "+a.Name+" "+cur
+	}
+	s.db.Audit(r.Context(), user, auditAction, auditDetail, "ok", "")
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": jobID})
 }

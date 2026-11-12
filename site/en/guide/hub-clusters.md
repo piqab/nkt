@@ -475,7 +475,16 @@ hv3: host w"`, `network nat|bridge|macvtap|wireguard`, `nic DEVICE` (or
   `cluster_addon_install`). Upgrades go forward only; Longhorn
   additionally no further than the next minor branch at a time (1.11 →
   1.12), as Longhorn requires; the previous values are kept
-  (`--reuse-values`).
+  (`--reuse-values`). An installed add-on can be **uninstalled** (the
+  "Uninstall" button with a confirmation, `{"name":"cert-manager",
+  "action":"uninstall"}`, MCP `cluster_addon_uninstall`): the job runs
+  `helm uninstall` on the first control plane and removes the add-on's
+  entry from the cluster spec. The namespace and the chart's CRDs are
+  deliberately kept — they may hold custom resources and PVC data (the
+  Longhorn volumes stay in `/var/lib/longhorn` on the nodes anyway); the
+  full clean-up command (`kubectl delete namespace …`) is printed in the
+  job log. Every add-on in the form and in the window carries a link to
+  its documentation.
 - **Expose** — DNAT from host ports (`6443`, `80`, `443`, any can be
   changed or cleared) to the control plane: its own `NKT-PF` chains, the
   `nkt-portforward.service` unit restores them on boot. The kubeconfig

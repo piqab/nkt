@@ -63,6 +63,9 @@ type AddonDef struct {
 	// ExtraSets — флаги --set свежей установки (обновление сохраняет
 	// прежние values — --reuse-values).
 	ExtraSets []string
+	// Docs — официальная документация дополнения (ссылка в формах и окне
+	// «Дополнения»).
+	Docs string
 }
 
 // addonDefs — реестр дополнений. Версии Default проверены по живым
@@ -73,6 +76,7 @@ var addonDefs = []AddonDef{
 		Default: LonghornDefaultVersion, Namespace: LonghornNamespace, Release: "longhorn",
 		Storage: true, NodePrepare: true, Packages: []string{"open-iscsi", "nfs-common"},
 		MinDiskGB: LonghornMinDiskGB, StrictUpgrade: true,
+		Docs: "https://longhorn.io/docs/",
 	},
 	{
 		// На голом железе без MetalLB сервис контроллера повис бы в
@@ -80,6 +84,7 @@ var addonDefs = []AddonDef{
 		Name: AddonIngressNginx, Chart: "ingress-nginx", Repo: "https://kubernetes.github.io/ingress-nginx",
 		RepoName: "ingress-nginx", Default: "4.15.1", Namespace: "ingress-nginx", Release: "ingress-nginx",
 		ExtraSets: []string{"controller.service.type=NodePort"},
+		Docs:      "https://kubernetes.github.io/ingress-nginx/",
 	},
 	{
 		// CRD ставятся явно: без них ClusterIssuer/Certificate не создать.
@@ -88,6 +93,7 @@ var addonDefs = []AddonDef{
 		Name: AddonCertManager, Chart: "cert-manager", Repo: "https://charts.jetstack.io",
 		RepoName: "jetstack", Default: "1.21.3", Namespace: "cert-manager", Release: "cert-manager",
 		ExtraSets: []string{"crds.enabled=true", "installCRDs=true"},
+		Docs:      "https://cert-manager.io/docs/",
 	},
 	{
 		// В k3s metrics-server встроен. На kubeadm kubelet отдаёт
@@ -105,24 +111,29 @@ var addonDefs = []AddonDef{
 			"args[4]=--metric-resolution=15s",
 			"args[5]=--kubelet-insecure-tls",
 		},
+		Docs: "https://github.com/kubernetes-sigs/metrics-server",
 	},
 	{
 		// Пул адресов (IPAddressPool + L2Advertisement) создаётся после
 		// установки — значениями чарта он не задаётся.
 		Name: AddonMetallb, Chart: "metallb", Repo: "https://metallb.github.io/metallb",
 		RepoName: "metallb", Default: "0.16.2", Namespace: "metallb-system", Release: "metallb",
+		Docs: "https://metallb.io/",
 	},
 	{
 		Name: AddonKubePrometheusStack, Chart: "kube-prometheus-stack", Repo: "https://prometheus-community.github.io/helm-charts",
 		RepoName: "prometheus-community", Default: "93.2.2", Namespace: "monitoring", Release: "kube-prometheus-stack",
+		Docs: "https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack",
 	},
 	{
 		Name: AddonKyverno, Chart: "kyverno", Repo: "https://kyverno.github.io/kyverno",
 		RepoName: "kyverno", Default: "3.10.0", Namespace: "kyverno", Release: "kyverno",
+		Docs: "https://kyverno.io/docs/",
 	},
 	{
 		Name: AddonArgoCD, Chart: "argo-cd", Repo: "https://argoproj.github.io/argo-helm",
 		RepoName: "argo", Default: "10.18.0", Namespace: "argo-cd", Release: "argo-cd",
+		Docs: "https://argo-cd.readthedocs.io/en/stable/",
 	},
 }
 
@@ -162,8 +173,9 @@ var addonVersionRe = regexp.MustCompile(`^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$`)
 
 // Действия AddonRequest.
 const (
-	AddonPrepare = "prepare"
-	AddonInstall = "install"
+	AddonPrepare   = "prepare"
+	AddonInstall   = "install"
+	AddonUninstall = "uninstall"
 )
 
 // AddonRequest — POST /k8s/addon: подготовить узел или поставить
@@ -236,6 +248,10 @@ func (r AddonRequest) Validate() error {
 				return msgs.Errorf("k8s.addonBadChartURL", r.ChartURL)
 			}
 		}
+		return nil
+	case AddonUninstall:
+		// Версия, реплики и чарт не нужны: удаление идёт по release имени
+		// записи реестра.
 		return nil
 	}
 	return msgs.Errorf("k8s.addonBadAction", r.Action)
@@ -485,6 +501,38 @@ func addonChartInstallScript(flavor string, helm []string, r AddonRequest, hubCa
 	}
 	lines = append(lines, h("status", def.Release, "-n", def.Namespace))
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// AddonUninstallScript — удаление дополнения: helm uninstall релиза из
+// записи реестра. Идемпотентно (нет релиза — не ошибка). Namespace и CRD
+// намеренно не удаляются: helm uninstall не трогает CRD по замыслу helm,
+// а удаление namespace снесло бы и пользовательские CR, и PVC с данными
+// (тома Longhorn при этом всё равно остаются в /var/lib/longhorn на
+// узлах). Подсказка о ручной дочистке — в журнал задания.
+func AddonUninstallScript(flavor string, helm []string, r AddonRequest) string {
+	def, _ := AddonDefOf(r.Name)
+	kubeconfig := "/etc/kubernetes/admin.conf"
+	if flavor == FlavorK3s {
+		kubeconfig = "/etc/rancher/k3s/k3s.yaml"
+	}
+	quoted := make([]string, len(helm))
+	for i, a := range helm {
+		quoted[i] = shq(a)
+	}
+	h := func(args ...string) string {
+		return quoted[0] + " " + strings.Join(args, " ") + " " + strings.Join(quoted[1:], " ")
+	}
+	return strings.Join([]string{
+		"set -e",
+		"export KUBECONFIG=" + kubeconfig,
+		"if " + h("status", def.Release, "-n", def.Namespace) + " >/dev/null 2>&1; then",
+		"  echo \"uninstalling " + def.Release + " from namespace " + def.Namespace + "\"",
+		"  " + h("uninstall", def.Release, "-n", def.Namespace, "--wait", "--timeout", "10m"),
+		"else",
+		"  echo \"" + def.Release + " is not installed in namespace " + def.Namespace + " — nothing to uninstall\"",
+		"fi",
+		"echo \"namespace " + def.Namespace + " and the chart's CRDs (if any) are kept: helm does not remove CRDs, and deleting the namespace would take user resources and PVC data with it. To clean up fully: kubectl delete namespace " + def.Namespace + "\"",
+	}, "\n") + "\n"
 }
 
 // AddonVersionCmp сравнивает версии вида 1.12.1 (-1, 0, 1).

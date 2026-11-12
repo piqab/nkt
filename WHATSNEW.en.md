@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.22.2 — 2026-11-12
+
+- **Add-ons: uninstall and documentation links.** In the “Add-ons” window of a ready cluster every installed add-on got an “Uninstall” button — the job runs `helm uninstall` on the first control plane and removes the add-on's entry from the cluster spec (so that growing the cluster no longer prepares nodes for a removed add-on). The namespace, the chart's CRDs and the data are deliberately kept: Longhorn volumes stay in `/var/lib/longhorn` on the nodes, monitoring PVCs stay in their namespace; the full clean-up command is printed in the job log. In MCP, `cluster_addon_uninstall` joins `cluster_addon_install`. Every add-on in the creation form and in the window carries a link to its official documentation.
+
 ## v1.22.1 — 2026-11-12
 
 - **“Continue” with a step selection no longer loses the job error.** The `RetryWithParams` error landed in a shadowed variable and never reached the check: the hub answered 200 with `job_id: 0` and switched the cluster to “creating” although no job had been started (that was the CodeQL “useless assignment” — a real defect, not noise). The error is now returned to the client. The gosec “XSS via taint analysis” finding on Kubernetes API responses (JSON pods, YAML kubeconfig) is suppressed with the correct rule **G705** — the earlier annotation named G703 (a different rule, already excluded globally), which is why the alert stayed open.

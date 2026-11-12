@@ -191,6 +191,9 @@ func TestAddonRegistry(t *testing.T) {
 		if !strings.HasPrefix(def.Repo, "https://") || def.Chart == "" || def.Release == "" || def.Namespace == "" || def.RepoName == "" {
 			t.Errorf("%s: incomplete def %+v", name, def)
 		}
+		if !strings.HasPrefix(def.Docs, "https://") {
+			t.Errorf("%s: docs link %q is not an https URL", name, def.Docs)
+		}
 		if !ValidAddon(name) {
 			t.Errorf("%s: ValidAddon is false", name)
 		}
@@ -225,6 +228,8 @@ func TestAddonRequestValidateRegistry(t *testing.T) {
 		{Action: AddonInstall, Name: AddonIngressNginx, Version: "4.15.1"},
 		{Action: AddonInstall, Name: AddonCertManager, Version: "1.21.3", ChartURL: "https://charts.jetstack.io/charts/cert-manager-v1.21.3.tgz"},
 		{Action: AddonInstall, Name: AddonArgoCD, Version: "10.18.0", Upgrade: true},
+		{Action: AddonUninstall, Name: AddonCertManager},
+		{Action: AddonUninstall, Name: AddonLonghorn},
 	}
 	for _, r := range ok {
 		if err := r.Validate(); err != nil {
@@ -233,6 +238,7 @@ func TestAddonRequestValidateRegistry(t *testing.T) {
 	}
 	bad := []AddonRequest{
 		{Action: AddonPrepare, Name: AddonIngressNginx}, // no node preparation
+		{Action: AddonUninstall, Name: "rook"},          // unknown name
 		{Action: AddonInstall, Name: AddonMetallb, Version: "0.16"},
 		{Action: AddonInstall, Name: AddonKyverno, Version: "3.10.0", ChartURL: "http://kyverno.github.io/kyverno/kyverno-3.10.0.tgz"},
 		{Action: AddonInstall, Name: AddonKyverno, Version: "3.10.0", ChartURL: "kyverno-3.10.0.tgz"},
@@ -340,6 +346,32 @@ func TestAddonChartFetchScriptGeneric(t *testing.T) {
 	if LonghornChartFetchScript(cache, "1.12.1") != AddonChartFetchScript(cache, AddonLonghorn, "1.12.1", LonghornChartURL("1.12.1")) {
 		t.Error("longhorn fetch script changed meaning")
 	}
+}
+
+// Скрипт удаления: guard идемпотентности (нет релиза — не ошибка),
+// --wait --timeout, подсказка о ручной дочистке namespace, kubeconfig
+// k3s.
+func TestAddonUninstallScript(t *testing.T) {
+	helm := []string{"helm", "--kubeconfig", "/etc/kubernetes/admin.conf"}
+	s := AddonUninstallScript(FlavorKubeadm, helm, AddonRequest{Action: AddonUninstall, Name: AddonCertManager})
+	for _, want := range []string{
+		"export KUBECONFIG=/etc/kubernetes/admin.conf",
+		"if 'helm' status cert-manager -n cert-manager '--kubeconfig' '/etc/kubernetes/admin.conf' >/dev/null 2>&1; then",
+		"'helm' uninstall cert-manager -n cert-manager --wait --timeout 10m '--kubeconfig' '/etc/kubernetes/admin.conf'",
+		"nothing to uninstall",
+		"kubectl delete namespace cert-manager",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("uninstall script lacks %q:\n%s", want, s)
+		}
+	}
+	checkBashSyntax(t, "cert-manager uninstall", s)
+
+	k3 := AddonUninstallScript(FlavorK3s, helm, AddonRequest{Action: AddonUninstall, Name: AddonLonghorn})
+	if !strings.Contains(k3, "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml") || !strings.Contains(k3, "uninstall longhorn -n longhorn-system") {
+		t.Errorf("k3s longhorn uninstall script:\n%s", k3)
+	}
+	checkBashSyntax(t, "longhorn uninstall on k3s", k3)
 }
 
 // Правила обновления: Longhorn строгий (ветка), остальные — только запрет
