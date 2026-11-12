@@ -667,6 +667,8 @@ var ruCatalog = map[string]string{
 	"control.cronReReadsFilesItself":                      "cron перечитывает файлы сам — применять отдельно ничего не нужно",
 	"control.daysMustBetween1Got":                         "days должен быть от 1 до %d, получено %d",
 	"control.diskPathMustInside":                          "путь диска должен быть внутри %s",
+	"control.diskFileExists":                              "файл диска %s уже существует — обычно это остатки прошлой попытки создания: удалите его или выберите другое имя",
+	"control.diskDirMissing":                              "каталог %s не существует — образы дисков создаются только в нём; установлен ли на хосте libvirt",
 	"control.dockerComposeStartCode":                      "docker compose up --pull never: код %d: %s",
 	"control.dockerComposeStartNoImage":                   "docker compose up --pull never: код %d — образа нет на хосте, без registry не поднять: выложите заново (deploy КОНВЕЙЕР или deploy КОНВЕЙЕР start — скачает с ключом конвейера) или поднимите через up: %s",
 	"control.dockerComposeStopCode":                       "docker compose stop: код %d: %s",

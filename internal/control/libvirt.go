@@ -3,13 +3,14 @@ package control
 import (
 	"context"
 	"fmt"
-	"github.com/piqab/nkt/internal/msgs"
+	"os"
 	"regexp"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -48,14 +49,15 @@ func (m *LibvirtManager) run(ctx context.Context, argv ...string) (collect.Comma
 	return m.c.Run(ctx, argv[0], argv[1:]...)
 }
 
-// virshFailure собирает причину отказа virsh.
+// failureLines сжимает вывод команды в причину отказа: первые три строки
+// без префиксов «error:»/«ошибка:» virsh и qemu-img.
 //
 // Не первая строка: заголовок вроде «Failed to start domain» virsh пишет
 // первым, а причину — следующей строкой, и показывать только заголовок
 // значит каждый раз выбрасывать самое нужное.
-func virshFailure(res collect.CommandResult) string {
+func failureLines(text string, exitCode int) string {
 	var lines []string
-	for _, line := range strings.Split(res.Output(), "\n") {
+	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		line = strings.TrimPrefix(line, "error: ")
 		line = strings.TrimPrefix(line, "ошибка: ")
@@ -64,12 +66,26 @@ func virshFailure(res collect.CommandResult) string {
 		}
 	}
 	if len(lines) == 0 {
-		return msgs.T(msgs.DefaultLang, "collect.exitCode", res.ExitCode)
+		return msgs.T(msgs.DefaultLang, "collect.exitCode", exitCode)
 	}
 	if len(lines) > 3 {
 		lines = lines[:3]
 	}
 	return strings.Join(lines, "; ")
+}
+
+// virshFailure собирает причину отказа virsh.
+func virshFailure(res collect.CommandResult) string { return failureLines(res.Output(), res.ExitCode) }
+
+// toolingFailure — причина отказа qemu-img и компании: отчёт «Formatting …»
+// они пишут в stdout, а настоящий отказ («Could not create image: …») — в
+// stderr; Output() же предпочитает stdout, из-за чего баннер мастера ВМ и
+// аудит получали отчёт вместо причины. Пустой stderr — прежний разбор.
+func toolingFailure(res collect.CommandResult) string {
+	if stderr := strings.TrimSpace(res.Stderr); stderr != "" {
+		return failureLines(stderr, res.ExitCode)
+	}
+	return failureLines(res.Output(), res.ExitCode)
 }
 
 // libvirtDomainRe accepts libvirt domain names: letters, digits, and the
@@ -96,21 +112,42 @@ func (m *LibvirtManager) CreateDisk(ctx context.Context, user, path string, size
 	if sizeGB <= 0 || sizeGB > 65536 {
 		return msgs.Errorf("control.invalidDiskSizeGB", sizeGB)
 	}
+	// Предпроверки до qemu-img, чей отказ приходит вместе с информационным
+	// отчётом в stdout: остатки прошлой попытки и отсутствие каталога образов
+	// встречаются чаще собственных отказов qemu-img, а подсказка полезнее его
+	// текста. Только существование, без пробы записи: сам демон сидит под
+	// ProtectSystem=strict, а qemu-img уходит за песочницу — проба отсюда
+	// соврала бы о правах на каталог. Fixtures-режим команды симулирует и
+	// реальную ФС не трогает — проверять там нечего.
+	if !m.cfg.IsFixtures() {
+		if _, err := os.Stat(path); err == nil {
+			return msgs.Errorf("control.diskFileExists", path)
+		}
+		if fi, err := os.Stat(libvirtImagesRoot); err != nil || !fi.IsDir() {
+			return msgs.Errorf("control.diskDirMissing", libvirtImagesRoot)
+		}
+	}
 
 	res, err := m.run(ctx, "qemu-img", "create", "-f", "qcow2", path, fmt.Sprintf("%dG", sizeGB))
 	outcome := "ok"
 	if err != nil || !res.OK() {
 		outcome = "error"
 	}
-	m.db.Audit(ctx, user, "vm.create_disk", path, outcome, map[string]any{
+	audit := map[string]any{
 		"size_gb": sizeGB, "exit_code": res.ExitCode,
 		"output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
-	})
+	}
+	// Причина отказа живёт в stderr — в аудит её целиком, баннеру хватит
+	// первых строк (toolingFailure).
+	if stderr := strings.TrimSpace(res.Stderr); stderr != "" {
+		audit["stderr"] = stderr
+	}
+	m.db.Audit(ctx, user, "vm.create_disk", path, outcome, audit)
 	if err != nil {
 		return fmt.Errorf("qemu-img create %s: %w", path, err)
 	}
 	if !res.OK() {
-		return fmt.Errorf("qemu-img create %s: %s", path, virshFailure(res))
+		return fmt.Errorf("qemu-img create %s: %s", path, toolingFailure(res))
 	}
 	return nil
 }

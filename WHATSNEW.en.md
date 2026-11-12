@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.22.3 — 2026-11-12
+
+- **The VM creation wizard now shows the real cause of a disk creation failure.** When `qemu-img create` failed, the banner and the `vm.create_disk` audit entry received only the informational “Formatting …” report (stdout): the actual rejection (“Could not create image: …”) went to stderr and was dropped while the text was composed — people saw the report's header instead of the cause. On a non-zero exit, stderr now takes priority in the message, and the audit keeps both streams in full. Pre-checks run before the command: an existing disk file gets a hint about leftovers of an earlier attempt (remove it or pick another name), and a missing `/var/lib/libvirt/images` directory gets a hint about installing libvirt.
+
 ## v1.22.2 — 2026-11-12
 
 - **Add-ons: uninstall and documentation links.** In the “Add-ons” window of a ready cluster every installed add-on got an “Uninstall” button — the job runs `helm uninstall` on the first control plane and removes the add-on's entry from the cluster spec (so that growing the cluster no longer prepares nodes for a removed add-on). The namespace, the chart's CRDs and the data are deliberately kept: Longhorn volumes stay in `/var/lib/longhorn` on the nodes, monitoring PVCs stay in their namespace; the full clean-up command is printed in the job log. In MCP, `cluster_addon_uninstall` joins `cluster_addon_install`. Every add-on in the creation form and in the window carries a link to its official documentation.

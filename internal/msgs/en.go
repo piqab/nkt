@@ -668,6 +668,8 @@ var enCatalog = map[string]string{
 	"control.cronReReadsFilesItself":                      "cron re-reads its files itself — nothing needs to be applied separately",
 	"control.daysMustBetween1Got":                         "days must be between 1 and %d, got %d",
 	"control.diskPathMustInside":                          "the disk path must be inside %s",
+	"control.diskFileExists":                              "the disk file %s already exists — usually leftovers of an earlier creation attempt: remove it or pick another name",
+	"control.diskDirMissing":                              "the directory %s does not exist — disk images are created only inside it; is libvirt installed on the host",
 	"control.dockerComposeStartCode":                      "docker compose up --pull never: code %d: %s",
 	"control.dockerComposeStartNoImage":                   "docker compose up --pull never: code %d — the image isn't on the host, it can't come up without the registry: deploy again (deploy PIPELINE or deploy PIPELINE start — pulls with the pipeline key) or bring it up with up: %s",
 	"control.dockerComposeStopCode":                       "docker compose stop: code %d: %s",
