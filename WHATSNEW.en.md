@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.22.5 — 2026-11-12
+
+- **The “+ New” button now creates a ready machine from an image by default.** The libvirt VM creation window got three tabs: **“From image”** (the default) — the same form as “create VM” in the “Images” section (an image downloaded on the host, hardware, network up to macvtap, cloud-init user and key, an optional password, templates): the host job prepares the disk from the image, applies cloud-init, defines the domain and **starts the machine**, and the generated private key is shown once; **“Empty disk”** and **“Raw XML”** remain the special-case paths, with an empty qcow2 and the XML review before saving. The form is now shared application-wide: the “Images” section opens the very same one, with no second copy; on the hub the window of every host works through the scope, and creation still runs as a job on the host's agent.
+
 ## v1.22.4 — 2026-11-12
 
 - **Creating a VM on the hub machine itself no longer hits “Read-only file system”.** The hub's virtualization (its localhost host) ran `qemu-img` and `virsh` inside its own unit's sandbox: the sandbox escape was given only to the single-host mode, while the hub runs in hub mode, and `ProtectSystem=strict` mounted `/var/lib/libvirt` read-only for it — the rejection did not depend on the machine name and looked like a qemu-img error. The escape is now enabled in every mode except fixtures: it detects the sandbox at runtime, and outside a systemd unit the behaviour is unchanged. The “machine from an image” job never lacked the escape — it receives it directly, which is why on the hub exactly that flow worked.

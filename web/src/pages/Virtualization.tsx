@@ -12,7 +12,7 @@ import { ConsoleModal } from '../components/ConsoleModal'
 import { VMScreenModal, addVNCGraphics } from '../components/VMScreenModal'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
-import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
+import type { FileContent, Job, Me, VMImage, VMImageLocal, VMTemplate, VMTool, VirtualMachine, WriteResult } from '../types'
 import { Banner, Card, CodeEditor, DiffView, ErrorNote, formatBytesShort, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
 import i18n from '../i18n'
 import { confirmAction, confirmWithOption } from '../components/confirm'
@@ -20,6 +20,8 @@ import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { PowerToggle, vmPowerState } from '../components/PowerToggle'
 import VMImagesSection from '../components/VMImagesSection'
+import { VMCreateImageForm } from '../components/VMCreateImageForm'
+import { JobLogModal } from './Jobs'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
 import { EngineInstallBanner } from '../components/EngineInstallBanner'
@@ -242,6 +244,10 @@ export default function Virtualization({ me }: { me: Me }) {
   // Заготовка правки XML (добавить VNC) — запись всё равно через дифф.
   const [editPrefill, setEditPrefill] = useState<{ edit: (s: string) => string; intro: string } | null>(null)
   const [chooserOpen, setChooserOpen] = useState(false)
+  // Задание создания машины из образа и одноразовый приватный ключ: окно
+  // «+ Новая» стартует его прямо со вкладки «Из образа».
+  const [openJob, setOpenJob] = useState<Job | null>(null)
+  const [genKey, setGenKey] = useState<string | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
   // Удаление машины (с дисками — минуты) — заданием; по окончании
@@ -405,6 +411,12 @@ export default function Virtualization({ me }: { me: Me }) {
             setChooserOpen(false)
             setCreating({ name, initialContent })
           }}
+          onJob={(job) => {
+            setChooserOpen(false)
+            setOpenJob(job)
+            setImagesReload((n) => n + 1)
+          }}
+          onKey={setGenKey}
         />
       )}
 
@@ -461,26 +473,62 @@ export default function Virtualization({ me }: { me: Me }) {
           }}
         />
       )}
+
+      {openJob && (
+        <JobLogModal
+          job={openJob}
+          onClose={() => {
+            setOpenJob(null)
+            vms.reload()
+            setImagesReload((n) => n + 1)
+          }}
+        />
+      )}
+
+      {genKey && (
+        <Modal title={t('vmimages.keyTitle')} onClose={() => setGenKey(null)} maskClosable={false} width={720}>
+          <Banner kind="warn">{t('vmimages.keyOnce')}</Banner>
+          <pre className="diff mono" style={{ maxHeight: '18rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+            {genKey}
+          </pre>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <Button
+              onClick={() => {
+                void navigator.clipboard?.writeText(genKey)
+              }}
+            >
+              {t('common.copy')}
+            </Button>
+            <Button type="primary" onClick={() => setGenKey(null)}>
+              {t('vmimages.keySaved')}
+            </Button>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }
 
 const domainNameRe = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
-/** Name + a choice of how to get to the XML review step: a short guided form
+/** How to get a new machine: a ready one from an image (the default — the
+ * host job prepares the disk, cloud-init and starts it), or the two
+ * special-case paths that end at the XML review step: a short guided form
  * (memory/vCPU/disk/network, with an optional real qcow2 file created to
- * match) or straight to a blank skeleton for hand-editing. Either path lands
- * on the same VMEditor — the wizard only changes what's pre-filled there,
- * never skips the review-before-save step. */
+ * match) or straight to a blank skeleton for hand-editing. */
 function VMCreateChooser({
   onClose,
   onReady,
+  onJob,
+  onKey,
 }: {
   onClose: () => void
   onReady: (name: string, initialContent?: string) => void
+  onJob: (job: Job) => void
+  onKey: (key: string) => void
 }) {
   const { t } = useTranslation()
-  const [mode, setMode] = useState<'wizard' | 'raw'>('wizard')
+  const [mode, setMode] = useState<'image' | 'wizard' | 'raw'>('image')
   const [name, setName] = useState('')
   const [memoryMB, setMemoryMB] = useState(2048)
   const [vcpus, setVcpus] = useState(2)
@@ -489,6 +537,22 @@ function VMCreateChooser({
   const [createDiskFile, setCreateDiskFile] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Msg | null>(null)
+  // Скачанные образы и шаблоны — те же источники, что у раздела «Образы»:
+  // окно создания не должно предлагать то, чего на хосте нет.
+  const images = useApi<{
+    catalog: VMImage[]
+    local: VMImageLocal[]
+    custom: VMImage[] | null
+    custom_local: VMImageLocal[] | null
+    missing: VMTool[] | null
+  }>('/vm/images', 60_000)
+  const templates = useApi<{ templates: VMTemplate[] }>('/vm/templates', 60_000)
+  const local = new Map(
+    [...(images.data?.local ?? []), ...(images.data?.custom_local ?? [])].map((l) => [l.id, l]),
+  )
+  const downloaded = [...(images.data?.catalog ?? []), ...(images.data?.custom ?? [])].filter((img) =>
+    local.get(img.id)?.downloaded,
+  )
 
   const diskPath = defaultDiskPath(name || 'new-vm')
 
@@ -527,54 +591,74 @@ function VMCreateChooser({
       width={760}
       maskClosable={false}
     >
-      <Form layout="vertical" onFinish={submit}>
-        {error && <Banner kind="error">{msg(error)}</Banner>}
-        <Segmented
-          value={mode}
-          onChange={(v) => setMode(v as 'wizard' | 'raw')}
-          options={[
-            { value: 'wizard', label: t('virt.wizard') },
-            { value: 'raw', label: t('virt.rawXml') },
-          ]}
-          style={{ marginBottom: '0.75rem' }}
-        />
-        <Form.Item label={t('virt.vmName')} style={{ maxWidth: '20rem' }}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="new-vm" autoFocus />
-        </Form.Item>
+      {error && <Banner kind="error">{msg(error)}</Banner>}
+      <Segmented
+        value={mode}
+        onChange={(v) => setMode(v as 'image' | 'wizard' | 'raw')}
+        options={[
+          { value: 'image', label: t('virt.tabImage') },
+          { value: 'wizard', label: t('virt.wizard') },
+          { value: 'raw', label: t('virt.rawXml') },
+        ]}
+        style={{ marginBottom: '0.75rem' }}
+      />
 
-        {mode === 'wizard' && (
-          <>
-            <div className="filters">
-              <Form.Item label={t('virt.memoryMb')} style={{ minWidth: '10rem' }}>
-                <InputNumber min={256} step={256} value={memoryMB} onChange={(v) => setMemoryMB(v ?? 256)} style={{ width: '100%' }} />
-              </Form.Item>
-              <Form.Item label="vCPU" style={{ minWidth: '8rem' }}>
-                <InputNumber min={1} max={64} value={vcpus} onChange={(v) => setVcpus(v ?? 1)} style={{ width: '100%' }} />
-              </Form.Item>
-              <Form.Item label={t('virt.diskGb')} style={{ minWidth: '8rem' }}>
-                <InputNumber min={1} max={65536} value={diskGB} onChange={(v) => setDiskGB(v ?? 1)} style={{ width: '100%' }} />
-              </Form.Item>
-              <Form.Item label={t('virt.networkBridge')} style={{ minWidth: '10rem' }}>
-                <Input value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder="br0" />
-              </Form.Item>
-            </div>
-            <p className="small muted" style={{ margin: 0 }}>
-              {t('virt.diskFile')}
-              <code className="mono">{diskPath}</code>
-            </p>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem' }}>
-              <Checkbox checked={createDiskFile} onChange={(e) => setCreateDiskFile(e.target.checked)} />
-              {t('virt.createDiskFile')}
-            </label>
-          </>
-        )}
+      {mode === 'image' && (
+        <div className="col" style={{ gap: '0.5rem' }}>
+          {(images.data?.missing?.length ?? 0) > 0 && <Banner kind="warn">{t('vmimages.toolsMissing')}</Banner>}
+          {downloaded.length === 0 && <Banner kind="info">{t('virt.noImagesYet')}</Banner>}
+          <VMCreateImageForm
+            image={null}
+            choices={downloaded}
+            templates={templates.data?.templates ?? []}
+            onSaved={() => void templates.reload()}
+            onClose={onClose}
+            onStarted={onJob}
+            onKey={onKey}
+          />
+        </div>
+      )}
 
-        <Form.Item style={{ marginTop: '0.75rem', marginBottom: 0 }}>
-          <Button type="primary" htmlType="submit" loading={busy}>
-            {busy ? t('virt.preparing') : t('virt.nextReviewXml')}
-          </Button>
-        </Form.Item>
-      </Form>
+      {mode !== 'image' && (
+        <Form layout="vertical" onFinish={submit}>
+          <Form.Item label={t('virt.vmName')} style={{ maxWidth: '20rem' }}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="new-vm" autoFocus />
+          </Form.Item>
+
+          {mode === 'wizard' && (
+            <>
+              <div className="filters">
+                <Form.Item label={t('virt.memoryMb')} style={{ minWidth: '10rem' }}>
+                  <InputNumber min={256} step={256} value={memoryMB} onChange={(v) => setMemoryMB(v ?? 256)} style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item label="vCPU" style={{ minWidth: '8rem' }}>
+                  <InputNumber min={1} max={64} value={vcpus} onChange={(v) => setVcpus(v ?? 1)} style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item label={t('virt.diskGb')} style={{ minWidth: '8rem' }}>
+                  <InputNumber min={1} max={65536} value={diskGB} onChange={(v) => setDiskGB(v ?? 1)} style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item label={t('virt.networkBridge')} style={{ minWidth: '10rem' }}>
+                  <Input value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder="br0" />
+                </Form.Item>
+              </div>
+              <p className="small muted" style={{ margin: 0 }}>
+                {t('virt.diskFile')}
+                <code className="mono">{diskPath}</code>
+              </p>
+              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem' }}>
+                <Checkbox checked={createDiskFile} onChange={(e) => setCreateDiskFile(e.target.checked)} />
+                {t('virt.createDiskFile')}
+              </label>
+            </>
+          )}
+
+          <Form.Item style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+            <Button type="primary" htmlType="submit" loading={busy}>
+              {busy ? t('virt.preparing') : t('virt.nextReviewXml')}
+            </Button>
+          </Form.Item>
+        </Form>
+      )}
     </Modal>
   )
 }

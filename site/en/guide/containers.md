@@ -228,23 +228,33 @@ live output) and **storage pools** (read-only).
   `/etc/libvirt/qemu/<name>.xml` in the config editor, with version
   history, rollback and `virsh define` on save. For a running machine the
   changes take effect after it restarts.
-- **New machine** from a cloud image: name, cores, memory, disk, network,
-  user and SSH key via cloud-init. The network can be a libvirt network or a
-  bridge, or the machine can be plugged straight into a host device
-  (**macvtap**, past bridges and networks): the list offers the host's devices
-  that are up, with their addresses (service ones — tunnels, bridges, libvirt
-  networks and `lo` — are not offered), and on creation the host checks the
-  device again and refuses it if it is missing, down, a loopback or already a
-  macvlan/macvtap. Such a machine really stands in the hosts' network, but the
-  host itself cannot talk to it: its address comes from that network's DHCP and
-  the network administrator has to pin it (a reservation by MAC or a static
-  address on the machine), otherwise the next lease moves it. The host cannot
-  reach the machine over the network, but the guest agent's channel is a virtio
-  port, not the network, so the hub still reads the address from the agent —
-  and since the package does not start its own service, the machine gets a
-  first-boot script that enables it. Missing tools
+- **New machine** — the “+ New” button opens a window with three tabs.
+  **“From image”** (the default) creates a ready machine: an image (one of
+  those downloaded on the host — catalogue or your own), name, cores, memory,
+  disk, network, user and SSH key via cloud-init, a password if wanted; the
+  host job prepares the disk from the image (convert + resize), applies
+  cloud-init, defines the domain and **starts the machine** — the finished
+  machine runs, and the generated private key is shown once. **“Empty disk”**
+  and **“Raw XML”** are for special cases: an empty qcow2 and a domain skeleton
+  with the XML reviewed and edited before saving (`virsh define`); such a
+  machine has no operating system until you install one yourself. The network
+  can be a libvirt network or a bridge, or the machine can be plugged straight
+  into a host device (**macvtap**, past bridges and networks): the list offers
+  the host's devices that are up, with their addresses (service ones — tunnels,
+  bridges, libvirt networks and `lo` — are not offered), and on creation the
+  host checks the device again and refuses it if it is missing, down, a
+  loopback or already a macvlan/macvtap. Such a machine really stands in the
+  hosts' network, but the host itself cannot talk to it: its address comes from
+  that network's DHCP and the network administrator has to pin it (a reservation
+  by MAC or a static address on the machine), otherwise the next lease moves
+  it. The host cannot reach the machine over the network, but the guest agent's
+  channel is a virtio port, not the network, so the hub still reads the address
+  from the agent — and since the package does not start its own service, the
+  machine gets a first-boot script that enables it. Missing tools
   (`virt-install`, `qemu-img`…) install themselves. Machine templates — to
-  create identical ones again; the device is part of a template too.
+  create identical ones again; the device is part of a template too. The same
+  “from image” form is opened by the “create VM” button on an image row in the
+  “Images” section.
 - **Images**: a catalogue of Ubuntu, Debian and other cloud images —
   downloaded with a checksum check; your own images — upload a file, move
   it into the disk directory.
