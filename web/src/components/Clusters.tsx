@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { NAME_MARK, NamedTitle, OsIcon, OsIconOf } from './OsIcon'
 import { Sensitive } from '../privacy'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, Tooltip } from 'antd'
@@ -74,6 +74,9 @@ export function ListenerFields({
   setGateway,
   allow,
   setAllow,
+  internal,
+  setInternal,
+  busyHosts,
 }: {
   // Список шлюзов приносит форма: сохранённому набору нужен адрес шлюза,
   // а не его id, и раздобыть его проще там, где набор собирается.
@@ -85,10 +88,18 @@ export function ListenerFields({
   setGateway: (v: number) => void
   allow: string
   setAllow: (v: string) => void
+  /** Держать трафик узлов к общему адресу внутри меша (внутренний путь). */
+  internal: boolean
+  setInternal: (v: boolean) => void
+  /** Хосты, на которых стоят macvtap-машины этого кластера: шлюз на таком хосте не может их обслуживать. */
+  busyHosts?: number[]
 }) {
   const { t } = useTranslation()
   const list = gateways
   const ep = endpoint.trim()
+  // Последний адрес, подставленный выбором шлюза: при смене шлюза он
+  // обновляется, а вписанный человеком текст остаётся нетронутым.
+  const autoEp = useRef('')
   return (
     <div className="col" style={{ gap: '0.4rem', marginBottom: '0.6rem' }}>
       <div className="grid grid-2" style={{ gap: '0.5rem' }}>
@@ -107,19 +118,34 @@ export function ListenerFields({
           {t('clusters.gateway')}
           <Select
             value={gateway}
-            onChange={(v: number) => setGateway(v)}
+            onChange={(v: number) => {
+              setGateway(v)
+              const gw = list.find((g) => g.edge_id === v)
+              if (gw && (!ep || ep === autoEp.current)) {
+                autoEp.current = `${gw.address}:6443`
+                setEndpoint(autoEp.current)
+              }
+            }}
             options={[
               { value: 0, label: t('clusters.gatewayAuto') },
-              ...list.map((g) => ({
-                value: g.edge_id,
-                label: `${g.name} — ${g.address}${g.connected ? '' : ` ${t('clusters.gatewayOffline')}`}`,
-                disabled: !g.connected,
-              })),
+              ...list.map((g) => {
+                const busy = !!g.host_id && (busyHosts ?? []).includes(g.host_id)
+                return {
+                  value: g.edge_id,
+                  label: `${g.name} — ${g.address}${g.connected ? '' : ` ${t('clusters.gatewayOffline')}`}${busy ? ` ${t('clusters.gatewayMacvtapHost')}` : ''}`,
+                  disabled: !g.connected || busy,
+                }
+              }),
             ]}
           />
           <span className="small muted">{list.length === 0 ? t('clusters.gatewayNone') : t('clusters.gatewayHint')}</span>
         </label>
       </div>
+      <label className="row" style={{ margin: 0, alignItems: 'baseline', gap: '0.4rem' }}>
+        <Checkbox checked={internal} disabled={!ep} onChange={(e) => setInternal(e.target.checked)} />
+        <span>{t('clusters.endpointInternal')}</span>
+        <span className="small muted">{t('clusters.endpointInternalHint')}</span>
+      </label>
       <label style={{ margin: 0 }}>
         {t('clusters.allow')}
         <Input
@@ -135,7 +161,7 @@ export function ListenerFields({
 }
 
 /** Разбор полей слушателя: что ушло бы в кластер и что сказать человеку. */
-export function listenerBody(flavor: string, endpoint: string, gateway: number, allow: string) {
+export function listenerBody(flavor: string, endpoint: string, gateway: number, allow: string, internal?: boolean) {
   if (flavor !== 'kubeadm') return {}
   const ep = endpoint.trim()
   if (!ep) return {}
@@ -146,6 +172,7 @@ export function listenerBody(flavor: string, endpoint: string, gateway: number, 
       .split(',')
       .map((a) => a.trim())
       .filter(Boolean),
+    ...(internal ? { endpoint_internal: true } : {}),
   }
 }
 
@@ -171,6 +198,7 @@ export function NewClusterModal({
   const [topology, setTopology] = useState<'single' | 'cp1' | 'cp3'>('cp1')
   const [endpoint, setEndpoint] = useState('')
   const [gateway, setGateway] = useState(0)
+  const [internal, setInternal] = useState(false)
   const [allow, setAllow] = useState('')
   const [workers, setWorkers] = useState(1)
   const [expose, setExpose] = useState(true)
@@ -225,7 +253,7 @@ export function NewClusterModal({
           w_memory_mb: w.mem,
           w_disk_gb: w.disk,
           addons: addonsBody(addons),
-          ...listenerBody(flavor, endpoint, gateway, allow),
+          ...listenerBody(flavor, endpoint, gateway, allow, internal),
   })
 
   // Чек-лист создания приходит с хаба: имена узлов и порядок шагов знает
@@ -324,6 +352,7 @@ export function NewClusterModal({
               if (v === 'k3s') {
                 setEndpoint('')
                 setGateway(0)
+                setInternal(false)
                 setAllow('')
               }
             }}
@@ -391,6 +420,8 @@ export function NewClusterModal({
           setGateway={setGateway}
           allow={allow}
           setAllow={setAllow}
+          internal={internal}
+          setInternal={setInternal}
         />
       )}
       <div className="col" style={{ gap: '0.6rem', marginBottom: '0.6rem' }}>

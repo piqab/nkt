@@ -362,19 +362,30 @@ how the Traffic Fly route is assembled.
 |---|---|---|
 | Network between hosts | **macvtap** | the machine attaches to the host's NIC directly; the device is named in every placement row (e.g. `eth0`) |
 | Machine addresses | reservation on the router | addresses come from the network DHCP; pin them with a MAC reservation (or static config) — routes, kubeconfig and Traffic Fly all hold these addresses |
-| **Built-in load balancer** | enabled, 1 machine (or 2 for HA) | an HAProxy machine holding the shared API address; a pair needs a **VIP** — pin it on the router too (keepalived moves it between the machines) |
-| Endpoint | fills itself in | `VIP:6443` or `lb-1 address:6443`; the shared-address listener is not needed |
+| **Built-in load balancer** | enabled, one machine | an HAProxy machine; the cluster endpoint is its **real address** from the placement subnet, reachable by the nodes through the site router. Pin the address with a DHCP reservation by MAC |
+| Endpoint | fills itself in | `lb-1 address:6443`; the shared-address listener is not needed. The LB-free alternative is a shared address on the Traffic Fly gateway (see “Clusters”) |
 
 The `lb-*` machines are not Kubernetes nodes: they never appear in
 `kubectl get nodes`, get no join steps and take no part in pod traffic — they
 serve 6443 only. Host port forwarding does not work with macvtap and is not
 needed: machines (the lb ones included) are reachable at their network
-addresses directly. keepalived on the pair exchanges VRRP advertisements by
-**unicast** (each machine is given its peer's address): over macvtap, machines
-on the same host do not deliver each other's multicast, and with multicast
-VRRP both machines of the pair would consider themselves master and hold the
-VIP at the same time — the address would jump between them together with the
-ARP answers.
+addresses directly.
+
+**Why a single LB and no VIP.** The form creates one HAProxy machine: its
+real address is routed to every node by the site router with no tricks. The
+former HA pair with a VIP is gone from the form — a VIP lives only inside the
+L2 segment of the balancer machines (GARP does not cross a router), and an
+address invented outside the node subnets is unreachable for them: `kubeadm`
+hangs on the token and the cluster comes up with a dead endpoint. Fault
+tolerance of the shared address comes from the Traffic Fly listener on the
+gateway (targets — the control planes over tunnels; losing any machine or
+even a gateway segment keeps the cluster manageable while two control planes
+live). keepalived keeps working on pairs created before — and exchanges VRRP
+advertisements by **unicast** (each machine is given its peer's address):
+over macvtap, machines on the same host do not deliver each other's
+multicast, and with multicast VRRP both machines of the pair would consider
+themselves master and hold the VIP at the same time — the address would jump
+between them together with the ARP answers.
 
 ### Ingress and the pod
 

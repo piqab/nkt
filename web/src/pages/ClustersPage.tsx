@@ -273,6 +273,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const gws = useApi<{ gateways: ClusterGateway[] }>('/hub/cluster/gateways', 60_000)
   const [endpoint, setEndpoint] = useState('')
   const [gateway, setGateway] = useState(0)
+  const [internal, setInternal] = useState(false)
   const [allow, setAllow] = useState('')
   const [rows, setRows] = useState<Row[]>([newRow('control-plane'), newRow('worker')])
   const [endpoints, setEndpoints] = useState<Record<number, string>>({})
@@ -282,10 +283,10 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [prepare, setPrepare] = useState(true)
   const [busy, setBusy] = useState<'create' | 'dry' | 'steps' | null>(null)
   const [error, setError] = useState<Msg | null>(null)
-  // Встроенный балансировщик: 1–2 машины с HAProxy (+ keepalived при HA).
+  // Встроенный балансировщик: одна машина с HAProxy; endpoint кластера —
+  // её реальный адрес. Отказоустойчивость общего адреса даёт слушатель
+  // Traffic Fly, а не VIP-пара.
   const [lbEnabled, setLbEnabled] = useState(false)
-  const [lbCount, setLbCount] = useState(1)
-  const [lbVIP, setLbVIP] = useState('')
   const [lbRows, setLbRows] = useState<Row[]>([newRow('load-balancer')])
   const [lbHaproxyOpen, setLbHaproxyOpen] = useState(false)
   const [lbHaproxy, setLbHaproxy] = useState({ connect: 5000, client: 50000, server: 50000, maxConn: 2000, statsPort: 8404, algorithm: 'source' as 'source' | 'roundrobin' })
@@ -325,7 +326,10 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     endpoint?: string
     gateway_addr?: string
     allow?: string
-    // Встроенный балансировщик.
+    /** Внутренний путь к слушателю: трафик узлов не покидает меш. */
+    endpoint_internal?: boolean
+    // Встроенный балансировщик. lb_count/lb_vip — только чтение старых
+    // наборов: новая форма создаёт одну LB без VIP.
     lb_enabled?: boolean
     lb_count?: number
     lb_vip?: string
@@ -351,9 +355,9 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         endpoint,
         gateway_addr: (gws.data?.gateways ?? []).find((g) => g.edge_id === gateway)?.address ?? '',
         allow,
+        endpoint_internal: internal || undefined,
         lb_enabled: lbEnabled,
-        lb_count: lbEnabled ? lbCount : undefined,
-        lb_vip: lbEnabled ? lbVIP.trim() : undefined,
+        lb_count: lbEnabled ? 1 : undefined,
         lb_rows: lbEnabled ? lbRows.map(({ host_id, ...r }) => ({ ...r, host: hostNameOf(host_id) })) : undefined,
         lb_haproxy: lbEnabled ? lbHaproxy : undefined,
       }
@@ -398,15 +402,15 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     setEndpoints(Object.fromEntries(Object.entries(form.endpoints ?? {}).flatMap(([h, v]) => (byName.has(h) ? [[String(byName.get(h)), v]] : []))))
     setEndpoint(form.endpoint ?? '')
     setAllow(form.allow ?? '')
+    setInternal(form.endpoint_internal ?? false)
     const gwAddr = form.gateway_addr ?? ''
     const gw = (gws.data?.gateways ?? []).find((g) => g.address === gwAddr)
     setGateway(gw?.edge_id ?? 0)
-    // Встроенный балансировщик.
+    // Встроенный балансировщик: одна машина; из старого набора с парой
+    // берётся первая строка, VIP больше не используется.
     setLbEnabled(form.lb_enabled ?? false)
-    setLbCount(form.lb_count ?? 1)
-    setLbVIP(form.lb_vip ?? '')
     if (form.lb_rows) {
-      setLbRows(form.lb_rows.map(({ host, ...r }) => {
+      setLbRows(form.lb_rows.slice(0, 1).map(({ host, ...r }) => {
         const hid = byName.get(host)
         if (host && hid === undefined) missing.push(host)
         return { ...newRow(r.role), ...r, host_id: hid ?? null }
@@ -507,9 +511,8 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   if (effectiveNetwork === 'bridge') {
     for (const r of rows) if (r.kind === 'vm' && r.host_id !== null && !r.bridge) problems.push(t('clusters.bridgeMissingRow'))
   }
-  // Валидация LB: при HA-паре VIP обязателен.
+  // Валидация LB: одной машине нужны размещение и образ.
   if (lbEnabled) {
-    if (lbCount === 2 && !lbVIP.trim()) problems.push(t('clusters.lbVIPNeeded'))
     if (lbRows.length === 0) problems.push(t('clusters.lbNeedsPlacements'))
     for (const r of lbRows) {
       if (r.kind === 'vm' && r.host_id !== null && !r.image_id) problems.push(t('clusters.lbNeedsImage'))
@@ -555,12 +558,12 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     expose_http: expose ? ports.http ?? 0 : 0,
     expose_https: expose ? ports.https ?? 0 : 0,
     image_id: imageOf(rows[0]) || 'ubuntu-24.04',
-    ...listenerBody(flavor, endpoint, gateway, allow),
-    // Встроенный балансировщик.
+    ...listenerBody(flavor, endpoint, gateway, allow, internal),
+    // Встроенный балансировщик: одна машина, endpoint — её реальный адрес.
     lb_enabled: lbEnabled,
-    lb_count: lbEnabled ? lbCount : 0,
+    lb_count: lbEnabled ? 1 : 0,
     lb_image: '',
-    vip: lbEnabled ? lbVIP.trim() : '',
+    vip: '',
     lb_placements: lbEnabled ? lbRows.map((r) => ({
       host_id: r.host_id,
       role: 'load-balancer' as const,
@@ -737,6 +740,13 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           setGateway={setGateway}
           allow={allow}
           setAllow={setAllow}
+          internal={internal}
+          setInternal={setInternal}
+          busyHosts={
+            effectiveNetwork === 'macvtap'
+              ? [...new Set([...rows, ...lbRows].filter((r) => r.kind === 'vm' && r.host_id !== null).map((r) => r.host_id as number))]
+              : []
+          }
         />
       )}
 
@@ -748,32 +758,9 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           <span className="small muted">{t('clusters.lbHint')}</span>
         </div>
         {lbEnabled && (
-          <div style={{ marginTop: '0.6rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem' }}>
-            <label>
-              {t('clusters.lbCount')}
-              <Select
-                value={lbCount}
-                onChange={(v: number) => {
-                  setLbCount(v)
-                  // При переключении на HA добавляем вторую строку размещения, если её нет.
-                  if (v === 2 && lbRows.length < 2) {
-                    setLbRows([...lbRows, newRow('load-balancer')])
-                  } else if (v === 1 && lbRows.length > 1) {
-                    setLbRows([lbRows[0]])
-                  }
-                }}
-                options={[
-                  { value: 1, label: t('clusters.lbCount1') },
-                  { value: 2, label: t('clusters.lbCount2') },
-                ]}
-              />
-            </label>
-            <label>
-              {t('clusters.lbVIP')}
-              <Input value={lbVIP} onChange={(e) => setLbVIP(e.target.value)} placeholder="10.77.1.10" />
-              <span className="small muted">{t('clusters.lbVIPHint')}</span>
-            </label>
-          </div>
+          <p className="small muted" style={{ margin: '0.4rem 0 0' }}>
+            {t('clusters.lbSingleHint')}
+          </p>
         )}
         {lbEnabled && network === 'macvtap' && (
           <p className="small muted" style={{ margin: '0.4rem 0 0', color: 'var(--series-8)' }}>
@@ -851,18 +838,10 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                         />
                       </div>
                     )}
-                    {lbCount === 2 && (
-                      <Button size="small" type="text" icon={<DeleteOutlined />} disabled={lbRows.length <= 1} onClick={() => setLbRows(lbRows.filter((_, j) => j !== i))} />
-                    )}
                   </div>
                 </div>
               )
             })}
-            {lbCount === 2 && lbRows.length < 2 && (
-              <Button size="small" icon={<PlusOutlined />} onClick={() => setLbRows([...lbRows, newRow('load-balancer')])}>
-                {t('clusters.addRow')} lb-{lbRows.length + 1}
-              </Button>
-            )}
           </div>
         )}
         {lbEnabled && (
@@ -915,7 +894,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
       {lbEnabled && (
         <div style={{ margin: '0.4rem 0', padding: '0.4rem 0.6rem', background: 'var(--bg-2)', borderRadius: 4, border: '1px solid var(--border)' }}>
           <span className="small muted">{t('clusters.endpoint')}: </span>
-          <code>{lbVIP ? `${lbVIP}:6443` : t('clusters.lbEndpointAuto')}</code>
+          <code>{t('clusters.lbEndpointAuto')}</code>
         </div>
       )}
 

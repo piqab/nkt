@@ -72,6 +72,13 @@ type ClusterSpec struct {
 	// адресов клиентов: без него кластер торчал бы открытым портом всему
 	// интернету.
 	AllowExtra []string `json:"allow_extra,omitempty"`
+	// EndpointInternal keeps node traffic to the shared address inside the
+	// fly mesh: instead of the default (possibly external) route, nodes
+	// reach the listener through their tunnel to the gateway. Only
+	// meaningful when the endpoint is served by a Traffic Fly listener;
+	// the shared address itself stays the gateway's external address, so
+	// certificates and external clients are unaffected.
+	EndpointInternal bool `json:"endpoint_internal,omitempty"`
 	// CNI — «cilium» или пусто (flannel); KubeProxyReplacement — Cilium
 	// вместо kube-proxy.
 	CNI                  string `json:"cni,omitempty"`
@@ -383,7 +390,7 @@ func (s *ClusterSpec) normalizeListener() error {
 	if len(s.AllowExtra) > fly.MaxAllow {
 		return msgs.Errorf("hub.clusterTooManyAllows", len(s.AllowExtra), fly.MaxAllow)
 	}
-	if s.Endpoint == "" && (s.Gateway != 0 || len(s.AllowExtra) > 0) {
+	if s.Endpoint == "" && (s.Gateway != 0 || len(s.AllowExtra) > 0 || s.EndpointInternal) {
 		return msgs.Errorf("hub.clusterListenerNeedsEndpoint")
 	}
 	return nil

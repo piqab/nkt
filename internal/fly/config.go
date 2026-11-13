@@ -141,6 +141,20 @@ type HostIface struct {
 	Mark     uint32    `json:"mark"`  // метка соединений из туннеля
 	Table    int       `json:"table"` // таблица маршрутов для ответов
 	Services []Service `json:"services"`
+	// TunnelVia — outbound connections to these addr:port pairs are marked
+	// and routed through this tunnel instead of the default route. Used by
+	// the cluster listener internal path: nodes reach the shared address
+	// (the gateway's own external address) inside the mesh, so the traffic
+	// never leaves for the external network.
+	TunnelVia []Via `json:"tunnel_via,omitempty"`
+}
+
+// Via — an external addr:port reached through the tunnel, not the default
+// route. Addr is the destination as the client dials it (the gateway's
+// external address); it is never a tunnel address itself.
+type Via struct {
+	Addr string `json:"addr"`
+	Port int    `json:"port"`
 }
 
 // HostConfig — туннели хоста ко всем шлюзам.
@@ -487,6 +501,17 @@ func (c HostConfig) Validate() error {
 				return fmt.Errorf("fly: iface %s service %d/%s", i.Name, s.Port, s.Proto)
 			}
 			seen[k] = true
+		}
+		seenVia := map[string]bool{}
+		for _, v := range i.TunnelVia {
+			a, err := netip.ParseAddr(v.Addr)
+			k := fmt.Sprint(v.Addr, ":", v.Port)
+			// A tunnel address needs no via: it is already routed through
+			// the tunnel by the interface itself.
+			if err != nil || !a.Is4() || a.IsLoopback() || a.IsUnspecified() || tunnelAddr(v.Addr) || !validPort(v.Port) || seenVia[k] {
+				return fmt.Errorf("fly: iface %s tunnel_via %s", i.Name, k)
+			}
+			seenVia[k] = true
 		}
 	}
 	return nil

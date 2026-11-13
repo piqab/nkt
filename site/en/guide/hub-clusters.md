@@ -152,9 +152,27 @@ listen”** and **“Who else”** — appear for kubeadm only.
 “Where to listen” follows the address by default; a named
 gateway is an instruction to put the listener there even if the name does
 not point anywhere yet (the log then shows what the address does
-resolve to). Over the API these are the `gateway` (the gateway's edge id)
-and `allow_extra` fields; in a script — the `gateway GATEWAY` (name or
-address) and `allow ADDRESS[,ADDRESS…]` parameters.
+resolve to). Picking a gateway in the list fills the “Shared address” with
+that gateway's address (`address:6443`) — text typed by hand is not
+overwritten. The list shows every gateway; the unusable ones are marked
+with the reason and disabled: “not connected”, “hosts the cluster macvtap
+machines” (a gateway does not talk to its own macvtap guests). Over the
+API these are the `gateway` (the gateway's edge id) and `allow_extra`
+fields; in a script — the `gateway GATEWAY` (name or address) and
+`allow ADDRESS[,ADDRESS…]` parameters.
+
+**“Internal path to the listener”** — a checkbox next to the shared
+address: node traffic to the shared address goes through the nodes' tunnel
+to the gateway instead of the default route and never leaves for the
+external network — no NAT loops, no external traffic per kubelet request.
+The shared address stays the gateway's address: certificates and external
+clients are unaffected, and an external kubectl reaches the same listener
+from outside. Through the tunnel the nodes arrive with their plan address,
+so the gateway's plan subnet (`10.77.N.0/24`) is added to the route allow
+list automatically. The internal path applies to nodes that have a tunnel
+of their own — host nodes and macvtap machines; VMs in NAT or on a bridge
+reach the shared address by the default route, and the job says so in the
+log. Over the API this is the `endpoint_internal` field.
 
 The route port is the endpoint's port, the targets are the control planes
 on their 6443, and the balancing is by source address (API connections

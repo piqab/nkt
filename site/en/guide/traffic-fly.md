@@ -452,6 +452,34 @@ Ingress controller port of all nodes gives access to the cluster with the
 certificate on the gateway and balancing across nodes — [Cluster: from zero
 to the first pod](/en/guide/k8s-first-pod).
 
+### Internal path to the listener
+
+The listener of a cluster shared address serves both the outside world and
+the cluster's own nodes — and the nodes need not go outside for it. The
+**“Internal path to the listener”** checkbox in the cluster form adds a
+destination mark (`tunnel_via`) to the tunnel configuration of the nodes:
+connections to the gateway's external address and the listener port are
+marked (nft, the `local_mark` chain) and routed by the tunnel's routing
+table — the traffic never leaves the mesh. External clients keep arriving
+at the same listener the usual way: one address, two roads.
+
+- the gateway sees such connections from the node's plan address
+  (`10.77.N.x`), so the gateway's plan subnet is added to the route allow
+  list automatically;
+- the internal path applies to nodes that have a tunnel of their own —
+  macvtap machines and host nodes; a VM in NAT or on a bridge has no
+  tunnel and reaches the gateway by the default route;
+- the return path is symmetric: the gateway has a peer with the node's
+  plan address, replies take the same tunnel, and the MSS is clamped by
+  the tunnel's existing chain;
+- if the node's tunnel dies, the marked traffic does not fall back to the
+  external route — that is deliberate: the external road is exactly what
+  the cluster opted out of.
+
+The configuration is declarative: `tunnel_via` is part of the Traffic Fly
+host configuration, an apply of the map rewrites it, and when the cluster
+is deleted the nodes lose the mark together with the route.
+
 ### A target pool that follows the cluster
 
 Both the Ingress controller and NodePort listen on **every** node, so a

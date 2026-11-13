@@ -134,6 +134,45 @@ func TestHost(t *testing.T) {
 	}
 }
 
+// TunnelVia: connections to the gateway's external addr:port are marked
+// into the tunnel table; the mark and ct mark let the reply path and the
+// MSS clamp keep working. An empty list renders no via rules.
+func TestHostTunnelVia(t *testing.T) {
+	h := sampleHost()
+	if nft := HostNFT(h); strings.Contains(nft, "ip daddr 203.0.113.10 tcp dport 6443") {
+		t.Errorf("via-правило без TunnelVia:\n%s", nft)
+	}
+	h.TunnelVia = []Via{{Addr: "203.0.113.10", Port: 6443}, {Addr: "198.51.100.7", Port: 8443}}
+	nft := HostNFT(h)
+	for _, want := range []string{
+		`ip daddr 203.0.113.10 tcp dport 6443 counter meta mark set 0x464c0001 ct mark set 0x464c0001`,
+		`ip daddr 198.51.100.7 tcp dport 8443 counter meta mark set 0x464c0001 ct mark set 0x464c0001`,
+	} {
+		if !strings.Contains(nft, want) {
+			t.Errorf("нет %q в\n%s", want, nft)
+		}
+	}
+	nftLoads(t, nft)
+	if err := (HostConfig{Ifaces: []HostIface{h}}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	bad := []func(*HostIface){
+		func(i *HostIface) { i.TunnelVia = []Via{{Addr: "10.77.1.1", Port: 6443}} },  // tunnel address: already routed
+		func(i *HostIface) { i.TunnelVia = []Via{{Addr: "203.0.113.10", Port: 0}} },  // bad port
+		func(i *HostIface) { i.TunnelVia = []Via{{Addr: "gw.example", Port: 6443}} }, // not an IP
+		func(i *HostIface) {
+			i.TunnelVia = []Via{{Addr: "203.0.113.10", Port: 6443}, {Addr: "203.0.113.10", Port: 6443}}
+		}, // duplicate
+	}
+	for n, mutate := range bad {
+		x := sampleHost()
+		mutate(&x)
+		if err := (HostConfig{Ifaces: []HostIface{x}}).Validate(); err == nil {
+			t.Errorf("вариант %d: проверка пропустила %#v", n, x.TunnelVia)
+		}
+	}
+}
+
 // Служба пересылки и правил: вслед за wg-quick того же интерфейса, правила
 // — из /etc/wireguard; постоянный sysctl — у шлюза со счётчиками.
 func TestRulesUnit(t *testing.T) {

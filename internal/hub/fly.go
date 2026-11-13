@@ -97,6 +97,12 @@ type FlyRoute struct {
 	// берёт порт по смыслу маршрута: ingress для клиентов у http/https,
 	// сам порт маршрута у tcp/udp.
 	TargetPort int `json:"target_port,omitempty" yaml:"target_port,omitempty"`
+	// Clients — hosts that only talk through this route's gateway and
+	// receive no traffic themselves (cluster nodes on the listener's
+	// internal path: they dial the shared address through the tunnel).
+	// They get a tunnel iface and a gateway peer like targets do, but no
+	// service ports.
+	Clients []int64 `json:"clients,omitempty" yaml:"clients,omitempty"`
 }
 
 // FlyAlloc — постоянные номера: хост в подсети шлюза, служебный порт
@@ -192,6 +198,11 @@ func (d *FlyDoc) normalize() {
 			keepHost[flyHostKey(r.Gateway, t.HostID)] = true
 			keepPort[flyPortKey(r.Gateway, t.HostID, r.ID, t.ID)] = true
 		}
+		// Pure clients of the gateway (no traffic back to them) keep their
+		// tunnel address like targets do.
+		for _, id := range r.Clients {
+			keepHost[flyHostKey(r.Gateway, id)] = true
+		}
 	}
 	for k, v := range d.Alloc.Hosts {
 		if keepHost[k] {
@@ -203,22 +214,31 @@ func (d *FlyDoc) normalize() {
 			ports[k] = v
 		}
 	}
-	for _, r := range d.Routes {
-		for _, t := range r.Targets {
-			hk := flyHostKey(r.Gateway, t.HostID)
-			if _, ok := hosts[hk]; !ok {
-				busy := map[int]bool{}
-				for k, v := range hosts {
-					if strings.HasPrefix(k, fmt.Sprint(r.Gateway, "/")) {
-						busy[v] = true
-					}
-				}
-				n := 2
-				for busy[n] {
-					n++
-				}
-				hosts[hk] = n
+	// allocHost assigns the next free tunnel number within the gateway's
+	// subnet; numbers are permanent until the host leaves every route.
+	allocHost := func(gw, hostID int64) {
+		hk := flyHostKey(gw, hostID)
+		if _, ok := hosts[hk]; ok {
+			return
+		}
+		busy := map[int]bool{}
+		for k, v := range hosts {
+			if strings.HasPrefix(k, fmt.Sprint(gw, "/")) {
+				busy[v] = true
 			}
+		}
+		n := 2
+		for busy[n] {
+			n++
+		}
+		hosts[hk] = n
+	}
+	for _, r := range d.Routes {
+		for _, id := range r.Clients {
+			allocHost(r.Gateway, id)
+		}
+		for _, t := range r.Targets {
+			allocHost(r.Gateway, t.HostID)
 			pk := flyPortKey(r.Gateway, t.HostID, r.ID, t.ID)
 			if _, ok := ports[pk]; !ok {
 				busy := map[int]bool{}
@@ -288,6 +308,18 @@ func (d FlyDoc) gatewayConfig(g FlyGateway, keys map[int64]string, names map[int
 			fr.Targets = append(fr.Targets, fly.Target{ID: t.ID, Label: t.Label, Host: d.hostAddr(g, t.HostID),
 				Port: port, Weight: t.Weight, Drain: t.Drain})
 		}
+		// Pure clients of the gateway get a peer entry (tunnel address and
+		// key) but no service ports: they only dial out through it.
+		for _, id := range r.Clients {
+			if !seen[id] {
+				seen[id] = true
+				key := keys[id]
+				if key == "" {
+					key = flyDummyKey
+				}
+				cfg.Peers = append(cfg.Peers, fly.Peer{Name: names[id], PublicKey: key, Address: d.hostAddr(g, id)})
+			}
+		}
 		cfg.Routes = append(cfg.Routes, fr)
 	}
 	return cfg
@@ -341,6 +373,11 @@ func (s *Server) flyValidate(ctx context.Context, d FlyDoc) error {
 			}
 			if t.Port < 1 || t.Port > 65535 {
 				return msgs.Errorf("fly.badTarget", r.ID, t.ID)
+			}
+		}
+		for _, id := range r.Clients {
+			if !hosts[id] {
+				return msgs.Errorf("fly.badClient", r.ID, id)
 			}
 		}
 	}

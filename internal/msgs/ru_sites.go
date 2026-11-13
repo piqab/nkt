@@ -317,6 +317,8 @@ var ruSitesCatalog = map[string]string{
 	"fly.badGateway":                  "Маршрут %q: шлюз — edge с ролью fly",
 	"fly.badListenPort":               "Порт WireGuard шлюза вне 1…65535: %d",
 	"fly.badTarget":                   "Маршрут %q, цель %q: хост, вид (container, vm, lxd, host, addr), имя или IPv4-адрес и порт",
+	"fly.badClient":                   "Маршрут %q: клиент %d — такого хоста нет",
+	"fly.tunnelViaUnresolved":         "      внутренний путь %s: общий адрес %s не разбирается в адреса (%s) — узлы пойдут к нему обычным маршрутом",
 	"fly.badConfig":                   "Конфигурация шлюза не проходит проверку: %s",
 	"fly.conflict":                    "Конфигурацию изменили, пока вы её правили (у вас версия %d, сейчас %d) — откройте заново",
 	"fly.restoredNote":                "возврат версии %d",

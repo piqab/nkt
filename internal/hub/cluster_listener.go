@@ -56,6 +56,9 @@ type listenerNode struct {
 	HostID int64 // хост, на котором узел (машина — на нём, узел-хост — он сам)
 	VM     bool  // машина, а не сам хост
 	CP     bool  // control plane: только они служат API
+	// LB — load-balancer machine: it serves the API but never dials the
+	// shared address itself, so it is neither a target nor a client.
+	LB bool
 	// Self — собственная запись узла в списке хостов: у машины она есть
 	// (хаб заводит её сам, и по ней ходит к машине по SSH), у ещё не
 	// созданной машины — нет. Узел-хост — это он сам.
@@ -98,7 +101,7 @@ func listenerNodesFromSpec(nodes []clusterNode, spec ClusterSpec) []listenerNode
 	out := make([]listenerNode, 0, len(nodes))
 	for _, n := range nodes {
 		ln := listenerNode{Name: n.Name, HostID: n.HostID, VM: n.Kind != KindHost, CP: n.Role == RoleControlPlane,
-			Macvtap: macvtapMachine(spec, n.Kind != KindHost)}
+			LB: n.Role == RoleLoadBalancer, Macvtap: macvtapMachine(spec, n.Kind != KindHost)}
 		if n.Kind == KindHost {
 			ln.Self = n.HostID
 		}
@@ -117,7 +120,7 @@ func listenerNodesFromHosts(hosts []store.Host, spec ClusterSpec) []listenerNode
 			id, vm = h.ParentID, true
 		}
 		out = append(out, listenerNode{Name: h.Name, HostID: id, VM: vm, CP: h.K8sRole == RoleControlPlane,
-			Self: h.ID, Macvtap: macvtapMachine(spec, vm)})
+			LB: h.K8sRole == RoleLoadBalancer, Self: h.ID, Macvtap: macvtapMachine(spec, vm)})
 	}
 	return out
 }
@@ -377,6 +380,23 @@ func (r *ClusterRunner) clusterListenerRoute(ctx context.Context, spec ClusterSp
 		}
 		route.Targets = append(route.Targets, t)
 	}
+	if spec.EndpointInternal {
+		// Internal path: every kubelet dials the shared address, not just
+		// the control planes. Non-CP nodes are no targets, but they need a
+		// tunnel to the gateway for their marked traffic — they become pure
+		// clients of the route. Only nodes that are fly clients themselves
+		// qualify (host nodes and macvtap machines); a VM in NAT or on a
+		// bridge has no tunnel of its own, and its traffic passes its host
+		// as a forward, which the output-hook marking never sees.
+		for _, n := range nodes {
+			if n.CP || n.LB || !n.hostTarget() {
+				continue
+			}
+			if id := n.ownHost(); id != 0 {
+				route.Clients = append(route.Clients, id)
+			}
+		}
+	}
 	return route, allow, unknown, nil
 }
 
@@ -401,7 +421,8 @@ func listenerKeepDrain(cur, want FlyRoute) FlyRoute {
 func clusterListenerSame(cur, want FlyRoute) bool {
 	if cur.ID != want.ID || cur.Gateway != want.Gateway || cur.Kind != want.Kind ||
 		cur.Port != want.Port || cur.Algorithm != want.Algorithm || cur.Check != want.Check ||
-		!slices.Equal(cur.Allow, want.Allow) || len(cur.Targets) != len(want.Targets) {
+		!slices.Equal(cur.Allow, want.Allow) || !slices.Equal(cur.Clients, want.Clients) ||
+		len(cur.Targets) != len(want.Targets) {
 		return false
 	}
 	for i := range cur.Targets {
@@ -446,7 +467,26 @@ func (r *ClusterRunner) clusterListenerStep(ctx context.Context, jc *jobs.Contex
 	if len(route.Targets) == 0 {
 		return false, msgs.Errorf("hub.clusterListenerNoTargets", spec.Name)
 	}
-	if len(allow) == 0 {
+	doc := r.s.flyDoc(ctx)
+	if spec.EndpointInternal {
+		// Nodes on the internal path arrive through the tunnel, so the
+		// gateway sees their plan address as the source: without the
+		// gateway's plan subnet in the allow list the listener would deny
+		// the cluster's own nodes.
+		if g, ok := doc.gateway(d.gw.EdgeID); ok {
+			sub := fmt.Sprintf("10.77.%d.0/24", g.Index)
+			if !slices.Contains(route.Allow, sub) {
+				route.Allow = append(route.Allow, sub)
+			}
+		}
+		if slices.ContainsFunc(nodes, func(n listenerNode) bool { return !n.LB && !n.hostTarget() }) {
+			// VMs in NAT or on a bridge have no tunnel of their own: they
+			// keep dialing the shared address by the default route.
+			jc.Log("hub.clusterListenerInternalNoVMs", route.ID)
+		}
+		jc.Log("hub.clusterListenerInternal", route.ID, len(route.Targets)+len(route.Clients))
+	}
+	if len(allow) == 0 && len(route.Allow) == 0 {
 		// Пустой список у Traffic Fly — не запрет, а «все»: такой слушатель
 		// открывал бы API кластера всему интернету.
 		return false, msgs.Errorf("hub.clusterListenerEmptyAllow", route.ID)
@@ -470,7 +510,6 @@ func (r *ClusterRunner) clusterListenerStep(ctx context.Context, jc *jobs.Contex
 	}
 	user := jc.Job.Author
 	note := msgs.T(jc.Lang(), "hub.clusterListenerNote", spec.Name)
-	doc := r.s.flyDoc(ctx)
 	idx := slices.IndexFunc(doc.Routes, func(x FlyRoute) bool { return x.ID == route.ID })
 	if idx >= 0 {
 		// Человеческие настройки маршрута хаб не перетирает.

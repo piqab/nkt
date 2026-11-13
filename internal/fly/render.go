@@ -181,7 +181,16 @@ func HostNFT(i HostIface) string {
 	}
 	b.WriteString("\t}\n")
 	fmt.Fprintf(&b, "\tchain reply_mark {\n\t\ttype filter hook prerouting priority mangle; policy accept;\n\t\tiifname != %q ct mark 0x%x meta mark set ct mark\n\t}\n", i.Name, i.Mark)
-	fmt.Fprintf(&b, "\tchain local_mark {\n\t\ttype route hook output priority mangle; policy accept;\n\t\tct mark 0x%x meta mark set ct mark\n\t}\n", i.Mark)
+	fmt.Fprintf(&b, "\tchain local_mark {\n\t\ttype route hook output priority mangle; policy accept;\n")
+	// TunnelVia: outbound connections to the gateway's external addr:port
+	// get the tunnel mark right away, so the route hook re-routes them via
+	// the tunnel table instead of the default route. The ct mark keeps the
+	// rest of the connection marked (replies hit the ct-mark rule below and
+	// the MSS clamp in clamp_mss_out).
+	for _, v := range i.TunnelVia {
+		fmt.Fprintf(&b, "\t\tip daddr %s tcp dport %d counter meta mark set 0x%x ct mark set 0x%x\n", v.Addr, v.Port, i.Mark, i.Mark)
+	}
+	fmt.Fprintf(&b, "\t\tct mark 0x%x meta mark set ct mark\n\t}\n", i.Mark)
 	// Из туннеля — только то, что пришло на служебные порты маршрутов
 	// (прошло DNAT), ответы и ICMP: взломанный шлюз не достучится до
 	// остальных служб хоста и его сетей.
