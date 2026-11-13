@@ -358,6 +358,9 @@ func TestClusterListenerRouteInternal(t *testing.T) {
 	if want := []int64{12, 2}; !slices.Equal(route.Clients, want) {
 		t.Errorf("клиенты: %+v, надо %+v", route.Clients, want)
 	}
+	if !route.Internal {
+		t.Error("внутренний путь не помечен на маршруте")
+	}
 	spec.EndpointInternal = false
 	plain, _, _, err := r.clusterListenerRoute(ctx, spec, gw, nodes)
 	if err != nil {
@@ -366,60 +369,8 @@ func TestClusterListenerRouteInternal(t *testing.T) {
 	if len(plain.Clients) != 0 {
 		t.Errorf("клиенты без внутреннего пути: %+v", plain.Clients)
 	}
-}
-
-// stubFlyLog — журнал-заглушка для проверок раскладки.
-type stubFlyLog struct{ keys []string }
-
-func (l *stubFlyLog) Log(key string, args ...any)                   { l.keys = append(l.keys, key) }
-func (l *stubFlyLog) Logf(format string, args ...any)               {}
-func (l *stubFlyLog) StepKey(n, total int, key string, args ...any) {}
-
-// Раскладка TunnelVia: via получает каждый хост, который покрыт маршрутом
-// слушателя внутреннего пути (цели «сам хост» и клиенты); чужие маршруты
-// кластера и кластеры без внутреннего пути не трогают конфиг.
-func TestFlyTunnelVias(t *testing.T) {
-	s, gwEdge, hosts := listenerFixture(t, "10.0.0.5", "8.8.8.8")
-	ctx := context.Background()
-	spec := `{"name":"lab","endpoint":"203.0.113.10:6443","endpoint_internal":true}`
-	if _, err := s.db.CreateCluster(ctx, store.Cluster{Name: "lab", HostID: hosts[0], Flavor: "kubeadm", Topology: TopologyCP3, SpecJSON: spec}); err != nil {
-		t.Fatal(err)
-	}
-	mkCfg := func() map[int64]*fly.HostConfig {
-		out := map[int64]*fly.HostConfig{}
-		for i, id := range hosts {
-			out[id] = &fly.HostConfig{Ifaces: []fly.HostIface{{Name: "nkt-fly1", Address: fmt.Sprintf("10.77.1.%d/24", i+2)}}}
-		}
-		return out
-	}
-	d := FlyDoc{
-		Gateways: []FlyGateway{{EdgeID: gwEdge, Index: 1, ListenPort: 51820}},
-		Routes: []FlyRoute{{
-			ID: "api-lab", Gateway: gwEdge, Kind: fly.KindTCP, Port: 6443, Cluster: "lab",
-			Targets: []FlyTarget{{ID: "lab-cp-1", HostID: hosts[0], Kind: "host", Port: k8sAPIPort}},
-			Clients: []int64{hosts[1]},
-		}},
-	}
-	cfg := mkCfg()
-	log := &stubFlyLog{}
-	s.flyTunnelVias(ctx, log, d, cfg)
-	for _, id := range hosts {
-		vias := cfg[id].Ifaces[0].TunnelVia
-		if len(vias) != 1 || vias[0].Addr != "203.0.113.10" || vias[0].Port != 6443 {
-			t.Errorf("хост %d: via %+v", id, vias)
-		}
-	}
-	if len(log.keys) != 0 {
-		t.Errorf("лишние строки журнала: %v", log.keys)
-	}
-	// A non-listener route of the same cluster changes nothing.
-	d.Routes[0].ID = "web-lab"
-	cfg = mkCfg()
-	s.flyTunnelVias(ctx, log, d, cfg)
-	for _, id := range hosts {
-		if len(cfg[id].Ifaces[0].TunnelVia) != 0 {
-			t.Errorf("хост %d: via на не-слушателе %+v", id, cfg[id].Ifaces[0].TunnelVia)
-		}
+	if plain.Internal {
+		t.Error("внутренний маршрут без внутреннего пути")
 	}
 }
 

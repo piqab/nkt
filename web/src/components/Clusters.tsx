@@ -55,6 +55,8 @@ export interface ClusterGateway {
   edge_id: number
   name: string
   address: string
+  /** Внутренний (plan) адрес шлюза в туннеле: им адресуется внутренний путь. */
+  plan?: string
   connected: boolean
   host_id?: number
 }
@@ -97,9 +99,20 @@ export function ListenerFields({
   const { t } = useTranslation()
   const list = gateways
   const ep = endpoint.trim()
-  // Последний адрес, подставленный выбором шлюза: при смене шлюза он
-  // обновляется, а вписанный человеком текст остаётся нетронутым.
+  // Последний адрес, подставленный выбором шлюза или режимом: при их смене
+  // он обновляется, а вписанный человеком текст остаётся нетронутым.
   const autoEp = useRef('')
+  const portOf = (v: string) => v.match(/:(\d+)$/)?.[1] ?? '6443'
+  const applyGw = (gwId: number, intMode: boolean) => {
+    const gw = list.find((g) => g.edge_id === gwId)
+    if (!gw) return
+    const host = intMode ? gw.plan || gw.address : gw.address
+    const next = `${host}:${portOf(ep)}`
+    if (!ep || ep === autoEp.current) {
+      autoEp.current = next
+      setEndpoint(next)
+    }
+  }
   return (
     <div className="col" style={{ gap: '0.4rem', marginBottom: '0.6rem' }}>
       <div className="grid grid-2" style={{ gap: '0.5rem' }}>
@@ -120,11 +133,7 @@ export function ListenerFields({
             value={gateway}
             onChange={(v: number) => {
               setGateway(v)
-              const gw = list.find((g) => g.edge_id === v)
-              if (gw && (!ep || ep === autoEp.current)) {
-                autoEp.current = `${gw.address}:6443`
-                setEndpoint(autoEp.current)
-              }
+              applyGw(v, internal)
             }}
             options={[
               { value: 0, label: t('clusters.gatewayAuto') },
@@ -142,7 +151,14 @@ export function ListenerFields({
         </label>
       </div>
       <label className="row" style={{ margin: 0, alignItems: 'baseline', gap: '0.4rem' }}>
-        <Checkbox checked={internal} disabled={!ep} onChange={(e) => setInternal(e.target.checked)} />
+        <Checkbox
+          checked={internal}
+          disabled={!ep}
+          onChange={(e) => {
+            setInternal(e.target.checked)
+            if (gateway) applyGw(gateway, e.target.checked)
+          }}
+        />
         <span>{t('clusters.endpointInternal')}</span>
         <span className="small muted">{t('clusters.endpointInternalHint')}</span>
       </label>

@@ -137,39 +137,38 @@ func TestHost(t *testing.T) {
 // TunnelVia: connections to the gateway's external addr:port are marked
 // into the tunnel table; the mark and ct mark let the reply path and the
 // MSS clamp keep working. An empty list renders no via rules.
-func TestHostTunnelVia(t *testing.T) {
-	h := sampleHost()
-	if nft := HostNFT(h); strings.Contains(nft, "ip daddr 203.0.113.10 tcp dport 6443") {
-		t.Errorf("via-правило без TunnelVia:\n%s", nft)
-	}
-	h.TunnelVia = []Via{{Addr: "203.0.113.10", Port: 6443}, {Addr: "198.51.100.7", Port: 8443}}
-	nft := HostNFT(h)
-	for _, want := range []string{
-		`ip daddr 203.0.113.10 tcp dport 6443 counter meta mark set 0x464c0001 ct mark set 0x464c0001`,
-		`ip daddr 198.51.100.7 tcp dport 8443 counter meta mark set 0x464c0001 ct mark set 0x464c0001`,
-	} {
-		if !strings.Contains(nft, want) {
-			t.Errorf("нет %q в\n%s", want, nft)
-		}
-	}
-	nftLoads(t, nft)
-	if err := (HostConfig{Ifaces: []HostIface{h}}).Validate(); err != nil {
+// Внутренний маршрут: пул принимает соединения из туннеля, пришедшие на
+// план-адрес шлюза; снаружи порт не открыт — внешнего правила нет.
+func TestGatewayInternalRoute(t *testing.T) {
+	g := sampleGateway()
+	g.Routes = append(g.Routes, Route{ID: "api", Kind: KindTCP, Port: 6443, Internal: true,
+		Algorithm: AlgoSourceHash, Check: Check{Kind: CheckTCP},
+		Targets: []Target{{ID: "cp1", Host: "10.77.1.2", Port: 40005}}})
+	if err := g.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	bad := []func(*HostIface){
-		func(i *HostIface) { i.TunnelVia = []Via{{Addr: "10.77.1.1", Port: 6443}} },  // tunnel address: already routed
-		func(i *HostIface) { i.TunnelVia = []Via{{Addr: "203.0.113.10", Port: 0}} },  // bad port
-		func(i *HostIface) { i.TunnelVia = []Via{{Addr: "gw.example", Port: 6443}} }, // not an IP
-		func(i *HostIface) {
-			i.TunnelVia = []Via{{Addr: "203.0.113.10", Port: 6443}, {Addr: "203.0.113.10", Port: 6443}}
-		}, // duplicate
+	nft := GatewayNFT(g, nil)
+	internalRule := `iifname "nkt-fly" ip daddr 10.77.1.1 tcp dport 6443 ct mark set`
+	if !strings.Contains(nft, internalRule) {
+		t.Errorf("нет внутреннего правила в\n%s", nft)
 	}
-	for n, mutate := range bad {
-		x := sampleHost()
-		mutate(&x)
-		if err := (HostConfig{Ifaces: []HostIface{x}}).Validate(); err == nil {
-			t.Errorf("вариант %d: проверка пропустила %#v", n, x.TunnelVia)
-		}
+	if !strings.Contains(nft, `dnat to 10.77.1.2:40005 comment "fly:api"`) {
+		t.Errorf("нет DNAT в пул внутреннего маршрута в\n%s", nft)
+	}
+	// Правило из туннеля обязано стоять до раннего return туннельного трафика.
+	if i, r := strings.Index(nft, internalRule), strings.Index(nft, `iifname "nkt-fly" return`); i < 0 || r < 0 || i > r {
+		t.Errorf("внутреннее правило после return туннеля в\n%s", nft)
+	}
+	if strings.Contains(nft, "\n\t\ttcp dport 6443 ") {
+		t.Errorf("внутренний маршрут открыл порт снаружи в\n%s", nft)
+	}
+	nftLoads(t, nft)
+	// Внутренним бывает только маршрут по порту: у маршрутов по имени
+	// терминал — сам шлюз, привязывать не к чему.
+	named := sampleGateway()
+	named.Routes[0].Internal = true
+	if err := named.Validate(); err == nil {
+		t.Error("проверка пропустила internal у маршрута по имени")
 	}
 }
 

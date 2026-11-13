@@ -2828,7 +2828,7 @@
     "gatewayMacvtapHost": "(hosts the cluster macvtap machines — a listener cannot sit on it)",
     "gatewayNone": "The hub has no Traffic Fly gateways: the listener has nowhere to sit — the shared address must be served outside the hub.",
     "endpointInternal": "Internal path to the listener",
-    "endpointInternalHint": "Node traffic to the shared address goes through the Traffic Fly tunnel and never leaves for the external network. The shared address stays the gateway's address — certificates and external clients are unaffected.",
+    "endpointInternalHint": "The shared address becomes the gateway's internal (plan) address: the nodes reach it straight through the tunnel, and the listener port stays closed outside — the cluster is managed through the hub and from inside the mesh. The gateway plan subnet joins “who else” by itself (the nodes arrive from plan addresses).",
     "lbTitle": "Built-in load balancer",
     "lbHint": "One machine with HAProxy: the cluster endpoint is its real address (the lb-1 address). Fault tolerance of the shared address comes from the Traffic Fly listener.",
     "lbSingleHint": "One machine with HAProxy: the cluster endpoint is its real address from the placement subnet, reachable by the nodes through the site router. The HA pair with a VIP is gone from the form: an address invented outside the machine subnets is unreachable for the nodes.",

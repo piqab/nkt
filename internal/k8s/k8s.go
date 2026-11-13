@@ -389,6 +389,15 @@ func ParseNodes(raw []byte) ([]Node, error) {
 // клиентского таймаута хаба, чтобы агент отвечал ошибкой, а не молчанием.
 const joinCommandTimeout = 20 * time.Second
 
+// loopKubeconfPath — копия admin.conf с сервером на loopback: ею Join ходит
+// в собственный API узла, минуя общий адрес кластера. /run — tmpfs: копия
+// переживает ровно reboot, а перекладывается при каждом Join.
+const loopKubeconfPath = "/run/nkt-kubeadm-loop.conf"
+
+// loopKubeconfSh — переписывает server: admin.conf на 127.0.0.1, сохраняя
+// порт; права — как у admin.conf (учётные данные те же).
+const loopKubeconfSh = "sed -E 's|server: https://[^:/]+:|server: https://127.0.0.1:|' /etc/kubernetes/admin.conf > " + loopKubeconfPath + " && chmod 600 " + loopKubeconfPath
+
 // Join — токен и адрес для присоединения новых узлов. serverAddr — адрес
 // API, который увидит узел: первый control plane или балансировщик.
 // controlPlane — true, когда по этому токену войдёт ещё и control plane:
@@ -416,7 +425,18 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		// которой хаб повторит запрос.
 		ctx, cancel := context.WithTimeout(ctx, joinCommandTimeout)
 		defer cancel()
-		out, err := m.run(ctx, "kubeadm", "token", "create", "--print-join-command")
+		// Токен и ключ сертификатов берутся у собственного API узла через
+		// loopback, а не через общий адрес кластера: общий адрес — маршрут
+		// слушателя, который не жив, пока не поднят первый control plane,
+		// и снова не жив, когда control plane легли. Вход узла не должен
+		// зависеть от пути, который он сам же и поднимает. Сертификат API
+		// покрывает 127.0.0.1 (штатный SAN kubeadm).
+		if out, err := m.run(ctx, "sh", "-c", loopKubeconfSh); err != nil {
+			return JoinInfo{}, err
+		} else if out.ExitCode != 0 {
+			return JoinInfo{}, msgs.Errorf("k8s.tokenRead", strings.TrimSpace(out.Stderr))
+		}
+		out, err := m.run(ctx, "kubeadm", "token", "create", "--print-join-command", "--kubeconfig", loopKubeconfPath)
 		if err != nil {
 			return JoinInfo{}, err
 		}
@@ -435,7 +455,7 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		// отдельной строкой. Молчать при неудаче нельзя: узел с пустым
 		// ключом падает на «--certificate-key» уже на машине, и в журнале
 		// остаётся непонятное «invalid value», а не причина.
-		out, err = m.run(ctx, "kubeadm", "init", "phase", "upload-certs", "--upload-certs")
+		out, err = m.run(ctx, "kubeadm", "init", "phase", "upload-certs", "--upload-certs", "--kubeconfig", loopKubeconfPath)
 		if err != nil {
 			return JoinInfo{}, err
 		}

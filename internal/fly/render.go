@@ -71,9 +71,35 @@ func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) stri
 	// сверх числа или частоты с одного адреса отбрасываются до DNAT.
 	b.WriteString(limitRules(c))
 	b.WriteString("\tchain prerouting {\n\t\ttype nat hook prerouting priority dstnat; policy accept;\n")
+	// Внутренние маршруты: пакеты из туннеля на план-адрес шлюза уходят в
+	// пул до раннего return туннельного трафика — снаружи порт не открыт.
+	plan, _, _ := strings.Cut(c.Address, "/")
+	for i, r := range c.Routes {
+		if r.Named() || !r.Internal {
+			continue
+		}
+		var live []Target
+		for _, t := range r.Targets {
+			if !t.Drain && (alive == nil || alive(r.ID, t.ID)) {
+				live = append(live, t)
+			}
+		}
+		if len(live) == 0 {
+			continue
+		}
+		for _, proto := range r.protos() {
+			if r.Range() {
+				fmt.Fprintf(&b, "\t\tiifname %q ip daddr %s %s dport %s %sct mark set 0x%x counter dnat to %s comment %q\n",
+					c.Iface, plan, proto, portSpec(r.Port, r.PortTo), r.allowNFT(), RouteMark(i+1), live[0].Host, "fly:"+r.ID)
+				continue
+			}
+			fmt.Fprintf(&b, "\t\tiifname %q ip daddr %s %s dport %d %sct mark set 0x%x counter dnat %s comment %q\n",
+				c.Iface, plan, proto, r.Port, r.allowNFT(), RouteMark(i+1), dnatTarget(r.Algorithm, live), "fly:"+r.ID)
+		}
+	}
 	fmt.Fprintf(&b, "\t\tiifname %q return\n", c.Iface)
 	for i, r := range c.Routes {
-		if r.Named() {
+		if r.Named() || r.Internal {
 			continue
 		}
 		var live []Target
@@ -181,16 +207,7 @@ func HostNFT(i HostIface) string {
 	}
 	b.WriteString("\t}\n")
 	fmt.Fprintf(&b, "\tchain reply_mark {\n\t\ttype filter hook prerouting priority mangle; policy accept;\n\t\tiifname != %q ct mark 0x%x meta mark set ct mark\n\t}\n", i.Name, i.Mark)
-	fmt.Fprintf(&b, "\tchain local_mark {\n\t\ttype route hook output priority mangle; policy accept;\n")
-	// TunnelVia: outbound connections to the gateway's external addr:port
-	// get the tunnel mark right away, so the route hook re-routes them via
-	// the tunnel table instead of the default route. The ct mark keeps the
-	// rest of the connection marked (replies hit the ct-mark rule below and
-	// the MSS clamp in clamp_mss_out).
-	for _, v := range i.TunnelVia {
-		fmt.Fprintf(&b, "\t\tip daddr %s tcp dport %d counter meta mark set 0x%x ct mark set 0x%x\n", v.Addr, v.Port, i.Mark, i.Mark)
-	}
-	fmt.Fprintf(&b, "\t\tct mark 0x%x meta mark set ct mark\n\t}\n", i.Mark)
+	fmt.Fprintf(&b, "\tchain local_mark {\n\t\ttype route hook output priority mangle; policy accept;\n\t\tct mark 0x%x meta mark set ct mark\n\t}\n", i.Mark)
 	// Из туннеля — только то, что пришло на служебные порты маршрутов
 	// (прошло DNAT), ответы и ICMP: взломанный шлюз не достучится до
 	// остальных служб хоста и его сетей.

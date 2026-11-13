@@ -103,6 +103,11 @@ type FlyRoute struct {
 	// They get a tunnel iface and a gateway peer like targets do, but no
 	// service ports.
 	Clients []int64 `json:"clients,omitempty" yaml:"clients,omitempty"`
+	// Internal — the route serves the tunnel only: the gateway DNATs
+	// packets that arrive at its own plan address and leaves the port
+	// closed outside. The cluster listener sets it with the internal path,
+	// where the shared address is the gateway's plan address.
+	Internal bool `json:"internal,omitempty" yaml:"internal,omitempty"`
 }
 
 // FlyAlloc — постоянные номера: хост в подсети шлюза, служебный порт
@@ -290,7 +295,7 @@ func (d FlyDoc) gatewayConfig(g FlyGateway, keys map[int64]string, names map[int
 		if r.Cluster != "" && len(r.Targets) == 0 {
 			continue
 		}
-		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, PortTo: r.PortTo, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Allow: r.Allow, MaxConns: r.MaxConns, Rate: r.Rate, Algorithm: r.Algorithm, Check: r.Check}
+		fr := fly.Route{ID: r.ID, Kind: r.Kind, Names: r.Names, Port: r.Port, PortTo: r.PortTo, ProxyProtocol: r.ProxyProtocol, TLS: r.TLS, Allow: r.Allow, MaxConns: r.MaxConns, Rate: r.Rate, Algorithm: r.Algorithm, Check: r.Check, Internal: r.Internal}
 		for _, t := range r.Targets {
 			if !seen[t.HostID] {
 				seen[t.HostID] = true

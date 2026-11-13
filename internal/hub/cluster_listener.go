@@ -223,7 +223,7 @@ func (r *ClusterRunner) listenerDecideByAddress(ctx context.Context, spec Cluste
 		// Шлюз выбран руками: ставим слушатель там — не найдётся или не
 		// будет связан, задание об этом скажет.
 		gw, _ := r.s.clusterListenerGateway(ctx, spec.Gateway)
-		return listenerDecision{need: true, gw: gw, mismatch: look.mismatch(gw)}
+		return listenerDecision{need: true, gw: gw, mismatch: look.mismatch(gw, spec.EndpointInternal)}
 	}
 	if len(gws) > 1 {
 		// Шлюзов несколько, а названного нет: адрес выбирает сам себя, если
@@ -232,7 +232,7 @@ func (r *ClusterRunner) listenerDecideByAddress(ctx context.Context, spec Cluste
 		// ждут.
 		var matched []flyGatewayJSON
 		for _, g := range gws {
-			if look.mismatch(g) == "" {
+			if look.mismatch(g, spec.EndpointInternal) == "" {
 				matched = append(matched, g)
 			}
 		}
@@ -241,7 +241,7 @@ func (r *ClusterRunner) listenerDecideByAddress(ctx context.Context, spec Cluste
 		}
 		return listenerDecision{key: "hub.clusterListenerSkipNoGateway", args: []any{msgs.Errorf("fly.pipelineGatewayAmbiguous", len(gws))}}
 	}
-	if m := look.mismatch(gws[0]); m != "" {
+	if m := look.mismatch(gws[0], spec.EndpointInternal); m != "" {
 		return listenerDecision{gw: gws[0], mismatch: m, key: "hub.clusterListenerSkipElsewhere", args: []any{spec.Endpoint, gws[0].Address, m}}
 	}
 	return listenerDecision{need: true, gw: gws[0]}
@@ -266,12 +266,17 @@ func listenerLookEndpoint(ctx context.Context, endpoint string) listenerLook {
 
 // mismatch — пусто, когда один из адресов endpoint'а есть адрес этого шлюза;
 // иначе — что нашлось вместо него (для журнала и «!» в сухом прогоне).
-func (l listenerLook) mismatch(gw flyGatewayJSON) string {
+// Внутренний путь сравнивает с план-адресом: endpoint им и является.
+func (l listenerLook) mismatch(gw flyGatewayJSON, internal bool) string {
 	if l.why != "" {
 		return l.why
 	}
+	want := gw.Address
+	if internal && gw.Plan != "" {
+		want = gw.Plan
+	}
 	for _, ip := range l.ips {
-		if a, err := netip.ParseAddr(ip); err == nil && a.String() == gw.Address {
+		if a, err := netip.ParseAddr(ip); err == nil && a.String() == want {
 			return ""
 		}
 	}
@@ -357,6 +362,9 @@ func (r *ClusterRunner) clusterListenerRoute(ctx context.Context, spec ClusterSp
 	}
 	route := FlyRoute{
 		ID: clusterListenerID(spec.Name), Gateway: gw.EdgeID, Kind: fly.KindTCP, Port: port,
+		// Internal path: the shared address is the gateway's plan address,
+		// served inside the tunnel only — the port stays closed outside.
+		Internal: spec.EndpointInternal,
 		// Один клиент — один control plane: соединения с API живущие
 		// (watch'и), и мотать их между узлами смысла нет.
 		Algorithm: fly.AlgoSourceHash,
@@ -422,7 +430,7 @@ func clusterListenerSame(cur, want FlyRoute) bool {
 	if cur.ID != want.ID || cur.Gateway != want.Gateway || cur.Kind != want.Kind ||
 		cur.Port != want.Port || cur.Algorithm != want.Algorithm || cur.Check != want.Check ||
 		!slices.Equal(cur.Allow, want.Allow) || !slices.Equal(cur.Clients, want.Clients) ||
-		len(cur.Targets) != len(want.Targets) {
+		cur.Internal != want.Internal || len(cur.Targets) != len(want.Targets) {
 		return false
 	}
 	for i := range cur.Targets {

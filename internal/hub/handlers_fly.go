@@ -23,9 +23,12 @@ import (
 
 // flyGatewayJSON — шлюз для интерфейса.
 type flyGatewayJSON struct {
-	EdgeID    int64  `json:"edge_id"`
-	Name      string `json:"name"`
-	Address   string `json:"address"`
+	EdgeID  int64  `json:"edge_id"`
+	Name    string `json:"name"`
+	Address string `json:"address"`
+	// Plan — адрес шлюза в туннеле (10.77.N.1): им кластер с внутренним
+	// путём адресуется как общим адресом.
+	Plan      string `json:"plan,omitempty"`
 	Connected bool   `json:"connected"`
 	HostID    int64  `json:"host_id,omitempty"`
 }
@@ -37,6 +40,10 @@ func (s *Server) flyGateways(ctx context.Context) []flyGatewayJSON {
 		for _, h := range list {
 			hosts[h.ID] = h.Name
 		}
+	}
+	index := map[int64]int{}
+	for _, g := range s.flyDoc(ctx).Gateways {
+		index[g.EdgeID] = g.Index
 	}
 	for _, e := range s.edges(ctx) {
 		if !e.Has(EdgeRoleFly) {
@@ -56,7 +63,11 @@ func (s *Server) flyGateways(ctx context.Context) []flyGatewayJSON {
 		if name == "" {
 			name = addr
 		}
-		out = append(out, flyGatewayJSON{EdgeID: e.ID, Name: name, Address: addr, Connected: connected, HostID: e.HostID})
+		gw := flyGatewayJSON{EdgeID: e.ID, Name: name, Address: addr, Connected: connected, HostID: e.HostID}
+		if i, ok := index[e.ID]; ok {
+			gw.Plan = fmt.Sprintf("10.77.%d.1", i)
+		}
+		out = append(out, gw)
 	}
 	return out
 }

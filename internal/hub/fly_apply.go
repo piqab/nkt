@@ -311,9 +311,6 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 			}
 		}
 	}
-	// Cluster listener internal path: connections of the nodes to the
-	// shared address take the tunnel instead of the default route.
-	s.flyTunnelVias(ctx, jc, d, hostCfg)
 	for id, hc := range hostCfg {
 		if err := hc.Validate(); err != nil {
 			return msgs.Errorf("fly.hostConfigBad", flyHostLabel(names, id), err)
@@ -502,88 +499,6 @@ func flyRouteSummary(r FlyRoute) string {
 		return fmt.Sprintf("%s %s:%d", r.Kind, strings.Join(r.Names, ","), r.Port)
 	}
 	return fmt.Sprintf("%s :%d", r.Kind, r.Port)
-}
-
-// flyTunnelVias fills HostIface.TunnelVia on every host a cluster listener
-// route covers (targets that are fly clients themselves, plus pure clients),
-// when the cluster asked for the internal path: connections of the nodes to
-// the shared address then take the tunnel instead of the default route. The
-// shared address itself stays what it is — the gateway's external address —
-// so certificates and external clients are unaffected.
-func (s *Server) flyTunnelVias(ctx context.Context, jc flyLog, d FlyDoc, hostCfg map[int64]*fly.HostConfig) {
-	internal := map[string]ClusterSpec{}
-	if list, err := s.db.ListClusters(ctx); err == nil {
-		for _, c := range list {
-			var spec ClusterSpec
-			if json.Unmarshal([]byte(c.SpecJSON), &spec) == nil && spec.EndpointInternal && spec.Endpoint != "" {
-				internal[c.Name] = spec
-			}
-		}
-	}
-	if len(internal) == 0 {
-		return
-	}
-	for _, rt := range d.Routes {
-		// Only the listener route serves the shared address; ingress and
-		// token routes of the same cluster carry other traffic.
-		if rt.Cluster == "" || rt.ID != clusterListenerID(rt.Cluster) {
-			continue
-		}
-		spec, ok := internal[rt.Cluster]
-		if !ok {
-			continue
-		}
-		g, ok := d.gateway(rt.Gateway)
-		if !ok {
-			continue
-		}
-		look := listenerLookEndpoint(ctx, spec.Endpoint)
-		var vias []fly.Via
-		for _, ip := range look.ips {
-			if a := net.ParseIP(ip); a != nil && a.To4() != nil {
-				vias = append(vias, fly.Via{Addr: a.To4().String(), Port: rt.Port})
-			}
-		}
-		if len(vias) == 0 {
-			// The nodes stay on the default route: the shared address did
-			// not resolve to anything usable.
-			jc.Log("fly.tunnelViaUnresolved", rt.ID, spec.Endpoint, look.why)
-			continue
-		}
-		iface := flyIface(g.Index)
-		seen := map[int64]bool{}
-		add := func(id int64) {
-			if id == 0 || seen[id] {
-				return
-			}
-			seen[id] = true
-			hc := hostCfg[id]
-			if hc == nil {
-				return
-			}
-			for k := range hc.Ifaces {
-				if hc.Ifaces[k].Name != iface {
-					continue
-				}
-				for _, v := range vias {
-					if !slices.Contains(hc.Ifaces[k].TunnelVia, v) {
-						hc.Ifaces[k].TunnelVia = append(hc.Ifaces[k].TunnelVia, v)
-					}
-				}
-			}
-		}
-		for _, t := range rt.Targets {
-			// Only a node that is a fly client itself dials through the
-			// tunnel; a NAT/bridge VM target stands for its hosting host,
-			// and marking the host's own traffic would be wrong.
-			if t.Kind == "host" {
-				add(t.HostID)
-			}
-		}
-		for _, id := range rt.Clients {
-			add(id)
-		}
-	}
 }
 
 // flyMinHostVersion — с какой версии nkt на хосте умеет Traffic Fly.
