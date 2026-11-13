@@ -60,6 +60,11 @@ type VMProvisionParams struct {
 	// ProfileID — профиль, который применить к новой машине. Требует
 	// установленного nkt: применяет его сама машина.
 	ProfileID int64 `json:"profile_id,omitempty"`
+	// ReuseID — запись машины уже есть в списке (прошлая попытка создания
+	// дошла до неё или дальше): задание доводит её вместо заведения
+	// второй записи с тем же именем. Машина с живым адресом при этом не
+	// пересоздаётся: диск и домен не трогаются, доводятся поздние шаги.
+	ReuseID int64 `json:"reuse_id,omitempty"`
 }
 
 type vmProvisionResume struct {
@@ -74,6 +79,9 @@ type vmProvisionResume struct {
 	// безвредно, но занимает машину и путает журнал.
 	Installed   bool `json:"installed"`
 	ProfileDone bool `json:"profile_done"`
+	// MachineReused — машина с прошлого раза жива на хосте: шаги создания
+	// и ожидания пропущены, адрес взят из записи.
+	MachineReused bool `json:"machine_reused,omitempty"`
 	// NewHostID — запись хоста уже заведена: повторять её нельзя, иначе
 	// после перезапуска службы в списке окажется два одинаковых хоста.
 	NewHostID int64 `json:"new_host_id"`
@@ -133,6 +141,10 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 	var done vmProvisionResume
 	if err := jc.LoadResume(&done); err != nil {
 		return msgs.Errorf("hub.parsingResumeState", err)
+	}
+	if p.ReuseID != 0 && done.NewHostID == 0 {
+		done.NewHostID = p.ReuseID
+		jc.SaveResume(done)
 	}
 
 	host, err := r.m.db.HostByID(ctx, p.HostID)
@@ -203,7 +215,16 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 
 	// 2. Создание машины на хосте.
 	jc.StepKey(2, steps, "hub.vmStepCreateOn", host.Name)
-	if done.RemoteJobID == 0 {
+	if done.RemoteJobID == 0 && !done.MachineReused && p.ReuseID != 0 {
+		if rec, err := r.m.db.HostByID(ctx, p.ReuseID); err == nil && !isPlaceholderAddr(rec.Addr) {
+			// Машина с прошлого раза стоит на хосте: ни диск, ни домен не
+			// трогаются — доводятся поздние шаги (установка nkt, профиль).
+			jc.Log("hub.vmReuseMachine", rec.Name, rec.Addr)
+			done.MachineReused = true
+			jc.SaveResume(done)
+		}
+	}
+	if done.RemoteJobID == 0 && !done.MachineReused {
 		var started struct {
 			JobID int64 `json:"job_id"`
 		}
@@ -224,9 +245,19 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 
 	// 3. Ожидание конца и адреса.
 	jc.StepKey(3, steps, "hub.vmStepWait")
-	addr, err := r.waitVMJob(ctx, jc, host, done.RemoteJobID)
-	if err != nil {
-		return err
+	var addr string
+	if done.MachineReused {
+		rec, err := r.m.db.HostByID(ctx, done.NewHostID)
+		if err != nil {
+			return err
+		}
+		addr = rec.Addr
+	} else {
+		waited, err := r.waitVMJob(ctx, jc, host, done.RemoteJobID)
+		if err != nil {
+			return err
+		}
+		addr = waited
 	}
 	// Токену разрешена почта — порт 25 его сети открывается на хосте.
 	if p.Spec.Isolated && mailToken != nil && mailToken.Perms.AllowMail {

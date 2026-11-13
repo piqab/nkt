@@ -59,6 +59,64 @@ func TestSetHostTerminalEnabled(t *testing.T) {
 	}
 }
 
+// TestHostByNameParent covers the lookup a retried cluster build uses to
+// reuse the machine of a previous attempt: it must find the record by name
+// only within its placement host — node names repeat across clusters, and a
+// match on another host would skip creating the machine this build needs.
+func TestHostByNameParent(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	hv1, err := db.CreateHost(ctx, "hv1", "10.0.0.1", 22, "root", HostAuthPassword, []byte("secret"))
+	if err != nil {
+		t.Fatalf("CreateHost(hv1): %v", err)
+	}
+	hv2, err := db.CreateHost(ctx, "hv2", "10.0.0.2", 22, "root", HostAuthPassword, []byte("secret"))
+	if err != nil {
+		t.Fatalf("CreateHost(hv2): %v", err)
+	}
+	vm1, err := db.CreateHost(ctx, "cp-1", "", 22, "root", HostAuthPassword, []byte("secret"))
+	if err != nil {
+		t.Fatalf("CreateHost(vm on hv1): %v", err)
+	}
+	if err := db.SetHostParent(ctx, vm1, hv1); err != nil {
+		t.Fatalf("SetHostParent(vm1): %v", err)
+	}
+	vm2, err := db.CreateHost(ctx, "cp-1", "", 22, "root", HostAuthPassword, []byte("secret"))
+	if err != nil {
+		t.Fatalf("CreateHost(vm on hv2): %v", err)
+	}
+	if err := db.SetHostParent(ctx, vm2, hv2); err != nil {
+		t.Fatalf("SetHostParent(vm2): %v", err)
+	}
+
+	got, err := db.HostByNameParent(ctx, "cp-1", hv1)
+	if err != nil {
+		t.Fatalf("HostByNameParent(cp-1, hv1): %v", err)
+	}
+	if got.ID != vm1 {
+		t.Errorf("HostByNameParent(cp-1, hv1) = %d, want %d (the record on its own placement host)", got.ID, vm1)
+	}
+	got, err = db.HostByNameParent(ctx, "cp-1", hv2)
+	if err != nil {
+		t.Fatalf("HostByNameParent(cp-1, hv2): %v", err)
+	}
+	if got.ID != vm2 {
+		t.Errorf("HostByNameParent(cp-1, hv2) = %d, want %d", got.ID, vm2)
+	}
+
+	if _, err := db.HostByNameParent(ctx, "nope", hv1); err != ErrNotFound {
+		t.Errorf("HostByNameParent on unknown name: err = %v, want ErrNotFound", err)
+	}
+	if _, err := db.HostByNameParent(ctx, "cp-1", 999); err != ErrNotFound {
+		t.Errorf("HostByNameParent under a parent that has no such machine: err = %v, want ErrNotFound", err)
+	}
+}
+
 // TestSetHostTunnelEnabledAndToken covers the reverse-tunnel opt-in flag and
 // its paired encrypted token — same off-by-default/per-host shape as
 // TestSetHostTerminalEnabled, plus SetHostTunnelToken (stores whatever

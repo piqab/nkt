@@ -314,6 +314,18 @@ func (d *DB) ListHosts(ctx context.Context) ([]Host, error) {
 	return d.listHosts(ctx, `kind = ''`)
 }
 
+// HostByNameParent looks a machine up by name within one placement host:
+// the cluster build reuses such a record on a retried job instead of
+// listing a duplicate next to the machine that already exists.
+func (d *DB) HostByNameParent(ctx context.Context, name string, parentID int64) (Host, error) {
+	row := d.QueryRowContext(ctx, `SELECT `+hostColumns+` FROM hosts WHERE name = ? AND parent_id = ?`, name, parentID)
+	h, err := scanHost(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Host{}, ErrNotFound
+	}
+	return h, err
+}
+
 // DeleteHost removes a host from the registry. It does not undo anything on
 // the remote machine — uninstalling nkt there, if wanted, is a separate step.
 func (d *DB) DeleteHost(ctx context.Context, id int64) error {

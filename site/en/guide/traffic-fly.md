@@ -110,7 +110,10 @@ networks (`203.0.113.7`, `198.51.100.0/24`, up to 200). The gateway cuts
 everyone else itself: the kernel for routes by port (their packets never
 reach the targets), the router for routes by name, before the target. The
 route window shows how many connections were denied. Let's Encrypt checks
-for a gateway certificate always pass.
+for a gateway certificate always pass. A bare address in the list is a
+`/32` — exactly that source: “everyone” for Traffic Fly is an **empty**
+list, not `0.0.0.0` (an entry `0.0.0.0` allows only a source with that
+address, i.e. nobody).
 
 Use it for what the whole internet should not see: VM consoles, service
 ports, admin panels. In a pipeline — the `allow:` field of a `fly:` block.

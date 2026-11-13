@@ -72,6 +72,24 @@ func (s *Server) flyGateways(ctx context.Context) []flyGatewayJSON {
 	return out
 }
 
+// flyGatewayPlanPredict — план-адрес шлюза: свой индекс, если шлюз уже в
+// документе, иначе первый свободный — тот самый, который назначит
+// normalize, когда на шлюз ляжет первый маршрут.
+func (s *Server) flyGatewayPlanPredict(ctx context.Context, edgeID int64) string {
+	taken := map[int]bool{}
+	for _, g := range s.flyDoc(ctx).Gateways {
+		taken[g.Index] = true
+		if g.EdgeID == edgeID {
+			return fmt.Sprintf("10.77.%d.1", g.Index)
+		}
+	}
+	idx := 1
+	for taken[idx] {
+		idx++
+	}
+	return fmt.Sprintf("10.77.%d.1", idx)
+}
+
 // handleFly — GET /hub/fly: документ, его текст (для диффа), шлюзы,
 // применённая ревизия.
 func (s *Server) handleFly(w http.ResponseWriter, r *http.Request) {

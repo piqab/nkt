@@ -838,6 +838,11 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 }
 
 func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Cluster, spec ClusterSpec, p ClusterJobParams, done *clusterResume) error {
+	// Внутренний путь: общий адрес выводит хаб (план-адрес шлюза), а не
+	// форма — спека могла сохранить внешний адрес при включённой галочке.
+	if err := r.applyInternalEndpoint(ctx, &spec); err != nil {
+		return err
+	}
 	nodes, cp1Name, err := clusterResolveNodes(ctx, r.m.db, cl, spec, p)
 	if err != nil {
 		return msgs.Errorf("hub.clusterNoNodes")
@@ -1386,10 +1391,17 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 	if r.s.jobs == nil {
 		return msgs.Errorf("api.backgroundJobsAreUnavailable")
 	}
+	// Запись с тем же именем на том же хосте — машина прошлой попытки:
+	// провижининг доводит её вместо того, чтобы завести дубля рядом с
+	// уже работающей машиной (повтор задания после сбоя установки).
+	var reuseID int64
+	if rec, err := r.m.db.HostByNameParent(ctx, nd.Name, host.ID); err == nil {
+		reuseID = rec.ID
+	}
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindVMProvision, TitleKey: "hub.machineOnHostJobTitle", TitleArgs: []any{nd.Name, host.Name},
 		Queue: fmt.Sprintf("vm:%d", host.ID), Author: jc.Job.Author, Steps: 5,
-		Params: VMProvisionParams{HostID: host.ID, Spec: vm, InstallNKT: true},
+		Params: VMProvisionParams{HostID: host.ID, Spec: vm, InstallNKT: true, ReuseID: reuseID},
 	})
 	if err != nil {
 		return err

@@ -350,8 +350,8 @@ func TestClusterListenerRouteInternal(t *testing.T) {
 		{Name: "hv2", HostID: 2, Self: 2},                // worker as a host node
 		{Name: "lab-lb-1", HostID: 1, VM: true, LB: true, Macvtap: true, Self: 14},
 	}
-	gw := flyGatewayJSON{EdgeID: gwEdge, Address: "203.0.113.10"}
-	route, _, _, err := r.clusterListenerRoute(ctx, spec, gw, nodes)
+	gw := flyGatewayJSON{EdgeID: gwEdge, Address: "203.0.113.10", Plan: "10.77.1.1"}
+	route, allow, _, err := r.clusterListenerRoute(ctx, spec, gw, nodes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,6 +360,11 @@ func TestClusterListenerRouteInternal(t *testing.T) {
 	}
 	if !route.Internal {
 		t.Error("внутренний путь не помечен на маршруте")
+	}
+	// Узлы приходят с план-адресов: подсеть плана шлюза в белом списке
+	// уже на построении маршрута — её видят и сухой прогон, и префлайт.
+	if !slices.Contains(allow, "10.77.1.0/24") || !slices.Contains(route.Allow, "10.77.1.0/24") {
+		t.Errorf("белый список внутреннего маршрута: %v", allow)
 	}
 	spec.EndpointInternal = false
 	plain, _, _, err := r.clusterListenerRoute(ctx, spec, gw, nodes)

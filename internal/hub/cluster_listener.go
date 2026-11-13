@@ -357,6 +357,15 @@ func (r *ClusterRunner) clusterListenerRoute(ctx context.Context, spec ClusterSp
 		return FlyRoute{}, nil, nil, err
 	}
 	allow, unknown := r.clusterListenerAllow(ctx, nodes, spec.AllowExtra)
+	if spec.EndpointInternal && gw.Plan != "" {
+		// Internal path: the nodes arrive from their plan addresses, so the
+		// gateway's plan subnet is allowed by construction — here, not in
+		// the step, so the dry run and the preflight see the same list the
+		// route is saved with.
+		if sub := planSubnet(gw.Plan); sub != "" && !slices.Contains(allow, sub) {
+			allow = append(allow, sub)
+		}
+	}
 	if len(allow) > fly.MaxAllow {
 		return FlyRoute{}, nil, nil, msgs.Errorf("hub.clusterTooManyAllows", len(allow), fly.MaxAllow)
 	}
@@ -406,6 +415,56 @@ func (r *ClusterRunner) clusterListenerRoute(ctx context.Context, spec ClusterSp
 		}
 	}
 	return route, allow, unknown, nil
+}
+
+// planSubnet — /24 плана, которой принадлежит адрес шлюза 10.77.N.1: в ней
+// лежат источники узлов, приходящих к шлюзу туннелем.
+func planSubnet(plan string) string {
+	a, err := netip.ParseAddr(plan)
+	if err != nil || !a.Is4() {
+		return ""
+	}
+	b := a.As4()
+	return fmt.Sprintf("%d.%d.%d.0/24", b[0], b[1], b[2])
+}
+
+// applyInternalEndpoint — внутренний путь адресуется план-адресом шлюза, и
+// выводит его сам хаб: форма могла не подставить адрес (шлюз «авто», старый
+// набор, правка спеки), а стройка с внешним адресом при включённой галочке
+// означала бы молча пропущенный слушатель и мёртвый endpoint. Порт берётся
+// из написанного адреса; шлюз — названный в кластере, а при «авто» —
+// единственный на хабе, иначе хаб не угадывает и отказывает.
+func (r *ClusterRunner) applyInternalEndpoint(ctx context.Context, spec *ClusterSpec) error {
+	if !spec.EndpointInternal || spec.Endpoint == "" {
+		return nil
+	}
+	_, port, err := k8s.EndpointHostPort(spec.Endpoint)
+	if err != nil {
+		return err
+	}
+	gws := r.s.flyGateways(ctx)
+	var gw *flyGatewayJSON
+	for i := range gws {
+		if spec.Gateway != 0 && gws[i].EdgeID == spec.Gateway {
+			gw = &gws[i]
+		}
+	}
+	if gw == nil && spec.Gateway == 0 && len(gws) == 1 {
+		gw = &gws[0]
+	}
+	if gw == nil {
+		return msgs.Errorf("hub.clusterListenerInternalNeedsGateway", len(gws))
+	}
+	plan := gw.Plan
+	if plan == "" {
+		plan = r.s.flyGatewayPlanPredict(ctx, gw.EdgeID)
+	}
+	if plan == "" {
+		return msgs.Errorf("hub.clusterListenerInternalNoPlan", gw.Name)
+	}
+	spec.Gateway = gw.EdgeID
+	spec.Endpoint = fmt.Sprintf("%s:%d", plan, port)
+	return nil
 }
 
 // listenerKeepDrain — человеческий вывод целей: цель, которую убрали из
@@ -477,16 +536,6 @@ func (r *ClusterRunner) clusterListenerStep(ctx context.Context, jc *jobs.Contex
 	}
 	doc := r.s.flyDoc(ctx)
 	if spec.EndpointInternal {
-		// Nodes on the internal path arrive through the tunnel, so the
-		// gateway sees their plan address as the source: without the
-		// gateway's plan subnet in the allow list the listener would deny
-		// the cluster's own nodes.
-		if g, ok := doc.gateway(d.gw.EdgeID); ok {
-			sub := fmt.Sprintf("10.77.%d.0/24", g.Index)
-			if !slices.Contains(route.Allow, sub) {
-				route.Allow = append(route.Allow, sub)
-			}
-		}
 		if slices.ContainsFunc(nodes, func(n listenerNode) bool { return !n.LB && !n.hostTarget() }) {
 			// VMs in NAT or on a bridge have no tunnel of their own: they
 			// keep dialing the shared address by the default route.
@@ -659,6 +708,12 @@ func (s *Server) clusterListenerRemoveRoute(ctx context.Context, jc *jobs.Contex
 // настоящего создания: тот же путь, что делает задание, только ничего не
 // записывается и не применяется.
 func (r *ClusterRunner) listenerPreflight(ctx context.Context, spec ClusterSpec, nodes []clusterNode, add func(ok, warn bool, key string, args ...any)) {
+	// Тот же вывод адреса, что в стройке: иначе сухой прогон смотрел бы на
+	// внешний адрес при включённом внутреннем пути.
+	if err := r.applyInternalEndpoint(ctx, &spec); err != nil {
+		add(false, false, "hub.preflightListenerInternal", err)
+		return
+	}
 	d := r.clusterListenerDecide(ctx, spec)
 	if !d.need {
 		// Слушателя не будет — предупреждение, не провал: общим адресом
