@@ -398,12 +398,6 @@ func ParseNodes(raw []byte) ([]Node, error) {
 // самой командой.
 const joinCommandTimeout = 30 * time.Second
 
-// joinSetupTimeout — переписывание loopback-копии admin.conf: сам sed
-// мгновенный, но старт transient unit на занятой машине занимает секунды —
-// заметное превышение означает, что машина сама не в себе, и ждать её
-// дальше незачем.
-const joinSetupTimeout = 15 * time.Second
-
 // runTimed — команда m.run со своим сроком: контекст запроса живёт дольше
 // одной команды, и зависшая команда не должна есть бюджет остальных. Вторым
 // значением — истёк ли срок: команда, убитая по сроку, и команда, упавшая
@@ -415,27 +409,26 @@ func (m *Manager) runTimed(ctx context.Context, d time.Duration, argv ...string)
 	return out, cctx.Err() == context.DeadlineExceeded, err
 }
 
-// loopKubeconfPath — копия admin.conf с сервером на loopback: ею Join ходит
-// в собственный API узла, минуя общий адрес кластера. /run — tmpfs: копия
-// переживает ровно reboot, а перекладывается при каждом Join.
-const loopKubeconfPath = "/run/nkt-kubeadm-loop.conf"
+// adminKubeconfPath — kubeconfig control plane, которым kubeadm-команды
+// Join ходят в API: server в нём — общий адрес кластера (endpoint), а его
+// сертификат API покрывает штатно (kubeadm кладёт --control-plane-endpoint
+// в SAN).
+const adminKubeconfPath = "/etc/kubernetes/admin.conf"
 
-// loopKubeconfSh — переписывает server: admin.conf на 127.0.0.1, сохраняя
-// порт; права — как у admin.conf (учётные данные те же).
-const loopKubeconfSh = "sed -E 's|server: https://[^:/]+:|server: https://127.0.0.1:|' /etc/kubernetes/admin.conf > " + loopKubeconfPath + " && chmod 600 " + loopKubeconfPath
-
-// loopServerRe — порт loopback-копии admin.conf для зонда healthz.
-var loopServerRe = regexp.MustCompile(`server: https://127\.0\.0\.1:(\d+)`)
+// adminServerRe — server из admin.conf: адрес, которым kubeadm-команды
+// Join действительно ходят, и зонд при неудаче проверяет именно его.
+var adminServerRe = regexp.MustCompile(`server:\s*https://(\S+)`)
 
 // joinCmdDetail — подробности провала команды внутри Join: что за команда,
 // код выхода или факт прерывания по сроку, последняя строка stderr и
-// состояние собственного API узла на loopback. Пустой stderr прежде доезжал
-// до журнала как «токен присоединения: » — ловить нечего, а именно так
-// выглядит команда, убитая по сроку: обёртка systemd-run умирает, и вывод
-// transient unit не доезжает вовсе.Stdout не включается никогда: у token
-// create там токен, у upload-certs — ключ сертификатов.
+// состояние общего адреса кластера (healthz по server из admin.conf — путь,
+// которым команда действительно ходит). Пустой stderr прежде доезжал до
+// журнала как «токен присоединения: » — ловить нечего, а именно так выглядит
+// команда, убитая по сроку: обёртка systemd-run умирает, и вывод transient
+// unit не доезжает вовсе. Stdout не включается никогда: у token create там
+// токен, у upload-certs — ключ сертификатов.
 func (m *Manager) joinCmdDetail(ctx context.Context, cmd string, out collect.CommandResult, timedOut bool, d time.Duration) string {
-	return joinCmdDetailText(cmd, out, timedOut, d, m.joinLoopbackHealthz(ctx))
+	return joinCmdDetailText(cmd, out, timedOut, d, m.joinEndpointHealthz(ctx))
 }
 
 func joinCmdDetailText(cmd string, out collect.CommandResult, timedOut bool, d time.Duration, healthz string) string {
@@ -450,43 +443,47 @@ func joinCmdDetailText(cmd string, out collect.CommandResult, timedOut bool, d t
 	} else {
 		b.WriteString(", stderr empty")
 	}
-	fmt.Fprintf(&b, "; loopback API: %s", healthz)
+	fmt.Fprintf(&b, "; endpoint API: %s", healthz)
 	return b.String()
 }
 
-// joinLoopbackHealthz — отвечает ли собственный API узла на loopback в
-// минуту неудачи: «ok» отделяет живой узел от мёртвого API без похода на
-// машину руками. Healthz открыт без учётных данных, ответ — диагностика, а
-// не данные, поэтому проверка сертификата не нужна (учётные данные никуда
-// не отправляются).
-func (m *Manager) joinLoopbackHealthz(ctx context.Context) string {
-	port := "6443"
-	if raw, err := m.c.ReadFile(loopKubeconfPath); err == nil {
-		if mm := loopServerRe.FindStringSubmatch(string(raw)); mm != nil {
-			port = mm[1]
+// joinEndpointHealthz — отвечает ли общий адрес кластера (server из
+// admin.conf) в минуту неудачи: «ok» отделяет живой путь от мёртвого без
+// похода на машину руками, а «connection refused» или «i/o timeout» говорят,
+// где искать — на шлюзе/маршруте или на самом узле. Healthz открыт без
+// учётных данных, ответ — диагностика, а не данные, поэтому проверка
+// сертификата не нужна (учётные данные никуда не отправляются).
+func (m *Manager) joinEndpointHealthz(ctx context.Context) string {
+	server := ""
+	if raw, err := m.c.ReadFile(adminKubeconfPath); err == nil {
+		if mm := adminServerRe.FindStringSubmatch(string(raw)); mm != nil {
+			server = strings.TrimSuffix(mm[1], "/")
 		}
+	}
+	if server == "" {
+		return "unknown (no server in admin.conf)"
 	}
 	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(cctx, "GET", "https://127.0.0.1:"+port+"/healthz", nil)
+	req, err := http.NewRequestWithContext(cctx, "GET", "https://"+server+"/healthz", nil)
 	if err != nil {
 		return err.Error()
 	}
 	client := &http.Client{Transport: &http.Transport{
-		// Диагностика loopback healthz без учётных данных — сертификат не проверяется.
+		// Диагностика healthz без учётных данных — сертификат не проверяется.
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
 	}}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err.Error()
+		return server + ": " + err.Error()
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
 	s := strings.TrimSpace(string(body))
 	if resp.StatusCode != http.StatusOK || s == "" {
-		return fmt.Sprintf("HTTP %d %s", resp.StatusCode, s)
+		return fmt.Sprintf("%s: HTTP %d %s", server, resp.StatusCode, s)
 	}
-	return s
+	return server + ": " + s
 }
 
 // Join — токен и адрес для присоединения новых узлов. serverAddr — адрес
@@ -509,23 +506,17 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		}
 		return JoinInfo{Flavor: FlavorK3s, ServerURL: "https://" + JoinServer(serverAddr), Token: strings.TrimSpace(string(raw))}, nil
 	case FlavorKubeadm:
-		// kubeadm при недоступном API (бэкенды балансировщика ещё DOWN
+		// kubeadm при недоступном API (маршрут общего адреса ещё не жив
 		// сразу после init) крутит собственные повторы минутами, а клиент
 		// хаба ждёт ответа меньше: без своего срока агент оставил бы запрос
 		// висеть до таймаута без ответа вместо быстрой ошибки, после
 		// которой хаб повторит запрос. Срок свой у каждой команды.
-		// Токен и ключ сертификатов берутся у собственного API узла через
-		// loopback, а не через общий адрес кластера: общий адрес — маршрут
-		// слушателя, который не жив, пока не поднят первый control plane,
-		// и снова не жив, когда control plane легли. Вход узла не должен
-		// зависеть от пути, который он сам же и поднимает. Сертификат API
-		// покрывает 127.0.0.1 (штатный SAN kubeadm).
-		if out, timedOut, err := m.runTimed(ctx, joinSetupTimeout, "sh", "-c", loopKubeconfSh); err != nil {
-			return JoinInfo{}, err
-		} else if out.ExitCode != 0 {
-			return JoinInfo{}, msgs.Errorf("k8s.tokenRead", m.joinCmdDetail(ctx, "loopback kubeconfig", out, timedOut, joinSetupTimeout))
-		}
-		out, timedOut, err := m.runTimed(ctx, joinCommandTimeout, "kubeadm", "token", "create", "--print-join-command", "--kubeconfig", loopKubeconfPath)
+		// Токен и ключ сертификатов берутся через общий адрес кластера —
+		// обычный admin.conf (kubeadm штатно кладёт endpoint в SAN
+		// сертификата API): обращение узла к общему адресу идёт через шлюз,
+		// в том числе когда узел сам оказывается целью — на внутренних
+		// маршрутах шлюз замыкает самообращение SNAT'ом (GatewayNFT).
+		out, timedOut, err := m.runTimed(ctx, joinCommandTimeout, "kubeadm", "token", "create", "--print-join-command")
 		if err != nil {
 			return JoinInfo{}, err
 		}
@@ -544,7 +535,7 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		// отдельной строкой. Молчать при неудаче нельзя: узел с пустым
 		// ключом падает на «--certificate-key» уже на машине, и в журнале
 		// остаётся непонятное «invalid value», а не причина.
-		out, timedOut, err = m.runTimed(ctx, joinCommandTimeout, "kubeadm", "init", "phase", "upload-certs", "--upload-certs", "--kubeconfig", loopKubeconfPath)
+		out, timedOut, err = m.runTimed(ctx, joinCommandTimeout, "kubeadm", "init", "phase", "upload-certs", "--upload-certs")
 		if err != nil {
 			return JoinInfo{}, err
 		}

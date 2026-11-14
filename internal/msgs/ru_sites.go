@@ -336,6 +336,7 @@ var ruSitesCatalog = map[string]string{
 	"fly.gatewayOffline":              "Шлюз %s (edge %d) не на связи с хабом",
 	"fly.gatewayKey":                  "Шлюз %s: ключ WireGuard: %v",
 	"fly.gatewayReady":                "Шлюз %s готов, WireGuard на %s",
+	"fly.gatewayInternalTooOld":       "Шлюз %s версии %s не умеет внутренние маршруты (нужна %s или новее): обновите шлюз — старый молча игнорирует признак, и маршрут %s оставит узлы без общего адреса (порт закрыт снаружи, а из туннеля шлюз отвечает отказом)",
 	"fly.stepHosts":                   "Хосты: ключи туннелей и адреса целей",
 	"fly.hostKey":                     "Хост %s: ключ туннеля: %v",
 	"fly.targetResolve":               "Маршрут %s, цель %s на хосте %s: %v",

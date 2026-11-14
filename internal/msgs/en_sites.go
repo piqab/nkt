@@ -336,6 +336,7 @@ var enSitesCatalog = map[string]string{
 	"fly.gatewayOffline":              "Gateway %s (edge %d) is not connected to the hub",
 	"fly.gatewayKey":                  "Gateway %s: WireGuard key: %v",
 	"fly.gatewayReady":                "Gateway %s ready, WireGuard on %s",
+	"fly.gatewayInternalTooOld":       "Gateway %s version %s does not support internal routes (%s or newer required): update the gateway — an old one silently ignores the flag, and route %s would leave the nodes without a shared address (the port is closed outside, and from the tunnel the gateway refuses)",
 	"fly.stepHosts":                   "Hosts: tunnel keys and target addresses",
 	"fly.hostKey":                     "Host %s: tunnel key: %v",
 	"fly.targetResolve":               "Route %s, target %s on host %s: %v",

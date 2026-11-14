@@ -190,6 +190,9 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 		if err := flyGatewayCall(ctx, sess, "POST", fly.PathKey, nil, &key); err != nil {
 			return msgs.Errorf("fly.gatewayKey", edgeName(st), err)
 		}
+		if err := flyCheckGatewayInternal(d, g, edgeName(st), key.Version); err != nil {
+			return err
+		}
 		ep, err := flyEndpoint(ctx, st, g.ListenPort)
 		if err != nil {
 			return err
@@ -588,6 +591,30 @@ func isTimeout(err error) bool {
 // flyMinTLSGatewayVersion — с какой версии шлюз выпускает сертификаты сам
 // (1.13.23 — сертификат на шлюзе, 1.13.25 — исправлен выпуск).
 var flyMinTLSGatewayVersion = [3]int{1, 13, 25}
+
+// flyMinInternalGatewayVersion — с какой версии шлюз рисует внутренние
+// маршруты: правило DNAT из туннеля до раннего return туннельного трафика
+// и SNAT самообращений в postrouting. Старший шлюз поле internal молча
+// игнорирует (неизвестное JSON-поле): маршрут встаёт как внешний, снаружи
+// порт закрыт, а узлы из туннеля получают RST от самого шлюза — применение
+// надо отклонять сразу, а не оставлять тихую ловушку.
+var flyMinInternalGatewayVersion = [3]int{1, 23, 1}
+
+// flyCheckGatewayInternal — на шлюз маршрутом с internal-признаком можно
+// применять только свежий шлюз.
+func flyCheckGatewayInternal(d FlyDoc, g FlyGateway, name, version string) error {
+	for _, rt := range d.Routes {
+		if rt.Gateway != g.EdgeID || !rt.Internal {
+			continue
+		}
+		if !flyVersionAtLeast(version, flyMinInternalGatewayVersion) {
+			min := fmt.Sprintf("%d.%d.%d", flyMinInternalGatewayVersion[0], flyMinInternalGatewayVersion[1], flyMinInternalGatewayVersion[2])
+			return msgs.Errorf("fly.gatewayInternalTooOld", name, version, min, rt.ID)
+		}
+		return nil
+	}
+	return nil
+}
 
 // flyVersionAtLeast — версия не старше min; пустая — старая; непонятная
 // (dev-сборка) — годится.

@@ -701,10 +701,10 @@ func TestParseCertKey(t *testing.T) {
 // Деталь провала kubeadm-команды внутри Join: убитая по сроку команда с
 // пустым stderr (обёртка systemd-run умерла, вывод не доехал) прежде
 // доезжала до журнала пустой строкой — теперь видны и срок, и пустой
-// вывод, и состояние loopback API.
+// вывод, и состояние общего адреса кластера.
 func TestJoinCmdDetailText(t *testing.T) {
-	killed := joinCmdDetailText("token create", collect.CommandResult{ExitCode: -1}, true, 30*time.Second, "ok")
-	for _, want := range []string{"token create: killed after 30s", "stderr empty", "loopback API: ok"} {
+	killed := joinCmdDetailText("token create", collect.CommandResult{ExitCode: -1}, true, 30*time.Second, "10.77.1.1:6443: ok")
+	for _, want := range []string{"token create: killed after 30s", "stderr empty", "endpoint API: 10.77.1.1:6443: ok"} {
 		if !strings.Contains(killed, want) {
 			t.Errorf("убитая по сроку: %q, нет %q", killed, want)
 		}
@@ -726,6 +726,24 @@ func TestJoinCmdDetailText(t *testing.T) {
 	}, false, 30*time.Second, "ok")
 	if strings.Contains(withSecret, "SECRET") {
 		t.Errorf("stdout утёк в деталь: %q", withSecret)
+	}
+}
+
+// Server из admin.conf — адрес, которым kubeadm-команды Join действительно
+// ходят; зонд healthz в детали отказа проверяет именно его.
+func TestAdminServerRe(t *testing.T) {
+	conf := "clusters:\n- cluster:\n    certificate-authority-data: LS0t\n    server: https://10.77.1.1:6443\n  name: kubernetes\n"
+	mm := adminServerRe.FindStringSubmatch(conf)
+	if mm == nil || mm[1] != "10.77.1.1:6443" {
+		t.Fatalf("server не разобран: %v", mm)
+	}
+	// Имя с портом — тоже host:port целиком.
+	mm = adminServerRe.FindStringSubmatch("    server: https://k8s.example.com:6443\n")
+	if mm == nil || mm[1] != "k8s.example.com:6443" {
+		t.Fatalf("server с именем не разобран: %v", mm)
+	}
+	if adminServerRe.FindString("clusters: []\n") != "" {
+		t.Error("найден server там, где его нет")
 	}
 }
 

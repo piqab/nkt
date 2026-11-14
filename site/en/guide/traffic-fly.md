@@ -477,10 +477,16 @@ proxy onto the control plane) and from mesh machines.
 - the internal mode applies to nodes with a tunnel of their own — macvtap
   machines and host nodes; a VM in NAT or on a bridge has no tunnel and
   joins the route the usual way (the job says so in its log);
-- node joins do not depend on the route being alive: a control plane takes
-  the token and the certificate key from its own API over loopback, not
-  through the shared address — otherwise the first control plane could not
-  raise the very thing it needs to be joined through;
+- a node's own connection to the shared address is closed on the gateway:
+  a control plane kubelet always dials the shared address, and the source
+  hash may land the node on itself — the gateway SNATs such a connection to
+  its plan address, closing the reply path; balancing and failover stay
+  uniform for every node, and the control plane takes the token and the
+  certificate key through the same shared address (admin.conf, whose server
+  kubeadm itself puts into the API certificate's SANs);
+- internal routes need a gateway of version 1.23.1 or newer: applying a map
+  with an internal route to an older gateway is refused with a clear line
+  instead of silently ignoring the flag;
 - if the node's tunnel dies, its traffic does not fall back to an external
   route — deliberate: the internal mode has no external road.
 

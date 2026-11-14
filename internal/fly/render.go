@@ -60,6 +60,18 @@ func GatewayWG(c GatewayConfig, keyFile string) string {
 // какие цели живы (по проверкам); цели без жизни и в «сливе» из правила
 // уходят; пул пуст — правила нет, соединения не принимаются. Маршруты по
 // имени здесь не участвуют: их слушает маршрутизатор.
+//
+// Исключение к «адрес клиента не подменяется» — самообращение на внутренних
+// маршрутах: когда клиент и выбранная цель — один и тот же узел (kubelet
+// control plane звонит на общий адрес кластера и хэш приводит его на свой же
+// узел), пакет после DNAT имеет источник, равный назначению. Без SNAT такое
+// соединение не замыкается: отражённый пакет приходит на узел с собственным
+// адресом в источнике (martian source, дроп на входе), а ответ цели после
+// обратного DNAT доставляется локально и не уходит обратно на шлюз — клиент
+// виснет. Поэтому в postrouting на живые цели внутренних маршрутов стоят
+// правила SNAT на план-адрес шлюза: шлюз сам становится клиентом соединения,
+// ответ приходит к нему, и conntrack разворачивает оба NAT. Балансировка и
+// фейловер не меняются: правило касается только источника, равного цели.
 func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) string {
 	var b strings.Builder
 	b.WriteString("# nkt Traffic Fly — шлюз\ntable ip nkt_fly\ndelete table ip nkt_fly\ntable ip nkt_fly {\n")
@@ -74,6 +86,7 @@ func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) stri
 	// Внутренние маршруты: пакеты из туннеля на план-адрес шлюза уходят в
 	// пул до раннего return туннельного трафика — снаружи порт не открыт.
 	plan, _, _ := strings.Cut(c.Address, "/")
+	var hairpin strings.Builder
 	for i, r := range c.Routes {
 		if r.Named() || !r.Internal {
 			continue
@@ -86,6 +99,18 @@ func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) stri
 		}
 		if len(live) == 0 {
 			continue
+		}
+		// Самообращение (клиент == цель): SNAT на план-адрес шлюза замыкает
+		// обратный путь — см. комментарий к GatewayNFT. Метка соединения
+		// сужает правило до своего маршрута, адреса — до самого узла.
+		seen := map[string]bool{}
+		for _, t := range live {
+			if seen[t.Host] {
+				continue
+			}
+			seen[t.Host] = true
+			fmt.Fprintf(&hairpin, "\t\tiifname %q ct mark 0x%x ip saddr %s ip daddr %s counter snat to %s comment %q\n",
+				c.Iface, RouteMark(i+1), t.Host, t.Host, plan, "fly:"+r.ID)
 		}
 		for _, proto := range r.protos() {
 			if r.Range() {
@@ -124,7 +149,15 @@ func GatewayNFT(c GatewayConfig, alive func(routeID, targetID string) bool) stri
 				proto, r.Port, r.allowNFT(), RouteMark(i+1), dnatTarget(r.Algorithm, live), "fly:"+r.ID)
 		}
 	}
-	b.WriteString("\t}\n}\n")
+	b.WriteString("\t}\n")
+	if hairpin.Len() > 0 {
+		// SNAT самообращений — после DNAT и маршрутизации: правило видит
+		// пакет уже с адресом цели и подменяет источник на план-адрес шлюза.
+		b.WriteString("\tchain postrouting {\n\t\ttype nat hook postrouting priority srcnat; policy accept;\n")
+		b.WriteString(hairpin.String())
+		b.WriteString("\t}\n")
+	}
+	b.WriteString("}\n")
 	return b.String()
 }
 

@@ -162,7 +162,30 @@ func TestGatewayInternalRoute(t *testing.T) {
 	if strings.Contains(nft, "\n\t\ttcp dport 6443 ") {
 		t.Errorf("внутренний маршрут открыл порт снаружи в\n%s", nft)
 	}
+	// Самообращение (клиент == цель, kubelet CP звонит на общий адрес и
+	// хэш приводит его на себя): SNAT на план-адрес шлюза в postrouting
+	// замыкает обратный путь — без него ответ цели доставляется локально и
+	// клиент виснет.
+	if !strings.Contains(nft, "chain postrouting {\n\t\ttype nat hook postrouting priority srcnat;") {
+		t.Errorf("нет цепочки postrouting в\n%s", nft)
+	}
+	hairpin := `ip saddr 10.77.1.2 ip daddr 10.77.1.2 counter snat to 10.77.1.1 comment "fly:api"`
+	if !strings.Contains(nft, hairpin) {
+		t.Errorf("нет SNAT самообращения в\n%s", nft)
+	}
+	// Мёртвая цель не принимает соединения — и самообращение на неё не
+	// замыкается: правила нет, а с ним и всей цепочки.
+	dead := GatewayNFT(g, func(r, id string) bool { return !(r == "api" && id == "cp1") })
+	if strings.Contains(dead, "postrouting") {
+		t.Errorf("цепочка postrouting с мёртвой целью в\n%s", dead)
+	}
 	nftLoads(t, nft)
+	nftLoads(t, dead)
+	// Внешние маршруты самообращения не получают: их клиенты приходят
+	// снаружи и источниками целей не бывают.
+	if strings.Contains(GatewayNFT(sampleGateway(), nil), "postrouting") {
+		t.Error("postrouting у шлюза без внутренних маршрутов")
+	}
 	// Внутренним бывает только маршрут по порту: у маршрутов по имени
 	// терминал — сам шлюз, привязывать не к чему.
 	named := sampleGateway()

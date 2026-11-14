@@ -181,8 +181,14 @@ outside anyway. In a mixed cluster the outward addresses stay in the
 list: the tunnel-less machines need them. The internal path applies to
 nodes with a tunnel of their own — host nodes and macvtap machines; VMs
 in NAT or on a bridge reach the shared address by the default route, and
-the job says so in the log. Node joins do not depend on the route being alive: a control plane
-takes the token and the certificate key from its own API over loopback.
+the job says so in the log. A control plane takes the token and the
+certificate key through the shared address — the regular admin.conf, whose
+server kubeadm itself puts into the API certificate's SANs; the job waits
+for the listener to come alive before asking for the token. When a node's
+own connection to the shared address lands on the node itself (a control
+plane kubelet always dials it, and the source hash may pick the node's own
+target), the gateway closes the loop with a SNAT to its plan address —
+balancing and failover stay uniform for every node.
 The hub derives the plan address itself even if the form did not fill it
 in: the “auto” gateway is fine when there is a single gateway; with
 several you must name one in “Where to listen”. Over the API this is the

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/piqab/nkt/internal/store"
@@ -125,5 +126,35 @@ func TestFlyHostLabelNamesUnknownHost(t *testing.T) {
 	}
 	if got := flyHostLabels([]int64{7, 9}); got != "#7, #9" {
 		t.Errorf("список забытых: %q", got)
+	}
+}
+
+// Внутренний маршрут на старом шлюзе — тихая ловушка: поле internal он
+// игнорирует, рисует маршрут внешним (после раннего return туннельного
+// трафика), и узлы получают RST от самого шлюза при зелёной сводке.
+// Применение обязано отклоняться внятной строкой.
+func TestFlyCheckGatewayInternal(t *testing.T) {
+	d := FlyDoc{Routes: []FlyRoute{
+		{ID: "web", Gateway: 5, Kind: "tcp", Port: 443},
+		{ID: "api-lab", Gateway: 5, Kind: "tcp", Port: 6443, Internal: true},
+	}}
+	g := FlyGateway{EdgeID: 5}
+	if err := flyCheckGatewayInternal(d, g, "fly", "1.13.34"); err == nil {
+		t.Error("старый шлюз прошёл с внутренним маршрутом")
+	} else if !strings.Contains(err.Error(), "1.23.1") || !strings.Contains(err.Error(), "api-lab") {
+		t.Errorf("в отказе нет нужной версии и маршрута: %v", err)
+	}
+	for _, ok := range []string{"1.23.1", "1.23.4-beta", "1.24.0", "dev"} {
+		if err := flyCheckGatewayInternal(d, g, "fly", ok); err != nil {
+			t.Errorf("версия %s отвергнута: %v", ok, err)
+		}
+	}
+	// Другой шлюз и документы без внутренних маршрутов не затрагиваются.
+	if err := flyCheckGatewayInternal(d, FlyGateway{EdgeID: 6}, "fly2", "1.0.0"); err != nil {
+		t.Errorf("чужой шлюз: %v", err)
+	}
+	plain := FlyDoc{Routes: []FlyRoute{{ID: "web", Gateway: 5, Kind: "tcp", Port: 443}}}
+	if err := flyCheckGatewayInternal(plain, g, "fly", ""); err != nil {
+		t.Errorf("без внутренних маршрутов: %v", err)
 	}
 }
