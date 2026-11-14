@@ -226,13 +226,13 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 						}
 						return err
 					}
-					var key fly.KeyResponse
-					if err := s.flyHostCall(ctx, user, t.HostID, flyHostLabel(names, t.HostID), "POST", "/api/fly/key?iface="+iface, nil, &key); err != nil {
+					key, keyErr := s.flyHostKeyRetry(ctx, user, t.HostID, flyHostLabel(names, t.HostID), iface)
+					if keyErr != nil {
 						var me *msgs.Err
-						if errors.As(err, &me) && me.Key == "fly.hostTimeout" {
-							return err
+						if errors.As(keyErr, &me) && me.Key == "fly.hostTimeout" {
+							return keyErr
 						}
-						return msgs.Errorf("fly.hostKey", flyHostLabel(names, t.HostID), err)
+						return msgs.Errorf("fly.hostKey", flyHostLabel(names, t.HostID), keyErr)
 					}
 					hostKeys[hk] = key.PublicKey
 				}
@@ -282,13 +282,13 @@ func (s *Server) flyApplyRun(ctx context.Context, jc flyLog, author string, p Fl
 						}
 						return err
 					}
-					var key fly.KeyResponse
-					if err := s.flyHostCall(ctx, user, cid, flyHostLabel(names, cid), "POST", "/api/fly/key?iface="+iface, nil, &key); err != nil {
+					key, keyErr := s.flyHostKeyRetry(ctx, user, cid, flyHostLabel(names, cid), iface)
+					if keyErr != nil {
 						var me *msgs.Err
-						if errors.As(err, &me) && me.Key == "fly.hostTimeout" {
-							return err
+						if errors.As(keyErr, &me) && me.Key == "fly.hostTimeout" {
+							return keyErr
 						}
-						return msgs.Errorf("fly.hostKey", flyHostLabel(names, cid), err)
+						return msgs.Errorf("fly.hostKey", flyHostLabel(names, cid), keyErr)
 					}
 					hostKeys[hk] = key.PublicKey
 				}
@@ -545,6 +545,29 @@ func (s *Server) flyHostCall(ctx context.Context, user string, hostID int64, nam
 		}
 	}
 	return msgs.Errorf("fly.hostTimeout", name, int(flyHostCallTimeout.Seconds()))
+}
+
+// flyHostKeyTries — сколько раз пробовать взять ключ туннеля с хоста.
+// Машина сразу после создания бывает доступна с перебоями (cloud-init ещё
+// перекладывает сеть, проба прямого пути запомнила неудачу), а один
+// непослушный ключ обрывал всё применение — маршрут не вставал ни у кого.
+const flyHostKeyTries = 3
+
+// flyHostKeyRetry — ключ с повторами: перед повтором forget пробы прямого
+// подключения, чтобы он перепробовался заново, а не ушёл через хост —
+// путь, для macvtap-гостей заведомо мёртвый.
+func (s *Server) flyHostKeyRetry(ctx context.Context, user string, hostID int64, name, iface string) (fly.KeyResponse, error) {
+	var key fly.KeyResponse
+	for attempt := 1; ; attempt++ {
+		err := s.flyHostCall(ctx, user, hostID, name, "POST", "/api/fly/key?iface="+iface, nil, &key)
+		if err == nil || attempt >= flyHostKeyTries || ctx.Err() != nil {
+			return key, err
+		}
+		s.hub.ForgetDirect(hostID)
+		if !sleepCtx(ctx, 5*time.Second) {
+			return key, ctx.Err()
+		}
+	}
 }
 
 // isTimeout — ошибка — истёкшее время (клиента HTTP, контекста, сети).

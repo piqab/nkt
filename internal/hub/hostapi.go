@@ -96,7 +96,7 @@ func (m *Manager) HostAPITimeout(ctx context.Context, hostID int64, method, path
 			onFail()
 		}
 		if slow {
-			return 0, msgs.Errorf("hub.hostSlow", path, int(timeout.Minutes()))
+			return 0, msgs.Errorf("hub.hostSlow", path, int(timeout.Seconds()))
 		}
 		return 0, err
 	}

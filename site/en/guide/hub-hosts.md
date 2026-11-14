@@ -608,8 +608,15 @@ is no pool by default, the window shows a diff and how many ports are
 given out. More — [the token API](/en/guide/hub-api#token-by-permission).
 
 **Machine link**: *auto* — the hub tries the machine's SSH directly
-(1.5 s, the result is remembered for 10 minutes) and bypasses the host if
-it answers, otherwise goes through the host; *direct*; *via host*.
+(1.5 s; a success is remembered for 10 minutes, a failure for one, so a
+momentary hiccup of a freshly created machine does not close the direct
+path for long) and bypasses the host if it answers, otherwise goes
+through the host; *direct*; *via host*. A machine created in macvtap gets
+*direct* right away: the “via host” path is dead for it by construction
+(the host does not see its own macvtap guests over the network), and the
+auto choice would report that dead path's error instead of the real
+reason. If both the direct and the via-host attempts fail, the error
+shows both reasons — the direct one first.
 
 ## Export and import
 

@@ -171,10 +171,17 @@ such a cluster has no external kubeconfig; management goes through the hub
 and from inside the mesh. The nodes arrive with their plan addresses, so
 the gateway's plan subnet (`10.77.N.0/24`) joins “who else” automatically
 — and the dry run shows it right away; an empty “who else” is legitimate
-in the internal mode. The internal path applies to nodes with a tunnel of
-their own — host nodes and macvtap machines; VMs in NAT or on a bridge
-reach the shared address by the default route, and the job says so in the
-log. Node joins do not depend on the route being alive: a control plane
+in the internal mode. When every node has a tunnel of its own (only host
+nodes and macvtap machines), the internal path covers the whole cluster:
+the allow list consists of the plan subnet and “who else” alone, the
+outward addresses of the hosts are not added to it, and neither the “host
+address is not visible from outside” nor the “a macvtap machine arrives
+from the site egress” warnings are issued — the nodes do not come from
+outside anyway. In a mixed cluster the outward addresses stay in the
+list: the tunnel-less machines need them. The internal path applies to
+nodes with a tunnel of their own — host nodes and macvtap machines; VMs
+in NAT or on a bridge reach the shared address by the default route, and
+the job says so in the log. Node joins do not depend on the route being alive: a control plane
 takes the token and the certificate key from its own API over loopback.
 The hub derives the plan address itself even if the form did not fill it
 in: the “auto” gateway is fine when there is a single gateway; with
@@ -195,17 +202,22 @@ The hub puts the outward addresses of the placement hosts in it plus what
 a person added; an empty list at Traffic Fly means “everyone”, so an empty
 list is a refusal, not an open port. A host behind NAT, whose address is
 not visible from outside, is logged with “!” — its nodes would be locked
-out, and that should be seen before creating.
+out, and that should be seen before creating (on an internal path that
+covers every node, outward addresses play no part in the join, and no “!”
+is raised).
 
 A macvtap machine needs its own line in that list: it arrives at the
 gateway from the address its own network gave it (usually the site's
 router), not from the parent host's address. The two may coincide, but
 nothing guarantees it, so the hub warns about this in the checklist and in
 the job log, and a person adds the address under “who else” — the hub does
-not guess it and never puts foreign addresses into the list. A gateway
-checks a target's liveness from itself, so “the target is alive” does not
-mean “the node is allowed in”: dead targets and a route with no connection
-at all are explained line by line in the log.
+not guess it and never puts foreign addresses into the list. On the
+internal path this warning is not issued: a macvtap machine reaches the
+shared address through its own tunnel and arrives with a plan address,
+which the plan subnet already covers. A gateway checks a target's liveness
+from itself, so “the target is alive” does not mean “the node is allowed
+in”: dead targets and a route with no connection at all are explained line
+by line in the log.
 
 **Dry run** shows all of it as a checklist: the gateway and its address,
 the port and targets of the route, the target shape for the network mode,

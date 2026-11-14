@@ -39,6 +39,13 @@ const (
 
 	clusterReadyTimeout = 15 * time.Minute
 	clusterNodePoll     = 10 * time.Second
+
+	// joinRequestTimeout — срок хаба на один запрос токена присоединения к
+	// агенту cp-1: у агента там до трёх команд с собственными потолками
+	// (internal/k8s, joinCommandTimeout), и клиентский таймаут обязан быть
+	// длиннее их худшей суммы — иначе хаб обрывает запрос раньше, чем агент
+	// успевает ответить своей ошибкой, и повторы идут вслепую.
+	joinRequestTimeout = 75 * time.Second
 )
 
 // ClusterSpec — что создаём. Хранится в clusters.spec_json.
@@ -1127,10 +1134,14 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		// бэкенды балансировщика ещё DOWN, kubeadm внутри агента крутит свои
 		// повторы, и одна попытка хаба ловила это окно вплоть до таймаута
 		// клиента. Три попытки с паузой окно переживают; старый агент
-		// (404/405) не повторяется — там повтор ничего не исправит.
+		// (404/405) не повторяется — там повтор ничего не исправит. Срок
+		// запроса длиннее обычных 30 с: у агента три команды с собственными
+		// потолками (см. internal/k8s, joinCommandTimeout), худший случай
+		// около минуты — клиентский таймаут обязан быть длиннее, иначе хаб
+		// обрывает запрос раньше, чем агент отвечает своей ошибкой.
 		var err error
 		for attempt := 1; ; attempt++ {
-			code, callErr := r.m.HostAPI(ctx, cp1.ID, "GET", joinURL, nil, &join)
+			code, callErr := r.m.HostAPITimeout(ctx, cp1.ID, "GET", joinURL, nil, &join, joinRequestTimeout)
 			if callErr == nil {
 				err = nil
 				break

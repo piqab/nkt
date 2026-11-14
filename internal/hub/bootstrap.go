@@ -7,6 +7,7 @@ import (
 	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -481,11 +482,32 @@ func (m *Manager) disablePasswordAuth(ctx context.Context, client *ssh.Client, h
 	}
 	// Ещё одно новое соединение: reload прошёл, но принимает ли демон
 	// подключения — вопрос отдельный, и уже открытая сессия на него не
-	// отвечает.
-	check, err := m.dialHostAs(ctx, host, user, store.HostAuthKey, []byte(privatePEM))
+	// отвечает. И соединение не одно: у только что созданной машины и у
+	// reload бывают секундные окна сетевой недоступности, а вердикт «вход по
+	// ключу перестал работать» по единственному транспортному сбою откатил
+	// бы исправное изменение. Вердикт — только настоящий отказ учётным
+	// данным; транспорт повторяется (память пробы прямого пути сбрасывается,
+	// чтобы повтор не ушёл на через-хост путь, для macvtap заведомо мёртвый).
+	var check *sshLink
+	var err error
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 {
+			m.ForgetDirect(host.ID)
+			if !sleepCtx(ctx, 5*time.Second) {
+				return ctx.Err()
+			}
+		}
+		check, err = m.dialHostAs(ctx, host, user, store.HostAuthKey, []byte(privatePEM))
+		if err == nil || sshAuthFailed(err) || attempt >= 2 {
+			break
+		}
+	}
 	if err != nil {
 		rollback()
-		return msgs.Errorf("hub.afterDisablingPasswordLoginKey", err)
+		if sshAuthFailed(err) {
+			return msgs.Errorf("hub.afterDisablingPasswordLoginKey", err)
+		}
+		return msgs.Errorf("hub.afterDisablingPasswordNoAccess", err)
 	}
 	_ = check.Close()
 	return nil

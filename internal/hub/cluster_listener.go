@@ -76,6 +76,26 @@ func (n listenerNode) hostTarget() bool {
 	return !n.VM || (n.Macvtap && n.Self != 0)
 }
 
+// listenerInternalCovers — внутренний путь покрывает каждый узел кластера:
+// у всех собственный туннель (узел-хост, машина в macvtap), и к общему
+// адресу они приходят с план-адресов, а не с наружных адресов своих сайтов.
+// Машина в NAT или мосту туннеля не получает и ходит маршрутом по умолчанию
+// — в смешанном кластере вход по-прежнему зависит от наружных адресов, и
+// режим нельзя считать покрытым. Машина в macvtap, которой ещё нет (записи
+// нет, Self нулевой — сухой прогон), считается покрытой: её создадут с
+// туннелем, как и остальные. Машины LB общий адрес не набирают вовсе.
+func listenerInternalCovers(nodes []listenerNode) bool {
+	if len(nodes) == 0 {
+		return false
+	}
+	return !slices.ContainsFunc(nodes, func(n listenerNode) bool {
+		if n.LB || n.hostTarget() {
+			return false
+		}
+		return !(n.Macvtap && n.Self == 0)
+	})
+}
+
 // ownHost — запись узла в списке хостов: у узла-хоста это он сам, у машины
 // — её собственная запись (хаб заводит её при создании); 0 — машины ещё нет.
 func (n listenerNode) ownHost() int64 {
@@ -356,13 +376,30 @@ func (r *ClusterRunner) clusterListenerRoute(ctx context.Context, spec ClusterSp
 	if err != nil {
 		return FlyRoute{}, nil, nil, err
 	}
-	allow, unknown := r.clusterListenerAllow(ctx, nodes, spec.AllowExtra)
-	if spec.EndpointInternal && gw.Plan != "" {
+	var allow, unknown []string
+	if spec.EndpointInternal && listenerInternalCovers(nodes) {
+		// Покрытый внутренний путь: каждый узел приходит с план-адреса, и
+		// наружные адреса хостов размещения во входе не участвуют — список
+		// состоит из «кому ещё» и подсети плана шлюза (ниже). Мёртвые записи
+		// в белом списке адреса управления кластером незачем держать, а
+		// «неизвестных снаружи» хостов в этом режиме не бывает.
+		allow, _ = r.clusterListenerAllow(ctx, nil, spec.AllowExtra)
+	} else {
+		allow, unknown = r.clusterListenerAllow(ctx, nodes, spec.AllowExtra)
+	}
+	if spec.EndpointInternal {
 		// Internal path: the nodes arrive from their plan addresses, so the
 		// gateway's plan subnet is allowed by construction — here, not in
 		// the step, so the dry run and the preflight see the same list the
 		// route is saved with.
-		if sub := planSubnet(gw.Plan); sub != "" && !slices.Contains(allow, sub) {
+		plan := gw.Plan
+		if plan == "" {
+			// Шлюза ещё нет в документе: тот же прогноз номера, что делает
+			// applyInternalEndpoint для адреса, — иначе список вышел бы
+			// пустым и построение отказало бы вместо стройки.
+			plan = r.s.flyGatewayPlanPredict(ctx, gw.EdgeID)
+		}
+		if sub := planSubnet(plan); sub != "" && !slices.Contains(allow, sub) {
 			allow = append(allow, sub)
 		}
 	}
@@ -552,11 +589,16 @@ func (r *ClusterRunner) clusterListenerStep(ctx context.Context, jc *jobs.Contex
 	// сети не дойдёт, поэтому цель строится «сам хост», а не «машина».
 	if form := listenerNames(nodes, func(n listenerNode) bool { return n.Macvtap }); len(form) > 0 {
 		jc.Log("hub.clusterListenerHostForm", route.ID, strings.Join(form, ", "))
-		// Белый список собран из адресов хостов размещения, а macvtap-машина
-		// приходит к шлюзу со своего шлюза по умолчанию — наружный адрес её
-		// сайта. Совпадение с адресом хоста не гарантия, поэтому об этом
-		// говорится заранее, а не тогда, когда вход будет отбит.
-		jc.Log("hub.clusterListenerAllowMacvtap", strings.Join(allow, ", "))
+		if !spec.EndpointInternal {
+			// Белый список собран из адресов хостов размещения, а macvtap-машина
+			// приходит к шлюзу со своего шлюза по умолчанию — наружный адрес её
+			// сайта. Совпадение с адресом хоста не гарантия, поэтому об этом
+			// говорится заранее, а не тогда, когда вход будет отбит.
+			// На внутреннем пути предупреждение ложное: macvtap-машина идёт к
+			// общему адресу через свой туннель и приходит с план-адреса, который
+			// подсеть плана уже покрывает.
+			jc.Log("hub.clusterListenerAllowMacvtap", strings.Join(allow, ", "))
+		}
 	}
 	for _, t := range route.Targets {
 		if t.Drain {
@@ -749,7 +791,11 @@ func (r *ClusterRunner) listenerPreflight(ctx context.Context, spec ClusterSpec,
 	// прогоне значит не оставлять вопроса «почему в списке не адрес машины».
 	if form := listenerNames(specNodes, func(n listenerNode) bool { return n.Macvtap }); len(form) > 0 {
 		add(true, false, "hub.preflightListenerHostForm", strings.Join(form, ", "))
-		add(true, true, "hub.clusterListenerAllowMacvtap", strings.Join(allow, ", "))
+		if !spec.EndpointInternal {
+			// На внутреннем пути macvtap-машина приходит с план-адреса, а не с
+			// egress-адреса сайта — предупреждение про белый список ложное.
+			add(true, true, "hub.clusterListenerAllowMacvtap", strings.Join(allow, ", "))
+		}
 	}
 	for _, name := range unknown {
 		add(true, true, "hub.clusterListenerPrivate", name)

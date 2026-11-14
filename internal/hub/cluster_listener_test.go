@@ -351,7 +351,7 @@ func TestClusterListenerRouteInternal(t *testing.T) {
 		{Name: "lab-lb-1", HostID: 1, VM: true, LB: true, Macvtap: true, Self: 14},
 	}
 	gw := flyGatewayJSON{EdgeID: gwEdge, Address: "203.0.113.10", Plan: "10.77.1.1"}
-	route, allow, _, err := r.clusterListenerRoute(ctx, spec, gw, nodes)
+	route, allow, unknown, err := r.clusterListenerRoute(ctx, spec, gw, nodes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,6 +366,15 @@ func TestClusterListenerRouteInternal(t *testing.T) {
 	if !slices.Contains(allow, "10.77.1.0/24") || !slices.Contains(route.Allow, "10.77.1.0/24") {
 		t.Errorf("белый список внутреннего маршрута: %v", allow)
 	}
+	// Кластер смешанный (lab-w-2 в NAT без туннеля) — внутренний путь его
+	// не покрывает: наружные адреса хостов остаются в списке (с них придут
+	// VM без туннеля), а хост за NAT попадает в «неизвестные».
+	if !slices.Contains(allow, "8.8.8.8") {
+		t.Errorf("в смешанном внутреннем режиме адрес хоста пропал из списка: %v", allow)
+	}
+	if !slices.Contains(unknown, "hv1") {
+		t.Errorf("в смешанном внутреннем режиме хост за NAT не помечен неизвестным: %v", unknown)
+	}
 	spec.EndpointInternal = false
 	plain, _, _, err := r.clusterListenerRoute(ctx, spec, gw, nodes)
 	if err != nil {
@@ -376,6 +385,69 @@ func TestClusterListenerRouteInternal(t *testing.T) {
 	}
 	if plain.Internal {
 		t.Error("внутренний маршрут без внутреннего пути")
+	}
+}
+
+// Покрытый внутренний путь (у каждого узла свой туннель): белый список —
+// только «кому ещё» и подсеть плана шлюза; наружные адреса хостов в нём
+// мёртвым грузом не висят, «неизвестных снаружи» хостов нет.
+func TestClusterListenerRouteInternalCovered(t *testing.T) {
+	s, gwEdge, _ := listenerFixture(t, "10.0.0.5", "8.8.8.8")
+	ctx := context.Background()
+	r := NewClusterRunner(s)
+	spec := ClusterSpec{Name: "lab", Flavor: "kubeadm", Endpoint: "10.77.1.1:6443", NetworkMode: NetworkMacvtap,
+		EndpointInternal: true, AllowExtra: []string{"198.51.100.7"}}
+	nodes := []listenerNode{
+		{Name: "lab-cp-1", HostID: 1, VM: true, CP: true, Macvtap: true, Self: 11},
+		{Name: "lab-cp-2", HostID: 2, VM: true, CP: true, Macvtap: true, Self: 12},
+		{Name: "lab-w-1", HostID: 1, VM: true, Macvtap: true, Self: 13},
+		{Name: "hv2", HostID: 2, Self: 2}, // worker — сам хост
+	}
+	gw := flyGatewayJSON{EdgeID: gwEdge, Address: "203.0.113.10", Plan: "10.77.1.1"}
+	route, allow, unknown, err := r.clusterListenerRoute(ctx, spec, gw, nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unknown) != 0 {
+		t.Errorf("покрытый внутренний режим не должен знать «неизвестных» хостов: %v", unknown)
+	}
+	want := []string{"198.51.100.7", "10.77.1.0/24"}
+	if !slices.Equal(allow, want) || !slices.Equal(route.Allow, want) {
+		t.Errorf("белый список: %v (маршрут %v), надо %v", allow, route.Allow, want)
+	}
+	// У шлюза без записи в документе номер плана предсказывается: тот же,
+	// что назначит normalize, — список не остаётся пустым.
+	gwNoPlan := flyGatewayJSON{EdgeID: gwEdge, Address: "203.0.113.10"}
+	_, allow2, _, err := r.clusterListenerRoute(ctx, spec, gwNoPlan, nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(allow2, "10.77.1.0/24") {
+		t.Errorf("подсеть плана не предсказана для шлюза вне документа: %v", allow2)
+	}
+}
+
+// Предикат покрытия: узел-хост и машина в macvtap покрыты (в сухом прогоне
+// машина без записи — тоже), машина в NAT/мосту — нет; LB-машина общий
+// адрес не набирает и покрытие не ломает.
+func TestListenerInternalCovers(t *testing.T) {
+	host := listenerNode{Name: "hv1", HostID: 1, Self: 1}
+	macCreated := listenerNode{Name: "cp-1", HostID: 1, VM: true, Macvtap: true, Self: 11}
+	macFuture := listenerNode{Name: "cp-2", HostID: 1, VM: true, Macvtap: true} // сухой прогон
+	natVM := listenerNode{Name: "w-1", HostID: 1, VM: true, Self: 12}
+	lb := listenerNode{Name: "lb-1", HostID: 1, VM: true, LB: true, Macvtap: true, Self: 13}
+
+	if !listenerInternalCovers([]listenerNode{host, macCreated}) {
+		t.Error("узлы-хосты и macvtap-машины должны быть покрыты")
+	}
+	if !listenerInternalCovers([]listenerNode{host, macFuture, lb}) {
+		t.Error("сухой прогон (macvtap без записи) и LB должны быть покрыты")
+	}
+	if listenerInternalCovers([]listenerNode{host, macCreated, natVM}) {
+		t.Error("машина в NAT без туннеля ломает покрытие")
+	}
+	if listenerInternalCovers(nil) {
+		t.Error("пустой список узлов покрыт быть не должен — слушателю некого слушать")
 	}
 }
 

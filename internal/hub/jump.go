@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"net"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -96,6 +97,7 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 	// отвечает хабу (проба короткая, итог помнится directProbeTTL), иначе
 	// через хост. Хост с macvtap-гостями сам до них не достучится — им
 	// нужен прямой путь.
+	var directErr error
 	switch host.Via {
 	case store.HostViaDirect:
 		client, err := dialSSHPinned(ctx, host.Addr, host.SSHPort, user, authKind, secret, pin)
@@ -108,8 +110,12 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 		if m.directReachable(host) {
 			client, err := dialSSHPinned(ctx, host.Addr, host.SSHPort, user, authKind, secret, pin)
 			if err == nil {
+				// Успех продлевает память: пока подключения ходят, редкая
+				// неудача пробы не должна отправлять машину на через-хост.
+				m.rememberDirect(host.ID, true)
 				return &sshLink{client: client}, nil
 			}
+			directErr = err
 			m.rememberDirect(host.ID, false)
 		}
 	}
@@ -129,26 +135,51 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 	if err != nil {
 		return nil, msgs.Errorf("hub.decryptingSSHSecretHost", parent.Name, err)
 	}
-	jump, err := m.dialHostDepth(ctx, parent, parent.SSHUser, parent.SSHAuthKind, parentSecret, depth+1)
-	if err != nil {
-		return nil, msgs.Errorf("hub.jumpingThroughHost", parent.Name, err)
+	jump, jumpErr := func() (*sshLink, error) {
+		jl, err := m.dialHostDepth(ctx, parent, parent.SSHUser, parent.SSHAuthKind, parentSecret, depth+1)
+		if err != nil {
+			return nil, msgs.Errorf("hub.jumpingThroughHost", parent.Name, err)
+		}
+		conn, err := jl.client.DialContext(ctx, "tcp", target)
+		if err != nil {
+			_ = jl.Close()
+			return nil, msgs.Errorf("hub.accessHost", parent.Name, target, err)
+		}
+		client, err := dialSSHOver(conn, target, user, authKind, secret, pin)
+		if err != nil {
+			_ = jl.Close()
+			return nil, err
+		}
+		return &sshLink{client: client, under: jl}, nil
+	}()
+	if jumpErr != nil {
+		if directErr != nil {
+			// Прямой путь пробовался и не вышел: для macvtap-гостя путь через
+			// хост мёртв по построению, и его ошибка настоящую причину не
+			// объясняет — показать обе, прямой первой.
+			return nil, msgs.Errorf("hub.hostUnreachableBothWays", host.Name, directErr, parent.Name, jumpErr)
+		}
+		return nil, jumpErr
 	}
-
-	conn, err := jump.client.DialContext(ctx, "tcp", target)
-	if err != nil {
-		_ = jump.Close()
-		return nil, msgs.Errorf("hub.accessHost", parent.Name, target, err)
-	}
-	client, err := dialSSHOver(conn, target, user, authKind, secret, pin)
-	if err != nil {
-		_ = jump.Close()
-		return nil, err
-	}
-	return &sshLink{client: client, under: jump}, nil
+	return jump, nil
 }
 
-// directProbeTTL — сколько помнить итог пробы прямого подключения.
+// sshAuthFailed — ошибка подключения это именно отказ учётным данным, а не
+// транспорт: машина доступна, но ключ или пароль не принимают. Отличать надо
+// там, где по итогам подключения делается вывод о самом ключе (подготовка
+// хоста): транспортный сбой о ключе не говорит ничего.
+func sshAuthFailed(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "unable to authenticate")
+}
+
+// directProbeTTL — сколько помнить итог успешной пробы прямого подключения.
 const directProbeTTL = 10 * time.Minute
+
+// directProbeFailTTL — неудача помнится на порядок короче: только что
+// созданная машина или секундная сетевая заминка не должны на десять минут
+// отправлять хост на через-хост путь, который для macvtap-гостей мёртв
+// (статус машины на хабе залипал «недоступен», хотя она давно отвечала).
+const directProbeFailTTL = time.Minute
 
 type directProbe struct {
 	ok bool
@@ -159,9 +190,15 @@ type directProbe struct {
 // памяти или короткой пробой).
 func (m *Manager) directReachable(host store.Host) bool {
 	m.directMu.Lock()
-	if p, ok := m.directCache[host.ID]; ok && time.Since(p.at) < directProbeTTL {
-		m.directMu.Unlock()
-		return p.ok
+	if p, ok := m.directCache[host.ID]; ok {
+		ttl := directProbeTTL
+		if !p.ok {
+			ttl = directProbeFailTTL
+		}
+		if time.Since(p.at) < ttl {
+			m.directMu.Unlock()
+			return p.ok
+		}
 	}
 	m.directMu.Unlock()
 	ok := TCPReachable(net.JoinHostPort(host.Addr, fmt.Sprintf("%d", host.SSHPort)), 1500*time.Millisecond)

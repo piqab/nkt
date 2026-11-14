@@ -200,6 +200,15 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 		if err := r.m.db.SetHostParent(ctx, id, host.ID); err != nil {
 			return msgs.Errorf("hub.bindingMachineHost", err)
 		}
+		if p.Spec.Direct != "" {
+			// Машина в macvtap для своего хоста по сети недостижима: путь
+			// «через хост» для неё заведомо мёртв, а автовыбор при неудачной
+			// пробе прямого подключения уходил бы именно туда и сообщал
+			// ошибку прыжка вместо настоящей причины. Прямой способ — сразу.
+			if err := r.m.db.SetHostVia(ctx, id, store.HostViaDirect); err != nil {
+				jc.Log("hub.vmViaDirectWarn", err)
+			}
+		}
 		// apt через хаб наследуется от хоста, на котором машина стоит: кэш
 		// тот же, а наружный путь машине после Cilium вместо kube-proxy
 		// доступен не всегда — см. aptproxy.go.

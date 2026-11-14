@@ -385,9 +385,25 @@ func ParseNodes(raw []byte) ([]Node, error) {
 	return nodes, nil
 }
 
-// joinCommandTimeout — потолок kubeadm-команд внутри Join: короче
-// клиентского таймаута хаба, чтобы агент отвечал ошибкой, а не молчанием.
+// joinCommandTimeout — потолок одной kubeadm-команды внутри Join: короче
+// клиентского таймаута хаба на запрос, чтобы агент отвечал ошибкой, а не
+// молчанием. Бюджет у каждой команды свой: общий на все три означал бы, что
+// одна зависшая съедает его целиком, а следующая падает мгновенно — хаб же
+// при повторе начинает всё сначала.
 const joinCommandTimeout = 20 * time.Second
+
+// joinSetupTimeout — переписывание loopback-копии admin.conf: локальный sed,
+// дольше секунды не длится; заметное превышение означает, что машина сама не
+// в себе, и ждать её незачем.
+const joinSetupTimeout = 10 * time.Second
+
+// runTimed — команда m.run со своим сроком: контекст запроса живёт дольше
+// одной команды, и зависшая команда не должна есть бюджет остальных.
+func (m *Manager) runTimed(ctx context.Context, d time.Duration, argv ...string) (collect.CommandResult, error) {
+	cctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	return m.run(cctx, argv...)
+}
 
 // loopKubeconfPath — копия admin.conf с сервером на loopback: ею Join ходит
 // в собственный API узла, минуя общий адрес кластера. /run — tmpfs: копия
@@ -422,21 +438,19 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		// сразу после init) крутит собственные повторы минутами, а клиент
 		// хаба ждёт ответа меньше: без своего срока агент оставил бы запрос
 		// висеть до таймаута без ответа вместо быстрой ошибки, после
-		// которой хаб повторит запрос.
-		ctx, cancel := context.WithTimeout(ctx, joinCommandTimeout)
-		defer cancel()
+		// которой хаб повторит запрос. Срок свой у каждой команды.
 		// Токен и ключ сертификатов берутся у собственного API узла через
 		// loopback, а не через общий адрес кластера: общий адрес — маршрут
 		// слушателя, который не жив, пока не поднят первый control plane,
 		// и снова не жив, когда control plane легли. Вход узла не должен
 		// зависеть от пути, который он сам же и поднимает. Сертификат API
 		// покрывает 127.0.0.1 (штатный SAN kubeadm).
-		if out, err := m.run(ctx, "sh", "-c", loopKubeconfSh); err != nil {
+		if out, err := m.runTimed(ctx, joinSetupTimeout, "sh", "-c", loopKubeconfSh); err != nil {
 			return JoinInfo{}, err
 		} else if out.ExitCode != 0 {
 			return JoinInfo{}, msgs.Errorf("k8s.tokenRead", strings.TrimSpace(out.Stderr))
 		}
-		out, err := m.run(ctx, "kubeadm", "token", "create", "--print-join-command", "--kubeconfig", loopKubeconfPath)
+		out, err := m.runTimed(ctx, joinCommandTimeout, "kubeadm", "token", "create", "--print-join-command", "--kubeconfig", loopKubeconfPath)
 		if err != nil {
 			return JoinInfo{}, err
 		}
@@ -455,7 +469,7 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		// отдельной строкой. Молчать при неудаче нельзя: узел с пустым
 		// ключом падает на «--certificate-key» уже на машине, и в журнале
 		// остаётся непонятное «invalid value», а не причина.
-		out, err = m.run(ctx, "kubeadm", "init", "phase", "upload-certs", "--upload-certs", "--kubeconfig", loopKubeconfPath)
+		out, err = m.runTimed(ctx, joinCommandTimeout, "kubeadm", "init", "phase", "upload-certs", "--upload-certs", "--kubeconfig", loopKubeconfPath)
 		if err != nil {
 			return JoinInfo{}, err
 		}

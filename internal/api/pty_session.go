@@ -221,18 +221,30 @@ func resolveUserEnv(env map[string]string, username string) (uid, gid uint32, us
 // systemd-run instead proxy the transient unit's stdio back to this
 // process's own and block until it exits, which is what gives
 // cmd.Output() something to actually capture.
+// execWaitDelay — сколько cmd.Run darf ждать pipe'ы команды после того, как
+// её процесс убит контекстом. systemd-run по сроку умирает, но запущенный им
+// transient unit может жить дольше и держать его stdout/stderr (--pipe
+// прокидывает их наследованием): без этого предела обработчик HTTP висел бы
+// до самостоятельного выхода осиротевшей команды, и вызывающая сторона
+// получала бы клиентский таймаут вместо ответа (так kubeadm token create в
+// internal/k8s срывал собственный срок, а хаб — свои повторы).
+const execWaitDelay = 2 * time.Second
+
 func unrestrictedQuietCommand(ctx context.Context, env map[string]string, argv ...string) *exec.Cmd {
-	if usingSystemdSandbox() {
-		return exec.CommandContext(ctx, "systemd-run", systemdRunQuietArgs(env, argv...)...)
+	var cmd *exec.Cmd
+	switch {
+	case usingSystemdSandbox():
+		cmd = exec.CommandContext(ctx, "systemd-run", systemdRunQuietArgs(env, argv...)...)
+	case needsNsenterFallback():
+		cmd = exec.CommandContext(ctx, "nsenter", nsenterArgs(env, argv...)...)
+	default:
+		cmd = exec.CommandContext(ctx, argv[0], argv[1:]...)
+		cmd.Env = os.Environ()
+		for k, v := range env {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
 	}
-	if needsNsenterFallback() {
-		return exec.CommandContext(ctx, "nsenter", nsenterArgs(env, argv...)...)
-	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Env = os.Environ()
-	for k, v := range env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
+	cmd.WaitDelay = execWaitDelay
 	return cmd
 }
 
@@ -247,18 +259,21 @@ func unrestrictedQuietCommandAsUser(ctx context.Context, env map[string]string, 
 	if err != nil {
 		return nil, err
 	}
-	if usingSystemdSandbox() {
-		return exec.CommandContext(ctx, "systemd-run", systemdRunQuietArgsAsUser(userEnv, username, argv...)...), nil
+	var cmd *exec.Cmd
+	switch {
+	case usingSystemdSandbox():
+		cmd = exec.CommandContext(ctx, "systemd-run", systemdRunQuietArgsAsUser(userEnv, username, argv...)...)
+	case needsNsenterFallback():
+		cmd = exec.CommandContext(ctx, "nsenter", nsenterArgsAsUser(userEnv, username, argv...)...)
+	default:
+		cmd = exec.CommandContext(ctx, argv[0], argv[1:]...)
+		cmd.Env = os.Environ()
+		for k, v := range userEnv {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid}}
 	}
-	if needsNsenterFallback() {
-		return exec.CommandContext(ctx, "nsenter", nsenterArgsAsUser(userEnv, username, argv...)...), nil
-	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Env = os.Environ()
-	for k, v := range userEnv {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid}}
+	cmd.WaitDelay = execWaitDelay
 	return cmd, nil
 }
 
