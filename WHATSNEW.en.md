@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.23.4 — 2026-11-14
+
+- **A join-token failure now names its reason instead of showing a blank.** The line “join token: ” with nothing after it meant the agent's kubeadm command had been killed at its deadline and its output never arrived (the `systemd-run` wrapper dies first) — there was nothing to diagnose. Now the error shows which command, whether it was interrupted at the deadline or exited on its own and with which code, the last line of stderr (or that it is empty), and whether the node's own API answers the loopback healthz at the moment of the failure — “ok” separates a live node from a dead API without visiting the machine. Stdout never enters the detail: it holds the token and the certificate key. The command deadlines were raised (30 s per kubeadm command, 15 s for the setup): on a busy machine right after init, starting the transient unit itself ate seconds; the hub's timeout for the token request is 105 s, longer than the agent's worst-case sum.
+
 ## v1.23.3 — 2026-11-14
 
 - **A machine's status on the hub no longer sticks for ten minutes, and macvtap machines connect directly from the start.** The auto connection method remembered a failed direct probe for 10 minutes and kept reaching the machine through its host during that time — a path that is dead for macvtap guests: the machine showed as unreachable although it worked, and “stabilized” only when the TTL expired. A failure is now remembered for a minute, every successful connection refreshes the success memory, and a machine created in macvtap gets the “direct” method right away. When both paths fail, the error names both — the direct reason first — instead of the meaningless jump error.

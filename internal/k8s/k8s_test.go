@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/piqab/nkt/internal/collect"
 )
@@ -694,6 +695,37 @@ func TestParseCertKey(t *testing.T) {
 		if got := parseCertKey(none); got != "" {
 			t.Errorf("%q: %q", none, got)
 		}
+	}
+}
+
+// Деталь провала kubeadm-команды внутри Join: убитая по сроку команда с
+// пустым stderr (обёртка systemd-run умерла, вывод не доехал) прежде
+// доезжала до журнала пустой строкой — теперь видны и срок, и пустой
+// вывод, и состояние loopback API.
+func TestJoinCmdDetailText(t *testing.T) {
+	killed := joinCmdDetailText("token create", collect.CommandResult{ExitCode: -1}, true, 30*time.Second, "ok")
+	for _, want := range []string{"token create: killed after 30s", "stderr empty", "loopback API: ok"} {
+		if !strings.Contains(killed, want) {
+			t.Errorf("убитая по сроку: %q, нет %q", killed, want)
+		}
+	}
+	failed := joinCmdDetailText("init phase upload-certs", collect.CommandResult{
+		ExitCode: 1, Stderr: "W: noise\nunable to connect to the cluster: last error",
+	}, false, 30*time.Second, "dial tcp 127.0.0.1:6443: connect: connection refused")
+	for _, want := range []string{"exit 1", "unable to connect to the cluster: last error", "connection refused"} {
+		if !strings.Contains(failed, want) {
+			t.Errorf("своя ошибка: %q, нет %q", failed, want)
+		}
+	}
+	if strings.Contains(failed, "W: noise") {
+		t.Errorf("в деталь попал не последний смысл stderr: %q", failed)
+	}
+	// Stdout в деталь не попадает никогда: у token create там токен.
+	withSecret := joinCmdDetailText("token create", collect.CommandResult{
+		ExitCode: 1, Stdout: "kubeadm join --token SECRET",
+	}, false, 30*time.Second, "ok")
+	if strings.Contains(withSecret, "SECRET") {
+		t.Errorf("stdout утёк в деталь: %q", withSecret)
 	}
 }
 

@@ -10,9 +10,12 @@ package k8s
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -389,20 +392,27 @@ func ParseNodes(raw []byte) ([]Node, error) {
 // клиентского таймаута хаба на запрос, чтобы агент отвечал ошибкой, а не
 // молчанием. Бюджет у каждой команды свой: общий на все три означал бы, что
 // одна зависшая съедает его целиком, а следующая падает мгновенно — хаб же
-// при повторе начинает всё сначала.
-const joinCommandTimeout = 20 * time.Second
+// при повторе начинает всё сначала. Запас против 20 с: команда стартует не
+// мгновенно — на занятой машине (init только что закончился) transient unit
+// systemd-run может заводиться секундами, и срок съедался стартом, а не
+// самой командой.
+const joinCommandTimeout = 30 * time.Second
 
-// joinSetupTimeout — переписывание loopback-копии admin.conf: локальный sed,
-// дольше секунды не длится; заметное превышение означает, что машина сама не
-// в себе, и ждать её незачем.
-const joinSetupTimeout = 10 * time.Second
+// joinSetupTimeout — переписывание loopback-копии admin.conf: сам sed
+// мгновенный, но старт transient unit на занятой машине занимает секунды —
+// заметное превышение означает, что машина сама не в себе, и ждать её
+// дальше незачем.
+const joinSetupTimeout = 15 * time.Second
 
 // runTimed — команда m.run со своим сроком: контекст запроса живёт дольше
-// одной команды, и зависшая команда не должна есть бюджет остальных.
-func (m *Manager) runTimed(ctx context.Context, d time.Duration, argv ...string) (collect.CommandResult, error) {
+// одной команды, и зависшая команда не должна есть бюджет остальных. Вторым
+// значением — истёк ли срок: команда, убитая по сроку, и команда, упавшая
+// сама, диагностируются по-разному.
+func (m *Manager) runTimed(ctx context.Context, d time.Duration, argv ...string) (collect.CommandResult, bool, error) {
 	cctx, cancel := context.WithTimeout(ctx, d)
 	defer cancel()
-	return m.run(cctx, argv...)
+	out, err := m.run(cctx, argv...)
+	return out, cctx.Err() == context.DeadlineExceeded, err
 }
 
 // loopKubeconfPath — копия admin.conf с сервером на loopback: ею Join ходит
@@ -413,6 +423,71 @@ const loopKubeconfPath = "/run/nkt-kubeadm-loop.conf"
 // loopKubeconfSh — переписывает server: admin.conf на 127.0.0.1, сохраняя
 // порт; права — как у admin.conf (учётные данные те же).
 const loopKubeconfSh = "sed -E 's|server: https://[^:/]+:|server: https://127.0.0.1:|' /etc/kubernetes/admin.conf > " + loopKubeconfPath + " && chmod 600 " + loopKubeconfPath
+
+// loopServerRe — порт loopback-копии admin.conf для зонда healthz.
+var loopServerRe = regexp.MustCompile(`server: https://127\.0\.0\.1:(\d+)`)
+
+// joinCmdDetail — подробности провала команды внутри Join: что за команда,
+// код выхода или факт прерывания по сроку, последняя строка stderr и
+// состояние собственного API узла на loopback. Пустой stderr прежде доезжал
+// до журнала как «токен присоединения: » — ловить нечего, а именно так
+// выглядит команда, убитая по сроку: обёртка systemd-run умирает, и вывод
+// transient unit не доезжает вовсе.Stdout не включается никогда: у token
+// create там токен, у upload-certs — ключ сертификатов.
+func (m *Manager) joinCmdDetail(ctx context.Context, cmd string, out collect.CommandResult, timedOut bool, d time.Duration) string {
+	return joinCmdDetailText(cmd, out, timedOut, d, m.joinLoopbackHealthz(ctx))
+}
+
+func joinCmdDetailText(cmd string, out collect.CommandResult, timedOut bool, d time.Duration, healthz string) string {
+	var b strings.Builder
+	if timedOut {
+		fmt.Fprintf(&b, "%s: killed after %ds", cmd, int(d.Seconds()))
+	} else {
+		fmt.Fprintf(&b, "%s: exit %d", cmd, out.ExitCode)
+	}
+	if s := strings.TrimSpace(out.Stderr); s != "" {
+		fmt.Fprintf(&b, ": %s", strings.TrimSpace(lastLine(s)))
+	} else {
+		b.WriteString(", stderr empty")
+	}
+	fmt.Fprintf(&b, "; loopback API: %s", healthz)
+	return b.String()
+}
+
+// joinLoopbackHealthz — отвечает ли собственный API узла на loopback в
+// минуту неудачи: «ok» отделяет живой узел от мёртвого API без похода на
+// машину руками. Healthz открыт без учётных данных, ответ — диагностика, а
+// не данные, поэтому проверка сертификата не нужна (учётные данные никуда
+// не отправляются).
+func (m *Manager) joinLoopbackHealthz(ctx context.Context) string {
+	port := "6443"
+	if raw, err := m.c.ReadFile(loopKubeconfPath); err == nil {
+		if mm := loopServerRe.FindStringSubmatch(string(raw)); mm != nil {
+			port = mm[1]
+		}
+	}
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(cctx, "GET", "https://127.0.0.1:"+port+"/healthz", nil)
+	if err != nil {
+		return err.Error()
+	}
+	client := &http.Client{Transport: &http.Transport{
+		// Диагностика loopback healthz без учётных данных — сертификат не проверяется.
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+	}}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err.Error()
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
+	s := strings.TrimSpace(string(body))
+	if resp.StatusCode != http.StatusOK || s == "" {
+		return fmt.Sprintf("HTTP %d %s", resp.StatusCode, s)
+	}
+	return s
+}
 
 // Join — токен и адрес для присоединения новых узлов. serverAddr — адрес
 // API, который увидит узел: первый control plane или балансировщик.
@@ -445,17 +520,17 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		// и снова не жив, когда control plane легли. Вход узла не должен
 		// зависеть от пути, который он сам же и поднимает. Сертификат API
 		// покрывает 127.0.0.1 (штатный SAN kubeadm).
-		if out, err := m.runTimed(ctx, joinSetupTimeout, "sh", "-c", loopKubeconfSh); err != nil {
+		if out, timedOut, err := m.runTimed(ctx, joinSetupTimeout, "sh", "-c", loopKubeconfSh); err != nil {
 			return JoinInfo{}, err
 		} else if out.ExitCode != 0 {
-			return JoinInfo{}, msgs.Errorf("k8s.tokenRead", strings.TrimSpace(out.Stderr))
+			return JoinInfo{}, msgs.Errorf("k8s.tokenRead", m.joinCmdDetail(ctx, "loopback kubeconfig", out, timedOut, joinSetupTimeout))
 		}
-		out, err := m.runTimed(ctx, joinCommandTimeout, "kubeadm", "token", "create", "--print-join-command", "--kubeconfig", loopKubeconfPath)
+		out, timedOut, err := m.runTimed(ctx, joinCommandTimeout, "kubeadm", "token", "create", "--print-join-command", "--kubeconfig", loopKubeconfPath)
 		if err != nil {
 			return JoinInfo{}, err
 		}
 		if out.ExitCode != 0 {
-			return JoinInfo{}, msgs.Errorf("k8s.tokenRead", strings.TrimSpace(out.Stderr))
+			return JoinInfo{}, msgs.Errorf("k8s.tokenRead", m.joinCmdDetail(ctx, "token create", out, timedOut, joinCommandTimeout))
 		}
 		info, err := ParseJoinCommand(out.Stdout)
 		if err != nil {
@@ -469,19 +544,15 @@ func (m *Manager) Join(ctx context.Context, serverAddr string, controlPlane bool
 		// отдельной строкой. Молчать при неудаче нельзя: узел с пустым
 		// ключом падает на «--certificate-key» уже на машине, и в журнале
 		// остаётся непонятное «invalid value», а не причина.
-		out, err = m.runTimed(ctx, joinCommandTimeout, "kubeadm", "init", "phase", "upload-certs", "--upload-certs", "--kubeconfig", loopKubeconfPath)
+		out, timedOut, err = m.runTimed(ctx, joinCommandTimeout, "kubeadm", "init", "phase", "upload-certs", "--upload-certs", "--kubeconfig", loopKubeconfPath)
 		if err != nil {
 			return JoinInfo{}, err
 		}
 		if out.ExitCode != 0 {
-			// Подробность берётся из stderr: при успехе фаза печатает ключ
-			// в stdout, и «последняя строка вывода» унесла бы секрет в
-			// журнал задания.
-			detail := strings.TrimSpace(lastLine(out.Stderr))
-			if detail == "" {
-				detail = fmt.Sprintf("exit %d", out.ExitCode)
-			}
-			return JoinInfo{}, msgs.Errorf("k8s.certKeyUpload", detail)
+			// Подробность — только stderr: при успехе фаза печатает ключ в
+			// stdout, и вывод целиком унёс бы секрет в журнал задания
+			// (joinCmdDetail stdout не включает никогда).
+			return JoinInfo{}, msgs.Errorf("k8s.certKeyUpload", m.joinCmdDetail(ctx, "init phase upload-certs", out, timedOut, joinCommandTimeout))
 		}
 		key := parseCertKey(out.Stdout + "\n" + out.Stderr)
 		if key == "" {
