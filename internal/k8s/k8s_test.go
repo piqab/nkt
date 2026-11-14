@@ -745,6 +745,15 @@ func TestAdminServerRe(t *testing.T) {
 	if adminServerRe.FindString("clusters: []\n") != "" {
 		t.Error("найден server там, где его нет")
 	}
+	// The CA line comes from the same file: the healthz probe validates the
+	// endpoint certificate with it instead of skipping TLS checks.
+	mm = adminCARe.FindStringSubmatch(conf)
+	if mm == nil || mm[1] != "LS0t" {
+		t.Fatalf("CA не разобран: %v", mm)
+	}
+	if adminCARe.FindString("    server: https://10.77.1.1:6443\n") != "" {
+		t.Error("найден CA там, где его нет")
+	}
 }
 
 // kubeadm с общим адресом: endpoint в init, вход по нему, advertise-адрес

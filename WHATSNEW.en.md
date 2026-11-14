@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.23.6 — 2026-11-14
+
+- **The probe in the token failure detail no longer makes a TLS exception.** The healthz probe of the shared address validates the endpoint certificate with the CA from the same admin.conf: kubeadm routinely puts the shared address into the API certificate's SANs, so the validation passes cleanly and the `InsecureSkipVerify` exception is gone (CodeQL/gosec G402 findings). If an address is ever not covered by the certificate, the x509 refusal lands in the failure detail and names the mismatch itself — previously the skip hid it. If admin.conf has no readable CA, the probe honestly says so instead of silently skipping the validation.
+
 ## v1.23.5 — 2026-11-14
 
 - **A node's own connection to the shared address no longer hangs: the gateway closes it with a SNAT.** The kubelet of every control plane dials the cluster shared address, and the source hash could land the node on itself — after the DNAT the packet returned to the same node with its own address as the source, and the reply reached neither the client nor the gateway (the gateway's counter showed bare SYNs with no answers). The gateway's postrouting now carries SNAT rules to its plan address for “source == target” connections on the live targets of internal routes: the reply path closes through the gateway, and balancing and failover stay uniform for every node — when its own API dies, the kubelet rehashes onto the live targets.

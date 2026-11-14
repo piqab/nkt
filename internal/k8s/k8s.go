@@ -11,6 +11,8 @@ package k8s
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -415,9 +417,16 @@ func (m *Manager) runTimed(ctx context.Context, d time.Duration, argv ...string)
 // в SAN).
 const adminKubeconfPath = "/etc/kubernetes/admin.conf"
 
-// adminServerRe — server из admin.conf: адрес, которым kubeadm-команды
-// Join действительно ходят, и зонд при неудаче проверяет именно его.
+// adminServerRe — the server line of admin.conf: the address the kubeadm
+// commands in Join actually talk to, and the address the failure-detail
+// probe checks.
 var adminServerRe = regexp.MustCompile(`server:\s*https://(\S+)`)
+
+// adminCARe — the CA certificate (base64) of admin.conf: the healthz probe
+// validates the endpoint certificate against it. kubeadm puts the
+// control-plane endpoint into the API certificate's SANs, so real validation
+// passes cleanly and the probe needs no TLS exceptions.
+var adminCARe = regexp.MustCompile(`certificate-authority-data:\s*(\S+)`)
 
 // joinCmdDetail — подробности провала команды внутри Join: что за команда,
 // код выхода или факт прерывания по сроку, последняя строка stderr и
@@ -447,21 +456,35 @@ func joinCmdDetailText(cmd string, out collect.CommandResult, timedOut bool, d t
 	return b.String()
 }
 
-// joinEndpointHealthz — отвечает ли общий адрес кластера (server из
-// admin.conf) в минуту неудачи: «ok» отделяет живой путь от мёртвого без
-// похода на машину руками, а «connection refused» или «i/o timeout» говорят,
-// где искать — на шлюзе/маршруте или на самом узле. Healthz открыт без
-// учётных данных, ответ — диагностика, а не данные, поэтому проверка
-// сертификата не нужна (учётные данные никуда не отправляются).
+// joinEndpointHealthz — does the cluster's shared address (server from
+// admin.conf) answer at the moment of failure: "ok" separates a live path
+// from a dead one without walking to the machine by hand, while
+// "connection refused" or "i/o timeout" say where to look — at the
+// gateway/route or at the node itself. Healthz needs no credentials (none
+// are sent anywhere), and the endpoint certificate is validated with the CA
+// from the same admin.conf: kubeadm puts the shared address into the SANs,
+// and an x509 failure in the detail is a diagnosis by itself (e.g.
+// "certificate is valid for … not …" names the address mismatch outright).
 func (m *Manager) joinEndpointHealthz(ctx context.Context) string {
-	server := ""
+	server, caB64 := "", ""
 	if raw, err := m.c.ReadFile(adminKubeconfPath); err == nil {
 		if mm := adminServerRe.FindStringSubmatch(string(raw)); mm != nil {
 			server = strings.TrimSuffix(mm[1], "/")
 		}
+		if mm := adminCARe.FindStringSubmatch(string(raw)); mm != nil {
+			caB64 = mm[1]
+		}
 	}
 	if server == "" {
 		return "unknown (no server in admin.conf)"
+	}
+	caPEM, err := base64.StdEncoding.DecodeString(caB64)
+	if err != nil || len(caPEM) == 0 {
+		return server + ": unknown (no certificate-authority-data in admin.conf)"
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return server + ": unknown (certificate-authority-data is not a PEM)"
 	}
 	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -470,8 +493,7 @@ func (m *Manager) joinEndpointHealthz(ctx context.Context) string {
 		return err.Error()
 	}
 	client := &http.Client{Transport: &http.Transport{
-		// Диагностика healthz без учётных данных — сертификат не проверяется.
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 	}}
 	resp, err := client.Do(req)
 	if err != nil {
