@@ -427,7 +427,6 @@ Manifest**; применить Traffic Fly — `POST /api/hub/fly/apply` или
 
 ## Что дальше
 
-- **Helm в кластеры** — релиз в выбранные кластеры заданием хаба.
 - **Манифесты** — один YAML в несколько кластеров с `kubectl diff`.
 - **Обновить** — версия Kubernetes по узлам: cordon, drain, обновление,
   uncordon.

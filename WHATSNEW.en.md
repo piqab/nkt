@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.24.0 — 2026-11-15
+
+- **Cluster control planes are created with the web terminal enabled.** nkt on control plane machines is installed as if the “web terminal” checkbox were ticked in the host card: debugging kubeadm, kubectl and the cluster internals with a console from the hub works right away, without SSH. Workers and load balancers are still created with the terminal off. When the build finishes off a machine from a previous attempt, the flag is updated in the record and takes effect at the next agent install or update.
+- **The “Helm to clusters” button is removed from the “Kubernetes clusters” section.** One YAML into many clusters on the same page is covered by the “Manifests” card — and covered better: with a revision history, a text diff and `kubectl diff` per cluster; a Helm release for a particular cluster is installed from its “Kubernetes” section, and deployment pipelines keep installing charts as before. The hub job and the `/hub/k8s/helm/install` endpoint are removed; helm on the nodes and addon installation (Cilium, Longhorn and the rest) are untouched.
+
 ## v1.23.6 — 2026-11-14
 
 - **The probe in the token failure detail no longer makes a TLS exception.** The healthz probe of the shared address validates the endpoint certificate with the CA from the same admin.conf: kubeadm routinely puts the shared address into the API certificate's SANs, so the validation passes cleanly and the `InsecureSkipVerify` exception is gone (CodeQL/gosec G402 findings). If an address is ever not covered by the certificate, the x509 refusal lands in the failure detail and names the mismatch itself — previously the skip hid it. If admin.conf has no readable CA, the probe honestly says so instead of silently skipping the validation.

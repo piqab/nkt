@@ -438,7 +438,6 @@ kubeconfig are closed to tokens. Details — [Hub API](/en/guide/hub-api#what-a-
 
 ## What next
 
-- **Helm to clusters** — a release into chosen clusters as a hub job.
 - **Manifests** — one YAML to several clusters with `kubectl diff`.
 - **Upgrade** — the Kubernetes version node by node: cordon, drain, upgrade,
   uncordon.

@@ -1,12 +1,10 @@
-import { useMemo, useState } from 'react'
-import { Button, Input, Select, Space } from 'antd'
+import { useMemo } from 'react'
+import { Button, Select, Space } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { useApi } from '../api'
 import type { Finding, HubHost, Severity } from '../types'
 import { Banner, Card, ErrorNote, Loading, SeverityBadge } from './ui'
-import { EditTextModal } from './EditTextModal'
 import { AIExplain } from './AIExplain'
-import { msg, tx, type Msg } from '../msg'
 
 interface ClusterRow {
   id: number
@@ -100,71 +98,5 @@ export function ClustersFindingsCard() {
         ))
       )}
     </Card>
-  )
-}
-
-/** Helm-релиз сразу в несколько кластеров: задание хаба по кластерам. */
-export function HelmMultiModal({ onClose, onStarted }: { onClose: () => void; onStarted: (jobID: number) => void }) {
-  const { t } = useTranslation()
-  const [clusters, setClusters] = useState<number[]>([])
-  const [f, setF] = useState({ repo_name: '', repo_url: '', chart: '', version: '', release: '', namespace: 'default' })
-  const [values, setValues] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<Msg | null>(null)
-  const set = (patch: Partial<typeof f>) => setF({ ...f, ...patch })
-
-  async function save(): Promise<boolean> {
-    setError(null)
-    if (clusters.length === 0) {
-      setError(tx('manifests.pickClusters'))
-      return false
-    }
-    setBusy(true)
-    try {
-      const res = await api<{ job_id: number }>('/hub/k8s/helm/install', { method: 'POST', body: { clusters, release: { ...f, values } } })
-      onStarted(res.job_id)
-      return true
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <EditTextModal
-      title={t('helmMulti.title')}
-      saved=""
-      draft={values}
-      onDraft={setValues}
-      busy={busy}
-      rows={12}
-      onSave={save}
-      onClose={onClose}
-      blocksEndpoint="/hub/k8s/manifests/blocks"
-      fields={
-        <>
-          <p className="small muted">{t('helmMulti.hint')}</p>
-          <div style={{ marginBottom: '0.5rem' }}>
-            <ClusterPicker value={clusters} onChange={setClusters} />
-          </div>
-          <Space wrap style={{ marginBottom: '0.5rem' }}>
-            <Input size="small" style={{ width: '10rem' }} value={f.repo_name} placeholder={t('k8s.helm.repoName')} onChange={(e) => set({ repo_name: e.target.value.trim() })} />
-            <Input size="small" style={{ width: '20rem' }} value={f.repo_url} placeholder={t('k8s.helm.repoURL')} onChange={(e) => set({ repo_url: e.target.value.trim() })} />
-            <Input size="small" style={{ width: '10rem' }} value={f.chart} placeholder={t('k8s.helm.chart')} onChange={(e) => set({ chart: e.target.value.trim() })} />
-            <Input size="small" style={{ width: '8rem' }} value={f.version} placeholder={t('k8s.helm.versionLatest')} onChange={(e) => set({ version: e.target.value.trim() })} />
-          </Space>
-          <Space wrap style={{ marginBottom: '0.5rem' }}>
-            <span className="small">{t('k8s.helm.release')}</span>
-            <Input size="small" style={{ width: '12rem' }} value={f.release} onChange={(e) => set({ release: e.target.value.trim() })} />
-            <span className="small">Namespace</span>
-            <Input size="small" style={{ width: '12rem' }} value={f.namespace} onChange={(e) => set({ namespace: e.target.value.trim() })} />
-            <span className="small muted">{t('k8s.helm.valuesLabel')}</span>
-          </Space>
-        </>
-      }
-      below={error ? <Banner kind="error" onClose={() => setError(null)}>{msg(error)}</Banner> : null}
-    />
   )
 }

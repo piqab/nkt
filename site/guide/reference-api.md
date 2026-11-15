@@ -105,11 +105,11 @@ cookie. Чтение доступно любой роли, изменения �
 | Сценарии | `/hub/scripts*` | Сценарии, проверка, запуск, версии, справка |
 | Описания сервисов | `/hub/svcdescs*` | Библиотека с версиями, `check`, `eval` (конструктор путей), `deliver` (задание доставки на хосты) |
 | Кластеры | `/hub/clusters*`, `/hub/cluster/gateways`, `/hub/cluster-images*`, `/hub/cluster-presets*`, `/hub/k8s-versions` | Создание, сухой прогон, worker, продолжение, обновление, kubeconfig, образы, наборы, шлюзы для слушателя общего адреса |
-| Манифесты и Helm | `/hub/k8s/manifests*`, `/hub/k8s/helm/install`, `/hub/k8s/findings` | Один YAML или релиз в несколько кластеров, находки по кластерам |
+| Манифесты | `/hub/k8s/manifests*`, `/hub/k8s/findings` | Один YAML в несколько кластеров, находки по кластерам |
 | Выкладки | `/hub/pipelines*` | Конвейеры, доступы, секрет вебхука, выкладка, откат, история |
 | API-токены | `/hub/tokens*`, `/hub/jobs/{id}*` | Токены (только из браузера), задание хаба и его журнал |
 | Вебхук | `POST /hub/hooks/{id}` | Без сессии, доступ по подписи |
-| nkt-edge | `/hub/edge`, `/hub/edge/install`, `/hub/edge/uninstall` | Состояние, настройка, установка, удаление с VPS |
+| nkt-edge | `/hub/edge`, `/hub/edge/install`, `/hub/edge/uninstall` | Состояние, настройка, установка, удаление |
 | Оповещения | `/hub/events*` | Журнал, прочитано, настройки |
 | О системе | `/hub/version*`, `/hub/update`, `/hub/rollback`, `/hub/vulndb*`, `/hub/clamdb*`, `/hub/aptcache*` | Версия, обновление, откат, базы, кэш |
 | ИИ | `/hub/ai*` | Настройки, проверка, разбор, ответы, инструкции; `POST /hub/ai/script` — ИИ в редакторе сценариев |

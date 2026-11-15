@@ -349,9 +349,6 @@ into the cache and brings up the libvirt network right away.
   given; what the operator creates for a client resource passes the same
   admission policies. The window shows a diff; the list goes into the
   export. Example — [rgstr and rgstroperator](/en/guide/hub-plugin-rgstr).
-- **Helm to clusters** — one release into the chosen clusters (or the
-  clusters of a host group) by a hub job, in turn, with a per-cluster
-  outcome.
 - **Cluster upgrade** — "Upgrade" on a cluster: a version, then node by
   node (control planes first) cordon, drain, the upgrade, waiting for
   Ready, uncordon; on an error the job stops and continues from the same

@@ -515,3 +515,17 @@ func TestClusterRetryValidation(t *testing.T) {
 		t.Errorf("конфликт: код %d", code)
 	}
 }
+
+// TestProvisionTerminal — веб-терминал включается только control plane:
+// worker'ы и балансировщик создаются без него.
+func TestProvisionTerminal(t *testing.T) {
+	if !provisionTerminal(RoleControlPlane) {
+		t.Error("control plane: терминал выключен, должен быть включён")
+	}
+	if provisionTerminal(RoleWorker) {
+		t.Error("worker: терминал включён, должен быть выключен")
+	}
+	if provisionTerminal(RoleLoadBalancer) {
+		t.Error("load balancer: терминал включён, должен быть выключен")
+	}
+}

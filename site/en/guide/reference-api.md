@@ -105,11 +105,11 @@ Under `/api/hub/`:
 | Scripts | `/hub/scripts*` | Scripts, check, run, versions, help |
 | Service descriptions | `/hub/svcdescs*` | Library with versions, `check`, `eval` (path builder), `deliver` (delivery job to hosts) |
 | Clusters | `/hub/clusters*`, `/hub/cluster/gateways`, `/hub/cluster-images*`, `/hub/cluster-presets*`, `/hub/k8s-versions` | Creation, dry run, workers, resume, upgrade, kubeconfig, images, presets, the gateways a shared address can listen on |
-| Manifests and Helm | `/hub/k8s/manifests*`, `/hub/k8s/helm/install`, `/hub/k8s/findings` | One YAML or release into several clusters, findings across clusters |
+| Manifests | `/hub/k8s/manifests*`, `/hub/k8s/findings` | One YAML into several clusters, findings across clusters |
 | Deployments | `/hub/pipelines*` | Pipelines, access, webhook secret, deploy, rollback, history |
 | API tokens | `/hub/tokens*`, `/hub/jobs/{id}*` | Tokens (from the browser only), a hub job and its log |
 | Webhook | `POST /hub/hooks/{id}` | No session, access by signature |
-| nkt-edge | `/hub/edge`, `/hub/edge/install`, `/hub/edge/uninstall` | State, configuration, installation, removal from the VPS |
+| nkt-edge | `/hub/edge`, `/hub/edge/install`, `/hub/edge/uninstall` | State, configuration, installation, removal |
 | Alerts | `/hub/events*` | Log, mark seen, settings |
 | About | `/hub/version*`, `/hub/update`, `/hub/rollback`, `/hub/vulndb*`, `/hub/clamdb*`, `/hub/aptcache*` | Version, update, rollback, databases, cache |
 | AI | `/hub/ai*` | Settings, test, analysis, answers, instructions; `POST /hub/ai/script` — AI in the script editor |

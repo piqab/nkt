@@ -3554,11 +3554,6 @@
     "subtitle": "From every control plane: pods, nodes, replicas, access, ports past the firewall.",
     "count": "findings: {{count}}"
   },
-  "helmMulti": {
-    "button": "Helm to clusters",
-    "title": "A Helm release into several clusters",
-    "hint": "One chart and one set of values into the chosen clusters: a hub job installs the release on each control plane (helm upgrade --install) in turn; an error in one cluster does not stop the others."
-  },
   "deploy": {
     "power": {
       "start": "Start",
