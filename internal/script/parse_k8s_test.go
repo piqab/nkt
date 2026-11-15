@@ -121,6 +121,51 @@ func TestK8sFirstPodExample(t *testing.T) {
 	}
 }
 
+// Сервис из кластера наружу: без значений параметры становятся
+// плейсхолдерами и проверка проходит с пустыми Refs, со значениями —
+// кластер берётся из Refs; ingress, манифест и маршрут несут подставленное.
+func TestK8sFlyServiceExample(t *testing.T) {
+	sc, issues := Parse(K8sFlyServiceExample, nil)
+	if len(issues) > 0 {
+		t.Fatalf("строка %d: %v", issues[0].Line, issues[0].Err)
+	}
+	if issues := Check(sc, Refs{}); len(issues) > 0 {
+		t.Fatalf("check: строка %d: %v", issues[0].Line, issues[0].Err)
+	}
+	vals := map[string]string{"param:CLUSTER": "lab", "param:DOMAIN": "shop.example.com"}
+	sc, issues = Parse(K8sFlyServiceExample, vals)
+	if len(issues) > 0 {
+		t.Fatalf("строка %d: %v", issues[0].Line, issues[0].Err)
+	}
+	if issues := Check(sc, Refs{Clusters: map[string]bool{"lab": true}}); len(issues) > 0 {
+		t.Fatalf("check: строка %d: %v", issues[0].Line, issues[0].Err)
+	}
+	var ingress, apply, route *Step
+	for i := range sc.Steps {
+		switch sc.Steps[i].Kind {
+		case KindK8sIngress:
+			ingress = &sc.Steps[i]
+		case KindK8sApply:
+			apply = &sc.Steps[i]
+		case KindFlyRoute:
+			route = &sc.Steps[i]
+		}
+	}
+	if ingress == nil || ingress.Name != "lab" || ingress.Args["port"] != "8080" {
+		t.Fatalf("ingress: %+v", ingress)
+	}
+	if apply == nil || apply.Name != "lab" || !strings.Contains(apply.Block, "host: shop.example.com") || !strings.Contains(apply.Block, "ingressClassName: cilium") {
+		t.Fatalf("apply: %+v", apply)
+	}
+	if route == nil || route.Action != "https" || route.Args["cluster"] != "lab" || route.Args["target_port"] != "8080" || route.Args["tls"] != "gateway" {
+		t.Fatalf("route: %+v", route)
+	}
+	raw, err := os.ReadFile("../../examples/scripts/k8s-fly-service.nkt")
+	if err != nil || string(raw) != K8sFlyServiceExample {
+		t.Error("examples/scripts/k8s-fly-service.nkt разошёлся с K8sFlyServiceExample")
+	}
+}
+
 func TestK8sCreateAddon(t *testing.T) {
 	sc, issues := Parse("on hv1 k8s create lab nodes 1+2 addon longhorn=1.12.1\non hv1 k8s create lab2 addon longhorn", nil)
 	if len(issues) > 0 {

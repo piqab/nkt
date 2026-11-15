@@ -2676,6 +2676,8 @@ var ruCatalog = map[string]string{
 	"script.doc.flyApply":                                 "Применяет карту Traffic Fly — как «Применить»; в сухом прогоне — сухой прогон применения.",
 	"script.ex.k8sFirstPod.title":                         "Кластер Kubernetes: от нуля до первого пода",
 	"script.ex.k8sFirstPod.summary":                       "kubeadm на двух хостах через WireGuard, Cilium без kube-proxy, Ingress Cilium, тестовый под whoami и вход снаружи через Traffic Fly — сценарием справки «Кластер: от нуля до первого пода».",
+	"script.ex.k8sFly.title":                              "Сервис из кластера наружу через Traffic Fly",
+	"script.ex.k8sFly.summary":                            "Существующий кластер: Ingress Cilium на узлах, сервис с Ingress одним манифестом, https-маршрут Traffic Fly на все узлы с TLS на шлюзе и проверка снаружи; в комментариях — NodePort-вариант для чистого TCP и передача домена токену «по правам».",
 	"hub.scriptDryWould":                                  "      сделал бы: %s",
 	"hub.scriptDryHost":                                   "      завёл бы хост %s (%s)",
 	"hub.scriptDryNewHost":                                "      %s: хост ещё не заведён — план узнать нельзя",

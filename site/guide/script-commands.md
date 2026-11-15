@@ -893,6 +893,76 @@ fly route hello https names ${DOMAIN} tls gateway check tcp targets cluster lab 
 wait url https://${DOMAIN}/ 200 10m
 ```
 
+### Сервис из кластера наружу через Traffic Fly
+
+Существующий кластер: Ingress Cilium на узлах, сервис с Ingress одним манифестом, https-маршрут Traffic Fly на все узлы с TLS на шлюзе и проверка снаружи; в комментариях — NodePort-вариант для чистого TCP и передача домена токену «по правам».
+
+```
+# Сервис из кластера наружу через шлюз Traffic Fly
+param CLUSTER "имя существующего кластера"
+param DOMAIN "домен сервиса — A-запись на адрес шлюза Traffic Fly"
+
+# Общий вход в кластер: Ingress Cilium слушает порт 8080 на каждом узле
+k8s ${CLUSTER} ingress cilium port 8080
+
+# Сервис и Ingress для него встают в кластер манифестом
+k8s ${CLUSTER} apply
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: shop}
+  template:
+    metadata:
+      labels: {app: shop}
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.12.0
+          ports: [{containerPort: 80}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shop
+spec:
+  selector: {app: shop}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+spec:
+  ingressClassName: cilium
+  rules:
+    - host: ${DOMAIN}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: shop, port: {number: 80}}
+end
+k8s ${CLUSTER} wait deployment shop 5m
+
+# Маршрут через шлюз: TLS терминируется на шлюзе, цели — все узлы кластера.
+# С DNS-плагином добавьте dns plugin в строку маршрута — A-запись создастся сама
+fly route shop-web https names ${DOMAIN} tls gateway check tcp targets cluster ${CLUSTER} port 8080
+wait url https://${DOMAIN}/ 200 10m
+
+# Чистый TCP идёт мимо Ingress: сервис типа NodePort и tcp-маршрут на узлы
+# (port — наружный порт шлюза, port у targets — NodePort сервиса, 30000…32767):
+# fly route shop-db tcp port 5432 targets cluster ${CLUSTER} port 30432
+
+# Домен можно передать токену «по правам»: маршрут останется на хабе,
+# а токен сможет править только свой namespace этого кластера
+# fly own ${DOMAIN} cluster ${CLUSTER} namespace shop
+```
+
 ### Обслуживание существующих хостов
 
 Применить профиль, записать файл, перечитать службу, убрать пакет — без заведения хостов.

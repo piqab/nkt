@@ -520,6 +520,10 @@ on lab-web packages install nginx
 		Content: K8sFirstPodExample,
 	},
 	{
+		Title: "script.ex.k8sFly.title", Summary: "script.ex.k8sFly.summary",
+		Content: K8sFlyServiceExample,
+	},
+	{
 		Title: "script.ex.maintain.title", Summary: "script.ex.maintain.summary",
 		Content: `# Хосты уже есть в хабе: только действия
 on web1 apply profile web-base
@@ -564,6 +568,17 @@ var englishTerms = [][2]string{
 	{"Ingress Cilium: порт 8080 на каждом узле", "Cilium Ingress: port 8080 on every node"},
 	{"Тестовый под, сервис и Ingress", "Test pod, service and Ingress"},
 	{"Вход снаружи: шлюз Traffic Fly на все узлы кластера", "Outside access: the Traffic Fly gateway to all cluster nodes"},
+	{"Сервис из кластера наружу через шлюз Traffic Fly", "A service from the cluster to the outside through the Traffic Fly gateway"},
+	{"имя существующего кластера", "name of the existing cluster"},
+	{"домен сервиса — A-запись на адрес шлюза Traffic Fly", "service domain — A record at the Traffic Fly gateway"},
+	{"Общий вход в кластер: Ingress Cilium слушает порт 8080 на каждом узле", "Shared entry into the cluster: Cilium Ingress listens on port 8080 of every node"},
+	{"Сервис и Ingress для него встают в кластер манифестом", "The service and its Ingress go into the cluster as a manifest"},
+	{"Маршрут через шлюз: TLS терминируется на шлюзе, цели — все узлы кластера.", "Route through the gateway: TLS terminates on the gateway, the targets are all cluster nodes."},
+	{"С DNS-плагином добавьте dns plugin в строку маршрута — A-запись создастся сама", "With a DNS plugin add dns plugin to the route line — the A record is created automatically"},
+	{"Чистый TCP идёт мимо Ingress: сервис типа NodePort и tcp-маршрут на узлы", "Raw TCP bypasses the Ingress: a NodePort service and a tcp route to the nodes"},
+	{"(port — наружный порт шлюза, port у targets — NodePort сервиса, 30000…32767):", "(port is the outside port of the gateway, the port of targets is the NodePort of the service, 30000…32767):"},
+	{"Домен можно передать токену «по правам»: маршрут останется на хабе,", "The domain can be handed to a “by rights” token: the route stays on the hub,"},
+	{"а токен сможет править только свой namespace этого кластера", "and the token can only manage its own namespace of that cluster"},
 	{"аргументы…", "args…"},
 	{"СЛОВО", "WORD"},
 	{"КОНВЕЙЕР", "PIPELINE"},
@@ -734,4 +749,74 @@ k8s lab wait deployment hello 5m
 # Вход снаружи: шлюз Traffic Fly на все узлы кластера
 fly route hello https names ${DOMAIN} tls gateway check tcp targets cluster lab port 8080
 wait url https://${DOMAIN}/ 200 10m
+`
+
+// K8sFlyServiceExample — сценарий справки «Сервис из кластера наружу через
+// шлюз Traffic Fly»: для существующего кластера — Ingress Cilium на узлах,
+// сервис с Ingress одним манифестом, https-маршрут на все узлы через шлюз
+// и проверка снаружи; в комментариях — NodePort-вариант для чистого TCP и
+// передача домена токену «по правам».
+const K8sFlyServiceExample = `# Сервис из кластера наружу через шлюз Traffic Fly
+param CLUSTER "имя существующего кластера"
+param DOMAIN "домен сервиса — A-запись на адрес шлюза Traffic Fly"
+
+# Общий вход в кластер: Ingress Cilium слушает порт 8080 на каждом узле
+k8s ${CLUSTER} ingress cilium port 8080
+
+# Сервис и Ingress для него встают в кластер манифестом
+k8s ${CLUSTER} apply
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: shop}
+  template:
+    metadata:
+      labels: {app: shop}
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.12.0
+          ports: [{containerPort: 80}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shop
+spec:
+  selector: {app: shop}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+spec:
+  ingressClassName: cilium
+  rules:
+    - host: ${DOMAIN}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: shop, port: {number: 80}}
+end
+k8s ${CLUSTER} wait deployment shop 5m
+
+# Маршрут через шлюз: TLS терминируется на шлюзе, цели — все узлы кластера.
+# С DNS-плагином добавьте dns plugin в строку маршрута — A-запись создастся сама
+fly route shop-web https names ${DOMAIN} tls gateway check tcp targets cluster ${CLUSTER} port 8080
+wait url https://${DOMAIN}/ 200 10m
+
+# Чистый TCP идёт мимо Ingress: сервис типа NodePort и tcp-маршрут на узлы
+# (port — наружный порт шлюза, port у targets — NodePort сервиса, 30000…32767):
+# fly route shop-db tcp port 5432 targets cluster ${CLUSTER} port 30432
+
+# Домен можно передать токену «по правам»: маршрут останется на хабе,
+# а токен сможет править только свой namespace этого кластера
+# fly own ${DOMAIN} cluster ${CLUSTER} namespace shop
 `

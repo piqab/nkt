@@ -2677,6 +2677,8 @@ var enCatalog = map[string]string{
 	"script.doc.flyApply":                                 "Applies the Traffic Fly map — like “Apply”; in a dry run — the apply dry run.",
 	"script.ex.k8sFirstPod.title":                         "A Kubernetes cluster: from zero to the first pod",
 	"script.ex.k8sFirstPod.summary":                       "kubeadm on two hosts over WireGuard, Cilium without kube-proxy, Cilium Ingress, a whoami test pod and outside access through Traffic Fly — the script of the “Cluster: from zero to the first pod” guide.",
+	"script.ex.k8sFly.title":                              "A service from the cluster to the outside through Traffic Fly",
+	"script.ex.k8sFly.summary":                            "An existing cluster: Cilium Ingress on the nodes, a service with its Ingress as one manifest, a Traffic Fly https route to all nodes with TLS at the gateway and an outside check; in the comments — a NodePort variant for raw TCP and handing the domain to a “by rights” token.",
 	"hub.scriptDryWould":                                  "      would do: %s",
 	"hub.scriptDryHost":                                   "      would register host %s (%s)",
 	"hub.scriptDryNewHost":                                "      %s: the host does not exist yet — no plan available",

@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.25.2 — 2026-11-15
+
+- **A ready-made “A service from the cluster to the outside through Traffic Fly” script.** In “Ready-made scripts ▾” of the editor and on the “Script commands” page — an example for an existing cluster: Cilium Ingress on port 8080 of the nodes, a service with its Ingress as one manifest, a `fly route https` to all cluster nodes with TLS at the gateway and an outside check with `wait url`; in the comments — a NodePort variant for raw TCP and handing the domain to a “by rights” token (`fly own`). At start the script asks for the cluster name and the service domain.
+
 ## v1.25.1 — 2026-11-15
 
 - **A saved cluster preset opens as a ready-made script.** The **“Ready-made scripts ▾”** list of the script editor gained a **“Cluster presets”** group: a preset saved in the “New cluster” form is inserted as a whole `k8s create` script — with the placement string and its per-entry parameters, the load balancer and HAProxy parameters, the add-on list, the shared address and port expose, and the Cilium values block when one was saved. The script behaves like a hand-written one: “Check”, “Dry run”, saving with version history, running. The form itself now also stores the Cilium values in the preset — picking a preset returns them into the form along with the rest of the fields.

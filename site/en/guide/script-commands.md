@@ -893,6 +893,76 @@ fly route hello https names ${DOMAIN} tls gateway check tcp targets cluster lab 
 wait url https://${DOMAIN}/ 200 10m
 ```
 
+### A service from the cluster to the outside through Traffic Fly
+
+An existing cluster: Cilium Ingress on the nodes, a service with its Ingress as one manifest, a Traffic Fly https route to all nodes with TLS at the gateway and an outside check; in the comments — a NodePort variant for raw TCP and handing the domain to a “by rights” token.
+
+```
+# A service from the cluster to the outside through the Traffic Fly gateway
+param CLUSTER "name of the existing cluster"
+param DOMAIN "service domain — A record at the Traffic Fly gateway"
+
+# Shared entry into the cluster: Cilium Ingress listens on port 8080 of every node
+k8s ${CLUSTER} ingress cilium port 8080
+
+# The service and its Ingress go into the cluster as a manifest
+k8s ${CLUSTER} apply
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: shop}
+  template:
+    metadata:
+      labels: {app: shop}
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.12.0
+          ports: [{containerPort: 80}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shop
+spec:
+  selector: {app: shop}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+spec:
+  ingressClassName: cilium
+  rules:
+    - host: ${DOMAIN}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: shop, port: {number: 80}}
+end
+k8s ${CLUSTER} wait deployment shop 5m
+
+# Route through the gateway: TLS terminates on the gateway, the targets are all cluster nodes.
+# With a DNS plugin add dns plugin to the route line — the A record is created automatically
+fly route shop-web https names ${DOMAIN} tls gateway check tcp targets cluster ${CLUSTER} port 8080
+wait url https://${DOMAIN}/ 200 10m
+
+# Raw TCP bypasses the Ingress: a NodePort service and a tcp route to the nodes
+# (port is the outside port of the gateway, the port of targets is the NodePort of the service, 30000…32767):
+# fly route shop-db tcp port 5432 targets cluster ${CLUSTER} port 30432
+
+# The domain can be handed to a “by rights” token: the route stays on the hub,
+# and the token can only manage its own namespace of that cluster
+# fly own ${DOMAIN} cluster ${CLUSTER} namespace shop
+```
+
 ### Maintaining existing hosts
 
 Apply a profile, write a file, reload a service, remove a package — without registering hosts.
