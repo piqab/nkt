@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.25.1 — 2026-11-15
+
+- **A saved cluster preset opens as a ready-made script.** The **“Ready-made scripts ▾”** list of the script editor gained a **“Cluster presets”** group: a preset saved in the “New cluster” form is inserted as a whole `k8s create` script — with the placement string and its per-entry parameters, the load balancer and HAProxy parameters, the add-on list, the shared address and port expose, and the Cilium values block when one was saved. The script behaves like a hand-written one: “Check”, “Dry run”, saving with version history, running. The form itself now also stores the Cilium values in the preset — picking a preset returns them into the form along with the rest of the fields.
+
 ## v1.25.0 — 2026-11-15
 
 - **The script `k8s create` caught up with the cluster form: per-entry parameters, a built-in load balancer, an add-on list.** In the placement string each machine entry can carry its own `cpu N`, `mem MB`, `disk GB`, `image IMAGE` and `network NETWORK` (a libvirt NAT network name); the `lb` entry is the built-in HAProxy load balancer machine, configured by the `haproxy connect=…,client=…,server=…,maxconn=…,stats=…,algo=source|roundrobin` argument (timeouts in ms, stats port, algorithm). `addons longhorn=1.12.1,ingress-nginx,cert-manager,…` is a list of registry add-ons (each with or without a version) superseding the single `addon`, which keeps working. The `prepare` flag warms the image and package caches in a dry run of the script, like the “with preparation” checkbox of the form. Whatever an entry doesn't name comes from the command's shared arguments — old scripts need no rewrite.

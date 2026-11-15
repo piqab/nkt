@@ -18,7 +18,9 @@ the first error. One line — one action; a compose file or a file's text
 goes in as a block up to `end`.
 
 Where: **"Profiles" → the "Scripts" tab**. "New script" opens the editor
-window; **"Ready-made scripts ▾"** in it inserts an example whole. Then — a
+window; **"Ready-made scripts ▾"** in it inserts an example whole — the same
+list has a **"Cluster presets"** group: a preset saved in the "New cluster"
+form is inserted as a ready `k8s create` script. Then — a
 name, "Save", "Check", "Dry run", "Run".
 
 ```

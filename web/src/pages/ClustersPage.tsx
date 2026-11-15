@@ -315,6 +315,8 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     allow?: string
     /** Внутренний путь к слушателю: трафик узлов не покидает меш. */
     endpoint_internal?: boolean
+    /** Helm values для Cilium из редактора формы; нет/пусто — значения по умолчанию. */
+    cilium_values?: string
     // Встроенный балансировщик. lb_count/lb_vip — только чтение старых
     // наборов: новая форма создаёт одну LB без VIP.
     lb_enabled?: boolean
@@ -343,6 +345,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         gateway_addr: (gws.data?.gateways ?? []).find((g) => g.edge_id === gateway)?.address ?? '',
         allow,
         endpoint_internal: internal || undefined,
+        cilium_values: cilium && ciliumValuesDraft.trim() ? ciliumValuesDraft : undefined,
         lb_enabled: lbEnabled,
         lb_count: lbEnabled ? 1 : undefined,
         lb_rows: lbEnabled ? lbRows.map(({ host_id, ...r }) => ({ ...r, host: hostNameOf(host_id) })) : undefined,
@@ -390,6 +393,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     setEndpoint(form.endpoint ?? '')
     setAllow(form.allow ?? '')
     setInternal(form.endpoint_internal ?? false)
+    setCiliumValuesDraft(form.cilium_values ?? '')
     const gwAddr = form.gateway_addr ?? ''
     const gw = (gws.data?.gateways ?? []).find((g) => g.address === gwAddr)
     setGateway(gw?.edge_id ?? 0)
@@ -1065,7 +1069,9 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         </label>
         {cilium && (
           <Button size="small" style={{ marginLeft: '1.6rem' }} onClick={() => {
-            setCiliumValuesDraft(CILIUM_DEFAULT_VALUES)
+            // Пустой черновик — старт с значений nkt; набранные (или
+            // восстановленные из набора) values не перезаписываются.
+            setCiliumValuesDraft((d) => (d.trim() ? d : CILIUM_DEFAULT_VALUES))
             setCiliumValuesError(null)
             setCiliumValuesOpen(true)
           }}>

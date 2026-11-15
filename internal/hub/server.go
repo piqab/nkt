@@ -314,6 +314,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/k8s-addon-versions", s.handleAddonVersions)
 				r.Get("/hub/k8s-addons", s.handleAddonsRegistry)
 				r.Get("/hub/cluster-presets", s.handleClusterPresets)
+				r.Get("/hub/cluster-presets/{id}/script", s.handleClusterPresetScript)
 				// Шлюзы для поля «общий адрес control plane»: где слушатель
 				// может встать.
 				r.Get("/hub/cluster/gateways", s.handleClusterGateways)

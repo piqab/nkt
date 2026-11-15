@@ -363,8 +363,13 @@ into the cache and brings up the libvirt network right away.
   (up to 10 GB) and chosen in the placement as “from hub: …”; on creation
   the hub uploads it to every host that lacks it.
 - **Saved presets** — “save preset” remembers the whole form under a
-  name, picking a preset fills it again; presets are part of
-  export/import.
+  name (including the Helm values for Cilium), picking a preset fills it
+  again; presets are part of export/import. The same preset opens as a
+  ready script: in the script editor (“Profiles” → “Scripts”) the
+  **“Ready-made scripts ▾”** list has a **“Cluster presets”** group — the
+  hub generates a `k8s create` command from the preset (with the Cilium
+  values block), it is inserted into the editor and then checked, saved
+  and run like any other script.
 - **Hub cache for nodes without internet** — with “apt via hub” on for
   the host, a cluster machine gets the same checkbox by itself (the hub
   keeps the reverse-forward session to the machine, so the machine's

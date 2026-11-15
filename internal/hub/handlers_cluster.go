@@ -579,3 +579,26 @@ func (s *Server) handleClusterPresetDelete(w http.ResponseWriter, r *http.Reques
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "cluster_preset.delete", p.Name, "ok", "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// handleClusterPresetScript — GET /hub/cluster-presets/{id}/script: the
+// preset as a script text for the editor ("Ready-made scripts ▾" → the
+// cluster presets group). Read-only: saving the text as a script is the
+// editor's usual flow.
+func (s *Server) handleClusterPresetScript(w http.ResponseWriter, r *http.Request) {
+	id, err := clusterIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	p, err := s.db.ClusterPresetByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	content, err := presetScript(p.Form, msgs.LangFromRequest(r))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"name": p.Name, "content": content})
+}

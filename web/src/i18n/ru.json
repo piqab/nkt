@@ -2578,6 +2578,8 @@
     "templateComment": "Веб-ферма: группа, два хоста, nginx и стек",
     "examplesLabel": "Начать с готового",
     "examplesBtn": "Готовые сценарии",
+    "presetsGroup": "Наборы кластеров",
+    "presetHint": "сценарий k8s create из сохранённого набора формы «Новый кластер»",
     "ai": {
       "label": "ИИ",
       "button": "ИИ",

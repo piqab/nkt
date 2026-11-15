@@ -195,6 +195,23 @@ export default function Scripts({ me }: { me: Me }) {
     setDraft(ex.content)
     setCheck(null)
   }
+  // Сохранённые наборы формы «Новый кластер»: хаб генерирует из набора
+  // текст сценария (одна команда k8s create + блок values Cilium), он
+  // вставляется в редактор — дальше проверка, сохранение, запуск как
+  // обычно. Связь разовая: правка набора сохранённый сценарий не меняет.
+  const presets = useApi<{ presets: { id: number; name: string }[] }>('/hub/cluster-presets', 60_000)
+  async function pickPreset(id: number) {
+    const pristine = draft.trim() === '' || draft === template(t('scripts.templateComment')) || (selected !== null && draft === (current.data?.content ?? ''))
+    if (!pristine && !(await confirmAction(t('scripts.help.confirmInsert'), { okText: t('scripts.help.insert'), danger: false }))) return
+    try {
+      const res = await api<{ name: string; content: string }>(`/hub/cluster-presets/${id}/script`)
+      setDraft(res.content)
+      setCheck(null)
+      if (!name.trim()) setName(`k8s-${res.name}`)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
 
   async function save(): Promise<number | null> {
     setBusy('save')
@@ -506,16 +523,36 @@ export default function Scripts({ me }: { me: Me }) {
                   <Dropdown
                     trigger={['click']}
                     menu={{
-                      items: (helpData.data?.examples ?? []).map((e, i) => ({
-                        key: String(i),
-                        label: (
-                          <div style={{ maxWidth: 460, whiteSpace: 'normal' }}>
-                            <strong>{e.title}</strong>
-                            <div className="small muted">{e.summary}</div>
-                          </div>
-                        ),
-                      })),
-                      onClick: ({ key }) => void pickExample(Number(key)),
+                      items: [
+                        ...(helpData.data?.examples ?? []).map((e, i) => ({
+                          key: `ex${i}`,
+                          label: (
+                            <div style={{ maxWidth: 460, whiteSpace: 'normal' }}>
+                              <strong>{e.title}</strong>
+                              <div className="small muted">{e.summary}</div>
+                            </div>
+                          ),
+                        })),
+                        ...((presets.data?.presets ?? []).length > 0
+                          ? [{
+                              type: 'group' as const,
+                              label: t('scripts.presetsGroup'),
+                              children: (presets.data?.presets ?? []).map((p) => ({
+                                key: `preset${p.id}`,
+                                label: (
+                                  <div style={{ maxWidth: 460, whiteSpace: 'normal' }}>
+                                    <strong>{p.name}</strong>
+                                    <div className="small muted">{t('scripts.presetHint')}</div>
+                                  </div>
+                                ),
+                              })),
+                            }]
+                          : []),
+                      ],
+                      onClick: ({ key }) => {
+                        if (key.startsWith('preset')) void pickPreset(Number(key.slice('preset'.length)))
+                        else void pickExample(Number(key.slice('ex'.length)))
+                      },
                     }}
                   >
                     <Button loading={helpData.loading && !helpData.data}>

@@ -2570,6 +2570,8 @@
     "templateComment": "Web farm: a group, two hosts, nginx and a stack",
     "examplesLabel": "Start from a ready one",
     "examplesBtn": "Ready-made scripts",
+    "presetsGroup": "Cluster presets",
+    "presetHint": "a k8s create script generated from a saved “New cluster” form preset",
     "ai": {
       "label": "AI",
       "button": "AI",
