@@ -98,11 +98,24 @@ export default function Jobs({ me }: { me: Me }) {
 
   const columns: TableColumnsType<Job> = [
     {
+      title: t('jobs.colNum'),
+      key: 'num',
+      width: '4rem',
+      render: (_, j) => <span className="small muted mono">{j.id}</span>,
+    },
+    {
       title: t('jobs.colTitle'),
       key: 'title',
       render: (_, j) => (
         <div style={{ minWidth: '14rem' }}>
-          <strong>{blurText(j.title || j.kind)}</strong>
+          <strong>
+            {/* Журнал открывается кликом по названию: при длинной
+                строке шага таблица уезжает вбок, и до иконок справа
+                не добраться. */}
+            <Button type="link" size="small" style={{ padding: 0, height: 'auto', fontWeight: 600 }} onClick={() => setOpenJob(j)}>
+              {blurText(j.title || j.kind)}
+            </Button>
+          </strong>
           <div className="small muted mono">{j.kind}</div>
         </div>
       ),
@@ -126,15 +139,15 @@ export default function Jobs({ me }: { me: Me }) {
         j.steps === 100 && !isJobDone(j) ? (
           <div style={{ minWidth: '9rem' }}>
             <Progress percent={j.step} size="small" status="active" />
-            {j.step_name && <div className="small muted">{j.step_name}</div>}
+            {j.step_name && <div className="small muted job-step-name" title={j.step_name}>{j.step_name}</div>}
           </div>
         ) : j.steps > 0 ? (
           <span className="small nowrap">
             {j.step}/{j.steps}
-            {j.step_name && <div className="small muted">{j.step_name}</div>}
+            {j.step_name && <div className="small muted job-step-name" title={j.step_name}>{j.step_name}</div>}
           </span>
         ) : (
-          <span className="small muted">{j.step_name || '—'}</span>
+          <span className="small muted job-step-name" title={j.step_name || undefined}>{j.step_name || '—'}</span>
         ),
     },
     {
@@ -472,7 +485,23 @@ export function JobLogModal({
   const canRetry = isJobDone(current) && current.status !== 'succeeded' && current.resumable
 
   return (
-    <Modal title={blurText(current.title || current.kind)} onClose={onClose} maskClosable={false} width={860} sizeKey="job">
+    <Modal
+      title={
+        <span>
+          {/* Номер и время — в заголовке журнала: окно открытия может
+              быть единственным местом, где задание видно целиком. */}
+          <span className="small muted mono">№ {current.id}</span> · {blurText(current.title || current.kind)}
+          <span className="small muted" style={{ marginLeft: '0.75rem' }}>
+            {t('jobs.colStarted')}: {formatDateTime(current.started_at ?? current.created_at)}
+            {current.finished_at ? ` · ${t('jobs.colFinished')}: ${formatDateTime(current.finished_at)}` : ''}
+          </span>
+        </span>
+      }
+      onClose={onClose}
+      maskClosable={false}
+      width={860}
+      sizeKey="job"
+    >
       <div className="row" style={{ marginBottom: '0.5rem' }}>
         <Tag color={STATUS_COLOR[current.status] ?? 'default'}>{t(`jobs.status.${current.status}`)}</Tag>
         {current.steps > 0 && current.steps !== 100 && (

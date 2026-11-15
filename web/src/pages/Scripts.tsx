@@ -523,6 +523,9 @@ export default function Scripts({ me }: { me: Me }) {
                   <Dropdown
                     trigger={['click']}
                     menu={{
+                      // Список примеров и наборов длиннее окна: своя
+                      // высота с прокруткой, иначе хвост уходит за экран.
+                      style: { maxHeight: 'min(60vh, 34rem)', overflowY: 'auto' },
                       items: [
                         ...(helpData.data?.examples ?? []).map((e, i) => ({
                           key: `ex${i}`,

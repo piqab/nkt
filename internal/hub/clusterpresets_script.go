@@ -93,10 +93,11 @@ func presetScript(form string, lang msgs.Lang) (string, error) {
 	if name == "" {
 		name = "k8s"
 	}
-	nodes, err := presetNodes(f)
+	entries, err := presetNodeEntries(f)
 	if err != nil {
 		return "", err
 	}
+	nodes := strings.Join(entries, "; ")
 	cilium := f.Cilium == nil || *f.Cilium
 
 	var b strings.Builder
@@ -104,11 +105,27 @@ func presetScript(form string, lang msgs.Lang) (string, error) {
 	if f.LBVip != "" || f.LBCount > 1 {
 		fmt.Fprintf(&b, "# %s\n", msgs.T(lang, "hub.presetScriptLBVip"))
 	}
+	// A long placement would make the create line endless in the editor:
+	// every per-host row goes into its own set variable and the create
+	// line references the join. Comments say what each command does, once.
+	split := len(nodes) > 60
+	nodesArg := strconv.Quote(nodes)
+	if split {
+		fmt.Fprintf(&b, "# %s\n", msgs.T(lang, "hub.presetScriptNodes"))
+		refs := make([]string, len(entries))
+		for i, e := range entries {
+			fmt.Fprintf(&b, "set N%d %s\n", i+1, strconv.Quote(e))
+			refs[i] = fmt.Sprintf("${N%d}", i+1)
+		}
+		fmt.Fprintf(&b, "set NODES %s\n", strconv.Quote(strings.Join(refs, "; ")))
+		nodesArg = strconv.Quote("${NODES}")
+	}
+	fmt.Fprintf(&b, "# %s\n", msgs.T(lang, "hub.presetScriptCreate"))
 	args := []string{"on", firstPresetHost(f), "k8s", "create", name}
 	if f.Flavor != "" {
 		args = append(args, "flavor", f.Flavor)
 	}
-	args = append(args, "nodes", strconv.Quote(nodes))
+	args = append(args, "nodes", nodesArg)
 	if f.Network != "" {
 		args = append(args, "network", f.Network)
 	}
@@ -154,6 +171,7 @@ func presetScript(form string, lang msgs.Lang) (string, error) {
 	b.WriteString(strings.Join(args, " "))
 	b.WriteString("\n")
 	if cilium && strings.TrimSpace(f.CiliumValues) != "" {
+		fmt.Fprintf(&b, "# %s\n", msgs.T(lang, "hub.presetScriptValues"))
 		b.WriteString(strings.TrimRight(f.CiliumValues, "\n"))
 		b.WriteString("\nend\n")
 	}
@@ -176,10 +194,11 @@ func firstPresetHost(f clusterPresetForm) string {
 	return ""
 }
 
-// presetNodes — the placement string: rows grouped by host in order of
-// appearance, load-balancer rows join the group of their host, host-line
-// keys (bridge/nic/endpoint) come from the rows and the endpoints map.
-func presetNodes(f clusterPresetForm) (string, error) {
+// presetNodeEntries — the placement rows grouped by host in order of
+// appearance, one string per host: load-balancer rows join the group of
+// their host, host-line keys (bridge/nic/endpoint) come from the rows and
+// the endpoints map.
+func presetNodeEntries(f clusterPresetForm) ([]string, error) {
 	type group struct {
 		entries  []string
 		bridge   string
@@ -213,7 +232,7 @@ func presetNodes(f clusterPresetForm) (string, error) {
 	}
 	for _, r := range f.Rows {
 		if err := add(r); err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 	if f.LBEnabled {
@@ -222,7 +241,7 @@ func presetNodes(f clusterPresetForm) (string, error) {
 				r.Role = RoleLoadBalancer
 			}
 			if err := add(r); err != nil {
-				return "", err
+				return nil, err
 			}
 		}
 	}
@@ -241,7 +260,7 @@ func presetNodes(f clusterPresetForm) (string, error) {
 		}
 		hosts = append(hosts, h+": "+strings.Join(items, ", "))
 	}
-	return strings.Join(hosts, "; "), nil
+	return hosts, nil
 }
 
 // presetEntry — one placement entry with its own parameters.

@@ -978,6 +978,14 @@ span.vm-toggle {
 .nkt-modal-frame.sized .ant-modal-content { height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
 .nkt-modal-frame.sized .ant-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .nkt-modal-frame.sized .modal-fill { flex: 1 1 auto; min-height: 8rem; max-height: none !important; height: auto !important; }
+/* Нерастянутое окно: редактор высотой по числу строк распирал окно за
+   экран (кнопки уходили вниз). Предел — текст крутится внутри поля;
+   у растянутого окна предел снят правилом выше. */
+.code-editor.modal-fill { max-height: calc(100vh - 22rem); }
+/* Длинная строка шага (строка сценария) не распирает таблицу заданий и
+   плашку фоновых операций: обрезается с многоточием, целиком — в подсказке. */
+.job-step-name { display: block; max-width: 24rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.active-jobs-step { display: -webkit-box; max-width: 24rem; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .modal-resize-handle {
   position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px;
   cursor: nwse-resize; touch-action: none; opacity: 0.55;

@@ -36,13 +36,19 @@ func TestPresetScriptRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"on hv1 k8s create prod flavor kubeadm",
-		`nodes "hv1: cp 3 cpu 4 mem 8192 disk 60 image debian-13, endpoint 10.0.0.5; hv2: w 2 cpu 8 mem 16384 disk 200 image debian-13, endpoint 10.0.0.6; hv3: lb cpu 1 mem 1024 disk 10 image debian-13"`,
+		"# размеры и размещение машин по хостам — по строке на хост",
+		`set N1 "hv1: cp 3 cpu 4 mem 8192 disk 60 image debian-13, endpoint 10.0.0.5"`,
+		`set N2 "hv2: w 2 cpu 8 mem 16384 disk 200 image debian-13, endpoint 10.0.0.6"`,
+		`set N3 "hv3: lb cpu 1 mem 1024 disk 10 image debian-13"`,
+		`set NODES "${N1}; ${N2}; ${N3}"`,
+		"# собирает кластер таким, каким сохранил его набор",
+		`on hv1 k8s create prod flavor kubeadm nodes "${NODES}"`,
 		"network wireguard", "version 1.34", "cni cilium", "no-kube-proxy",
 		"endpoint 10.77.1.1:6443", "gateway 89.111.153.12", "internal",
 		"allow 203.0.113.0/24,198.51.100.7", "addons ingress-nginx,longhorn=1.12.1",
 		"haproxy connect=5000,client=50000,server=50000,maxconn=2000,stats=8404,algo=source",
 		"expose api 6443 http 80 https 443",
+		"# параметры установки Cilium",
 		"cni:\n  binPath: /usr/lib/cni\nend",
 	} {
 		if !strings.Contains(text, want) {
@@ -83,6 +89,11 @@ func TestPresetScriptRoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(text, "cni cilium") || !strings.Contains(text, "addons longhorn=1.10.0") {
 		t.Errorf("old:\n%s", text)
+	}
+	// Короткое размещение остаётся в самой строке create: set-переменные
+	// нужны только длинной строке, иначе они лишь шумят.
+	if !strings.Contains(text, `nodes "hv1: cp 1"`) || strings.Contains(text, "set N1") {
+		t.Errorf("короткий набор ждал в одну строку без set:\n%s", text)
 	}
 
 	if _, err := presetScript(`{"name":"x"}`, msgs.RU); err == nil {

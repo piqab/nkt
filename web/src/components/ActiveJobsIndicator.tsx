@@ -109,7 +109,7 @@ export function ActiveJobsIndicator({ isHub }: { isHub: boolean }) {
             )}
             {a.job.title}
           </span>
-          <span className="small muted">
+          <span className="small muted active-jobs-step" title={a.job.step_name || undefined}>
             {a.job.status === 'queued' ? t('activeJobs.queued') : a.job.step_name || t('activeJobs.running')}
           </span>
           {a.job.status === 'running' && <Progress percent={percent(a.job)} size="small" showInfo={false} />}

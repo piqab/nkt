@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.25.3 — 2026-11-15
+
+- **A long script line no longer breaks the interface, and jobs got a number and a click-to-open log.** The script generated from a saved preset splits a placement that does not fit one line into per-host `set` variables, and the `k8s create` line references the join through `nodes "${NODES}"`; every command carries a comment saying what it does. In the “Jobs” list the first column is the job number, the log opens by clicking the name, and a long step line is clipped with an ellipsis (the whole text in a hint), so the “log” and “cancel” icons stay on screen; the job log header shows the job's number and its start/finish times. The “Background operations” plate clips the step line to two lines. The “Start from a ready one” list of the script editor scrolls within the window, and the editor window no longer stretches past the screen because of a long text.
+
 ## v1.25.2 — 2026-11-15
 
 - **A ready-made “A service from the cluster to the outside through Traffic Fly” script.** In “Ready-made scripts ▾” of the editor and on the “Script commands” page — an example for an existing cluster: Cilium Ingress on port 8080 of the nodes, a service with its Ingress as one manifest, a `fly route https` to all cluster nodes with TLS at the gateway and an outside check with `wait url`; in the comments — a NodePort variant for raw TCP and handing the domain to a “by rights” token (`fly own`). At start the script asks for the cluster name and the service domain.
