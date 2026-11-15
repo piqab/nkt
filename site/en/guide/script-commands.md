@@ -423,12 +423,12 @@ Example:
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [gateway GATEWAY] [internal] [allow ADDR[,ADDR…]] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
+### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N [cpu N mem MB disk GB image IMAGE network NETWORK], w N […], host cp|w, lb [N], bridge BRIDGE, nic DEV, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|macvtap|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [gateway GATEWAY] [internal] [allow ADDR[,ADDR…]] [addon longhorn[=VERSION]] [addons LIST] [haproxy K=V,…] [prepare] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
 
 Creates a Kubernetes cluster on the host's virtual machines — like “new cluster” in the host list: machines from a cloud image with nkt, control plane, joining nodes, waiting for Ready, port forward and kubeconfig (downloadable on the hub in the cluster card).
 
 ```
-on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [gateway GATEWAY] [internal] [allow ADDR[,ADDR…]] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]
+on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N [cpu N mem MB disk GB image IMAGE network NETWORK], w N […], host cp|w, lb [N], bridge BRIDGE, nic DEV, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|macvtap|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [gateway GATEWAY] [internal] [allow ADDR[,ADDR…]] [addon longhorn[=VERSION]] [addons LIST] [haproxy K=V,…] [prepare] [expose] [api PORT] [http PORT] [https PORT]
   [Cilium values line by line
 end]
 ```
@@ -437,7 +437,7 @@ end]
 |---|---|---|
 | `NAME` | ✓ | cluster name — also the group and the prefix of machine names (lowercase letters, digits, hyphen) |
 | `flavor` |  | k3s (default) or kubeadm |
-| `nodes` |  | single — one machine; 1+N — a control plane and N workers (default 1+1); 3+N — three control planes (kubeadm requires endpoint with them); in quotes — placement across hosts, as in the “Clusters” section: “HOST: cp N, w N, host cp\|w, bridge BRIDGE, nic DEVICE, endpoint ADDR; HOST2: …” (cp/w N — machines with a role, host — the host itself as a node, bridge/nic — that host's bridge or device, endpoint — the host's address for WireGuard peers) |
+| `nodes` |  | single — one machine; 1+N — a control plane and N workers (default 1+1); 3+N — three control planes (kubeadm requires endpoint with them); in quotes — placement across hosts, as in the “Clusters” section: “HOST: cp N, w N, host cp\|w, lb, bridge BRIDGE, nic DEVICE, endpoint ADDR; HOST2: …” (cp/w N — machines with a role, lb — the built-in HAProxy load balancer machine (always a VM, one; two require a VIP, which is no longer supported), host — the host itself as a node, bridge/nic — that host's bridge or device, endpoint — the host's address for WireGuard peers). A machine entry can carry its own cpu N, mem MB, disk GB, image IMAGE and network NETWORK (a libvirt NAT network name) — whatever is not named comes from the command's shared arguments |
 | `image` |  | an image from the host catalog (default ubuntu-24.04) |
 | `cpu / mem / disk` |  | size of every machine: cores, memory in MB, disk in GB (2 / 4096 / 30) |
 | `network / bridge` |  | on one host — a libvirt network name; with a placement — the network mode between hosts: nat (one host), bridge (a host bridge: bridge BRIDGE for all or “bridge …” in a host's part), macvtap (the machine is plugged into a host device: nic DEVICE for all or “nic …” in a host's part) or wireguard (a tunnel the hub sets up itself) |
@@ -449,6 +449,9 @@ end]
 | `internal` |  | the internal path to the shared address (the “internal path” checkbox of the “Clusters” form): node traffic goes to the gateway's plan address through the nodes' tunnels and never leaves for the external network. The gateway comes from gateway (empty — the only one on the hub); the hub derives the shared address itself — the gateway plan address and port 6443, or the port of endpoint when given. kubeadm only |
 | `allow` |  | who else besides the cluster nodes may reach the shared address — IPv4 addresses and networks separated by commas (203.0.113.0/24,198.51.100.7). The hub adds the external addresses of the placement hosts; with an empty list the job refuses to open the cluster API to the whole internet |
 | `addon` |  | an add-on on top of the ready cluster: longhorn (block volumes replicated across nodes, the default StorageClass) — the chart version after “=”, without it the nkt default version |
+| `addons` |  | the list of add-ons on top of the ready cluster, comma-separated — supersedes the single addon argument: longhorn[=VERSION], ingress-nginx, cert-manager, metrics-server, metallb, kube-prometheus-stack, kyverno, argo-cd; each with “=version” or without — then the nkt default version |
+| `haproxy` |  | parameters of the built-in HAProxy load balancer (needs an lb entry in the placement): comma-separated pairs — connect, client, server (timeouts in ms), maxconn, stats (statistics port, 0 disables), algo=source\|roundrobin; defaults as in the cluster form |
+| `prepare` |  | in a dry run of the script — prepare the caches: the image and packages (like the “with preparation” checkbox of the form's dry run); a regular run ignores it |
 | `expose` |  | forward host ports 6443, 80, 443 to the control plane |
 | `api / http / https` |  | host ports with expose: api (6443), http (80), https (443); 0 — do not forward |
 

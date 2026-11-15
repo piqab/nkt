@@ -423,12 +423,12 @@ on web1 cert renew example.org
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]` {#cmd-k8s-create}
+### `on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N [cpu N mem МБ disk ГБ image ОБРАЗ network СЕТЬ], w N […], host cp|w, lb [N], bridge МОСТ, nic УСТР, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|macvtap|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [addons СПИСОК] [haproxy К=З,…] [prepare] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]` {#cmd-k8s-create}
 
 Создаёт кластер Kubernetes на виртуалках хоста — как «новый кластер» в списке хостов: машины из облачного образа с nkt, control plane, присоединение узлов, ожидание Ready, проброс и kubeconfig (скачивается на хабе в карточке кластера).
 
 ```
-on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]
+on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N [cpu N mem МБ disk ГБ image ОБРАЗ network СЕТЬ], w N […], host cp|w, lb [N], bridge МОСТ, nic УСТР, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|macvtap|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [addons СПИСОК] [haproxy К=З,…] [prepare] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]
   [values Cilium построчно
 end]
 ```
@@ -437,7 +437,7 @@ end]
 |---|---|---|
 | `ИМЯ` | ✓ | имя кластера — оно же группа и префикс имён машин (строчные буквы, цифры, дефис) |
 | `flavor` |  | k3s (по умолчанию) или kubeadm |
-| `nodes` |  | single — одна машина; 1+N — control plane и N worker (по умолчанию 1+1); 3+N — три control plane (у kubeadm с ними обязателен endpoint); в кавычках — размещение по хостам, как в разделе «Кластеры»: «ХОСТ: cp N, w N, host cp\|w, bridge МОСТ, nic УСТРОЙСТВО, endpoint АДРЕС; ХОСТ2: …» (cp/w N — машины с ролью, host — сам хост как узел, bridge/nic — мост или устройство этого хоста, endpoint — адрес хоста для соседей по туннелю WireGuard) |
+| `nodes` |  | single — одна машина; 1+N — control plane и N worker (по умолчанию 1+1); 3+N — три control plane (у kubeadm с ними обязателен endpoint); в кавычках — размещение по хостам, как в разделе «Кластеры»: «ХОСТ: cp N, w N, host cp\|w, lb, bridge МОСТ, nic УСТРОЙСТВО, endpoint АДРЕС; ХОСТ2: …» (cp/w N — машины с ролью, lb — машина встроенного балансировщика HAProxy (всегда VM, одна; две требуют VIP, а он больше не поддерживается), host — сам хост как узел, bridge/nic — мост или устройство этого хоста, endpoint — адрес хоста для соседей по туннелю WireGuard). У записи машин могут быть свои cpu N, mem МБ, disk ГБ, image ОБРАЗ и network СЕТЬ (имя NAT-сети libvirt) — не названное берётся из общих аргументов команды |
 | `image` |  | образ из каталога хоста (по умолчанию ubuntu-24.04) |
 | `cpu / mem / disk` |  | размеры каждой машины: ядра, память в МБ, диск в ГБ (2 / 4096 / 30) |
 | `network / bridge` |  | на одном хосте — имя сети libvirt; при размещении по хостам — режим сети между хостами: nat (один хост), bridge (мост хоста: bridge МОСТ для всех или «bridge …» в строке хоста), macvtap (машина включена в устройство хоста: nic УСТРОЙСТВО для всех или «nic …» в строке хоста) или wireguard (туннель, хаб настроит сам) |
@@ -449,6 +449,9 @@ end]
 | `internal` |  | внутренний путь к общему адресу (галочка «внутренний путь» формы раздела «Кластеры»): трафик узлов идёт на план-адрес шлюза через их туннели и не выходит во внешнюю сеть. Шлюз — из gateway (пусто — единственный на хабе); общий адрес хаб выводит сам — план-адрес шлюза и порт 6443, а с endpoint — порт из него. Только для kubeadm |
 | `allow` |  | кому ещё, кроме узлов кластера, разрешён вход на общий адрес — адреса и сети IPv4 через запятую (203.0.113.0/24,198.51.100.7). Хаб добавляет наружные адреса хостов размещения; без единого адреса в списке задание не станет открывать API кластера всему интернету |
 | `addon` |  | дополнение поверх готового кластера: longhorn (блочные тома с репликами по узлам, StorageClass по умолчанию) — версия чарта через «=», без неё — версия nkt по умолчанию |
+| `addons` |  | список дополнений поверх готового кластера через запятую — заменяет одиночный addon: longhorn[=ВЕРСИЯ], ingress-nginx, cert-manager, metrics-server, metallb, kube-prometheus-stack, kyverno, argo-cd; каждое с «=версия» или без неё — тогда версия nkt по умолчанию |
+| `haproxy` |  | параметры встроенного балансировщика HAProxy (нужна запись lb в размещении): пары через запятую — connect, client, server (таймауты в мс), maxconn, stats (порт статистики, 0 — выключить), algo=source\|roundrobin; умолчания как в форме кластера |
+| `prepare` |  | в сухом прогоне сценария — подготовить кэши: образ и пакеты (как галочка «с подготовкой» у сухого прогона формы); на обычное выполнение не влияет |
 | `expose` |  | пробросить порты 6443, 80, 443 хоста в control plane |
 | `api / http / https` |  | порты хоста при expose: api (6443), http (80), https (443); 0 — не пробрасывать |
 

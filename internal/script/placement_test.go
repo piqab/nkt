@@ -64,3 +64,43 @@ func TestParseK8sPlacementStep(t *testing.T) {
 		}
 	}
 }
+
+// Записи размещения со своими параметрами и роль lb — соответствие
+// таблице раздела «Кластеры» (размеры/образ у каждой строки, машина
+// встроенного балансировщика).
+func TestParsePlacementEntryKeys(t *testing.T) {
+	rows, err := ParsePlacement(`hv1: cp 1 cpu 4 mem 8192 disk 60 image debian-13 network labnet, w 2; hv2: lb cpu 1 mem 1024 disk 10 image debian-13; hv3: lb, bridge br0`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []PlacementRow{
+		{Host: "hv1", Role: "control-plane", Kind: "vm", Count: 1, VCPUs: 4, MemMB: 8192, DiskGB: 60, ImageID: "debian-13", Network: "labnet"},
+		{Host: "hv1", Role: "worker", Kind: "vm", Count: 2},
+		{Host: "hv2", Role: "load-balancer", Kind: "vm", Count: 1, VCPUs: 1, MemMB: 1024, DiskGB: 10, ImageID: "debian-13"},
+		{Host: "hv3", Role: "load-balancer", Kind: "vm", Count: 1, Bridge: "br0"},
+	}
+	if len(rows) != len(want) {
+		t.Fatalf("rows: %+v", rows)
+	}
+	for i := range want {
+		if rows[i] != want[i] {
+			t.Errorf("row %d: %+v, want %+v", i, rows[i], want[i])
+		}
+	}
+	for _, bad := range []string{
+		"hv1: cp 1 cpu",         // ключ без значения
+		"hv1: cp 1 cpu x",       // не число
+		"hv1: cp 1 cpu 0",       // вне диапазона
+		"hv1: cp 1 mem 64",      // меньше 128 МБ
+		"hv1: cp 1 bad 2",       // неизвестный ключ
+		"hv1: cp 1 image a b",   // не бывает: tokenize/Fields
+		"hv1: lb 3",             // больше двух LB
+		"hv1: lb x",             // не число
+		"hv1: host lb",          // балансировщик не бывает хостом
+		"hv1: cp 1 network a b", //
+	} {
+		if _, err := ParsePlacement(bad); err == nil {
+			t.Errorf("%q: expected error", bad)
+		}
+	}
+}

@@ -281,7 +281,7 @@ var Commands = []CommandDoc{
 		Example: "on web1 git clone https://github.com/org/app.git /srv/app branch main token ask",
 	},
 	{
-		Kind: KindK8sCreate, OnHost: true, Block: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|\"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …\"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]\n  [values Cilium построчно\nend]",
+		Kind: KindK8sCreate, OnHost: true, Block: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|\"ХОСТ: cp N [cpu N mem МБ disk ГБ image ОБРАЗ network СЕТЬ], w N […], host cp|w, lb [N], bridge МОСТ, nic УСТР, endpoint АДРЕС; …\"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|macvtap|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [addons СПИСОК] [haproxy К=З,…] [prepare] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]\n  [values Cilium построчно\nend]",
 		Summary: "script.doc.k8sCreate",
 		Args: []ArgDoc{
 			{Name: "ИМЯ", Required: true, Desc: "script.doc.k8sCreate.name"},
@@ -298,6 +298,9 @@ var Commands = []CommandDoc{
 			{Name: "internal", Desc: "script.doc.k8sCreate.internal"},
 			{Name: "allow", Desc: "script.doc.k8sCreate.allow"},
 			{Name: "addon", Desc: "script.doc.k8sCreate.addon"},
+			{Name: "addons", Desc: "script.doc.k8sCreate.addons"},
+			{Name: "haproxy", Desc: "script.doc.k8sCreate.haproxy"},
+			{Name: "prepare", Desc: "script.doc.k8sCreate.prepare"},
 			{Name: "expose", Desc: "script.doc.k8sCreate.expose"},
 			{Name: "api / http / https", Desc: "script.doc.k8sCreate.ports"},
 		},
@@ -542,6 +545,8 @@ var englishTerms = [][2]string{
 	{"values YAML построчно", "values YAML line by line"},
 	{"ЧАРТ", "CHART"},
 	{"К=З", "K=V"},
+	{"СПИСОК", "LIST"},
+	{"УСТР", "DEV"},
 	{"описание конвейера построчно", "pipeline description line by line"},
 	{"Forgejo за Traffic Fly: выкладка и перенос на другой хост", "Forgejo behind Traffic Fly: deploy and move to another host"},
 	{"хост, где Forgejo будет выложен сначала", "host where Forgejo is deployed first"},

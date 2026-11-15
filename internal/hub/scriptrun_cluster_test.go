@@ -114,3 +114,62 @@ func TestClusterSpecFromScriptPlacement(t *testing.T) {
 		t.Errorf("addon: %+v %v", spec.Addons, err)
 	}
 }
+
+// Размещение с lb-записью, построчными размерами и списком дополнений:
+// спека совпадает с тем, что собрала бы форма раздела «Кластеры».
+func TestClusterSpecFromScriptPlacementLB(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	ids := map[string]int64{}
+	for _, n := range []string{"hv1", "hv2"} {
+		id, err := db.CreateHost(ctx, n, n+".lan", 22, "root", "key", []byte("x"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[n] = id
+	}
+	m := NewManager(&config.Config{}, db, make([]byte, 32), "test", slog.Default())
+	r := &ScriptRunner{m: m}
+	done := &scriptRunResume{HostIDs: map[string]int64{}}
+	h, _ := db.HostByID(ctx, ids["hv1"])
+
+	sc, issues := script.Parse(`on hv1 k8s create lab nodes "hv1: cp 1 cpu 4 mem 8192 disk 60 image debian-13; hv2: w 2, lb cpu 1 mem 1024 disk 10 image debian-13" network bridge bridge br0 addons longhorn=1.12.1,ingress-nginx haproxy stats=8404,algo=roundrobin`, nil)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	spec, err := r.clusterSpecFromStep(ctx, done, h, sc.Steps[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Placements) != 2 {
+		t.Fatalf("placements: %+v", spec.Placements)
+	}
+	cp, w := spec.Placements[0], spec.Placements[1]
+	if cp.VCPUs != 4 || cp.MemMB != 8192 || cp.DiskGB != 60 || cp.ImageID != "debian-13" {
+		t.Errorf("cp: %+v", cp)
+	}
+	// У worker своих параметров нет — глобальные умолчания сценария.
+	if w.VCPUs != 2 || w.MemMB != 4096 || w.DiskGB != 30 || w.ImageID != "ubuntu-24.04" || w.Bridge != "br0" {
+		t.Errorf("w: %+v", w)
+	}
+	if !spec.LBEnabled || spec.LBCount != 1 || len(spec.LBPlacements) != 1 {
+		t.Fatalf("lb: %+v", spec)
+	}
+	lb := spec.LBPlacements[0]
+	if lb.HostID != ids["hv2"] || lb.Role != RoleLoadBalancer || lb.Kind != KindVM || lb.VCPUs != 1 ||
+		lb.MemMB != 1024 || lb.DiskGB != 10 || lb.ImageID != "debian-13" || lb.Bridge != "br0" {
+		t.Errorf("lb placement: %+v", lb)
+	}
+	if spec.LBHaproxy.StatsPort != 8404 || spec.LBHaproxy.Algorithm != "roundrobin" {
+		t.Errorf("haproxy: %+v", spec.LBHaproxy)
+	}
+	// ingress-nginx без версии в сценарии — Validate подставляет версию
+	// nkt по умолчанию, как и форме.
+	if len(spec.Addons) != 2 || spec.Addons[0].Name != "longhorn" || spec.Addons[0].Version != "1.12.1" || spec.Addons[1].Name != "ingress-nginx" || spec.Addons[1].Version == "" {
+		t.Errorf("addons: %+v", spec.Addons)
+	}
+}

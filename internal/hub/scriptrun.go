@@ -688,7 +688,7 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 			return err
 		}
 		cr := &ClusterRunner{m: r.m, s: r.s}
-		failed, err := cr.runPreflight(ctx, jc, spec, false, 0)
+		failed, err := cr.runPreflight(ctx, jc, spec, st.Args["prepare"] == "true", 0)
 		if err != nil {
 			return err
 		}
@@ -1226,15 +1226,41 @@ func (r *ScriptRunner) clusterSpecFromStep(ctx context.Context, done *scriptRunR
 		if err != nil {
 			return spec, err
 		}
-		pl := Placement{HostID: ph.ID, Role: row.Role, Kind: row.Kind, Count: row.Count, Bridge: row.Bridge, Nic: row.Nic, Endpoint: row.Endpoint}
+		pl := Placement{HostID: ph.ID, Role: row.Role, Kind: row.Kind, Count: row.Count,
+			Bridge: row.Bridge, Nic: row.Nic, Endpoint: row.Endpoint, Network: row.Network}
 		if row.Kind == KindVM {
 			pl.VCPUs, pl.MemMB, pl.DiskGB, pl.ImageID = spec.CPVCPUs, spec.CPMemoryMB, spec.CPDiskGB, spec.ImageID
+			if row.Role == RoleWorker {
+				pl.VCPUs, pl.MemMB, pl.DiskGB = spec.WVCPUs, spec.WMemoryMB, spec.WDiskGB
+			}
+			// The entry's own parameters override the shared ones —
+			// per-row sizes and image, as in the placement table.
+			if row.VCPUs > 0 {
+				pl.VCPUs = row.VCPUs
+			}
+			if row.MemMB > 0 {
+				pl.MemMB = row.MemMB
+			}
+			if row.DiskGB > 0 {
+				pl.DiskGB = row.DiskGB
+			}
+			if row.ImageID != "" {
+				pl.ImageID = row.ImageID
+			}
 			if pl.Bridge == "" {
 				pl.Bridge = st.Args["bridge"]
 			}
 			if pl.Nic == "" {
 				pl.Nic = st.Args["nic"]
 			}
+		}
+		if row.Role == RoleLoadBalancer {
+			// The form keeps the load balancer in its own table; in the
+			// script it is just another placement entry.
+			spec.LBEnabled = true
+			spec.LBCount += row.Count
+			spec.LBPlacements = append(spec.LBPlacements, pl)
+			continue
 		}
 		spec.Placements = append(spec.Placements, pl)
 	}
@@ -1305,14 +1331,80 @@ func clusterSpecFromArgs(h store.Host, st script.Step) (ClusterSpec, error) {
 	// endpoint — общий адрес control plane (kubeadm); проверка формы и
 	// порта по умолчанию — за Validate.
 	spec.Endpoint = st.Args["endpoint"]
-	if a := st.Args["addon"]; a != "" {
+	if a := st.Args["addons"]; a != "" {
+		for _, item := range strings.Split(a, ",") {
+			if item = strings.TrimSpace(item); item != "" {
+				name, ver, _ := strings.Cut(item, "=")
+				spec.Addons = append(spec.Addons, ClusterAddon{Name: name, Version: ver})
+			}
+		}
+	} else if a := st.Args["addon"]; a != "" {
 		name, ver, _ := strings.Cut(a, "=")
 		spec.Addons = []ClusterAddon{{Name: name, Version: ver}}
 	}
+	hp, err := parseHaproxyArgs(st.Args["haproxy"])
+	if err != nil {
+		return spec, err
+	}
+	spec.LBHaproxy = hp
 	if spec.Expose {
 		spec.ExposeAPI, spec.ExposeHTTP, spec.ExposeHTTPS = atoi("api", 6443), atoi("http", 80), atoi("https", 443)
 	}
 	return spec, nil
+}
+
+// parseHaproxyArgs — the "haproxy" argument of "k8s create": comma-
+// separated key=value pairs for the built-in load balancer, the same
+// knobs the cluster form has (timeouts in ms, maxconn, stats port,
+// algorithm). Ranges are validated by ClusterSpec.Validate; zero values
+// stay zero and get the runner's defaults.
+func parseHaproxyArgs(s string) (LBHaproxyConfig, error) {
+	var c LBHaproxyConfig
+	if strings.TrimSpace(s) == "" {
+		return c, nil
+	}
+	for _, p := range strings.Split(s, ",") {
+		k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
+		if !ok {
+			return c, msgs.Errorf("script.badK8sHaproxy", s)
+		}
+		n, err := strconv.Atoi(v)
+		switch k {
+		case "connect":
+			if err != nil {
+				return c, msgs.Errorf("script.badK8sHaproxy", s)
+			}
+			c.ConnectTimeout = n
+		case "client":
+			if err != nil {
+				return c, msgs.Errorf("script.badK8sHaproxy", s)
+			}
+			c.ClientTimeout = n
+		case "server":
+			if err != nil {
+				return c, msgs.Errorf("script.badK8sHaproxy", s)
+			}
+			c.ServerTimeout = n
+		case "maxconn":
+			if err != nil {
+				return c, msgs.Errorf("script.badK8sHaproxy", s)
+			}
+			c.MaxConn = n
+		case "stats":
+			if err != nil {
+				return c, msgs.Errorf("script.badK8sHaproxy", s)
+			}
+			c.StatsPort = n
+		case "algo":
+			if v != "source" && v != "roundrobin" {
+				return c, msgs.Errorf("script.badK8sHaproxy", s)
+			}
+			c.Algorithm = v
+		default:
+			return c, msgs.Errorf("script.badK8sHaproxy", s)
+		}
+	}
+	return c, nil
 }
 
 // createCluster заводит кластер как диалог «Новый кластер» и ждёт задание.

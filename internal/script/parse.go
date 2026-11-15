@@ -744,7 +744,7 @@ func parseOn(toks []string) (Step, error) {
 			}
 			return Step{Kind: KindK8sDestroy, Name: toks[2]}, nil
 		case "create":
-			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "nic", "api", "http", "https", "cni", "version", "addon", "endpoint", "gateway", "allow"}, []string{"expose", "no-kube-proxy", "internal"})
+			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "nic", "api", "http", "https", "cni", "version", "addon", "addons", "haproxy", "endpoint", "gateway", "allow"}, []string{"expose", "no-kube-proxy", "internal", "prepare"})
 			if err != nil {
 				return Step{}, err
 			}
@@ -787,6 +787,41 @@ func parseOn(toks []string) (Step, error) {
 			}
 			if a := args["addon"]; a != "" && !k8sAddonRe.MatchString(a) {
 				return Step{}, msgs.Errorf("script.badK8sAddon", a)
+			}
+			// The addon list supersedes the single "addon" argument;
+			// names are checked against the registry by ClusterSpec
+			// validation, here only the item format is verified.
+			if a := args["addons"]; a != "" {
+				if args["addon"] != "" {
+					return Step{}, msgs.Errorf("script.badK8sAddonsBoth")
+				}
+				for _, item := range strings.Split(a, ",") {
+					item = strings.TrimSpace(item)
+					name, _, _ := strings.Cut(item, "=")
+					if item == "" || !nameRe.MatchString(name) {
+						return Step{}, msgs.Errorf("script.badK8sAddons", a)
+					}
+				}
+			}
+			if hp := args["haproxy"]; hp != "" {
+				for _, p := range strings.Split(hp, ",") {
+					k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
+					if !ok {
+						return Step{}, msgs.Errorf("script.badK8sHaproxy", hp)
+					}
+					switch k {
+					case "connect", "client", "server", "maxconn", "stats":
+						if _, err := strconv.Atoi(v); err != nil {
+							return Step{}, msgs.Errorf("script.badK8sHaproxy", hp)
+						}
+					case "algo":
+						if v != "source" && v != "roundrobin" {
+							return Step{}, msgs.Errorf("script.badK8sHaproxy", hp)
+						}
+					default:
+						return Step{}, msgs.Errorf("script.badK8sHaproxy", hp)
+					}
+				}
 			}
 			return Step{Kind: KindK8sCreate, Name: toks[2], Args: args}, nil
 		}

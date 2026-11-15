@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.25.0 — 2026-11-15
+
+- **The script `k8s create` caught up with the cluster form: per-entry parameters, a built-in load balancer, an add-on list.** In the placement string each machine entry can carry its own `cpu N`, `mem MB`, `disk GB`, `image IMAGE` and `network NETWORK` (a libvirt NAT network name); the `lb` entry is the built-in HAProxy load balancer machine, configured by the `haproxy connect=…,client=…,server=…,maxconn=…,stats=…,algo=source|roundrobin` argument (timeouts in ms, stats port, algorithm). `addons longhorn=1.12.1,ingress-nginx,cert-manager,…` is a list of registry add-ons (each with or without a version) superseding the single `addon`, which keeps working. The `prepare` flag warms the image and package caches in a dry run of the script, like the “with preparation” checkbox of the form. Whatever an entry doesn't name comes from the command's shared arguments — old scripts need no rewrite.
+
 ## v1.24.1 — 2026-11-15
 
 - **Scripts build clusters with the internal path and Cilium values, and install Helm releases.** `on HOST k8s create` got the `internal` flag — the internal path to the shared address, like the checkbox of the “Clusters” form: the gateway comes from `gateway` (empty — the only one on the hub), and the hub derives the shared address itself (the gateway plan address, port 6443 or the one from `endpoint`). The command block up to `end` is the Helm values YAML for Cilium. The new command `k8s CLUSTER helm RELEASE chart CHART repo URL [version V] [namespace NS] [set K=V,…]` installs or upgrades any chart as a job on the cluster's first control plane: values — in the command block, single parameters — through `set` (each with its own `--set`, overriding the values); a dry run checks the cluster and the fields, and a “by rights” token is limited to its namespaces. Available wherever scripts run, MCP included (`run_script`).

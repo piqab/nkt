@@ -197,3 +197,29 @@ func TestParseK8sHelmAndInternal(t *testing.T) {
 		}
 	}
 }
+
+// «k8s create» с addons-списком, haproxy и prepare — разбор и отказы.
+func TestParseK8sCreateFlags(t *testing.T) {
+	sc, issues := Parse(`on hv1 k8s create lab flavor kubeadm nodes "hv1: cp 1; hv2: w 1, lb cpu 1 mem 1024 disk 10 image debian-13" network bridge bridge br0 addons longhorn=1.12.1,ingress-nginx haproxy connect=5000,algo=roundrobin prepare expose api 6443`, nil)
+	if len(issues) > 0 {
+		t.Fatalf("строка %d: %v", issues[0].Line, issues[0].Err)
+	}
+	st := sc.Steps[0]
+	if st.Args["addons"] != "longhorn=1.12.1,ingress-nginx" || st.Args["haproxy"] != "connect=5000,algo=roundrobin" ||
+		st.Args["prepare"] != "true" || st.Args["flavor"] != "kubeadm" {
+		t.Errorf("args: %+v", st.Args)
+	}
+	for text, want := range map[string]string{
+		`on hv1 k8s create lab addons longhorn addon longhorn`: "badK8sAddonsBoth",
+		`on hv1 k8s create lab addons "bad name"`:              "badK8sAddons",
+		`on hv1 k8s create lab haproxy connect=x`:              "badK8sHaproxy",
+		`on hv1 k8s create lab haproxy algo=rr`:                "badK8sHaproxy",
+		`on hv1 k8s create lab haproxy unknown=1`:              "badK8sHaproxy",
+		`on hv1 k8s create lab haproxy connect`:                "badK8sHaproxy",
+	} {
+		_, issues := Parse(text, nil)
+		if len(issues) == 0 || !strings.Contains(issueKey(issues[0]), want) {
+			t.Errorf("%q: %v, ожидалось %s", text, issues, want)
+		}
+	}
+}
