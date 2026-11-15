@@ -49,7 +49,7 @@ wait web1 http http://${ADDR}/ 200 1m
   compose-стеки, машины, профили, файлы, учётные записи, системные
   настройки, сертификаты, `git clone`, кластеры Kubernetes;
 - выкладки и переносы: `pipeline`, `deploy`, `migrate`;
-- кластеры и Traffic Fly: `k8s … ingress|apply|wait`, `fly route`, `fly apply`.
+- кластеры и Traffic Fly: `k8s … ingress|apply|helm|wait`, `fly route`, `fly apply`.
 
 ![Вкладка «Справка»: страница «Команды сценариев» с сайта](/screens/ru/hub-script-help.png)
 

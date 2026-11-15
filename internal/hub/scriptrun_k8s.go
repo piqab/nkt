@@ -12,16 +12,17 @@ import (
 
 	"github.com/piqab/nkt/internal/fly"
 	"github.com/piqab/nkt/internal/jobs"
+	"github.com/piqab/nkt/internal/k8s"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/script"
 	"github.com/piqab/nkt/internal/store"
 )
 
-// Команды сценария для готового кластера и маршрутов Traffic Fly:
-// «k8s ИМЯ ingress cilium», «k8s ИМЯ apply», «k8s ИМЯ wait deployment»,
-// «fly route», «fly apply». Кластер — по имени; действия идут на первый
-// control plane теми же вызовами, что раздел «Кластеры» (манифесты,
-// терминал kubectl).
+// Script commands for a ready cluster and for Traffic Fly routes:
+// "k8s NAME ingress cilium", "k8s NAME apply", "k8s NAME helm RELEASE",
+// "k8s NAME wait deployment", "fly route", "fly apply". The cluster is
+// found by name; the actions go to the first control plane through the
+// same calls the "Clusters" section uses (manifests, the kubectl terminal).
 
 // clusterByName — кластер хаба по имени и его первый control plane.
 func (r *ScriptRunner) clusterByName(ctx context.Context, name string) (store.Cluster, store.Host, error) {
@@ -130,6 +131,64 @@ func (r *ScriptRunner) k8sApply(ctx context.Context, jc *jobs.Context, done *scr
 		}
 	}
 	return nil
+}
+
+// k8sHelm — "k8s NAME helm RELEASE chart …": a Helm release installed or
+// upgraded as a job on the cluster's first control plane — the same agent
+// endpoint the cluster's "Kubernetes" section and the deployment pipelines
+// use. The command block carries the values YAML, the set argument carries
+// helm's own --set parameters (they override the values). A dry run only
+// validates the cluster and the fields.
+func (r *ScriptRunner) k8sHelm(ctx context.Context, jc *jobs.Context, done *scriptRunResume, st script.Step, dry bool) error {
+	if dry && clusterLater(done, st.Name) {
+		jc.Log("hub.scriptDryWould", st.Text)
+		return nil
+	}
+	cl, cp, err := r.clusterByName(ctx, st.Name)
+	if err != nil {
+		return err
+	}
+	rel := k8s.HelmInstallRequest{
+		Release:   st.Action,
+		Chart:     st.Args["chart"],
+		Version:   st.Args["version"],
+		Namespace: st.Args["namespace"],
+		Values:    st.Block,
+	}
+	if rel.Namespace == "" {
+		rel.Namespace = "default"
+	}
+	if repo := st.Args["repo"]; repo != "" {
+		rel.RepoURL = repo
+		if !strings.HasPrefix(repo, "oci://") {
+			// helm wants a local alias for a regular repository: derive
+			// it from the URL hostname (dots are legal in an alias).
+			if u, err := url.Parse(repo); err == nil && u.Host != "" {
+				rel.RepoName = strings.ToLower(u.Host)
+			}
+		}
+	}
+	for _, s := range strings.Split(st.Args["set"], ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			rel.Set = append(rel.Set, s)
+		}
+	}
+	if err := rel.Validate(); err != nil {
+		return err
+	}
+	// A "by rights" token: the release may only go into a namespace from
+	// its list — the same rule manifests and fly targets follow.
+	if t, ok := tokenFromContext(ctx); ok && t.Limited() {
+		if !slices.Contains(r.s.tokenAllowedNamespaces(ctx, t), rel.Namespace) {
+			return msgs.Errorf("hub.ownNSNotOwn", rel.Namespace)
+		}
+	}
+	if dry {
+		jc.Log("hub.scriptDryWould", st.Text)
+		return nil
+	}
+	jc.Log("hub.scriptK8sOn", cl.Name, cp.Name)
+	return r.s.hostJob(ctx, jc, jc.Job.Author, cp.ID, "/api/k8s/helm/install?job=1", rel)
 }
 
 // k8sWait — «k8s ИМЯ wait deployment ИМЯ»: все реплики готовы.

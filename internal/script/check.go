@@ -81,7 +81,7 @@ func Check(sc Script, refs Refs) []Issue {
 	clusters := map[string]bool{}
 	for _, s := range sc.Steps {
 		switch s.Kind {
-		case KindK8sIngress, KindK8sApply, KindK8sWait:
+		case KindK8sIngress, KindK8sApply, KindK8sWait, KindK8sHelm:
 			if !known(refs.Clusters, s.Name) && !clusters[s.Name] {
 				fail(s.Line, "script.unknownCluster2", s.Name)
 			}
@@ -135,6 +135,11 @@ func Check(sc Script, refs Refs) []Issue {
 		default:
 			if s.Kind == KindK8sCreate {
 				clusters[s.Name] = true
+				// The create block is the Cilium values YAML — without
+				// cni cilium there is nothing to apply it to.
+				if strings.TrimSpace(s.Block) != "" && s.Args["cni"] != "cilium" {
+					fail(s.Line, "script.k8sValuesNeedCilium")
+				}
 			}
 			if s.Host != "" && !known(refs.Hosts, s.Host) && !hosts[s.Host] {
 				fail(s.Line, "script.unknownHost", s.Host)

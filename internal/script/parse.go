@@ -744,7 +744,7 @@ func parseOn(toks []string) (Step, error) {
 			}
 			return Step{Kind: KindK8sDestroy, Name: toks[2]}, nil
 		case "create":
-			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "nic", "api", "http", "https", "cni", "version", "addon", "endpoint", "gateway", "allow"}, []string{"expose", "no-kube-proxy"})
+			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "nic", "api", "http", "https", "cni", "version", "addon", "endpoint", "gateway", "allow"}, []string{"expose", "no-kube-proxy", "internal"})
 			if err != nil {
 				return Step{}, err
 			}
@@ -925,6 +925,23 @@ func parseK8s(toks []string) (Step, error) {
 			return Step{}, msgs.Errorf("script.badK8sCluster")
 		}
 		return Step{Kind: KindK8sApply, Name: name}, nil
+	case "helm":
+		// "k8s CLUSTER helm RELEASE chart CHART …": a release into the
+		// cluster; values — an optional block, set — helm's own parameters.
+		if len(toks) < 4 || !nameRe.MatchString(toks[3]) {
+			return Step{}, msgs.Errorf("script.badK8sHelm")
+		}
+		args, err := kv(toks[4:], []string{"chart", "repo", "version", "namespace", "set"}, nil)
+		if err != nil {
+			return Step{}, err
+		}
+		if args["chart"] == "" {
+			return Step{}, msgs.Errorf("script.k8sHelmNeedsChart")
+		}
+		if ns := args["namespace"]; ns != "" && !nameRe.MatchString(ns) {
+			return Step{}, msgs.Errorf("script.badName", "namespace")
+		}
+		return Step{Kind: KindK8sHelm, Name: name, Action: toks[3], Args: args}, nil
 	case "wait":
 		if len(toks) < 5 || toks[3] != "deployment" || !nameRe.MatchString(toks[4]) {
 			return Step{}, msgs.Errorf("script.badK8sCluster")
@@ -1140,11 +1157,17 @@ func blockFollows(step Step, lines []string, i int) bool {
 	if step.Kind == KindRun {
 		return step.Args["command"] == ""
 	}
-	if step.Kind != KindDockerStack {
+	switch step.Kind {
+	case KindDockerStack:
+		if step.Action != "up" {
+			return false
+		}
+	case KindK8sCreate, KindK8sHelm:
+		// The values block is optional — the lines that follow are
+		// swallowed only when they look like YAML (indented or "key:"),
+		// never when the next command comes right after.
+	default:
 		return true
-	}
-	if step.Action != "up" {
-		return false
 	}
 	for j := i + 1; j < len(lines); j++ {
 		l := lines[j]

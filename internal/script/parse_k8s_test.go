@@ -135,3 +135,65 @@ func TestK8sCreateAddon(t *testing.T) {
 		}
 	}
 }
+
+// «k8s create … internal» с блоком values для Cilium и «k8s КЛАСТЕР helm» —
+// релиз с values-блоком и set-параметрами.
+func TestParseK8sHelmAndInternal(t *testing.T) {
+	text := strings.Join([]string{
+		"on hv1 k8s create lab flavor kubeadm cni cilium no-kube-proxy internal gateway fly1",
+		"  cni:",
+		"    binPath: /usr/lib/cni",
+		"end",
+		"k8s lab helm cache chart redis repo https://charts.bitnami.com/bitnami version 20.1.4 namespace shop set replica.replicaCount=3,image.tag=7.2",
+		"k8s lab helm op chart rgstroperator repo oci://ghcr.io/piqab/charts",
+		"  key: value",
+		"end",
+	}, "\n")
+	sc, issues := Parse(text, nil)
+	if len(issues) > 0 {
+		t.Fatalf("строка %d: %v", issues[0].Line, issues[0].Err)
+	}
+	if len(sc.Steps) != 3 {
+		t.Fatalf("%+v", sc.Steps)
+	}
+	cr, h1, h2 := sc.Steps[0], sc.Steps[1], sc.Steps[2]
+	if cr.Kind != KindK8sCreate || cr.Args["internal"] != "true" || cr.Args["cni"] != "cilium" ||
+		cr.Args["no-kube-proxy"] != "true" || cr.Args["gateway"] != "fly1" ||
+		!strings.Contains(cr.Block, "binPath: /usr/lib/cni") {
+		t.Errorf("create: %+v", cr)
+	}
+	if h1.Kind != KindK8sHelm || h1.Name != "lab" || h1.Action != "cache" || h1.Args["chart"] != "redis" ||
+		h1.Args["repo"] != "https://charts.bitnami.com/bitnami" || h1.Args["version"] != "20.1.4" ||
+		h1.Args["namespace"] != "shop" || h1.Args["set"] != "replica.replicaCount=3,image.tag=7.2" || h1.Block != "" {
+		t.Errorf("helm: %+v", h1)
+	}
+	if h2.Kind != KindK8sHelm || h2.Action != "op" || h2.Args["repo"] != "oci://ghcr.io/piqab/charts" ||
+		!strings.Contains(h2.Block, "key: value") {
+		t.Errorf("helm oci: %+v", h2)
+	}
+	// create выше по тексту заводит кластер lab — helm-шаги.check это видит.
+	if issues := Check(sc, Refs{Hosts: map[string]bool{"hv1": true}}); len(issues) != 0 {
+		t.Errorf("check: %v", issues)
+	}
+	if issues := Check(sc, Refs{}); len(issues) != 1 {
+		t.Errorf("check без хоста: %v", issues)
+	}
+	// Блок values без cni cilium — ошибка проверки.
+	bad, issues := Parse("on hv1 k8s create lab\n  a: b\nend", nil)
+	if len(issues) != 0 {
+		t.Fatalf("разбор: %v", issues)
+	}
+	if issues := Check(bad, Refs{Hosts: map[string]bool{"hv1": true}}); len(issues) != 1 {
+		t.Errorf("блок без cilium: %v", issues)
+	}
+	for _, bad := range []string{
+		"k8s lab helm cache",
+		"k8s lab helm",
+		"k8s lab helm cache chart redis namespace \"a b\"",
+		"k8s lab helm cache chart redis badkey x",
+	} {
+		if _, issues := Parse(bad, nil); len(issues) == 0 {
+			t.Errorf("принято: %s", bad)
+		}
+	}
+}

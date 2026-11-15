@@ -255,7 +255,7 @@ var (
 	helmVersionRe  = regexp.MustCompile(`^v?[0-9A-Za-z.+_-]{1,64}$`)
 )
 
-// HelmInstallRequest — установка или обновление релиза.
+// HelmInstallRequest — install or upgrade of a release.
 type HelmInstallRequest struct {
 	RepoName  string `json:"repo_name"`
 	RepoURL   string `json:"repo_url"`
@@ -264,9 +264,13 @@ type HelmInstallRequest struct {
 	Release   string `json:"release"`
 	Namespace string `json:"namespace"`
 	Values    string `json:"values"`
+	// Set — helm's own --set parameters, each a "key=value" pair passed
+	// as a separate flag. helm applies them after the -f values file, so
+	// they override it, exactly like on the command line.
+	Set []string `json:"set,omitempty"`
 }
 
-// Validate проверяет новые имена и адрес репозитория.
+// Validate checks the names, the repository address and the --set pairs.
 func (r HelmInstallRequest) Validate() error {
 	if !dnsLabelRe.MatchString(r.Release) {
 		return msgs.Errorf("k8s.badName", r.Release)
@@ -279,6 +283,11 @@ func (r HelmInstallRequest) Validate() error {
 	}
 	if r.Version != "" && !helmVersionRe.MatchString(r.Version) {
 		return msgs.Errorf("k8s.badValue", r.Version)
+	}
+	for _, s := range r.Set {
+		if k, _, ok := strings.Cut(s, "="); !ok || strings.TrimSpace(k) == "" {
+			return msgs.Errorf("k8s.helmBadSet", s)
+		}
 	}
 	if strings.HasPrefix(r.RepoURL, "oci://") {
 		return validRepoURL(r.RepoURL)
@@ -338,9 +347,10 @@ func (m *Manager) WriteValues(namespace, release, values string) (string, error)
 	return p, nil
 }
 
-// HelmInstallCommands — шаги задания установки/обновления: репозиторий
-// (для обычного — add и update), затем upgrade --install. valuesFile —
-// путь от WriteValues (пусто — без -f).
+// HelmInstallCommands — job steps of an install/upgrade: the repository
+// (add and update for a regular one), then upgrade --install. valuesFile is
+// the path from WriteValues (empty — no -f); the Set pairs go after it as
+// --set flags, so they override the file just like on the command line.
 func (m *Manager) HelmInstallCommands(ctx context.Context, r HelmInstallRequest, valuesFile string) ([][]string, error) {
 	var out [][]string
 	if !strings.HasPrefix(r.RepoURL, "oci://") {
@@ -357,6 +367,11 @@ func (m *Manager) HelmInstallCommands(ctx context.Context, r HelmInstallRequest,
 	}
 	if valuesFile != "" {
 		args = append(args, "-f", valuesFile)
+	}
+	for _, s := range r.Set {
+		if s = strings.TrimSpace(s); s != "" {
+			args = append(args, "--set", s)
+		}
 	}
 	inst, err := m.HelmArgv(ctx, args...)
 	if err != nil {

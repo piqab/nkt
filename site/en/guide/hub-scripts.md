@@ -48,7 +48,7 @@ understands. In short:
   compose stacks, machines, profiles, files, accounts, system settings,
   certificates, `git clone`, Kubernetes clusters;
 - deployments and moves: `pipeline`, `deploy`, `migrate`;
-- clusters and Traffic Fly: `k8s … ingress|apply|wait`, `fly route`, `fly apply`.
+- clusters and Traffic Fly: `k8s … ingress|apply|helm|wait`, `fly route`, `fly apply`.
 
 ![The “Reference” tab: the “Script commands” page from the site](/screens/en/hub-script-help.png)
 

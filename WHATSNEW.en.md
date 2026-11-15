@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.24.1 — 2026-11-15
+
+- **Scripts build clusters with the internal path and Cilium values, and install Helm releases.** `on HOST k8s create` got the `internal` flag — the internal path to the shared address, like the checkbox of the “Clusters” form: the gateway comes from `gateway` (empty — the only one on the hub), and the hub derives the shared address itself (the gateway plan address, port 6443 or the one from `endpoint`). The command block up to `end` is the Helm values YAML for Cilium. The new command `k8s CLUSTER helm RELEASE chart CHART repo URL [version V] [namespace NS] [set K=V,…]` installs or upgrades any chart as a job on the cluster's first control plane: values — in the command block, single parameters — through `set` (each with its own `--set`, overriding the values); a dry run checks the cluster and the fields, and a “by rights” token is limited to its namespaces. Available wherever scripts run, MCP included (`run_script`).
+
 ## v1.24.0 — 2026-11-15
 
 - **Cluster control planes are created with the web terminal enabled.** nkt on control plane machines is installed as if the “web terminal” checkbox were ticked in the host card: debugging kubeadm, kubectl and the cluster internals with a console from the hub works right away, without SSH. Workers and load balancers are still created with the terminal off. When the build finishes off a machine from a previous attempt, the flag is updated in the record and takes effect at the next agent install or update.

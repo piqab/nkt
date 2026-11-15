@@ -23,7 +23,8 @@ func TestHelmFromFixtures(t *testing.T) {
 	if err != nil || len(h) != 3 {
 		t.Errorf("history: %v %v", h, err)
 	}
-	req := HelmInstallRequest{RepoName: "bitnami", RepoURL: "https://charts.bitnami.com/bitnami", Chart: "redis", Version: "20.1.4", Release: "cache", Namespace: "shop"}
+	req := HelmInstallRequest{RepoName: "bitnami", RepoURL: "https://charts.bitnami.com/bitnami", Chart: "redis", Version: "20.1.4", Release: "cache", Namespace: "shop",
+		Set: []string{"replica.replicaCount=3", " master.count=1 "}}
 	if err := req.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +39,11 @@ func TestHelmFromFixtures(t *testing.T) {
 	last := strings.Join(cmds[2], " ")
 	if !strings.HasPrefix(last, "helm upgrade --install cache bitnami/redis -n shop --create-namespace") || !strings.Contains(last, "-f "+vf) || !strings.Contains(last, "--kubeconfig /etc/rancher/k3s/k3s.yaml") {
 		t.Errorf("install: %s", last)
+	}
+	// The --set pairs come after the values file — helm gives them the
+	// higher priority, and each pair is its own flag (trimmed).
+	if !strings.Contains(last, "-f "+vf+" --set replica.replicaCount=3 --set master.count=1") {
+		t.Errorf("set: %s", last)
 	}
 	m.SaveSource(req)
 	if src := m.Source(HelmRelease{Name: "cache", Namespace: "shop", Chart: "redis-20.1.4"}); src.RepoName != "bitnami" || src.Chart != "redis" {
@@ -104,6 +110,8 @@ func TestHelmValidate(t *testing.T) {
 		{RepoName: "r", RepoURL: "https://x.example", Chart: "../c", Release: "rel", Namespace: "ns"},
 		{RepoName: "r", RepoURL: "https://x.example", Chart: "c", Release: "Rel", Namespace: "ns"},
 		{RepoName: "r", RepoURL: "https://x.example", Chart: "c", Release: "rel", Namespace: "ns", Version: "1 --set x=y"},
+		{RepoName: "r", RepoURL: "https://x.example", Chart: "c", Release: "rel", Namespace: "ns", Set: []string{"novalue"}},
+		{RepoName: "r", RepoURL: "https://x.example", Chart: "c", Release: "rel", Namespace: "ns", Set: []string{"=x"}},
 	}
 	for _, b := range bad {
 		if err := b.Validate(); err == nil {

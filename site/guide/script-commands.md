@@ -60,6 +60,7 @@ title: Команды сценариев
 |---|---|
 | [`k8s КЛАСТЕР ingress cilium`](#cmd-k8s-ingress) | Включает Ingress-контроллер Cilium в режиме host network: Envoy слушает порт на каждом узле (без LoadBalancer), Cilium — контроллер по умолчанию; версия Cilium не меняется. |
 | [`k8s КЛАСТЕР apply`](#cmd-k8s-apply) | Применяет манифест (kubectl apply) на первом control plane — как «Манифесты» раздела «Кластеры»; в сухом прогоне — kubectl diff. |
+| [`k8s КЛАСТЕР helm RELEASE chart ЧАРТ`](#cmd-k8s-helm) | Ставит или обновляет helm-релиз на первом control plane кластера заданием (helm upgrade --install) — та же установка чарта, что в разделе «Kubernetes» кластера; блок команды — YAML с values, set — параметры helm (--set, перекрывают values). |
 | [`k8s КЛАСТЕР wait deployment ИМЯ`](#cmd-k8s-wait) | Ждёт, пока все реплики deployment готовы. |
 | [`fly route ИД ВИД`](#cmd-fly-route) | Создаёт или обновляет маршрут Traffic Fly и применяет его — как блок fly: конвейера: новый записывается и применяется, у существующего цели меняются плавно (новые добавляются и проверяются, прежние выводятся). |
 | [`fly apply`](#cmd-fly-apply) | Применяет карту Traffic Fly — как «Применить»; в сухом прогоне — сухой прогон применения. |
@@ -422,9 +423,15 @@ on web1 cert renew example.org
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]` {#cmd-k8s-create}
+### `on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]` {#cmd-k8s-create}
 
 Создаёт кластер Kubernetes на виртуалках хоста — как «новый кластер» в списке хостов: машины из облачного образа с nkt, control plane, присоединение узлов, ожидание Ready, проброс и kubeconfig (скачивается на хабе в карточке кластера).
+
+```
+on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]
+  [values Cilium построчно
+end]
+```
 
 | Аргумент | Обязательный | Что это |
 |---|---|---|
@@ -434,11 +441,12 @@ on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 | `image` |  | образ из каталога хоста (по умолчанию ubuntu-24.04) |
 | `cpu / mem / disk` |  | размеры каждой машины: ядра, память в МБ, диск в ГБ (2 / 4096 / 30) |
 | `network / bridge` |  | на одном хосте — имя сети libvirt; при размещении по хостам — режим сети между хостами: nat (один хост), bridge (мост хоста: bridge МОСТ для всех или «bridge …» в строке хоста), macvtap (машина включена в устройство хоста: nic УСТРОЙСТВО для всех или «nic …» в строке хоста) или wireguard (туннель, хаб настроит сам) |
-| `cni` |  | cilium — Cilium вместо flannel (ставится после control plane); flannel — как у варианта по умолчанию |
+| `cni` |  | cilium — Cilium вместо flannel (ставится после control plane); flannel — как у варианта по умолчанию. Блок команды (строки до end) — YAML с Helm values для Cilium; без блока значения не переопределяются |
 | `no-kube-proxy` |  | с cilium: заменить kube-proxy на Cilium (eBPF) |
 | `version` |  | минорная версия Kubernetes: у kubeadm — ветка pkgs.k8s.io, у k3s — канал v1.36; по умолчанию — актуальная stable |
 | `endpoint` |  | общий адрес control plane для kubeadm — «ХОСТ» или «ХОСТ:ПОРТ» (порт по умолчанию 6443): по нему узлы входят в кластер, он попадает в сертификат API каждого узла и в kubeconfig; при трёх control plane обязателен, у k3s такого адреса нет. Не путать с endpoint внутри строки размещения — там адрес хоста для соседей по туннелю |
 | `gateway` |  | шлюз Traffic Fly, на котором слушать общий адрес (имя или адрес edge из списка nkt); пусто — единственный шлюз на хабе. Слушатель ставится, только когда адрес endpoint'а указывает на шлюз: совпадает с ним или резолвится в него; свой VIP или внешний балансировщик хаб не трогает |
+| `internal` |  | внутренний путь к общему адресу (галочка «внутренний путь» формы раздела «Кластеры»): трафик узлов идёт на план-адрес шлюза через их туннели и не выходит во внешнюю сеть. Шлюз — из gateway (пусто — единственный на хабе); общий адрес хаб выводит сам — план-адрес шлюза и порт 6443, а с endpoint — порт из него. Только для kubeadm |
 | `allow` |  | кому ещё, кроме узлов кластера, разрешён вход на общий адрес — адреса и сети IPv4 через запятую (203.0.113.0/24,198.51.100.7). Хаб добавляет наружные адреса хостов размещения; без единого адреса в списке задание не станет открывать API кластера всему интернету |
 | `addon` |  | дополнение поверх готового кластера: longhorn (блочные тома с репликами по узлам, StorageClass по умолчанию) — версия чарта через «=», без неё — версия nkt по умолчанию |
 | `expose` |  | пробросить порты 6443, 80, 443 хоста в control plane |
@@ -569,6 +577,32 @@ kind: Namespace
 metadata:
   name: demo
 end
+```
+
+### `k8s КЛАСТЕР helm RELEASE chart ЧАРТ [repo URL] [version ВЕРСИЯ] [namespace NS] [set К=З[,К=З…]]` {#cmd-k8s-helm}
+
+Ставит или обновляет helm-релиз на первом control plane кластера заданием (helm upgrade --install) — та же установка чарта, что в разделе «Kubernetes» кластера; блок команды — YAML с values, set — параметры helm (--set, перекрывают values). В сухом прогоне — проверка кластера и полей.
+
+```
+k8s КЛАСТЕР helm RELEASE chart ЧАРТ [repo URL] [version ВЕРСИЯ] [namespace NS] [set К=З[,К=З…]]
+  [values YAML построчно
+end]
+```
+
+| Аргумент | Обязательный | Что это |
+|---|---|---|
+| `КЛАСТЕР` | ✓ | имя кластера в хабе или из «k8s create» выше; действия идут на первый control plane |
+| `RELEASE` | ✓ | имя релиза |
+| `chart` |  | имя чарта (обязательно) |
+| `repo` |  | репозиторий чарта (обязателен): https://… — обычная ссылка (локальное имя репозитория выводится из адреса), или oci://… — OCI-чарт |
+| `version` |  | версия чарта (пусто — последняя) |
+| `namespace` |  | namespace релиза (по умолчанию default) |
+| `set` |  | параметры helm: пары ключ=значение через запятую — каждая уходит отдельным --set и перекрывает values из блока |
+
+Пример:
+
+```
+k8s lab helm cache chart redis repo https://charts.bitnami.com/bitnami namespace shop set replica.replicaCount=3
 ```
 
 ### `k8s КЛАСТЕР wait deployment ИМЯ [namespace NS] [ДЛИТЕЛЬНОСТЬ]` {#cmd-k8s-wait}

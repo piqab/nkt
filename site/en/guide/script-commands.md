@@ -60,6 +60,7 @@ Every command of the hub script language — the same ones “Check”, the “R
 |---|---|
 | [`k8s CLUSTER ingress cilium`](#cmd-k8s-ingress) | Turns on the Cilium Ingress controller in host network mode: Envoy listens on the port on every node (no LoadBalancer), Cilium is the default controller; the Cilium version stays the same. |
 | [`k8s CLUSTER apply`](#cmd-k8s-apply) | Applies a manifest (kubectl apply) on the first control plane — like “Manifests” in “Clusters”; in a dry run — kubectl diff. |
+| [`k8s CLUSTER helm RELEASE chart CHART`](#cmd-k8s-helm) | Installs or upgrades a Helm release as a job on the cluster's first control plane (helm upgrade --install) — the same chart install the cluster's “Kubernetes” section does; the command block is the values YAML, set carries helm's own parameters (--set, they override the values). |
 | [`k8s CLUSTER wait deployment NAME`](#cmd-k8s-wait) | Waits until all replicas of a deployment are ready. |
 | [`fly route ID KIND`](#cmd-fly-route) | Creates or updates a Traffic Fly route and applies it — like a pipeline's fly: block: a new one is saved and applied, an existing one changes targets smoothly (new ones added and checked, old ones drained). |
 | [`fly apply`](#cmd-fly-apply) | Applies the Traffic Fly map — like “Apply”; in a dry run — the apply dry run. |
@@ -422,9 +423,15 @@ Example:
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 ```
 
-### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [gateway GATEWAY] [allow ADDR[,ADDR…]] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
+### `on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [gateway GATEWAY] [internal] [allow ADDR[,ADDR…]] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]` {#cmd-k8s-create}
 
 Creates a Kubernetes cluster on the host's virtual machines — like “new cluster” in the host list: machines from a cloud image with nkt, control plane, joining nodes, waiting for Ready, port forward and kubeconfig (downloadable on the hub in the cluster card).
+
+```
+on HOST k8s create NAME [flavor k3s|kubeadm] [nodes single|1+N|3+N|"HOST: cp N, w N, host cp|w, bridge BRIDGE, endpoint ADDR; …"] [image IMAGE] [cpu N] [mem MB] [disk GB] [network NETWORK|nat|bridge|wireguard] [bridge BRIDGE] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint HOST[:PORT]] [gateway GATEWAY] [internal] [allow ADDR[,ADDR…]] [addon longhorn[=VERSION]] [expose] [api PORT] [http PORT] [https PORT]
+  [Cilium values line by line
+end]
+```
 
 | Argument | Required | What it is |
 |---|---|---|
@@ -434,11 +441,12 @@ Creates a Kubernetes cluster on the host's virtual machines — like “new clus
 | `image` |  | an image from the host catalog (default ubuntu-24.04) |
 | `cpu / mem / disk` |  | size of every machine: cores, memory in MB, disk in GB (2 / 4096 / 30) |
 | `network / bridge` |  | on one host — a libvirt network name; with a placement — the network mode between hosts: nat (one host), bridge (a host bridge: bridge BRIDGE for all or “bridge …” in a host's part), macvtap (the machine is plugged into a host device: nic DEVICE for all or “nic …” in a host's part) or wireguard (a tunnel the hub sets up itself) |
-| `cni` |  | cilium — Cilium instead of flannel (installed after the control plane); flannel — the flavor default |
+| `cni` |  | cilium — Cilium instead of flannel (installed after the control plane); flannel — the flavor default. The command block (lines up to end) is the Helm values YAML for Cilium; without a block nothing is overridden |
 | `no-kube-proxy` |  | with cilium: replace kube-proxy with Cilium (eBPF) |
 | `version` |  | the Kubernetes minor version: the pkgs.k8s.io branch for kubeadm, the v1.36 channel for k3s; default — the current stable |
 | `endpoint` |  | the shared control plane address for kubeadm — “HOST” or “HOST:PORT” (port 6443 by default): nodes join the cluster through it, it goes into the API certificate of every node and into the kubeconfig; required with three control planes, k3s has no such address. Not to be confused with the endpoint inside a placement string — that one is the host address for WireGuard peers |
 | `gateway` |  | the Traffic Fly gateway that should listen for the shared address (an edge name or address from the nkt list); empty means the only gateway on the hub. The listener is created only when the endpoint address points at the gateway — it matches it or resolves to it; a VIP or an external load balancer of somebody else's is left alone |
+| `internal` |  | the internal path to the shared address (the “internal path” checkbox of the “Clusters” form): node traffic goes to the gateway's plan address through the nodes' tunnels and never leaves for the external network. The gateway comes from gateway (empty — the only one on the hub); the hub derives the shared address itself — the gateway plan address and port 6443, or the port of endpoint when given. kubeadm only |
 | `allow` |  | who else besides the cluster nodes may reach the shared address — IPv4 addresses and networks separated by commas (203.0.113.0/24,198.51.100.7). The hub adds the external addresses of the placement hosts; with an empty list the job refuses to open the cluster API to the whole internet |
 | `addon` |  | an add-on on top of the ready cluster: longhorn (block volumes replicated across nodes, the default StorageClass) — the chart version after “=”, without it the nkt default version |
 | `expose` |  | forward host ports 6443, 80, 443 to the control plane |
@@ -569,6 +577,32 @@ kind: Namespace
 metadata:
   name: demo
 end
+```
+
+### `k8s CLUSTER helm RELEASE chart CHART [repo URL] [version VERSION] [namespace NS] [set K=V[,K=V…]]` {#cmd-k8s-helm}
+
+Installs or upgrades a Helm release as a job on the cluster's first control plane (helm upgrade --install) — the same chart install the cluster's “Kubernetes” section does; the command block is the values YAML, set carries helm's own parameters (--set, they override the values). A dry run checks the cluster and the fields.
+
+```
+k8s CLUSTER helm RELEASE chart CHART [repo URL] [version VERSION] [namespace NS] [set K=V[,K=V…]]
+  [values YAML line by line
+end]
+```
+
+| Argument | Required | What it is |
+|---|---|---|
+| `CLUSTER` | ✓ | a cluster name on the hub or from “k8s create” above; actions go to the first control plane |
+| `RELEASE` | ✓ | the release name |
+| `chart` |  | the chart name (required) |
+| `repo` |  | the chart repository (required): https://… — a regular URL (the local repository name is derived from the address), or oci://… — an OCI chart |
+| `version` |  | the chart version (empty — latest) |
+| `namespace` |  | the release namespace (default by default) |
+| `set` |  | helm parameters: key=value pairs separated by commas — each goes as its own --set and overrides the block values |
+
+Example:
+
+```
+k8s lab helm cache chart redis repo https://charts.bitnami.com/bitnami namespace shop set replica.replicaCount=3
 ```
 
 ### `k8s CLUSTER wait deployment NAME [namespace NS] [DURATION]` {#cmd-k8s-wait}

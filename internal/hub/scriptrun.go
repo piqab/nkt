@@ -279,6 +279,8 @@ func (r *ScriptRunner) step(ctx context.Context, jc *jobs.Context, p *ScriptRunP
 		return r.k8sIngress(ctx, jc, done, st, false)
 	case script.KindK8sApply:
 		return r.k8sApply(ctx, jc, done, st, false)
+	case script.KindK8sHelm:
+		return r.k8sHelm(ctx, jc, done, st, false)
 	case script.KindK8sWait:
 		return r.k8sWait(ctx, jc, done, st, false)
 	case script.KindFlyRoute:
@@ -640,6 +642,8 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 		return r.k8sIngress(ctx, jc, done, st, true)
 	case script.KindK8sApply:
 		return r.k8sApply(ctx, jc, done, st, true)
+	case script.KindK8sHelm:
+		return r.k8sHelm(ctx, jc, done, st, true)
 	case script.KindK8sWait:
 		return r.k8sWait(ctx, jc, done, st, true)
 	case script.KindFlyRoute:
@@ -1194,6 +1198,20 @@ func (r *ScriptRunner) clusterSpecFromStep(ctx context.Context, done *scriptRunR
 			}
 		}
 	}
+	if spec.EndpointInternal {
+		if spec.Endpoint == "" {
+			// The operator didn't write a shared address: the internal
+			// path is the gateway plan address anyway, so a placeholder
+			// carries the default port into applyInternalEndpoint, which
+			// replaces the host with the plan address (or fails with the
+			// reason the gateway can't be told).
+			spec.Endpoint = "internal:6443"
+		}
+		cr := &ClusterRunner{m: r.m, s: r.s}
+		if err := cr.applyInternalEndpoint(ctx, &spec); err != nil {
+			return spec, err
+		}
+	}
 	if !script.IsPlacement(st.Args["nodes"]) {
 		return spec, spec.Validate()
 	}
@@ -1277,7 +1295,12 @@ func clusterSpecFromArgs(h store.Host, st script.Step) (ClusterSpec, error) {
 	if st.Args["cni"] == "cilium" {
 		spec.CNI = "cilium"
 		spec.KubeProxyReplacement = st.Args["no-kube-proxy"] == "true"
+		// The optional command block is the Helm values YAML for Cilium —
+		// the script file carries it the same way "k8s apply" carries a
+		// manifest. Check rejects a block without cni cilium.
+		spec.CiliumValues = st.Block
 	}
+	spec.EndpointInternal = st.Args["internal"] == "true"
 	spec.K8sVersion = st.Args["version"]
 	// endpoint — общий адрес control plane (kubeadm); проверка формы и
 	// порта по умолчанию — за Validate.

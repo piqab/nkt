@@ -55,6 +55,7 @@ const (
 	KindK8sIngress   Kind = "k8s.ingress"
 	KindK8sApply     Kind = "k8s.apply"
 	KindK8sWait      Kind = "k8s.wait"
+	KindK8sHelm      Kind = "k8s.helm"
 	KindFlyRoute     Kind = "fly.route"
 	KindFlyApply     Kind = "fly.apply"
 	KindFlyOwn       Kind = "fly.own"
@@ -280,7 +281,7 @@ var Commands = []CommandDoc{
 		Example: "on web1 git clone https://github.com/org/app.git /srv/app branch main token ask",
 	},
 	{
-		Kind: KindK8sCreate, OnHost: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|\"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …\"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]",
+		Kind: KindK8sCreate, OnHost: true, Block: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|\"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …\"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [version 1.34] [endpoint ХОСТ[:ПОРТ]] [gateway ШЛЮЗ] [internal] [allow АДРЕС[,АДРЕС…]] [addon longhorn[=ВЕРСИЯ]] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]\n  [values Cilium построчно\nend]",
 		Summary: "script.doc.k8sCreate",
 		Args: []ArgDoc{
 			{Name: "ИМЯ", Required: true, Desc: "script.doc.k8sCreate.name"},
@@ -294,6 +295,7 @@ var Commands = []CommandDoc{
 			{Name: "version", Desc: "script.doc.k8sCreate.version"},
 			{Name: "endpoint", Desc: "script.doc.k8sCreate.endpoint"},
 			{Name: "gateway", Desc: "script.doc.k8sCreate.gateway"},
+			{Name: "internal", Desc: "script.doc.k8sCreate.internal"},
 			{Name: "allow", Desc: "script.doc.k8sCreate.allow"},
 			{Name: "addon", Desc: "script.doc.k8sCreate.addon"},
 			{Name: "expose", Desc: "script.doc.k8sCreate.expose"},
@@ -352,6 +354,20 @@ var Commands = []CommandDoc{
 		Summary: "script.doc.k8sApply", Block: true,
 		Args:    []ArgDoc{{Name: "КЛАСТЕР", Required: true, Desc: "script.doc.k8sCluster"}},
 		Example: "k8s lab apply\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: demo\nend",
+	},
+	{
+		Kind: KindK8sHelm, Syntax: "k8s КЛАСТЕР helm RELEASE chart ЧАРТ [repo URL] [version ВЕРСИЯ] [namespace NS] [set К=З[,К=З…]]\n  [values YAML построчно\nend]",
+		Summary: "script.doc.k8sHelm", Block: true,
+		Args: []ArgDoc{
+			{Name: "КЛАСТЕР", Required: true, Desc: "script.doc.k8sCluster"},
+			{Name: "RELEASE", Required: true, Desc: "script.doc.k8sHelm.release"},
+			{Name: "chart", Desc: "script.doc.k8sHelm.chart"},
+			{Name: "repo", Desc: "script.doc.k8sHelm.repo"},
+			{Name: "version", Desc: "script.doc.k8sHelm.version"},
+			{Name: "namespace", Desc: "script.doc.k8sHelm.namespace"},
+			{Name: "set", Desc: "script.doc.k8sHelm.set"},
+		},
+		Example: "k8s lab helm cache chart redis repo https://charts.bitnami.com/bitnami namespace shop set replica.replicaCount=3",
 	},
 	{
 		Kind: KindK8sWait, Syntax: "k8s КЛАСТЕР wait deployment ИМЯ [namespace NS] [ДЛИТЕЛЬНОСТЬ]",
@@ -522,6 +538,10 @@ on web2 packages remove telnet
 var englishTerms = [][2]string{
 	{"КОМАНДА", "COMMAND"},
 	{"compose-файл построчно", "compose file line by line"},
+	{"values Cilium построчно", "Cilium values line by line"},
+	{"values YAML построчно", "values YAML line by line"},
+	{"ЧАРТ", "CHART"},
+	{"К=З", "K=V"},
 	{"описание конвейера построчно", "pipeline description line by line"},
 	{"Forgejo за Traffic Fly: выкладка и перенос на другой хост", "Forgejo behind Traffic Fly: deploy and move to another host"},
 	{"хост, где Forgejo будет выложен сначала", "host where Forgejo is deployed first"},
