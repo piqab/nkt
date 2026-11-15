@@ -535,7 +535,6 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/pipelines/{id}/start", s.handlePipelineStart)
 					r.Post("/hub/pipelines/{id}/stop", s.handlePipelineStop)
 					r.Get("/hub/pipelines/{id}/deployments", s.handlePipelineDeployments)
-					r.Post("/hub/k8s/helm/install", s.handleHelmMulti)
 					r.Post("/hub/k8s/manifests/blocks", s.handleManifestBlocks)
 					r.Post("/hub/k8s/manifests/apply", s.handleManifestApply)
 

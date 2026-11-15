@@ -323,20 +323,14 @@ curl -sS -X POST -H "Authorization: Bearer $NKT_TOKEN" -H 'Content-Type: applica
 Оператор ставит администратор: у него ClusterRole, CRD и свой namespace.
 Токену это недоступно.
 
-**Helm в кластеры** (раздел «Кластеры» или API, заданием):
-
-```sh
-curl -sS -X POST -H "Authorization: Bearer $NKT_ADMIN" -H 'Content-Type: application/json' -d '{
-  "clusters": [3],
-  "release": {"repo_url": "oci://ghcr.io/piqab/charts", "chart": "rgstroperator", "version": "0.5.1",
-              "release": "rgstroperator", "namespace": "rgstroperator-system"}
-}' https://hub.example.com/api/hub/k8s/helm/install
-```
-
-Или **манифестом** — «Манифесты» раздела «Кластеры» с содержимым
+**Манифестом** — «Манифесты» раздела «Кластеры» с содержимым
 `https://github.com/piqab/rgstroperator/releases/latest/download/operator.yaml`.
 Через API — `POST /api/hub/k8s/manifests/apply?job=1`
 (`{"name","note","content","clusters"}`).
+
+**Через Helm** — в разделе «Kubernetes» кластера (helm на первом control
+plane): репозиторий `oci://ghcr.io/piqab/charts`, чарт `rgstroperator`,
+релиз `rgstroperator` в namespace `rgstroperator-system`.
 
 ### Registry
 

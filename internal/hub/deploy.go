@@ -286,12 +286,11 @@ func (r *DeployRunner) installHelm(ctx context.Context, jc *jobs.Context, spec d
 	if err != nil {
 		return err
 	}
-	runner := &HelmMultiRunner{m: s.hub}
 	waiter := &GroupApplyRunner{m: s.hub}
 	failed := 0
 	for i, cl := range clusters {
 		jc.StepKey(2+i, 2+len(clusters), "deploy.stepHelm", cl.Name)
-		if err := runner.installOn(ctx, jc, waiter, cl.ID, rel); err != nil {
+		if err := helmInstallOn(ctx, s.hub, jc, waiter, cl.ID, rel); err != nil {
 			failed++
 			jc.Log("deploy.clusterFailed", cl.Name, msgs.Localize(jc.Lang(), err))
 		}
@@ -300,6 +299,25 @@ func (r *DeployRunner) installHelm(ctx context.Context, jc *jobs.Context, spec d
 		return msgs.Errorf("deploy.failedClusters", failed, len(clusters))
 	}
 	return nil
+}
+
+// helmInstallOn installs (upgrades) one Helm release as a job on the
+// cluster's first control plane and waits for that job. ClusterHosts sorts
+// control planes first, so hosts[0] is the cp. An error in one cluster is
+// returned to the caller, which counts failures without stopping the rest.
+func helmInstallOn(ctx context.Context, m *Manager, jc *jobs.Context, waiter *GroupApplyRunner, clusterID int64, rel k8s.HelmInstallRequest) error {
+	hosts, err := m.db.ClusterHosts(ctx, clusterID)
+	if err != nil || len(hosts) == 0 {
+		return msgs.Errorf("hub.clusterNoNodes")
+	}
+	cp := hosts[0]
+	var started struct {
+		JobID int64 `json:"job_id"`
+	}
+	if _, err := m.HostAPI(ctx, cp.ID, "POST", "/api/k8s/helm/install?job=1", rel, &started); err != nil {
+		return err
+	}
+	return waiter.waitHostJob(ctx, jc, cp, started.JobID)
 }
 
 // SetYAMLKey ставит значение по пути a.b.c (карты создаются по дороге).

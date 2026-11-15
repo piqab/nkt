@@ -339,22 +339,17 @@ The full list with arguments is under "Plugins" → rgstr → **"For agents"**.
 An administrator installs the operator: it brings a ClusterRole, a CRD and
 its own namespace. A token cannot do this.
 
-**Helm into clusters** — from the "Clusters" section or the API, as a job:
-
-```sh
-curl -sS -X POST -H "Authorization: Bearer $NKT_ADMIN" -H 'Content-Type: application/json' -d '{
-  "clusters": [3],
-  "release": {"repo_url": "oci://ghcr.io/piqab/charts", "chart": "rgstroperator", "version": "0.5.1",
-              "release": "rgstroperator", "namespace": "rgstroperator-system"}
-}' https://hub.example.com/api/hub/k8s/helm/install
-```
-
-**Or as a manifest:**
+**As a manifest:**
 
 - In the UI: "Clusters" → "Manifests", with the content of
   `https://github.com/piqab/rgstroperator/releases/latest/download/operator.yaml`.
 - Through the API: `POST /api/hub/k8s/manifests/apply?job=1`
   (`{"name","note","content","clusters"}`).
+
+**Via Helm** — in the cluster's "Kubernetes" section (helm on the first
+control plane): repository `oci://ghcr.io/piqab/charts`, chart
+`rgstroperator`, release `rgstroperator` into the namespace
+`rgstroperator-system`.
 
 ### Registry
 

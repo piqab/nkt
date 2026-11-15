@@ -960,7 +960,6 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindClusterCreate, hub.NewClusterRunner(server))
 	r.jobs.Register(hub.KindClusterDelete, hub.NewClusterDeleteRunner(server))
 	r.jobs.Register(hub.KindClusterUpgrade, hub.NewClusterUpgradeRunner(manager))
-	r.jobs.Register(hub.KindHelmMulti, hub.NewHelmMultiRunner(manager))
 	r.jobs.Register(hub.KindClusterAddon, hub.NewClusterAddonRunner(manager))
 	r.jobs.Register(hub.KindDeploy, hub.NewDeployRunner(server))
 	// Бан и разбан адресов fail2ban на всех хостах.

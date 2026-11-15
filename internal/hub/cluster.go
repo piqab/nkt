@@ -1362,6 +1362,12 @@ func exposeSummary(s ClusterSpec) string {
 	return strings.Join(parts, ", ")
 }
 
+// provisionTerminal turns the web terminal on for control planes only:
+// that is where kubeadm, kubectl and the cluster internals get debugged
+// from the hub. Workers and load balancers stay with the terminal off —
+// one less open surface on machines nobody shells into.
+func provisionTerminal(role string) bool { return role == RoleControlPlane }
+
 // createNode создаёт машину заданием VMProvision и ждёт его.
 func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec ClusterSpec, clusterID int64, nd clusterNode, done *clusterResume) error {
 	host, err := r.m.db.HostByID(ctx, nd.HostID)
@@ -1413,7 +1419,8 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindVMProvision, TitleKey: "hub.machineOnHostJobTitle", TitleArgs: []any{nd.Name, host.Name},
 		Queue: fmt.Sprintf("vm:%d", host.ID), Author: jc.Job.Author, Steps: 5,
-		Params: VMProvisionParams{HostID: host.ID, Spec: vm, InstallNKT: true, ReuseID: reuseID},
+		Params: VMProvisionParams{HostID: host.ID, Spec: vm, InstallNKT: true, ReuseID: reuseID,
+			Terminal: provisionTerminal(nd.Role)},
 	})
 	if err != nil {
 		return err

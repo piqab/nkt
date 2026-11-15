@@ -48,22 +48,29 @@ var addressRe = regexp.MustCompile(`Адрес машины: ([0-9.]+)`)
 
 // VMProvisionParams — вход задания.
 type VMProvisionParams struct {
-	// HostID — на какой машине создаётся виртуальная.
+	// HostID is the machine the virtual one is created on.
 	HostID int64 `json:"host_id"`
-	// Spec — что за машину создаём. Ключ хаба сюда дописывается уже
-	// здесь, оператор его не вводит.
+	// Spec describes the machine being created. The hub key is appended
+	// to it here; the operator never types it.
 	Spec vmcreate.Spec `json:"spec"`
-	// InstallNKT — поставить на новую машину nkt сразу после её
-	// появления. Без этого она остаётся обычным записанным хостом, на
-	// который установку запускают кнопкой.
+	// InstallNKT — install nkt on the new machine as soon as it appears.
+	// Without it the machine stays a plain listed host whose install is
+	// started by button.
 	InstallNKT bool `json:"install_nkt"`
-	// ProfileID — профиль, который применить к новой машине. Требует
-	// установленного nkt: применяет его сама машина.
+	// Terminal turns the web terminal on for the new machine
+	// (NKT_TERMINAL_ENABLED in the agent env, host.terminal_enabled in
+	// the record). The cluster build asks for it on control planes so
+	// they are debuggable from the hub right away; plain machine
+	// creation leaves it off, as before.
+	Terminal bool `json:"terminal,omitempty"`
+	// ProfileID is the profile to apply to the new machine. Requires
+	// nkt installed: the machine applies it itself.
 	ProfileID int64 `json:"profile_id,omitempty"`
-	// ReuseID — запись машины уже есть в списке (прошлая попытка создания
-	// дошла до неё или дальше): задание доводит её вместо заведения
-	// второй записи с тем же именем. Машина с живым адресом при этом не
-	// пересоздаётся: диск и домен не трогаются, доводятся поздние шаги.
+	// ReuseID — the machine record is already in the list (the previous
+	// creation attempt reached it or got further): the job finishes it
+	// off instead of making a second record with the same name. A
+	// machine with a live address is not recreated then: disk and domain
+	// stay as they are, the late steps are completed.
 	ReuseID int64 `json:"reuse_id,omitempty"`
 }
 
@@ -183,10 +190,11 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 	// 1. Запись нового хоста и ключ для него.
 	jc.StepKey(1, steps, "hub.vmStepKey")
 	if done.NewHostID == 0 {
-		// Адрес пока неизвестен — машины ещё нет. Ставится заглушка, а
-		// настоящий адрес запишется на шаге 3: без записи негде взять
-		// ключ, который должен попасть в машину при первом запуске.
-		id, key, err := r.m.AddHostGenerated(ctx, p.Spec.Name, "0.0.0.0", 22, p.Spec.User, false)
+		// The address isn't known yet — the machine doesn't exist. A
+		// placeholder is set, and step 3 writes the real address: without
+		// the record there's nowhere to take the key that must get into
+		// the machine on first boot.
+		id, key, err := r.m.AddHostGenerated(ctx, p.Spec.Name, "0.0.0.0", 22, p.Spec.User, p.Terminal)
 		if err != nil {
 			return msgs.Errorf("hub.savingNewHost", err)
 		}
@@ -293,7 +301,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) (err erro
 		return nil
 	}
 	if err := r.m.UpdateHost(ctx, done.NewHostID, p.Spec.Name, done.Address, 22, p.Spec.User,
-		store.HostAuthKey, "", false); err != nil {
+		store.HostAuthKey, "", p.Terminal); err != nil {
 		return msgs.Errorf("hub.savingAddress", err)
 	}
 	jc.Log("hub.machineReachableHostListed", p.Spec.Name, done.Address)
