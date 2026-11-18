@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/piqab/nkt/internal/api"
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/files"
@@ -784,6 +785,15 @@ func (s *Server) ForwardHandler() http.Handler {
 		r2.URL.Path = "/api/k8s/pf/" + token + rest
 		r2.URL.RawPath = ""
 		r2.Header.Set("X-NKT-Forward-Prefix", prefix)
+		// Браузер сидит на адресе пробросов хаба, а приложение — за
+		// прокси хоста: свой внешний host:port хаб передаёт заголовком,
+		// чтобы Host у приложения совпал с адресом страницы. Не поднят
+		// полным URL — заголовок снимается, клиентский не проходит.
+		if ext := api.ForwardExtHost(s.cfg.ForwardBase()); ext != "" {
+			r2.Header.Set("X-NKT-Forward-Host", ext)
+		} else {
+			r2.Header.Del("X-NKT-Forward-Host")
+		}
 		if host == "local" {
 			if s.local == nil {
 				http.NotFound(w, r)

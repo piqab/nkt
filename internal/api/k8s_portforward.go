@@ -237,7 +237,7 @@ func (s *Server) handleK8sPortForwardStart(w http.ResponseWriter, r *http.Reques
 	user := auth.Username(r.Context())
 	sess := &pfSession{Token: hex.EncodeToString(buf), Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, Port: port, User: user,
 		Created: time.Now(), LastUsed: time.Now(), local: local, cmd: cmd}
-	sess.proxy = pfProxy(local, port, forwardExtHost(s.cfg.ForwardBase()))
+	sess.proxy = pfProxy(local, port, ForwardExtHost(s.cfg.ForwardBase()))
 	s.pf.add(sess)
 	s.db.Audit(r.Context(), user, "k8s.portforward", t.Kind+" "+t.Namespace+"/"+t.Name+":"+strconv.Itoa(port), "ok", "")
 	writeJSON(w, http.StatusOK, map[string]any{"token": sess.Token, "path": "/k8s/pf/" + sess.Token + "/"})
@@ -339,11 +339,13 @@ func appCookies(h string) string {
 	return strings.Join(keep, "; ")
 }
 
-// forwardExtHost — host:port отдельного адреса пробросов, каким его видит
+// ForwardExtHost — host:port отдельного адреса пробросов, каким его видит
 // браузер (ForwardBase полным URL); «:порт» или пусто — хоста сервер не
 // знает, заголовок Host остаётся синтетическим. Значение — только из
 // конфигурации: Host из запроса клиента кормить приложению нельзя.
-func forwardExtHost(base string) string {
+// Экспортирован для хаба: проксируя проброс на хост, хаб передаёт свой
+// адрес этим же значением в X-NKT-Forward-Host.
+func ForwardExtHost(base string) string {
 	if base == "" || strings.HasPrefix(base, ":") {
 		return ""
 	}
@@ -364,9 +366,16 @@ func pfProxy(local, port int, extHost string) *httputil.ReverseProxy {
 			pr.Out.Host = "127.0.0.1:" + strconv.Itoa(port)
 			// Вне песочницы приложение видит тот же адрес, что и
 			// браузер: его логика «дефолтного порта» (редиректы,
-			// канонические URL) совпадает с адресом страницы.
-			if !mode.sandbox && extHost != "" {
-				pr.Out.Host = extHost
+			// канонические URL) совпадает с адресом страницы. Когда
+			// проброс маршрутизирован хабом, браузер сидит на адресе
+			// хаба — его передаёт X-NKT-Forward-Host (ставит хаб,
+			// создание пробросов доступно только админу).
+			host := extHost
+			if h := pr.In.Header.Get("X-NKT-Forward-Host"); !mode.sandbox && h != "" {
+				host = h
+			}
+			if !mode.sandbox && host != "" {
+				pr.Out.Host = host
 			}
 			pr.Out.Header.Del("Authorization")
 			if c := appCookies(pr.In.Header.Get("Cookie")); c != "" && !mode.sandbox {

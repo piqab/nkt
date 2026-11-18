@@ -53,6 +53,23 @@ func TestPortForwardProxy(t *testing.T) {
 	if rec2.Header().Get("Content-Security-Policy") != "" {
 		t.Errorf("на адресе пробросов песочницы быть не должно: %v", rec2.Header())
 	}
+	// Хаб маршрутизировал проброс и передал свой внешний адрес: он побеждает
+	// конфигурацию хоста — приложение видит адрес страницы браузера.
+	req3 := httptest.NewRequest("GET", "/f/0123456789abcdef0123456789abcdef/app/", nil)
+	req3.Header.Set("X-NKT-Forward-Host", "hub.example:9446")
+	rec3 := httptest.NewRecorder()
+	s.ForwardHandler().ServeHTTP(rec3, req3)
+	if rec3.Code != 200 || gotHost != "hub.example:9446" {
+		t.Fatalf("заголовок хаба: code %d host %q", rec3.Code, gotHost)
+	}
+	// В песочнице заголовок не действует: Host синтетический.
+	req4 := httptest.NewRequest("GET", "/api/k8s/pf/0123456789abcdef0123456789abcdef/app/", nil)
+	req4.Header.Set("X-NKT-Forward-Host", "hub.example:9446")
+	rec4 := httptest.NewRecorder()
+	r.ServeHTTP(rec4, req4)
+	if rec4.Code != 200 || gotHost != "127.0.0.1:80" {
+		t.Fatalf("заголовок в песочнице: code %d host %q", rec4.Code, gotHost)
+	}
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/k8s/pf/0123456789abcdef0123456789abcdef", nil))
 	if rec.Code != http.StatusNotFound || rec.Header().Get("Location") != "" {

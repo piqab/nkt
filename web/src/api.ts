@@ -53,6 +53,12 @@ export const hostScope: { id: number | null } = { id: null }
  */
 export const clusterAgentScope: { id: number | null } = { id: null }
 
+/** Host id of the cluster's first control plane while the cluster
+ * "Kubernetes" window is open: port-forward links on the hub's forward
+ * address route by host id, and the browser cannot derive it from the
+ * agent-scoped calls. Same live-scope pattern as clusterAgentScope. */
+export const clusterCpHostId: { id: number | null } = { id: null }
+
 /** Sentinel hostScope.id for the pinned "localhost" row — the machine the
  * hub itself runs on (internal/hub/handlers.go's localHostID). Real hosts
  * autoincrement from 1 in the hub's own db, so -1 never collides; routed

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Dropdown, Input, InputNumber, Select, Space } from 'antd'
 import { CopyOutlined, MoreOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { LOCAL_HOST_ID, api, apiURL, hostScope, qs, useApi } from '../api'
+import { LOCAL_HOST_ID, api, apiURL, clusterCpHostId, hostScope, qs, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, CodeEditor, Loading, Modal, formatRelative } from './ui'
 import { confirmAction } from './confirm'
@@ -417,14 +417,15 @@ function BoundsModal({ row, id, onClose, onSave }: { row: K8sRow; id: string; on
 
 /** Ссылка на проброс: с отдельного адреса пробросов (свой origin — без
  * песочницы), если сервер его держит; иначе — по пути /api в песочнице.
- * В кластерной области — тот же адрес хаба по токену: hub-овый обработчик
- * пробросов маршрутизует по токену без id хоста, а storage-приложениям
- * песочница ломает bootstrap. */
+ * Адрес пробросов маршрутизует по id хоста, где живёт сессия и kubectl:
+ * в области хоста — этот хост, в кластерной — host id первого control
+ * plane (clusterCpHostId); без него — прежний путь /api в песочнице. */
 function forwardHref(token: string, base?: string): string {
   if (!base) return apiURL(`/k8s/pf/${token}/`)
   const origin = base.startsWith(':') ? `${location.protocol}//${location.hostname}${base}` : base
-  const path = hostScope.id !== null ? `/f/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}/${token}/` : `/f/${token}/`
-  return origin + path
+  if (hostScope.id !== null) return origin + `/f/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}/${token}/`
+  if (clusterCpHostId.id !== null) return origin + `/f/${clusterCpHostId.id}/${token}/`
+  return apiURL(`/k8s/pf/${token}/`)
 }
 
 /** forward_base из /auth/me (у хаба — его собственный адрес пробросов). */

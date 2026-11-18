@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { clusterAgentScope, useApi } from '../api'
+import { clusterAgentScope, clusterCpHostId, useApi } from '../api'
 import type { Me } from '../types'
 import { Loading, Modal } from './ui'
 import { K8sObjects } from './K8sObjects'
@@ -12,15 +12,23 @@ import { K8sObjects } from './K8sObjects'
  * кластера (internal/hub/cluster_agent.go) — кластер может лежать на
  * нескольких хостах, и у самого раздела выбранного хоста нет.
  */
-export function ClusterK8sModal({ cluster, onClose }: { cluster: { id: number; name: string }; onClose: () => void }) {
+export function ClusterK8sModal({
+  cluster,
+  onClose,
+}: {
+  cluster: { id: number; name: string; nodes?: { role: string; host_id?: number }[] }
+  onClose: () => void
+}) {
   const { t } = useTranslation()
   // The scope must be live before K8sObjects mounts and fires its first
   // fetches — child effects run before parent effects, so set it during
   // render (idempotent) and only clear it on unmount.
   clusterAgentScope.id = cluster.id
+  clusterCpHostId.id = cluster.nodes?.find((n) => n.role === 'control-plane')?.host_id ?? null
   useEffect(() => {
     return () => {
       clusterAgentScope.id = null
+      clusterCpHostId.id = null
     }
   }, [])
   const me = useApi<Me>('/auth/me')
