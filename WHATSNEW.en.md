@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.25.4 — 2026-11-18
+
+- **Kubernetes port forwards from the cluster area open on the separate forward address, and the app sees the external address in Host.** With `NKT_FORWARD_ADDR` configured on the hub, the forward link from the cluster's “Kubernetes” area goes to the forward address (`/f/<token>/`) instead of the interface path in the sandbox: applications reading localStorage/sessionStorage at startup no longer die with a SecurityError — the page has its own origin, while the nkt session stays out of its reach. Without the address everything stays as before (the sandbox), and the forward window now says so about this limitation outright. On the separate address the proxy puts the configured forward address into the app's Host header instead of the synthetic 127.0.0.1:port — the app's “default port” logic (redirects, canonical URLs) matches the page address; the value comes from the server configuration only.
+
 ## v1.25.3 — 2026-11-15
 
 - **A long script line no longer breaks the interface, and jobs got a number and a click-to-open log.** The script generated from a saved preset splits a placement that does not fit one line into per-host `set` variables, and the `k8s create` line references the join through `nodes "${NODES}"`; every command carries a comment saying what it does. In the “Jobs” list the first column is the job number, the log opens by clicking the name, and a long step line is clipped with an ellipsis (the whole text in a hint), so the “log” and “cancel” icons stay on screen; the job log header shows the job's number and its start/finish times. The “Background operations” plate clips the step line to two lines. The “Start from a ready one” list of the script editor scrolls within the window, and the editor window no longer stretches past the screen because of a long text.

@@ -321,6 +321,14 @@ into the cache and brings up the libvirt network right away.
   (`/hub/clusters/{id}/agent/…`) to the cluster's first control plane —
   no need to open the node machine itself as a host. Built-in load
   balancer machines don't count: they run no Kubernetes.
+- **Port forwarding: two modes.** The forward link opens on the separate
+  forward address (`NKT_FORWARD_ADDR`, its own origin — the app's scripts,
+  localStorage and cookies work), and when the address is not configured —
+  on the interface path in a sandbox without `allow-same-origin`: there,
+  applications reading localStorage/sessionStorage at startup die with a
+  `SecurityError`. In the sandbox the app's cookies are not kept; the nkt
+  session is out of the app's reach in both modes. On the separate address
+  the app gets in the `Host` header the same address the browser sees.
 - **Kubernetes findings across clusters** — a summary from every control
   plane.
 - **Client ingress** — a cluster node and the HTTP port of the ingress

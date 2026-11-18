@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Dropdown, Input, InputNumber, Select, Space } from 'antd'
 import { CopyOutlined, MoreOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { LOCAL_HOST_ID, api, apiURL, clusterAgentScope, hostScope, qs, useApi } from '../api'
+import { LOCAL_HOST_ID, api, apiURL, hostScope, qs, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, CodeEditor, Loading, Modal, formatRelative } from './ui'
 import { confirmAction } from './confirm'
@@ -417,10 +417,11 @@ function BoundsModal({ row, id, onClose, onSave }: { row: K8sRow; id: string; on
 
 /** Ссылка на проброс: с отдельного адреса пробросов (свой origin — без
  * песочницы), если сервер его держит; иначе — по пути /api в песочнице.
- * В кластерной области — всегда по пути /api: отдельный адрес маршрутизует
- * по id хоста, а id control plane кластера браузеру неизвестен. */
+ * В кластерной области — тот же адрес хаба по токену: hub-овый обработчик
+ * пробросов маршрутизует по токену без id хоста, а storage-приложениям
+ * песочница ломает bootstrap. */
 function forwardHref(token: string, base?: string): string {
-  if (!base || clusterAgentScope.id !== null) return apiURL(`/k8s/pf/${token}/`)
+  if (!base) return apiURL(`/k8s/pf/${token}/`)
   const origin = base.startsWith(':') ? `${location.protocol}//${location.hostname}${base}` : base
   const path = hostScope.id !== null ? `/f/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}/${token}/` : `/f/${token}/`
   return origin + path
@@ -460,6 +461,7 @@ function ForwardModal({ kind, row, id, onClose }: { kind: string; row: K8sRow; i
   return (
     <Modal title={t('k8s.act.forwardTitle', { name: id })} onClose={onClose} width={560}>
       <p className="small muted">{t('k8s.act.forwardHint')}</p>
+      {!fwdBase && <p className="small" style={{ color: 'var(--status-warning)' }}>{t('k8s.act.forwardSandboxHint')}</p>}
       {ports.error && <Banner kind="error">{ports.error}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
       {!ports.data && !ports.error ? (

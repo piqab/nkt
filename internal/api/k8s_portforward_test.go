@@ -14,9 +14,9 @@ import (
 )
 
 func TestPortForwardProxy(t *testing.T) {
-	var gotPath, gotCookie string
+	var gotPath, gotCookie, gotHost string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath, gotCookie = r.URL.Path+"?"+r.URL.RawQuery, r.Header.Get("Cookie")
+		gotPath, gotCookie, gotHost = r.URL.Path+"?"+r.URL.RawQuery, r.Header.Get("Cookie"), r.Host
 		http.SetCookie(w, &http.Cookie{Name: "app", Value: "x"})
 		_, _ = io.WriteString(w, "hello")
 	}))
@@ -25,7 +25,7 @@ func TestPortForwardProxy(t *testing.T) {
 	local, _ := strconv.Atoi(u.Port())
 
 	s := &Server{}
-	s.pf.sessions = map[string]*pfSession{"0123456789abcdef0123456789abcdef": {Token: "0123456789abcdef0123456789abcdef", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80)}}
+	s.pf.sessions = map[string]*pfSession{"0123456789abcdef0123456789abcdef": {Token: "0123456789abcdef0123456789abcdef", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80, "hub.example:8446")}}
 	r := chi.NewRouter()
 	r.HandleFunc("/api/k8s/pf/{token}", s.handleK8sPortForwardProxy)
 	r.HandleFunc("/api/k8s/pf/{token}/*", s.handleK8sPortForwardProxy)
@@ -37,8 +37,21 @@ func TestPortForwardProxy(t *testing.T) {
 	if rec.Code != 200 || rec.Body.String() != "hello" || gotPath != "/static/app.js?v=1" || gotCookie != "" {
 		t.Fatalf("code %d body %q path %q cookie %q", rec.Code, rec.Body.String(), gotPath, gotCookie)
 	}
+	// Песочница: Host остаётся синтетическим, даже когда внешний адрес поднят.
+	if gotHost != "127.0.0.1:80" {
+		t.Errorf("host в песочнице: %q", gotHost)
+	}
 	if rec.Header().Get("Content-Security-Policy") == "" || rec.Header().Get("Set-Cookie") != "" || len(rec.Header().Values("Referrer-Policy")) != 1 || rec.Header().Get("Referrer-Policy") != "no-referrer" {
 		t.Errorf("заголовки: %v", rec.Header())
+	}
+	// Адрес пробросов: песочницы нет, приложение видит внешний адрес в Host.
+	rec2 := httptest.NewRecorder()
+	s.ForwardHandler().ServeHTTP(rec2, httptest.NewRequest("GET", "/f/0123456789abcdef0123456789abcdef/static/app.js", nil))
+	if rec2.Code != 200 || rec2.Body.String() != "hello" || gotHost != "hub.example:8446" {
+		t.Fatalf("адрес пробросов: code %d body %q host %q", rec2.Code, rec2.Body.String(), gotHost)
+	}
+	if rec2.Header().Get("Content-Security-Policy") != "" {
+		t.Errorf("на адресе пробросов песочницы быть не должно: %v", rec2.Header())
 	}
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/k8s/pf/0123456789abcdef0123456789abcdef", nil))
@@ -64,7 +77,7 @@ func TestPortForwardOwnOrigin(t *testing.T) {
 	u, _ := url.Parse(up.URL)
 	local, _ := strconv.Atoi(u.Port())
 	s := &Server{}
-	s.pf.sessions = map[string]*pfSession{"0123456789abcdef0123456789abcdef": {Token: "0123456789abcdef0123456789abcdef", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80)}}
+	s.pf.sessions = map[string]*pfSession{"0123456789abcdef0123456789abcdef": {Token: "0123456789abcdef0123456789abcdef", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80, "")}}
 	h := s.ForwardHandler()
 	req := httptest.NewRequest("GET", "/f/0123456789abcdef0123456789abcdef/app/", nil)
 	req.Header.Set("Cookie", "nkt_session=admin; sid=1")

@@ -237,7 +237,7 @@ func (s *Server) handleK8sPortForwardStart(w http.ResponseWriter, r *http.Reques
 	user := auth.Username(r.Context())
 	sess := &pfSession{Token: hex.EncodeToString(buf), Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, Port: port, User: user,
 		Created: time.Now(), LastUsed: time.Now(), local: local, cmd: cmd}
-	sess.proxy = pfProxy(local, port)
+	sess.proxy = pfProxy(local, port, forwardExtHost(s.cfg.ForwardBase()))
 	s.pf.add(sess)
 	s.db.Audit(r.Context(), user, "k8s.portforward", t.Kind+" "+t.Namespace+"/"+t.Name+":"+strconv.Itoa(port), "ok", "")
 	writeJSON(w, http.StatusOK, map[string]any{"token": sess.Token, "path": "/k8s/pf/" + sess.Token + "/"})
@@ -339,14 +339,35 @@ func appCookies(h string) string {
 	return strings.Join(keep, "; ")
 }
 
+// forwardExtHost — host:port отдельного адреса пробросов, каким его видит
+// браузер (ForwardBase полным URL); «:порт» или пусто — хоста сервер не
+// знает, заголовок Host остаётся синтетическим. Значение — только из
+// конфигурации: Host из запроса клиента кормить приложению нельзя.
+func forwardExtHost(base string) string {
+	if base == "" || strings.HasPrefix(base, ":") {
+		return ""
+	}
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Host
+}
+
 // pfProxy — обратный прокси на локальный порт проброса.
-func pfProxy(local, port int) *httputil.ReverseProxy {
+func pfProxy(local, port int, extHost string) *httputil.ReverseProxy {
 	target, _ := url.Parse("http://127.0.0.1:" + strconv.Itoa(local))
 	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			mode, _ := pr.In.Context().Value(pfModeKey{}).(pfMode)
 			pr.SetURL(target)
 			pr.Out.Host = "127.0.0.1:" + strconv.Itoa(port)
+			// Вне песочницы приложение видит тот же адрес, что и
+			// браузер: его логика «дефолтного порта» (редиректы,
+			// канонические URL) совпадает с адресом страницы.
+			if !mode.sandbox && extHost != "" {
+				pr.Out.Host = extHost
+			}
 			pr.Out.Header.Del("Authorization")
 			if c := appCookies(pr.In.Header.Get("Cookie")); c != "" && !mode.sandbox {
 				pr.Out.Header.Set("Cookie", c)

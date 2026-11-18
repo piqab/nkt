@@ -3097,6 +3097,7 @@
       "forward": "Open in the browser (port forward)",
       "forwardTitle": "Port forward: {{name}}",
       "forwardHint": "kubectl port-forward on the host plus the nkt proxy: the application opens in a new tab via a one-off link on a separate forward address (its own origin — scripts, localStorage and the app's cookies work, while the nkt session is out of its reach). The link lives while it is used (closed after 30 minutes idle). Applications that reference their files from the site root (/static/…) may open only partially — they need a base path setting (X-Forwarded-Prefix is passed).",
+      "forwardSandboxHint": "No separate forward address (NKT_FORWARD_ADDR) is configured: the forward opens on the interface path in a sandbox without allow-same-origin — applications reading localStorage or sessionStorage at startup do not work in it (SecurityError). Configure the forward address and forwards will open on it without the sandbox.",
       "forwardNoPorts": "The object declares no ports.",
       "port": "Port",
       "forwardOpen": "Open",
