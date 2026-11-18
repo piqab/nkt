@@ -8,9 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.25.5 — 2026-11-18
+
+- **Port forwards from the cluster area open on the forward address by the control plane's host id.** The link from the cluster's “Kubernetes” goes to `/f/{cp host id}/{token}/` on the hub's separate forward address, and the hub proxies it to the control plane agent where the forward session and kubectl live (without the host id — the previous `/api` path in the sandbox); the app behind the hub route gets the browser's address in Host through `X-NKT-Forward-Host`. Without the host id in the link the handler answered “forward not found or closed” — the session is created on the agent, not on the hub.
+
 ## v1.25.4 — 2026-11-18
 
-- **Kubernetes port forwards from the cluster area open on the separate forward address, and the app sees the external address in Host.** With `NKT_FORWARD_ADDR` configured on the hub, the forward link from the cluster's “Kubernetes” area goes to the forward address (`/f/<token>/`) instead of the interface path in the sandbox: applications reading localStorage/sessionStorage at startup no longer die with a SecurityError — the page has its own origin, while the nkt session stays out of its reach. Without the address everything stays as before (the sandbox), and the forward window now says so about this limitation outright. On the separate address the proxy puts the configured forward address into the app's Host header instead of the synthetic 127.0.0.1:port — the app's “default port” logic (redirects, canonical URLs) matches the page address; the value comes from the server configuration only.
+- **Kubernetes port forwards: the app sees the external address in Host, and the window honestly warns about the sandbox.** On the separate forward address (`NKT_FORWARD_ADDR`) the proxy puts the configured address into the app's Host header instead of the synthetic 127.0.0.1:port — the app's “default port” logic (redirects, canonical URLs) matches the page address; the value comes from the server configuration only, and the sandbox on the `/api` path is untouched. Without the address configured the forward window says outright: applications reading localStorage/sessionStorage at startup do not work in the sandbox (SecurityError) — configuring `NKT_FORWARD_ADDR` is the cure. The hub-clusters guide ru+en gained the “Port forwarding: two modes” bullet.
 
 ## v1.25.3 — 2026-11-15
 
