@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Dropdown, Input, InputNumber, Select, Space } from 'antd'
 import { CopyOutlined, MoreOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { LOCAL_HOST_ID, api, apiURL, clusterCpHostId, hostScope, qs, useApi } from '../api'
+import { LOCAL_HOST_ID, api, apiURL, clusterAgentScope, clusterCpHostId, hostScope, qs, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, CodeEditor, Loading, Modal, formatRelative } from './ui'
 import { confirmAction } from './confirm'
@@ -419,12 +419,18 @@ function BoundsModal({ row, id, onClose, onSave }: { row: K8sRow; id: string; on
  * песочницы), если сервер его держит; иначе — по пути /api в песочнице.
  * Адрес пробросов маршрутизует по id хоста, где живёт сессия и kubectl:
  * в области хоста — этот хост, в кластерной — host id первого control
- * plane (clusterCpHostId); без него — прежний путь /api в песочнице. */
+ * plane (clusterCpHostId), без него — прежний путь /api в песочнице.
+ * Кластерная область проверяется ПЕРВОЙ: hostScope может остаться живым
+ * от ранее открытого хоста, и host-ветка увела бы ссылку на чужой
+ * менеджер пробросов («проброс не найден или закрыт»). */
 function forwardHref(token: string, base?: string): string {
   if (!base) return apiURL(`/k8s/pf/${token}/`)
   const origin = base.startsWith(':') ? `${location.protocol}//${location.hostname}${base}` : base
+  if (clusterAgentScope.id !== null) {
+    if (clusterCpHostId.id === null) return apiURL(`/k8s/pf/${token}/`)
+    return origin + `/f/${clusterCpHostId.id}/${token}/`
+  }
   if (hostScope.id !== null) return origin + `/f/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}/${token}/`
-  if (clusterCpHostId.id !== null) return origin + `/f/${clusterCpHostId.id}/${token}/`
   return apiURL(`/k8s/pf/${token}/`)
 }
 

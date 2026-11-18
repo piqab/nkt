@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.25.6 — 2026-11-18
+
+- **The forward link from the cluster area no longer confuses interface scopes.** The cluster “Kubernetes” scope is checked before the host scope: a live `hostScope` left over from a previously opened host sent the link to `/f/local/<token>/` — the forward manager of the hub machine, which has no session (“forward not found or closed”), while the session lived on the control plane agent. Now the link from the cluster window is always `/f/{cp host id}/{token}/` (and when the control plane id is not yet known — the previous `/api` path in the sandbox); from a host's Kubernetes — as before.
+
 ## v1.25.5 — 2026-11-18
 
 - **Port forwards from the cluster area open on the forward address by the control plane's host id.** The link from the cluster's “Kubernetes” goes to `/f/{cp host id}/{token}/` on the hub's separate forward address, and the hub proxies it to the control plane agent where the forward session and kubectl live (without the host id — the previous `/api` path in the sandbox); the app behind the hub route gets the browser's address in Host through `X-NKT-Forward-Host`. Without the host id in the link the handler answered “forward not found or closed” — the session is created on the agent, not on the hub.
