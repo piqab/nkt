@@ -229,6 +229,13 @@ Plugins → **Install on a host** → the plugin, the host and its settings
 A plugin that is down shows an error in its sections, the DNS check
 retries by itself; the rest of the hub works.
 
+Renaming a host does not cut off its plugins: the hub retargets their
+settings to the new name (the journal shows a `plugin.host_renamed`
+entry listing the moved plugins). DNS autonames converge on their own —
+at the next check (every 10 minutes) or immediately via “Check” in the
+Plugins section. Names inside scripts and pipelines are not rewritten:
+if a script referred to the host by its old name, update it yourself.
+
 The catalog is an install description next to the plugin file in the
 repository (`examples/<example>/deploy/nkt-plugin.json`):
 

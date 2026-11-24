@@ -987,6 +987,12 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	addr := strings.TrimSpace(req.Addr)
 	sshUser := strings.TrimSpace(req.SSHUser)
 
+	// The previous name, before the update: connected plugins keep their
+	// host by name, so a rename has to carry their confs over to the new
+	// one (cascadeHostRename) — otherwise every plugin call starts failing
+	// with plugin.hostGone.
+	prev, errPrev := s.db.HostByID(r.Context(), id)
+
 	if req.AuthKind == authKindGenerated {
 		authorizedKey, err := s.hub.UpdateHostGenerated(r.Context(), id, name, addr, req.SSHPort, sshUser, req.TerminalEnabled)
 		if err != nil {
@@ -998,6 +1004,9 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		s.setHostGroup(r.Context(), id, req.Group)
 		s.setHostVia(r.Context(), id, req.Via)
 		apiPortChanged := s.setHostAPIPort(r.Context(), id, req.APIPort)
+		if errPrev == nil && prev.Name != name {
+			s.cascadeHostRename(r.Context(), prev.Name, name, auth.Username(r.Context()))
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "authorized_key": authorizedKey, "api_port_changed": apiPortChanged})
 		return
 	}
@@ -1013,6 +1022,9 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	// Порт живёт в nkt.env хоста: пока не переустановим, хост слушает
 	// прежний — фронт по этому признаку запускает установку сам.
 	apiPortChanged := s.setHostAPIPort(r.Context(), id, req.APIPort)
+	if errPrev == nil && prev.Name != name {
+		s.cascadeHostRename(r.Context(), prev.Name, name, auth.Username(r.Context()))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "api_port_changed": apiPortChanged})
 }
 

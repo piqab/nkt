@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.25.7 — 2026-11-24
+
+- **Renaming a host no longer cuts off its plugins.** The hub retargets the settings of every plugin installed on the renamed host (Technitium DNS or any other) to the new name — previously each plugin call failed with `plugin.hostGone` after a rename until the setting was fixed by hand. The journal shows a `plugin.host_renamed` entry listing the moved plugins. DNS autonames converge on their own: at the next check (every 10 minutes) or immediately via “Check” in the Plugins section; names inside scripts and pipelines are not rewritten. The hub-plugins guide ru+en gained a paragraph in “Where to put plugins”.
+
 ## v1.25.6 — 2026-11-18
 
 - **The forward link from the cluster area no longer confuses interface scopes.** The cluster “Kubernetes” scope is checked before the host scope: a live `hostScope` left over from a previously opened host sent the link to `/f/local/<token>/` — the forward manager of the hub machine, which has no session (“forward not found or closed”), while the session lived on the control plane agent. Now the link from the cluster window is always `/f/{cp host id}/{token}/` (and when the control plane id is not yet known — the previous `/api` path in the sandbox); from a host's Kubernetes — as before.

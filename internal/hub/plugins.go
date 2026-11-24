@@ -90,6 +90,38 @@ func (s *Server) savePlugins(ctx context.Context, list []pluginConf) error {
 	return s.db.KVSet(ctx, pluginsKV, string(raw))
 }
 
+// cascadeHostRename retargets plugins installed on a renamed host: the
+// conf keeps the host by name (so it survives export and import), and
+// every plugin call resolves that name at call time — without the
+// cascade a rename leaves each call failing with plugin.hostGone until
+// somebody edits the conf by hand. Plugin-agnostic by construction: it
+// touches the generic Host field every connected conf carries, so
+// plugins added to the catalog later inherit the behaviour for free.
+// The hub machine's "localhost" is a constant, never a store name, and
+// is never matched. Returns the names of the retargeted plugins.
+func (s *Server) cascadeHostRename(ctx context.Context, from, to, user string) []string {
+	if from == to || from == "" || to == "" || from == localHostName {
+		return nil
+	}
+	list := s.plugins(ctx)
+	var moved []string
+	for i := range list {
+		if list[i].Host == from {
+			list[i].Host = to
+			moved = append(moved, list[i].Name)
+		}
+	}
+	if len(moved) == 0 {
+		return nil
+	}
+	if err := s.savePlugins(ctx, list); err != nil {
+		s.log.Warn("cascade host rename to plugins failed", "from", from, "to", to, "err", err)
+		return nil
+	}
+	s.db.Audit(ctx, user, "plugin.host_renamed", to, "ok", map[string]any{"from": from, "plugins": moved})
+	return moved
+}
+
 func (s *Server) pluginByName(ctx context.Context, name string) (pluginConf, bool) {
 	for _, p := range s.plugins(ctx) {
 		if p.Name == name {
